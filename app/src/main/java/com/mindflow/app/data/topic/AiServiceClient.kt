@@ -117,6 +117,76 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateDailyBrief(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are a strategic thinking assistant for a personal idea system. Based on the note summary, produce exactly 2 short Chinese lines with high-value exploration directions. Do not repeat note titles or obvious facts. Focus on new angles, useful synthesis, technology innovation, product thinking, work improvement, health, or life progress. Each line should be actionable or thought-provoking. Return only the 2 lines, with no intro and no explanation.",
+            maxTokens = 220,
+            temperature = 0.6,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateNextAction(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(3_000),
+            systemPrompt = "You are a practical action coach for a personal idea system. Based on the note summary, produce exactly one concise Chinese next action. It must be specific, executable today or very soon, and easy to verify. Do not repeat the note. Do not explain. Return only one line.",
+            maxTokens = 120,
+            temperature = 0.4,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateWeeklyReview(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are creating a weekly review for a personal idea system. Return exactly 3 concise Chinese lines: the strongest weekly theme, the most valuable direction to keep pushing, and one synthesis or breakthrough suggestion. Do not number. Do not repeat note titles mechanically. Make the lines useful, concrete, and thought-provoking.",
+            maxTokens = 260,
+            temperature = 0.6,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateFusionSuggestions(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are generating fusion suggestions for a personal idea system. Return exactly 2 concise Chinese lines. Each line must combine multiple themes, folders, or recurring ideas into one stronger exploration direction. Avoid restating existing notes. Make it forward-looking and useful.",
+            maxTokens = 220,
+            temperature = 0.65,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateThreadWorkspace(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are generating a thread workspace for a personal idea system. Return exactly 3 concise Chinese lines in this order: 1) a summary of the thread's current direction, 2) the main bottleneck or unanswered question, 3) the single most valuable next step. Do not number the lines. Do not repeat note titles mechanically. Be concrete and useful.",
+            maxTokens = 280,
+            temperature = 0.55,
+            thinkingEnabled = false,
+        )
+    }
+
     private fun requestChatCompletion(
         settings: AiSettings,
         userPrompt: String,

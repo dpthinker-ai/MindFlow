@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,10 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -92,7 +97,9 @@ fun SearchRoute(
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -124,6 +131,8 @@ fun SearchRoute(
 
     SearchScreen(
         uiState = uiState,
+        hiddenNoteIds = pendingDeletedIds,
+        snackbarHostState = snackbarHostState,
         onQueryChange = viewModel::updateQuery,
         onFolderChange = viewModel::updateFolder,
         onTagChange = viewModel::updateTag,
@@ -132,7 +141,21 @@ fun SearchRoute(
         onToggleArchived = viewModel::toggleArchived,
         onOpenNote = onOpenNote,
         onClassifyPendingFolders = viewModel::classifyPendingFolders,
-        onDeleteNote = viewModel::deleteNote,
+        onDeleteNote = { note ->
+            scope.launch {
+                pendingDeletedIds = pendingDeletedIds + note.id
+                val result = snackbarHostState.showSnackbar(
+                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
+                    actionLabel = "撤销",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    pendingDeletedIds = pendingDeletedIds - note.id
+                } else {
+                    viewModel.deleteNote(note.id)
+                }
+            }
+        },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -141,6 +164,8 @@ fun SearchRoute(
 @Composable
 private fun SearchScreen(
     uiState: SearchUiState,
+    hiddenNoteIds: Set<Long>,
+    snackbarHostState: SnackbarHostState,
     onQueryChange: (String) -> Unit,
     onFolderChange: (String?) -> Unit,
     onTagChange: (String?) -> Unit,
@@ -149,7 +174,7 @@ private fun SearchScreen(
     onToggleArchived: () -> Unit,
     onOpenNote: (Long) -> Unit,
     onClassifyPendingFolders: () -> Unit,
-    onDeleteNote: (Long) -> Unit,
+    onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
     var showAllTags by remember(uiState.availableTags) { mutableStateOf(false) }
@@ -186,6 +211,9 @@ private fun SearchScreen(
             activeFilterLabels.joinToString(" · ")
         }
     }
+    val visibleResults = remember(uiState.results, hiddenNoteIds) {
+        uiState.results.filterNot { it.id in hiddenNoteIds }
+    }
     ScreenBackground {
         Column(
             modifier = Modifier
@@ -214,7 +242,7 @@ private fun SearchScreen(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(
-                                    text = "筛选",
+                                    text = "搜索",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
@@ -231,32 +259,31 @@ private fun SearchScreen(
                                 accent = AccentBlue,
                             )
                         }
+                        OutlinedTextField(
+                            value = uiState.filters.query,
+                            onValueChange = onQueryChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("关键词") },
+                            placeholder = { Text("搜主题或正文") },
+                            shape = MaterialTheme.shapes.medium,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = WhiteGlass,
+                                unfocusedContainerColor = WhiteGlass,
+                            ),
+                        )
 
-                            Text(
-                                text = filterSummary,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                            )
+                        Text(
+                            text = filterSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
 
                         if (filtersExpanded) {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                OutlinedTextField(
-                                    value = uiState.filters.query,
-                                    onValueChange = onQueryChange,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    label = { Text("关键词") },
-                                    placeholder = { Text("搜主题或正文") },
-                                    shape = MaterialTheme.shapes.medium,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = WhiteGlass,
-                                        unfocusedContainerColor = WhiteGlass,
-                                    ),
-                                )
-
                                 FilterSectionLabel(text = "状态")
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -462,16 +489,16 @@ private fun SearchScreen(
                     }
                 }
 
-                if (uiState.results.isNotEmpty()) {
+                if (visibleResults.isNotEmpty()) {
                     item {
                         SectionHeader(
                             title = "结果",
-                            headline = "${uiState.results.size} 条",
+                            headline = "${visibleResults.size} 条",
                         )
                     }
                 }
 
-                if (uiState.results.isEmpty()) {
+                if (visibleResults.isEmpty()) {
                     item {
                         EmptyState(
                             title = "没有匹配结果",
@@ -479,18 +506,25 @@ private fun SearchScreen(
                         )
                     }
                 } else {
-                    items(uiState.results, key = { it.id }) { note ->
+                    items(visibleResults, key = { it.id }) { note ->
                         SwipeRevealNoteCard(
                             note = note,
                             onOpen = { onOpenNote(note.id) },
                             onToggleArchive = null,
                             onShare = { onShareNote(note) },
-                            onDelete = { onDeleteNote(note.id) },
+                            onDelete = { onDeleteNote(note) },
                         )
                     }
                 }
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
+        )
     }
 }
 

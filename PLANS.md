@@ -26,6 +26,11 @@ Already implemented:
 - heatmap activity view
 - share cards
 - WebDAV backup
+- Today page
+- AI daily brief
+- note-to-next-action extraction
+- reminder scheduling hooks
+- weekly AI review
 
 ## P0: Make It Daily
 
@@ -35,14 +40,18 @@ Goal:
 Planned items:
 
 1. Today page
-- show one note to continue
-- show one old note worth revisiting
-- show one AI-generated connection or prompt
+- status: implemented in a lighter form
+- current shape:
+  - one note to continue
+  - one AI-generated exploration direction
+  - one next action
 
 2. Smarter reminders
-- morning brief
-- evening review
-- low-frequency, high-value reminders
+- status: first version implemented
+- current shape:
+  - morning brief
+  - evening review
+  - low-frequency local notifications
 
 3. Faster capture
 - widget
@@ -57,15 +66,17 @@ Goal:
 Planned items:
 
 1. Daily AI brief
-- what to continue
-- what to reconnect
-- what to explore
+- status: implemented
+- current shape:
+  - what to continue
+  - what to explore
 
 2. Weekly AI review
-- recurring themes
-- stalled ideas
-- strongest ideas
-- recommended next actions
+- status: implemented
+- current shape:
+  - strongest weekly theme
+  - direction worth continuing
+  - one synthesis / breakthrough suggestion
 
 3. Idea linking
 - connect similar notes
@@ -84,8 +95,10 @@ Goal:
 Planned items:
 
 1. Next action extraction
-- convert a note into one concrete next step
-- include optional estimated effort and value
+- status: implemented
+- current shape:
+  - one concrete next step
+  - AI first, rule fallback
 
 2. Progress loop
 - light status updates
@@ -129,13 +142,13 @@ Planned items:
 
 ## Tonight Build Focus
 
-If pushing hard tonight, the best order is:
+Next best order:
 
-1. polish current UX rough edges
-2. add Today page skeleton
-3. add AI daily brief card
-4. add note-to-next-action extraction
-5. add reminder scheduling hooks
+1. refine weekly review quality
+2. add idea linking
+3. add theme threads
+4. add fusion suggestions
+5. add faster capture entry points
 
 ## Success Criteria
 

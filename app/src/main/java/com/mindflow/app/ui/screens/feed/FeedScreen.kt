@@ -3,16 +3,22 @@ package com.mindflow.app.ui.screens.feed
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,14 +27,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
@@ -53,30 +60,25 @@ import kotlinx.coroutines.launch
 @Composable
 fun FeedRoute(
     noteRepository: NoteRepository,
-    backgroundFolderOrganizer: BackgroundFolderOrganizer,
     onCreateNote: () -> Unit,
-    onOpenFolder: (String) -> Unit,
     onOpenStatusFilter: (NoteStatus?, Boolean) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
     val viewModel: FeedViewModel = viewModel(
-        factory = FeedViewModel.factory(
-            noteRepository = noteRepository,
-            backgroundFolderOrganizer = backgroundFolderOrganizer,
-        ),
+        factory = FeedViewModel.factory(noteRepository = noteRepository),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
             when (event) {
-                is FeedEvent.Message -> {
-                    Toast.makeText(context, event.text, Toast.LENGTH_SHORT).show()
-                }
+                is FeedEvent.Message -> Toast.makeText(context, event.text, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -103,13 +105,27 @@ fun FeedRoute(
 
     FeedScreen(
         uiState = uiState,
+        hiddenNoteIds = pendingDeletedIds,
+        snackbarHostState = snackbarHostState,
         onCreateNote = onCreateNote,
-        onOpenFolder = onOpenFolder,
         onOpenStatusFilter = onOpenStatusFilter,
         onOpenNote = onOpenNote,
         onArchiveNote = viewModel::archiveNote,
-        onDeleteNote = viewModel::deleteNote,
-        onClassifyPendingFolders = viewModel::classifyPendingFolders,
+        onDeleteNote = { note ->
+            scope.launch {
+                pendingDeletedIds = pendingDeletedIds + note.id
+                val result = snackbarHostState.showSnackbar(
+                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
+                    actionLabel = "撤销",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    pendingDeletedIds = pendingDeletedIds - note.id
+                } else {
+                    viewModel.deleteNote(note.id)
+                }
+            }
+        },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -117,22 +133,20 @@ fun FeedRoute(
 @Composable
 private fun FeedScreen(
     uiState: FeedUiState,
+    hiddenNoteIds: Set<Long>,
+    snackbarHostState: SnackbarHostState,
     onCreateNote: () -> Unit,
-    onOpenFolder: (String) -> Unit,
     onOpenStatusFilter: (NoteStatus?, Boolean) -> Unit,
     onOpenNote: (Long) -> Unit,
     onArchiveNote: (Long) -> Unit,
-    onDeleteNote: (Long) -> Unit,
-    onClassifyPendingFolders: () -> Unit,
+    onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
-    val doneCount = uiState.doneCount
-    val totalCount = uiState.totalCount
-    val ideaCount = uiState.ideaCount
-    val inProgressCount = uiState.inProgressCount
-    val archivedCount = uiState.archivedCount
-    val completionProgress = if (totalCount == 0) 0f else doneCount.toFloat() / totalCount.toFloat()
+    val completionProgress = if (uiState.totalCount == 0) 0f else uiState.doneCount.toFloat() / uiState.totalCount.toFloat()
     val completionPercent = (completionProgress * 100).toInt()
+    val visibleNotes = remember(uiState.notes, hiddenNoteIds) {
+        uiState.notes.filterNot { it.id in hiddenNoteIds }
+    }
 
     ScreenBackground {
         Column(
@@ -171,50 +185,52 @@ private fun FeedScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        SectionHeader(
-                            title = "总览",
-                            headline = "$completionPercent% 已实现",
-                        )
-                        NeonProgress(
-                            progress = completionProgress,
-                            startColor = AccentSuccess,
-                            endColor = AccentSuccess,
-                        )
-                        GridTwo {
-                            MetricTile(
-                                label = "想法",
-                                value = ideaCount.toString(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
-                                accent = noteStatusAccent(NoteStatus.IDEA),
+                        PanelCard {
+                            SectionHeader(
+                                title = "总览",
+                                headline = "$completionPercent% 已实现",
                             )
-                            MetricTile(
-                                label = "进行中",
-                                value = inProgressCount.toString(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onOpenStatusFilter(NoteStatus.IN_PROGRESS, false) },
-                                accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
+                            NeonProgress(
+                                progress = completionProgress,
+                                startColor = AccentSuccess,
+                                endColor = AccentSuccess,
                             )
-                        }
-                        GridTwo {
-                            MetricTile(
-                                label = "已实现",
-                                value = doneCount.toString(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onOpenStatusFilter(NoteStatus.DONE, false) },
-                                accent = noteStatusAccent(NoteStatus.DONE),
-                            )
-                            MetricTile(
-                                label = "已归档",
-                                value = archivedCount.toString(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onOpenStatusFilter(null, true) },
-                                accent = MaterialTheme.colorScheme.onSurface,
-                            )
+                            GridTwo {
+                                MetricTile(
+                                    label = "想法",
+                                    value = uiState.ideaCount.toString(),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
+                                    accent = noteStatusAccent(NoteStatus.IDEA),
+                                )
+                                MetricTile(
+                                    label = "进行中",
+                                    value = uiState.inProgressCount.toString(),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStatusFilter(NoteStatus.IN_PROGRESS, false) },
+                                    accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
+                                )
+                            }
+                            GridTwo {
+                                MetricTile(
+                                    label = "已实现",
+                                    value = uiState.doneCount.toString(),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStatusFilter(NoteStatus.DONE, false) },
+                                    accent = noteStatusAccent(NoteStatus.DONE),
+                                )
+                                MetricTile(
+                                    label = "已归档",
+                                    value = uiState.archivedCount.toString(),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStatusFilter(null, true) },
+                                    accent = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                         }
                         ActionButton(
                             text = "新建记录",
@@ -228,11 +244,11 @@ private fun FeedScreen(
                 item {
                     SectionHeader(
                         title = "记录",
-                        headline = "${uiState.notes.size} 条",
+                        headline = "${visibleNotes.size} 条",
                     )
                 }
 
-                if (uiState.notes.isEmpty()) {
+                if (visibleNotes.isEmpty()) {
                     item {
                         EmptyState(
                             title = "还没有记录",
@@ -240,17 +256,24 @@ private fun FeedScreen(
                         )
                     }
                 } else {
-                    items(uiState.notes, key = { it.id }) { note ->
+                    items(visibleNotes, key = { it.id }) { note ->
                         SwipeRevealNoteCard(
                             note = note,
                             onOpen = { onOpenNote(note.id) },
                             onToggleArchive = { onArchiveNote(note.id) },
                             onShare = { onShareNote(note) },
-                            onDelete = { onDeleteNote(note.id) },
+                            onDelete = { onDeleteNote(note) },
                         )
                     }
                 }
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
+        )
     }
 }

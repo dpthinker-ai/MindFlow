@@ -1,5 +1,8 @@
 package com.mindflow.app.ui.screens.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,14 +49,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
@@ -75,6 +81,7 @@ private enum class SettingsDestination {
     HOME,
     CLOUD,
     AI,
+    REMINDER,
 }
 
 @Composable
@@ -82,7 +89,9 @@ fun SettingsRoute(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    reminderSettingsRepository: ReminderSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
+    reminderScheduler: ReminderScheduler,
     aiServiceClient: AiServiceClient,
 ) {
     val viewModel: SettingsViewModel = viewModel(
@@ -90,7 +99,9 @@ fun SettingsRoute(
             noteRepository = noteRepository,
             aiSettingsRepository = aiSettingsRepository,
             cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+            reminderSettingsRepository = reminderSettingsRepository,
             cloudBackupCoordinator = cloudBackupCoordinator,
+            reminderScheduler = reminderScheduler,
             aiServiceClient = aiServiceClient,
         ),
     )
@@ -98,6 +109,7 @@ fun SettingsRoute(
     val context = LocalContext.current
     var pendingExport by remember { mutableStateOf<ExportPayload?>(null) }
     var showRestoreDialog by remember { mutableStateOf(false) }
+    var pendingReminderPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -131,6 +143,18 @@ fun SettingsRoute(
         pendingExport = null
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val action = pendingReminderPermission
+        pendingReminderPermission = null
+        if (granted) {
+            action?.invoke()
+        } else {
+            Toast.makeText(context, "需要通知权限才能收到每日提醒", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
             when (event) {
@@ -157,7 +181,10 @@ fun SettingsRoute(
         onCloudPasswordChange = viewModel::onCloudPasswordChange,
         onCloudRemoteDirChange = viewModel::onCloudRemoteDirChange,
         onCloudAutoBackupChange = viewModel::onCloudAutoBackupChange,
+        onMorningBriefEnabledChange = viewModel::onMorningBriefEnabledChange,
+        onEveningReviewEnabledChange = viewModel::onEveningReviewEnabledChange,
         onSaveCloud = viewModel::saveCloud,
+        onSaveReminder = viewModel::saveReminder,
         onClearCloud = viewModel::clearCloud,
         onBackupToCloud = viewModel::backupToCloud,
         onRestoreRequest = { showRestoreDialog = true },
@@ -168,6 +195,19 @@ fun SettingsRoute(
         onRestoreDismissed = { showRestoreDialog = false },
         onExport = viewModel::exportMarkdown,
         onImport = { importLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
+        onRequestNotificationPermission = { afterGranted ->
+            val hasPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                afterGranted()
+            } else {
+                pendingReminderPermission = afterGranted
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        },
         showRestoreDialog = showRestoreDialog,
     )
 }
@@ -187,7 +227,10 @@ private fun SettingsScreen(
     onCloudPasswordChange: (String) -> Unit,
     onCloudRemoteDirChange: (String) -> Unit,
     onCloudAutoBackupChange: (Boolean) -> Unit,
+    onMorningBriefEnabledChange: (Boolean) -> Unit,
+    onEveningReviewEnabledChange: (Boolean) -> Unit,
     onSaveCloud: () -> Unit,
+    onSaveReminder: () -> Unit,
     onClearCloud: () -> Unit,
     onBackupToCloud: () -> Unit,
     onRestoreRequest: () -> Unit,
@@ -195,6 +238,7 @@ private fun SettingsScreen(
     onRestoreDismissed: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onRequestNotificationPermission: ((() -> Unit) -> Unit),
     showRestoreDialog: Boolean,
 ) {
     var destination by rememberSaveable { mutableStateOf(SettingsDestination.HOME) }
@@ -227,6 +271,7 @@ private fun SettingsScreen(
                 uiState = uiState,
                 onOpenCloud = { destination = SettingsDestination.CLOUD },
                 onOpenAi = { destination = SettingsDestination.AI },
+                onOpenReminder = { destination = SettingsDestination.REMINDER },
                 onExport = onExport,
                 onImport = onImport,
             )
@@ -254,6 +299,14 @@ private fun SettingsScreen(
                 onTestAi = onTestAi,
                 onClearAi = onClearAi,
             )
+            SettingsDestination.REMINDER -> ReminderSettingsScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onMorningBriefEnabledChange = onMorningBriefEnabledChange,
+                onEveningReviewEnabledChange = onEveningReviewEnabledChange,
+                onSaveReminder = onSaveReminder,
+                onRequestNotificationPermission = onRequestNotificationPermission,
+            )
         }
     }
 }
@@ -263,6 +316,7 @@ private fun SettingsHomeScreen(
     uiState: SettingsUiState,
     onOpenCloud: () -> Unit,
     onOpenAi: () -> Unit,
+    onOpenReminder: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
@@ -314,6 +368,21 @@ private fun SettingsHomeScreen(
             }
 
             item {
+                SettingsEntryCard(
+                    title = "每日提醒",
+                    summary = when {
+                        uiState.morningBriefEnabled && uiState.eveningReviewEnabled -> "晨间 + 晚间"
+                        uiState.morningBriefEnabled -> "仅晨间"
+                        uiState.eveningReviewEnabled -> "仅晚间"
+                        else -> "未开启"
+                    },
+                    headline = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else "未开启",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = onOpenReminder,
+                )
+            }
+
+            item {
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.95f),
                     shape = MaterialTheme.shapes.large,
@@ -344,6 +413,110 @@ private fun SettingsHomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReminderSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onMorningBriefEnabledChange: (Boolean) -> Unit,
+    onEveningReviewEnabledChange: (Boolean) -> Unit,
+    onSaveReminder: () -> Unit,
+    onRequestNotificationPermission: ((() -> Unit) -> Unit),
+) {
+    DetailScreenFrame(
+        title = "每日提醒",
+        subtitle = "晨间 brief / 晚间 review",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "提醒节奏", headline = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else "未开启")
+                Text(
+                    text = "晨间在 08:30 给你一条推进方向，晚间在 21:30 帮你收拢当天记录。先用固定时间，后面再开放自定义。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "提醒开关",
+                description = "频率保持很低，只做真正有价值的提示。",
+            ) {
+                ReminderSwitchRow(
+                    title = "晨间 brief",
+                    description = "08:30 推送一条积极推进和探索方向",
+                    checked = uiState.morningBriefEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            onRequestNotificationPermission { onMorningBriefEnabledChange(true) }
+                        } else {
+                            onMorningBriefEnabledChange(false)
+                        }
+                    },
+                )
+                ReminderSwitchRow(
+                    title = "晚间 review",
+                    description = "21:30 提醒你回收今天的记录节奏",
+                    checked = uiState.eveningReviewEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            onRequestNotificationPermission { onEveningReviewEnabledChange(true) }
+                        } else {
+                            onEveningReviewEnabledChange(false)
+                        }
+                    },
+                )
+                ActionButton(
+                    text = if (uiState.isSavingReminder) "保存中..." else "保存提醒设置",
+                    onClick = onSaveReminder,
+                    enabled = !uiState.isSavingReminder,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Save,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReminderSwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+            )
         }
     }
 }

@@ -7,10 +7,15 @@ import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.backup.PreferencesCloudBackupIndexRepository
 import com.mindflow.app.data.backup.WebDavBackupClient
 import com.mindflow.app.BuildConfig
+import com.mindflow.app.data.action.NextActionPlanner
+import com.mindflow.app.data.brief.DailyBriefPlanner
+import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.local.MindFlowDatabase
 import com.mindflow.app.data.model.AiSettings
+import com.mindflow.app.data.reminder.ReminderScheduler
+import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.repository.OfflineFirstNoteRepository
@@ -18,6 +23,8 @@ import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
+import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.topic.AiFolderClassifier
 import com.mindflow.app.data.topic.AiTagExtractor
@@ -57,6 +64,11 @@ class AppContainer(context: Context) {
 
     val cloudBackupSettingsRepository: CloudBackupSettingsRepository =
         PreferencesCloudBackupSettingsRepository(
+            context = context.applicationContext,
+        )
+
+    val reminderSettingsRepository: ReminderSettingsRepository =
+        PreferencesReminderSettingsRepository(
             context = context.applicationContext,
         )
 
@@ -120,4 +132,34 @@ class AppContainer(context: Context) {
         aiSettingsRepository = aiSettingsRepository,
         applicationScope = applicationScope,
     )
+
+    val dailyBriefPlanner = DailyBriefPlanner(
+        context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val nextActionPlanner = NextActionPlanner(
+        context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val weeklyReviewPlanner = WeeklyReviewPlanner(
+        context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val fusionSuggestionPlanner = FusionSuggestionPlanner(
+        context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val reminderScheduler = ReminderScheduler(
+        context = context.applicationContext,
+        reminderSettingsRepository = reminderSettingsRepository,
+        applicationScope = applicationScope,
+    ).also { it.syncInBackground() }
 }

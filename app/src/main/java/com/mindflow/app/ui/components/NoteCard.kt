@@ -62,7 +62,7 @@ fun NoteCard(
         modifier = modifier.clickable(onClick = onOpen),
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -75,8 +75,8 @@ fun NoteCard(
                 ) {
                     Text(
                         text = note.topic.ifBlank { "未命名想法" },
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(
@@ -111,12 +111,13 @@ fun NoteCard(
                             onClick = onShare,
                         ) {
                             Box(
-                                modifier = Modifier.size(34.dp),
+                                modifier = Modifier.size(30.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Share,
                                     contentDescription = "分享",
+                                    modifier = Modifier.size(18.dp),
                                     tint = TextSoft,
                                 )
                             }
@@ -129,7 +130,7 @@ fun NoteCard(
                 text = SimpleMarkdown.toPlainText(note.content).replace("\n", " "),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
 
@@ -138,8 +139,11 @@ fun NoteCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    note.tags.forEach { tag ->
+                    note.tags.take(2).forEach { tag ->
                         NoteTagBadge(tag = tag)
+                    }
+                    if (note.tags.size > 2) {
+                        OverflowTagBadge(extraCount = note.tags.size - 2)
                     }
                 }
             }
@@ -157,6 +161,25 @@ fun NoteCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OverflowTagBadge(
+    extraCount: Int,
+) {
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Text(
+            text = "+$extraCount",
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSoft,
+            maxLines = 1,
+        )
     }
 }
 

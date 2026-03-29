@@ -1,22 +1,29 @@
 package com.mindflow.app.ui
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SpaceDashboard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,19 +42,27 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.action.NextActionPlanner
+import com.mindflow.app.data.brief.DailyBriefPlanner
+import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.reminder.ReminderScheduler
+import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
+import com.mindflow.app.ui.screens.flow.FlowRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
 import com.mindflow.app.ui.screens.settings.SettingsRoute
 import com.mindflow.app.ui.screens.stats.StatsRoute
+import com.mindflow.app.ui.screens.thread.ThreadRoute
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
@@ -66,16 +81,30 @@ fun MindFlowApp(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    reminderSettingsRepository: ReminderSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
+    reminderScheduler: ReminderScheduler,
     backgroundFolderOrganizer: BackgroundFolderOrganizer,
+    dailyBriefPlanner: DailyBriefPlanner,
+    nextActionPlanner: NextActionPlanner,
+    weeklyReviewPlanner: WeeklyReviewPlanner,
+    fusionSuggestionPlanner: FusionSuggestionPlanner,
     aiServiceClient: AiServiceClient,
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val openNoteSafely: (Long) -> Unit = { noteId ->
+        runCatching {
+            navController.navigate(MindFlowDestinations.detailRoute(noteId)) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     val topLevelDestinations = listOf(
         TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.SpaceDashboard),
+        TopLevelDestination(MindFlowDestinations.FLOW, "Flow", Icons.Outlined.AutoAwesome),
         TopLevelDestination(MindFlowDestinations.SEARCH_BASE, "查找", Icons.Outlined.Search),
         TopLevelDestination(MindFlowDestinations.STATS, "统计", Icons.Outlined.QueryStats),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
@@ -89,6 +118,7 @@ fun MindFlowApp(
 
     val showBottomBar = normalizedRoute in setOf(
         MindFlowDestinations.FEED,
+        MindFlowDestinations.FLOW,
         MindFlowDestinations.SEARCH_BASE,
         MindFlowDestinations.STATS,
         MindFlowDestinations.SETTINGS,
@@ -103,9 +133,7 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FEED) {
                 FeedRoute(
                     noteRepository = noteRepository,
-                    backgroundFolderOrganizer = backgroundFolderOrganizer,
                     onCreateNote = { navController.navigate(MindFlowDestinations.CAPTURE) },
-                    onOpenFolder = { folderKey -> navController.navigate(MindFlowDestinations.folderRoute(folderKey)) },
                     onOpenStatusFilter = { status, archivedOnly ->
                         navController.navigate(
                             MindFlowDestinations.searchRoute(
@@ -114,7 +142,35 @@ fun MindFlowApp(
                             ),
                         )
                     },
-                    onOpenNote = { noteId -> navController.navigate(MindFlowDestinations.detailRoute(noteId)) },
+                    onOpenNote = openNoteSafely,
+                )
+            }
+
+            composable(MindFlowDestinations.FLOW) {
+                FlowRoute(
+                    noteRepository = noteRepository,
+                    dailyBriefPlanner = dailyBriefPlanner,
+                    nextActionPlanner = nextActionPlanner,
+                    weeklyReviewPlanner = weeklyReviewPlanner,
+                    fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
+                    onOpenNote = openNoteSafely,
+                )
+            }
+
+            composable(
+                route = MindFlowDestinations.THREAD,
+                arguments = listOf(navArgument(MindFlowDestinations.THREAD_ARG) { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val rawThreadKey = backStackEntry.arguments?.getString(MindFlowDestinations.THREAD_ARG).orEmpty()
+                val threadKey = Uri.decode(rawThreadKey)
+                ThreadRoute(
+                    noteRepository = noteRepository,
+                    aiSettingsRepository = aiSettingsRepository,
+                    aiServiceClient = aiServiceClient,
+                    threadKey = threadKey,
+                    onBack = { navController.popBackStack() },
+                    onOpenNote = openNoteSafely,
                 )
             }
 
@@ -127,7 +183,7 @@ fun MindFlowApp(
                     noteRepository = noteRepository,
                     folderKey = folderKey,
                     onBack = { navController.popBackStack() },
-                    onOpenNote = { noteId -> navController.navigate(MindFlowDestinations.detailRoute(noteId)) },
+                    onOpenNote = openNoteSafely,
                 )
             }
 
@@ -153,14 +209,14 @@ fun MindFlowApp(
                     backgroundFolderOrganizer = backgroundFolderOrganizer,
                     initialStatus = initialStatus,
                     initialArchivedOnly = archivedOnly,
-                    onOpenNote = { noteId -> navController.navigate(MindFlowDestinations.detailRoute(noteId)) },
+                    onOpenNote = openNoteSafely,
                 )
             }
 
             composable(MindFlowDestinations.STATS) {
                 StatsRoute(
                     noteRepository = noteRepository,
-                    onOpenNote = { noteId -> navController.navigate(MindFlowDestinations.detailRoute(noteId)) },
+                    onOpenNote = openNoteSafely,
                 )
             }
 
@@ -169,7 +225,9 @@ fun MindFlowApp(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    reminderSettingsRepository = reminderSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,
                 )
             }
@@ -180,6 +238,7 @@ fun MindFlowApp(
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
                     noteId = null,
+                    onOpenNote = openNoteSafely,
                     onBack = { navController.popBackStack() },
                     onSavedNewNote = {
                         navController.navigate(MindFlowDestinations.FEED) {
@@ -200,6 +259,7 @@ fun MindFlowApp(
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
                     noteId = noteId,
+                    onOpenNote = openNoteSafely,
                     onBack = { navController.popBackStack() },
                     onSavedNewNote = { navController.popBackStack() },
                 )
@@ -254,11 +314,23 @@ fun MindFlowApp(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(vertical = 10.dp),
                             ) {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.label,
-                                    tint = if (active) Accent else TextSoft,
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = destination.icon,
+                                        contentDescription = destination.label,
+                                        tint = if (active) Accent else TextSoft,
+                                    )
+                                    Spacer(modifier = Modifier.size(4.dp))
+                                    Text(
+                                        text = destination.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (active) Accent else TextSoft.copy(alpha = 0.72f),
+                                        maxLines = 1,
+                                    )
+                                }
                             }
                         }
                     }

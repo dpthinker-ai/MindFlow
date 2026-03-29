@@ -42,7 +42,18 @@ fun MarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
 ) {
-    val blocks = remember(markdown) { SimpleMarkdown.parse(markdown) }
+    val blocks = remember(markdown) {
+        runCatching { SimpleMarkdown.parse(markdown) }.getOrNull()
+    }
+    if (blocks == null) {
+        Text(
+            text = markdown,
+            modifier = modifier,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        return
+    }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),

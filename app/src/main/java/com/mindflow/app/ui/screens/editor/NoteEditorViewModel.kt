@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
+import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.NoteStatus
@@ -45,6 +46,7 @@ data class NoteEditorUiState(
     val updatedAt: Long? = null,
     val latestDoneAt: Long? = null,
     val statusHistory: List<NoteStatusHistoryEntity> = emptyList(),
+    val relatedNotes: List<NoteEntity> = emptyList(),
     val polishedOriginalContent: String? = null,
     val polishedCandidateContent: String? = null,
     val folderEdited: Boolean = false,

@@ -24,6 +24,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -78,7 +82,9 @@ fun StatsRoute(
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -108,8 +114,24 @@ fun StatsRoute(
     }
     StatsScreen(
         uiState = uiState,
+        hiddenNoteIds = pendingDeletedIds,
+        snackbarHostState = snackbarHostState,
         onOpenNote = onOpenNote,
-        onDeleteNote = viewModel::deleteNote,
+        onDeleteNote = { note ->
+            scope.launch {
+                pendingDeletedIds = pendingDeletedIds + note.id
+                val result = snackbarHostState.showSnackbar(
+                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
+                    actionLabel = "撤销",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    pendingDeletedIds = pendingDeletedIds - note.id
+                } else {
+                    viewModel.deleteNote(note.id)
+                }
+            }
+        },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -118,8 +140,10 @@ fun StatsRoute(
 @Composable
 private fun StatsScreen(
     uiState: StatsUiState,
+    hiddenNoteIds: Set<Long>,
+    snackbarHostState: SnackbarHostState,
     onOpenNote: (Long) -> Unit,
-    onDeleteNote: (Long) -> Unit,
+    onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
     val stats = uiState.stats
@@ -162,6 +186,9 @@ private fun StatsScreen(
                 .filter { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.createdAt), zoneId) == selectedDate }
                 .sortedByDescending { it.createdAt }
         }
+    }
+    val visibleSelectedDateNotes = remember(selectedDateNotes, hiddenNoteIds) {
+        selectedDateNotes.filterNot { it.id in hiddenNoteIds }
     }
 
     ScreenBackground {
@@ -229,7 +256,7 @@ private fun StatsScreen(
                     PanelCard {
                         SectionHeader(
                             title = selectedDate?.let { "${it.monthValue}月${it.dayOfMonth}日" } ?: "当天记录",
-                            headline = if (selectedDate == null) null else "${selectedDateNotes.size} 条",
+                            headline = if (selectedDate == null) null else "${visibleSelectedDateNotes.size} 条",
                         )
                         if (selectedDate == null) {
                             Text(
@@ -237,20 +264,20 @@ private fun StatsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSoft,
                             )
-                        } else if (selectedDateNotes.isEmpty()) {
+                        } else if (visibleSelectedDateNotes.isEmpty()) {
                             Text(
                                 text = "这一天没有新记录。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSoft,
                             )
                         } else {
-                            selectedDateNotes.forEach { note ->
+                            visibleSelectedDateNotes.forEach { note ->
                                 SwipeRevealNoteCard(
                                     note = note,
                                     onOpen = { onOpenNote(note.id) },
                                     onToggleArchive = null,
                                     onShare = { onShareNote(note) },
-                                    onDelete = { onDeleteNote(note.id) },
+                                    onDelete = { onDeleteNote(note) },
                                 )
                             }
                         }
@@ -258,6 +285,13 @@ private fun StatsScreen(
                 }
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
+        )
     }
 }
 

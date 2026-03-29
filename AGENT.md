@@ -108,3 +108,17 @@ MindFlow should evolve toward:
 - idea-to-action extraction
 - note linking and theme connection
 - long-term personal innovation memory
+
+Current status:
+
+- daily AI brief: implemented
+- weekly review: implemented
+- idea-to-action extraction: implemented
+- morning/evening reminder hooks: implemented
+
+Next strongest direction:
+
+- weekly review refinement
+- note linking
+- theme threads
+- fusion suggestions

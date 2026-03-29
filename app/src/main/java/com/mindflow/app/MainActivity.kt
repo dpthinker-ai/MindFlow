@@ -1,6 +1,11 @@
 package com.mindflow.app
 
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.action.NextActionPlanner
+import com.mindflow.app.data.brief.DailyBriefPlanner
+import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.reminder.ReminderScheduler
+import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.topic.AiServiceClient
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
@@ -11,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.ui.MindFlowApp
 import com.mindflow.app.ui.theme.MindFlowTheme
 
@@ -33,7 +39,13 @@ class MainActivity : ComponentActivity() {
         val aiSettingsRepository: AiSettingsRepository = appContainer.aiSettingsRepository
         val cloudBackupSettingsRepository: CloudBackupSettingsRepository =
             appContainer.cloudBackupSettingsRepository
+        val reminderSettingsRepository: ReminderSettingsRepository = appContainer.reminderSettingsRepository
         val cloudBackupCoordinator: CloudBackupCoordinator = appContainer.cloudBackupCoordinator
+        val reminderScheduler: ReminderScheduler = appContainer.reminderScheduler
+        val dailyBriefPlanner: DailyBriefPlanner = appContainer.dailyBriefPlanner
+        val nextActionPlanner: NextActionPlanner = appContainer.nextActionPlanner
+        val weeklyReviewPlanner: WeeklyReviewPlanner = appContainer.weeklyReviewPlanner
+        val fusionSuggestionPlanner: FusionSuggestionPlanner = appContainer.fusionSuggestionPlanner
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
         setContent {
             MindFlowTheme {
@@ -41,8 +53,14 @@ class MainActivity : ComponentActivity() {
                     noteRepository = repository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    reminderSettingsRepository = reminderSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    reminderScheduler = reminderScheduler,
                     backgroundFolderOrganizer = appContainer.backgroundFolderOrganizer,
+                    dailyBriefPlanner = dailyBriefPlanner,
+                    nextActionPlanner = nextActionPlanner,
+                    weeklyReviewPlanner = weeklyReviewPlanner,
+                    fusionSuggestionPlanner = fusionSuggestionPlanner,
                     aiServiceClient = aiServiceClient,
                 )
             }

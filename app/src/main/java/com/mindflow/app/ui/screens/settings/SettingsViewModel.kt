@@ -9,9 +9,12 @@ import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.model.ReminderSettings
+import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,8 +44,11 @@ data class SettingsUiState(
     val cloudIsConfigured: Boolean = false,
     val cloudLastBackupAt: Long = 0L,
     val cloudLastBackupError: String = "",
+    val morningBriefEnabled: Boolean = false,
+    val eveningReviewEnabled: Boolean = false,
     val isSavingAi: Boolean = false,
     val isSavingCloud: Boolean = false,
+    val isSavingReminder: Boolean = false,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
     val isTestingAi: Boolean = false,
@@ -59,7 +65,9 @@ class SettingsViewModel(
     private val noteRepository: NoteRepository,
     private val aiSettingsRepository: AiSettingsRepository,
     private val cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    private val reminderSettingsRepository: ReminderSettingsRepository,
     private val cloudBackupCoordinator: CloudBackupCoordinator,
+    private val reminderScheduler: ReminderScheduler,
     private val aiServiceClient: AiServiceClient,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -105,6 +113,16 @@ class SettingsViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            reminderSettingsRepository.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(
+                        morningBriefEnabled = settings.morningBriefEnabled,
+                        eveningReviewEnabled = settings.eveningReviewEnabled,
+                    )
+                }
+            }
+        }
     }
 
     fun onApiKeyChange(value: String) {
@@ -141,6 +159,14 @@ class SettingsViewModel(
 
     fun onCloudAutoBackupChange(value: Boolean) {
         _uiState.update { it.copy(cloudAutoBackupEnabled = value) }
+    }
+
+    fun onMorningBriefEnabledChange(value: Boolean) {
+        _uiState.update { it.copy(morningBriefEnabled = value) }
+    }
+
+    fun onEveningReviewEnabledChange(value: Boolean) {
+        _uiState.update { it.copy(eveningReviewEnabled = value) }
     }
 
     fun saveAi() {
@@ -226,6 +252,25 @@ class SettingsViewModel(
         }
     }
 
+    fun saveReminder() {
+        val state = _uiState.value
+        val settings = ReminderSettings(
+            morningBriefEnabled = state.morningBriefEnabled,
+            eveningReviewEnabled = state.eveningReviewEnabled,
+        )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingReminder = true) }
+            reminderSettingsRepository.save(settings)
+            reminderScheduler.syncNow(settings)
+            _uiState.update { it.copy(isSavingReminder = false) }
+            _events.emit(
+                SettingsEvent.Message(
+                    if (settings.hasAnyEnabled) "提醒已保存，晨间和晚间会按时提示你" else "已关闭每日提醒"
+                )
+            )
+        }
+    }
+
     fun backupToCloud() {
         viewModelScope.launch {
             _uiState.update { it.copy(isBackingUpCloud = true) }
@@ -277,7 +322,9 @@ class SettingsViewModel(
             noteRepository: NoteRepository,
             aiSettingsRepository: AiSettingsRepository,
             cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+            reminderSettingsRepository: ReminderSettingsRepository,
             cloudBackupCoordinator: CloudBackupCoordinator,
+            reminderScheduler: ReminderScheduler,
             aiServiceClient: AiServiceClient,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -285,7 +332,9 @@ class SettingsViewModel(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    reminderSettingsRepository = reminderSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,
                 )
             }

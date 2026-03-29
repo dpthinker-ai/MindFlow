@@ -1,9 +1,13 @@
 package com.mindflow.app.ui.navigation
 
+import android.net.Uri
 import com.mindflow.app.data.model.NoteStatus
 
 object MindFlowDestinations {
     const val FEED = "feed"
+    const val FLOW = "flow"
+    const val THREAD = "flow/thread/{threadKey}"
+    const val THREAD_ARG = "threadKey"
     const val SEARCH_BASE = "search"
     const val SEARCH = "search?status={status}&archivedOnly={archivedOnly}"
     const val SEARCH_STATUS_ARG = "status"
@@ -19,6 +23,7 @@ object MindFlowDestinations {
 
     fun folderRoute(folderKey: String): String = "folder/$folderKey"
     fun detailRoute(noteId: Long): String = "detail/$noteId"
+    fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
     fun searchRoute(
         status: NoteStatus? = null,
         archivedOnly: Boolean = false,

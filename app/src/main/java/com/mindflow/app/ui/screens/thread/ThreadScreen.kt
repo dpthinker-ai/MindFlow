@@ -1,6 +1,5 @@
-package com.mindflow.app.ui.screens.folder
+package com.mindflow.app.ui.screens.thread
 
-import android.graphics.Color as AndroidColor
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,15 +29,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
-import com.mindflow.app.data.model.MindFolderCatalog
-import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
@@ -55,115 +53,27 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
-import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.TextSoft
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-
-data class FolderUiState(
-    val folderKey: String,
-    val folderName: String,
-    val accentHex: String,
-    val notes: List<NoteEntity> = emptyList(),
-    val totalCount: Int = 0,
-    val ideaCount: Int = 0,
-    val inProgressCount: Int = 0,
-    val doneCount: Int = 0,
-)
-
-sealed interface FolderEvent {
-    data class Message(val text: String) : FolderEvent
-}
-
-class FolderViewModel(
-    private val noteRepository: NoteRepository,
-    private val folderKey: String,
-) : ViewModel() {
-    val uiState: StateFlow<FolderUiState> = noteRepository.observeAllNotes()
-        .map { notes ->
-            val filtered = notes
-                .filter { !it.isArchived }
-                .filter { note ->
-                    if (folderKey == MindFlowDestinations.UNCATEGORIZED_FOLDER) {
-                        note.folderKey == null
-                    } else {
-                        note.folderKey == folderKey
-                    }
-                }
-            val folder = MindFolderCatalog.fromKey(folderKey)
-            val folderName = if (folderKey == MindFlowDestinations.UNCATEGORIZED_FOLDER) "未分类" else (folder?.name ?: "文件夹")
-            val accentHex = folder?.colorHex ?: "#64748B"
-            FolderUiState(
-                folderKey = folderKey,
-                folderName = folderName,
-                accentHex = accentHex,
-                notes = filtered,
-                totalCount = filtered.size,
-                ideaCount = filtered.count { it.status == NoteStatus.IDEA },
-                inProgressCount = filtered.count { it.status == NoteStatus.IN_PROGRESS },
-                doneCount = filtered.count { it.status == NoteStatus.DONE },
-            )
-        }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
-            FolderUiState(
-                folderKey = folderKey,
-                folderName = if (folderKey == MindFlowDestinations.UNCATEGORIZED_FOLDER) "未分类" else (MindFolderCatalog.fromKey(folderKey)?.name ?: "文件夹"),
-                accentHex = MindFolderCatalog.fromKey(folderKey)?.colorHex ?: "#64748B",
-            ),
-        )
-
-    private val _events = MutableSharedFlow<FolderEvent>()
-    val events = _events.asSharedFlow()
-
-    fun archiveNote(noteId: Long) {
-        viewModelScope.launch {
-            noteRepository.setArchived(noteId, archived = true)
-            _events.emit(FolderEvent.Message("已归档"))
-        }
-    }
-
-    fun deleteNote(noteId: Long) {
-        viewModelScope.launch {
-            noteRepository.deleteNote(noteId)
-            _events.emit(FolderEvent.Message("已删除记录"))
-        }
-    }
-
-    companion object {
-        fun factory(
-            noteRepository: NoteRepository,
-            folderKey: String,
-        ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { FolderViewModel(noteRepository, folderKey) }
-        }
-    }
-}
 
 @Composable
-fun FolderRoute(
+fun ThreadRoute(
     noteRepository: NoteRepository,
-    folderKey: String,
+    aiSettingsRepository: AiSettingsRepository,
+    aiServiceClient: AiServiceClient,
+    threadKey: String,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
-    val viewModel: FolderViewModel = viewModel(
-        key = "folder-$folderKey",
-        factory = FolderViewModel.factory(
+    val viewModel: ThreadViewModel = viewModel(
+        key = "thread-$threadKey",
+        factory = ThreadViewModel.factory(
             noteRepository = noteRepository,
-            folderKey = folderKey,
+            aiSettingsRepository = aiSettingsRepository,
+            aiServiceClient = aiServiceClient,
+            threadKey = threadKey,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -175,9 +85,9 @@ fun FolderRoute(
     var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
+        viewModel.events.collectLatest { event ->
             when (event) {
-                is FolderEvent.Message -> Toast.makeText(context, event.text, Toast.LENGTH_SHORT).show()
+                is ThreadEvent.Message -> Toast.makeText(context, event.text, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -202,7 +112,7 @@ fun FolderRoute(
         )
     }
 
-    FolderScreen(
+    ThreadScreen(
         uiState = uiState,
         hiddenNoteIds = pendingDeletedIds,
         snackbarHostState = snackbarHostState,
@@ -229,8 +139,8 @@ fun FolderRoute(
 }
 
 @Composable
-private fun FolderScreen(
-    uiState: FolderUiState,
+private fun ThreadScreen(
+    uiState: ThreadUiState,
     hiddenNoteIds: Set<Long>,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
@@ -239,7 +149,6 @@ private fun FolderScreen(
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
-    val accent = Color(AndroidColor.parseColor(uiState.accentHex))
     val progress = if (uiState.totalCount == 0) 0f else uiState.doneCount.toFloat() / uiState.totalCount.toFloat()
     val percent = (progress * 100).toInt()
     val visibleNotes = remember(uiState.notes, hiddenNoteIds) {
@@ -261,7 +170,7 @@ private fun FolderScreen(
                     bottom = BottomBarClearance,
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
+            ) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -273,19 +182,19 @@ private fun FolderScreen(
                                 icon = Icons.AutoMirrored.Outlined.ArrowBack,
                                 contentDescription = "返回",
                                 onClick = onBack,
-                                accent = accent,
+                                accent = AccentBlue,
                             )
                             Column(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
                                 Text(
-                                    text = uiState.folderName,
+                                    text = uiState.title,
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    text = "${visibleNotes.size} 条记录 · 按同类内容整理浏览",
+                                    text = "${uiState.totalCount} 条记录 · 持续推进这个方向",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSoft,
                                 )
@@ -302,28 +211,66 @@ private fun FolderScreen(
                         )
                         NeonProgress(
                             progress = progress,
-                            startColor = accent,
-                            endColor = accent,
+                            startColor = AccentBlue,
+                            endColor = AccentBlue,
                         )
                         GridTwo {
                             MetricTile(
                                 label = "想法",
                                 value = uiState.ideaCount.toString(),
                                 modifier = Modifier.weight(1f),
-                                accent = noteStatusAccent(NoteStatus.IDEA),
+                                accent = noteStatusAccent(com.mindflow.app.data.model.NoteStatus.IDEA),
                             )
                             MetricTile(
                                 label = "进行中",
                                 value = uiState.inProgressCount.toString(),
                                 modifier = Modifier.weight(1f),
-                                accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
+                                accent = noteStatusAccent(com.mindflow.app.data.model.NoteStatus.IN_PROGRESS),
                             )
                         }
                         MetricTile(
                             label = "已实现",
                             value = uiState.doneCount.toString(),
-                            accent = noteStatusAccent(NoteStatus.DONE),
+                            accent = noteStatusAccent(com.mindflow.app.data.model.NoteStatus.DONE),
                         )
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "当前判断",
+                            headline = if (uiState.insightSourceLabel.isNotBlank()) uiState.insightSourceLabel else null,
+                        )
+                        Text(
+                            text = uiState.threadSummary.ifBlank { "这条方向正在形成，还需要更多真实记录来稳定主线。" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (uiState.threadBlocker.isNotBlank()) {
+                            Text(
+                                text = "卡点",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = uiState.threadBlocker,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (uiState.threadNextStep.isNotBlank()) {
+                            Text(
+                                text = "下一步",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = uiState.threadNextStep,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 }
 
@@ -337,8 +284,8 @@ private fun FolderScreen(
                 if (visibleNotes.isEmpty()) {
                     item {
                         EmptyState(
-                            title = "这个文件夹还没有内容",
-                            description = "等新记录被归到这里，这里就会慢慢长起来。",
+                            title = "这个方向还没有内容",
+                            description = "等更多记录被串进来，这里就会慢慢形成稳定脉络。",
                         )
                     }
                 } else {

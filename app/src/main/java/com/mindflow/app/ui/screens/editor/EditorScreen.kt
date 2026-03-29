@@ -60,11 +60,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.components.ActionButton
@@ -90,6 +92,7 @@ fun EditorRoute(
     aiSettingsRepository: AiSettingsRepository,
     aiServiceClient: AiServiceClient,
     noteId: Long?,
+    onOpenNote: (Long) -> Unit,
     onBack: () -> Unit,
     onSavedNewNote: () -> Unit,
 ) {
@@ -103,7 +106,30 @@ fun EditorRoute(
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val allNotes by noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
+    val relatedNotes = remember(
+        uiState.isLoading,
+        uiState.noteId,
+        uiState.topic,
+        uiState.content,
+        uiState.folderKey,
+        uiState.tags,
+        allNotes,
+    ) {
+        if (uiState.isLoading || uiState.noteId == null) {
+            emptyList()
+        } else {
+            NoteConnectionAnalyzer.buildRelatedNotes(
+                currentNoteId = uiState.noteId,
+                topic = uiState.topic,
+                content = uiState.content,
+                folderKey = uiState.folderKey,
+                tags = uiState.tags,
+                notes = allNotes,
+            )
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -132,6 +158,8 @@ fun EditorRoute(
         onRetriggerFolder = viewModel::retriggerFolderClassification,
         onRetriggerTopic = viewModel::retriggerTopicExtraction,
         onRetriggerTag = viewModel::retriggerTagExtraction,
+        relatedNotes = relatedNotes,
+        onOpenRelatedNote = onOpenNote,
     )
 }
 
@@ -159,7 +187,55 @@ private fun EditorScreen(
     onRetriggerFolder: () -> Unit,
     onRetriggerTopic: () -> Unit,
     onRetriggerTag: () -> Unit,
+    relatedNotes: List<NoteEntity>,
+    onOpenRelatedNote: (Long) -> Unit,
 ) {
+    if (uiState.isLoading) {
+        ScreenBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconPillButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "返回",
+                        onClick = onBack,
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "编辑记录",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Text(
+                            text = "正在加载内容…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                PanelCard {
+                    Text(
+                        text = "正在打开这条记录，请稍等。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        return
+    }
+
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
     var pendingTag by rememberSaveable(uiState.noteId) { mutableStateOf("") }
     var previewingOriginal by rememberSaveable(
@@ -167,6 +243,7 @@ private fun EditorScreen(
         uiState.polishedCandidateContent,
     ) { mutableStateOf(false) }
     var isEditingContent by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(uiState.isNew) }
+    var aiToolsExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
     val editorScrollState = rememberScrollState()
     val contentBringIntoViewRequester = remember { BringIntoViewRequester() }
     var isContentFieldFocused by rememberSaveable { mutableStateOf(false) }
@@ -336,32 +413,68 @@ private fun EditorScreen(
                             }
                         }
                     }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        GhostActionButton(
-                            text = if (uiState.isPolishingContent) "润色中..." else "AI 润色",
-                            onClick = onPolishContent,
-                            enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
-                            icon = Icons.Outlined.AutoFixHigh,
-                        )
-                        if (!uiState.isNew) {
-                            GhostActionButton(
-                                text = if (uiState.isRefreshingFolder) "分类中..." else "重分类",
-                                onClick = onRetriggerFolder,
-                                enabled = !uiState.isRefreshingFolder,
-                            )
-                            GhostActionButton(
-                                text = if (uiState.isRefreshingTopic) "生成中..." else "重提主题",
-                                onClick = onRetriggerTopic,
-                                enabled = !uiState.isRefreshingTopic,
-                            )
-                            GhostActionButton(
-                                text = if (uiState.isRefreshingTags) "生成中..." else "重提标签",
-                                onClick = onRetriggerTag,
-                                enabled = !uiState.isRefreshingTags,
-                            )
+                    GhostActionButton(
+                        text = if (aiToolsExpanded) "收起 AI 助手" else "AI 助手",
+                        onClick = { aiToolsExpanded = !aiToolsExpanded },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "需要时再展开，避免打断写作。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (aiToolsExpanded) {
+                        Surface(
+                            color = WhiteGlass.copy(alpha = 0.9f),
+                            shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, BorderSoft),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(
+                                    text = "AI 工具",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                GridTwo {
+                                    GhostActionButton(
+                                        text = if (uiState.isPolishingContent) "正在润色" else "润色正文",
+                                        onClick = onPolishContent,
+                                        enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    if (!uiState.isNew) {
+                                        GhostActionButton(
+                                            text = if (uiState.isRefreshingTopic) "正在提炼" else "提炼主题",
+                                            onClick = onRetriggerTopic,
+                                            enabled = !uiState.isRefreshingTopic,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    } else {
+                                        Box(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                                if (!uiState.isNew) {
+                                    GridTwo {
+                                        GhostActionButton(
+                                            text = if (uiState.isRefreshingTags) "正在提取" else "提取标签",
+                                            onClick = onRetriggerTag,
+                                            enabled = !uiState.isRefreshingTags,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        GhostActionButton(
+                                            text = if (uiState.isRefreshingFolder) "正在归类" else "归类内容",
+                                            onClick = onRetriggerFolder,
+                                            enabled = !uiState.isRefreshingFolder,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     if (!uiState.polishedOriginalContent.isNullOrBlank() && !uiState.polishedCandidateContent.isNullOrBlank()) {
@@ -566,6 +679,48 @@ private fun EditorScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+
+                    if (relatedNotes.isNotEmpty()) {
+                        PanelCard {
+                            SectionHeader(title = "相关记录", headline = "${relatedNotes.size} 条")
+                            relatedNotes.forEach { note ->
+                                val cardModifier = if (uiState.hasUnsavedChanges) {
+                                    Modifier.fillMaxWidth()
+                                } else {
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenRelatedNote(note.id) }
+                                }
+                                Surface(
+                                    modifier = cardModifier,
+                                    color = WhiteGlass.copy(alpha = 0.9f),
+                                    shape = MaterialTheme.shapes.medium,
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = note.topic.ifBlank { "未命名记录" },
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
