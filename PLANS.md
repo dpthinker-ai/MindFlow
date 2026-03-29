@@ -67,7 +67,7 @@ Planned items:
   - share-to-capture
   - voice-to-text in editor
 - next step:
-  - notification quick capture
+  - richer notification quick capture
   - faster voice entry from outside the editor
 
 ## P1: AI Insight Layer

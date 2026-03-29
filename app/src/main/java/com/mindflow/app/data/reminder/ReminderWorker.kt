@@ -13,11 +13,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.mindflow.app.EntryProxyActivity
 import com.mindflow.app.MindFlowApplication
 import com.mindflow.app.SplashActivity
 import com.mindflow.app.R
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.LocalDate
@@ -143,6 +145,16 @@ class ReminderWorker(
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val quickCaptureIntent = quickActionPendingIntent(
+            kind = kind,
+            action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
+            requestCodeOffset = 100,
+        )
+        val flowIntent = quickActionPendingIntent(
+            kind = kind,
+            action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
+            requestCodeOffset = 200,
+        )
 
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_monochrome_inset)
@@ -152,6 +164,16 @@ class ReminderWorker(
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .addAction(
+                R.drawable.ic_launcher_monochrome_inset,
+                "记一条",
+                quickCaptureIntent,
+            )
+            .addAction(
+                R.drawable.ic_launcher_monochrome_inset,
+                "打开 Flow",
+                flowIntent,
+            )
             .build()
 
         NotificationManagerCompat.from(applicationContext).notify(kind.ordinal + 701, notification)
@@ -185,6 +207,23 @@ class ReminderWorker(
         val title: String,
         val body: String,
     )
+
+    private fun quickActionPendingIntent(
+        kind: ReminderKind,
+        action: String,
+        requestCodeOffset: Int,
+    ): PendingIntent {
+        val intent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
+            this.action = action
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            applicationContext,
+            kind.ordinal + requestCodeOffset,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     companion object {
         private const val CHANNEL_ID = "mindflow_daily_brief"
