@@ -84,11 +84,13 @@ Planned items:
   - what to explore
 
 2. Weekly AI review
-- status: implemented
+- status: implemented and refined
 - current shape:
   - strongest weekly theme
   - direction worth continuing
+  - one stalled direction worth reviving
   - one synthesis / breakthrough suggestion
+  - light weekly progress stats
 
 3. Idea linking
 - connect similar notes
@@ -162,7 +164,7 @@ Planned items:
 Next best order:
 
 1. thread curation and refinement
-2. weekly review quality
+2. thread-level action refinement
 3. external research enrichment
 4. notification quick capture
 5. external research enrichment for selected threads

@@ -152,8 +152,8 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(5_000),
-            systemPrompt = "You are creating a weekly review for a personal idea system. Return exactly 3 concise Chinese lines: the strongest weekly theme, the most valuable direction to keep pushing, and one synthesis or breakthrough suggestion. Do not number. Do not repeat note titles mechanically. Make the lines useful, concrete, and thought-provoking.",
-            maxTokens = 260,
+            systemPrompt = "You are creating a weekly review for a personal idea system. Return exactly 4 concise Chinese lines in this order: 1) the strongest weekly theme, 2) the most valuable direction to keep pushing, 3) one old direction worth reviving or the key missing gap, 4) one synthesis or breakthrough suggestion. Do not number. Do not repeat note titles mechanically. Make the lines useful, concrete, and thought-provoking.",
+            maxTokens = 320,
             temperature = 0.6,
             thinkingEnabled = false,
         )

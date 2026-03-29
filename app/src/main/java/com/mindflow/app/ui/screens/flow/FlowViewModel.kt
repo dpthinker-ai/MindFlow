@@ -18,8 +18,11 @@ import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.ThreadPreferences
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.review.WeeklyReviewState
+import com.mindflow.app.data.review.items
+import com.mindflow.app.data.review.statsLine
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import java.time.Instant
 import java.time.LocalDate
@@ -38,8 +41,9 @@ data class FlowUiState(
     val nextActionSource: DailyBriefSource = DailyBriefSource.RULE,
     val explorationPrompts: List<String> = emptyList(),
     val explorationSource: DailyBriefSource = DailyBriefSource.RULE,
-    val weeklyReviewLines: List<String> = emptyList(),
+    val weeklyReviewItems: List<WeeklyReviewItem> = emptyList(),
     val weeklyReviewSource: DailyBriefSource = DailyBriefSource.RULE,
+    val weeklyReviewStatsLine: String = "",
     val followedThreads: List<ThemeThread> = emptyList(),
     val themeThreads: List<ThemeThread> = emptyList(),
     val fusionSuggestions: List<String> = emptyList(),
@@ -119,8 +123,9 @@ class FlowViewModel(
             nextActionSource = primary.nextActionSource,
             explorationPrompts = primary.explorationPrompts,
             explorationSource = primary.explorationSource,
-            weeklyReviewLines = weeklyReviewState.lines,
+            weeklyReviewItems = weeklyReviewState.items,
             weeklyReviewSource = weeklyReviewState.source,
+            weeklyReviewStatsLine = weeklyReviewState.statsLine,
             followedThreads = primary.followedThreads,
             themeThreads = primary.themeThreads,
             fusionSuggestions = fusionState.lines,

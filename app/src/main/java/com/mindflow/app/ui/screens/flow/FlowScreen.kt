@@ -29,6 +29,7 @@ import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.ui.components.BottomBarClearance
@@ -135,8 +136,9 @@ private fun FlowScreen(
 
                 item {
                     DirectionCard(
-                        weeklyLines = uiState.weeklyReviewLines,
+                        weeklyItems = uiState.weeklyReviewItems,
                         weeklySource = uiState.weeklyReviewSource,
+                        weeklyStatsLine = uiState.weeklyReviewStatsLine,
                         followedThreads = uiState.followedThreads,
                         threads = uiState.themeThreads,
                         suggestions = uiState.fusionSuggestions,
@@ -151,8 +153,9 @@ private fun FlowScreen(
 
 @Composable
 private fun DirectionCard(
-    weeklyLines: List<String>,
+    weeklyItems: List<WeeklyReviewItem>,
     weeklySource: DailyBriefSource,
+    weeklyStatsLine: String,
     followedThreads: List<ThemeThread>,
     threads: List<ThemeThread>,
     suggestions: List<String>,
@@ -170,8 +173,9 @@ private fun DirectionCard(
             },
         )
         WeeklyReviewCard(
-            lines = weeklyLines,
+            items = weeklyItems,
             source = weeklySource,
+            statsLine = weeklyStatsLine,
         )
         ConnectionCard(
             followedThreads = followedThreads,
@@ -287,8 +291,9 @@ private fun ThreadRow(
 
 @Composable
 private fun WeeklyReviewCard(
-    lines: List<String>,
+    items: List<WeeklyReviewItem>,
     source: DailyBriefSource,
+    statsLine: String,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
@@ -307,6 +312,14 @@ private fun WeeklyReviewCard(
                 color = TextSoft,
                 maxLines = 1,
             )
+            if (statsLine.isNotBlank()) {
+                Text(
+                    text = statsLine,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
+                    maxLines = 1,
+                )
+            }
             if (source == DailyBriefSource.AI) {
                 Text(
                     text = "AI Review",
@@ -315,19 +328,26 @@ private fun WeeklyReviewCard(
                     maxLines = 1,
                 )
             }
-            if (lines.isEmpty()) {
+            if (items.isEmpty()) {
                 Text(
                     text = "这一周的线索还不够多，再记几条更具体的内容会更有价值。",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
             } else {
-                lines.forEach { line ->
-                    Text(
-                        text = "• $line",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextMain,
-                    )
+                items.forEach { item ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = item.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                        Text(
+                            text = item.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextMain,
+                        )
+                    }
                 }
             }
         }

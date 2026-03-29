@@ -3,6 +3,7 @@ package com.mindflow.app.data.review
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -31,7 +32,32 @@ data class WeeklyReviewState(
     val source: DailyBriefSource = DailyBriefSource.RULE,
     val generatedAt: Long = 0L,
     val weekKey: String = "",
+    val updatedCount: Int = 0,
+    val progressCount: Int = 0,
+    val doneCount: Int = 0,
+    val revisitTitle: String = "",
 )
+
+data class WeeklyReviewItem(
+    val label: String,
+    val text: String,
+) {
+    companion object {
+        val labels = listOf("主线", "推进", "重启", "串联")
+    }
+}
+
+val WeeklyReviewState.items: List<WeeklyReviewItem>
+    get() = WeeklyReviewItem.labels.mapIndexedNotNull { index, label ->
+        lines.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { WeeklyReviewItem(label, it) }
+    }
+
+val WeeklyReviewState.statsLine: String
+    get() = buildList {
+        add("本周 ${updatedCount} 条")
+        if (progressCount > 0) add("推进 ${progressCount} 条")
+        if (doneCount > 0) add("完成 ${doneCount} 条")
+    }.joinToString(" · ")
 
 class WeeklyReviewPlanner(
     private val context: Context,
@@ -59,6 +85,10 @@ class WeeklyReviewPlanner(
                     ?: DailyBriefSource.RULE,
                 generatedAt = preferences[GENERATED_AT] ?: 0L,
                 weekKey = preferences[WEEK_KEY].orEmpty(),
+                updatedCount = preferences[UPDATED_COUNT] ?: 0,
+                progressCount = preferences[PROGRESS_COUNT] ?: 0,
+                doneCount = preferences[DONE_COUNT] ?: 0,
+                revisitTitle = preferences[REVISIT_TITLE].orEmpty(),
             )
         }
 
@@ -95,7 +125,9 @@ class WeeklyReviewPlanner(
         val weekKey = currentWeekKey()
         val signature = buildSignature(weeklyNotes)
         val dayKey = LocalDate.now().toString()
-        val ruleLines = buildRuleReview(weeklyNotes, notes.filter { !it.isArchived })
+        val activeNotes = notes.filter { !it.isArchived }
+        val ruleLines = buildRuleReview(weeklyNotes, activeNotes)
+        val weeklyStats = buildWeeklyStats(weeklyNotes, activeNotes)
         val settings = aiSettingsRepository.getCurrent()
 
         if (settings.aiEnabled && settings.isConfigured && weeklyNotes.isNotEmpty()) {
@@ -117,6 +149,10 @@ class WeeklyReviewPlanner(
                             source = DailyBriefSource.AI,
                             generatedAt = System.currentTimeMillis(),
                             weekKey = weekKey,
+                            updatedCount = weeklyStats.updatedCount,
+                            progressCount = weeklyStats.progressCount,
+                            doneCount = weeklyStats.doneCount,
+                            revisitTitle = weeklyStats.revisitTitle,
                         )
                         persist(state, signature)
                         return state
@@ -134,6 +170,10 @@ class WeeklyReviewPlanner(
             source = DailyBriefSource.RULE,
             generatedAt = System.currentTimeMillis(),
             weekKey = weekKey,
+            updatedCount = weeklyStats.updatedCount,
+            progressCount = weeklyStats.progressCount,
+            doneCount = weeklyStats.doneCount,
+            revisitTitle = weeklyStats.revisitTitle,
         )
         persist(fallback, signature)
         return fallback
@@ -149,6 +189,10 @@ class WeeklyReviewPlanner(
             preferences[SOURCE] = state.source.name
             preferences[GENERATED_AT] = state.generatedAt
             preferences[SIGNATURE] = signature
+            preferences[UPDATED_COUNT] = state.updatedCount
+            preferences[PROGRESS_COUNT] = state.progressCount
+            preferences[DONE_COUNT] = state.doneCount
+            preferences[REVISIT_TITLE] = state.revisitTitle
         }
     }
 
@@ -156,6 +200,7 @@ class WeeklyReviewPlanner(
         weeklyNotes: List<NoteEntity>,
         allNotes: List<NoteEntity>,
     ): String {
+        val activeNotes = allNotes.filter { !it.isArchived }
         val latestWeekly = weeklyNotes.sortedByDescending { it.updatedAt }.take(10)
         val repeatedTags = weeklyNotes
             .flatMap { it.tags.distinct() }
@@ -178,16 +223,21 @@ class WeeklyReviewPlanner(
 
         return buildString {
             appendLine("你正在为一个人的灵感系统生成本周回看。")
-            appendLine("请输出恰好 3 行中文，分别对应：")
+            appendLine("请输出恰好 4 行中文，分别对应：")
             appendLine("1. 本周最明显的主题")
             appendLine("2. 最值得继续推进的方向")
-            appendLine("3. 一条有启发性的融合或突破建议")
+            appendLine("3. 一个值得重启的旧方向或当前最需要补上的断点")
+            appendLine("4. 一条有启发性的融合或突破建议")
             appendLine("要求：")
             appendLine("不要机械复述记录原文，不要空话，不要编号。")
             appendLine("整体累计：想法${allNotes.count { it.status == NoteStatus.IDEA }}条，进行中${allNotes.count { it.status == NoteStatus.IN_PROGRESS }}条，已实现${allNotes.count { it.status == NoteStatus.DONE }}条。")
             appendLine("本周分布：$folderSummary")
             if (repeatedTags.isNotBlank()) {
                 appendLine("本周高频标签：$repeatedTags")
+            }
+            val revisitCandidate = buildWeeklyStats(weeklyNotes, activeNotes).revisitTitle
+            if (revisitCandidate.isNotBlank()) {
+                appendLine("可重启方向：$revisitCandidate")
             }
             appendLine("本周记录：")
             appendLine(weeklySummary)
@@ -202,6 +252,8 @@ class WeeklyReviewPlanner(
             return listOf(
                 "这周还没有形成清晰主线，先记下一条真正想长期推进的事。",
                 "从工作、项目、健康里只选一个方向，别同时摊开太多战线。",
+                "挑一条停了很久却还值得做的记录，重新写出它为什么重要。",
+                "先把工作里的真实问题和项目里的实现思路串起来，形成一条更有突破感的方案。",
             )
         }
 
@@ -221,6 +273,10 @@ class WeeklyReviewPlanner(
         val continueNote = activeNotes
             .filter { it.status == NoteStatus.IN_PROGRESS }
             .maxByOrNull { it.updatedAt }
+        val revisitNote = activeNotes
+            .filter { it.status != NoteStatus.DONE }
+            .filter { it.updatedAt < System.currentTimeMillis() - 10L * 24 * 60 * 60 * 1_000 }
+            .minByOrNull { it.updatedAt }
         val ideaHeavy = weeklyNotes.count { it.status == NoteStatus.IDEA } >= weeklyNotes.count { it.status == NoteStatus.IN_PROGRESS } + 2
 
         if (dominantFolder != null) {
@@ -234,14 +290,20 @@ class WeeklyReviewPlanner(
         } else if (ideaHeavy) {
             lines += "这周新想法明显多于推进动作，下一步应该把一组想法压成一个可验证的小实验。"
         }
+        if (revisitNote != null) {
+            lines += "「${revisitNote.topic.ifBlank { "未命名记录" }}」已经停了一段时间，值得重启并补一条新的验证动作。"
+        }
 
-        if (lines.size < 3) {
+        if (lines.size < 4) {
             lines += "尝试把工作里的真实问题和项目里的实现思路串起来，形成一条更有突破感的方案。"
         }
-        if (lines.size < 3) {
+        if (lines.size < 4) {
             lines += "如果最近健康和效率记录同时出现，优先找出一个既能改善状态又能提升执行力的微动作。"
         }
-        return lines.distinct().take(3)
+        if (lines.size < 4) {
+            lines += "别只停留在总结层，至少选一个方向在下周推进到可观察的结果。"
+        }
+        return lines.distinct().take(4)
     }
 
     private fun parseAiLines(raw: String): List<String> {
@@ -256,12 +318,31 @@ class WeeklyReviewPlanner(
                     .removePrefix("1.")
                     .removePrefix("2.")
                     .removePrefix("3.")
+                    .removePrefix("4.")
                     .trim()
             }
             .filter { it.isNotBlank() }
             .toList()
 
-        return normalized.take(3)
+        return normalized.take(4)
+    }
+
+    private fun buildWeeklyStats(
+        weeklyNotes: List<NoteEntity>,
+        activeNotes: List<NoteEntity>,
+    ): WeeklyStats {
+        val revisitTitle = activeNotes
+            .filter { it.status != NoteStatus.DONE }
+            .filter { it.updatedAt < System.currentTimeMillis() - 10L * 24 * 60 * 60 * 1_000 }
+            .minByOrNull { it.updatedAt }
+            ?.topic
+            .orEmpty()
+        return WeeklyStats(
+            updatedCount = weeklyNotes.size,
+            progressCount = weeklyNotes.count { it.status == NoteStatus.IN_PROGRESS },
+            doneCount = weeklyNotes.count { it.status == NoteStatus.DONE },
+            revisitTitle = revisitTitle,
+        )
     }
 
     private fun buildSignature(notes: List<NoteEntity>): String =
@@ -295,5 +376,16 @@ class WeeklyReviewPlanner(
         val SOURCE = stringPreferencesKey("source")
         val GENERATED_AT = longPreferencesKey("generated_at")
         val SIGNATURE = stringPreferencesKey("signature")
+        val UPDATED_COUNT = intPreferencesKey("updated_count")
+        val PROGRESS_COUNT = intPreferencesKey("progress_count")
+        val DONE_COUNT = intPreferencesKey("done_count")
+        val REVISIT_TITLE = stringPreferencesKey("revisit_title")
     }
+
+    private data class WeeklyStats(
+        val updatedCount: Int,
+        val progressCount: Int,
+        val doneCount: Int,
+        val revisitTitle: String,
+    )
 }
