@@ -101,6 +101,7 @@ Planned items:
   - related notes
   - thread detail page
   - followed directions in Flow
+  - thread focus and lightweight promotion
 
 4. Fusion suggestions
 - combine multiple notes into one stronger concept
@@ -122,6 +123,11 @@ Planned items:
 2. Progress loop
 - light status updates
 - move notes from idea to in progress to done naturally
+- status: first version implemented in thread workspace
+- current shape:
+  - focus note inside a thread
+  - quick open
+  - promote from idea to in progress
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long
@@ -163,11 +169,11 @@ Planned items:
 
 Next best order:
 
-1. thread curation and refinement
-2. thread-level action refinement
-3. external research enrichment
-4. notification quick capture
-5. external research enrichment for selected threads
+1. external research enrichment
+2. notification quick capture
+3. external research enrichment for selected threads
+4. thread-level weekly review
+5. follow-up prompts for stale notes
 
 ## Success Criteria
 

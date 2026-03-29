@@ -118,10 +118,11 @@ Current status:
 - faster capture entry points: first version implemented
 - thread follow and curation: first version implemented
 - voice capture in editor: first version implemented
+- thread focus and lightweight promotion: first version implemented
 
 Next strongest direction:
 
-- weekly review quality
 - external research enrichment
 - notification quick capture
-- thread-level action refinement
+- follow-up prompts for stale notes
+- thread-level weekly review

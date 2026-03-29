@@ -45,6 +45,8 @@ import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
 import com.mindflow.app.ui.components.GridTwo
 import com.mindflow.app.ui.components.IconPillButton
+import com.mindflow.app.ui.components.ActionButton
+import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.MetricTile
 import com.mindflow.app.ui.components.NeonProgress
 import com.mindflow.app.ui.components.PanelCard
@@ -122,6 +124,7 @@ fun ThreadRoute(
         onBack = onBack,
         onOpenNote = onOpenNote,
         onToggleFollow = viewModel::toggleFollow,
+        onPromoteFocus = viewModel::promoteFocusNote,
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -150,6 +153,7 @@ private fun ThreadScreen(
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
     onToggleFollow: () -> Unit,
+    onPromoteFocus: () -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -242,6 +246,58 @@ private fun ThreadScreen(
                             value = uiState.doneCount.toString(),
                             accent = noteStatusAccent(com.mindflow.app.data.model.NoteStatus.DONE),
                         )
+                    }
+                }
+
+                if (uiState.focusNote != null) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "当前焦点",
+                                headline = uiState.focusNote.status.label,
+                            )
+                            Text(
+                                text = uiState.focusNote.topic.ifBlank { "未命名记录" },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (uiState.focusReason.isNotBlank()) {
+                                Text(
+                                    text = uiState.focusReason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
+                            if (uiState.threadNextStep.isNotBlank()) {
+                                Text(
+                                    text = "这一条先这样推进",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.threadNextStep,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                GhostActionButton(
+                                    text = "打开记录",
+                                    onClick = { onOpenNote(uiState.focusNote.id) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (uiState.focusNote.status == com.mindflow.app.data.model.NoteStatus.IDEA) {
+                                    ActionButton(
+                                        text = "开始推进",
+                                        onClick = onPromoteFocus,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 

@@ -8,7 +8,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.TagSource
+import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
@@ -36,6 +39,8 @@ data class ThreadUiState(
     val threadSummary: String = "",
     val threadBlocker: String = "",
     val threadNextStep: String = "",
+    val focusNote: NoteEntity? = null,
+    val focusReason: String = "",
     val insightSource: DailyBriefSource = DailyBriefSource.RULE,
     val isRefreshingInsights: Boolean = false,
     val isFollowed: Boolean = false,
@@ -79,6 +84,7 @@ class ThreadViewModel(
         _insightState,
     ) { allNotes, isFollowed, insight ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
+        val focusNote = pickFocusNote(notes)
         ThreadUiState(
             threadKey = threadKey,
             title = NoteConnectionAnalyzer.titleForThread(threadKey),
@@ -90,6 +96,8 @@ class ThreadViewModel(
             threadSummary = insight.summary,
             threadBlocker = insight.blocker,
             threadNextStep = insight.nextStep,
+            focusNote = focusNote,
+            focusReason = focusReasonFor(focusNote),
             insightSource = insight.source,
             isRefreshingInsights = insight.isLoading,
             isFollowed = isFollowed,
@@ -129,6 +137,29 @@ class ThreadViewModel(
         viewModelScope.launch {
             val nowFollowed = threadPreferencesRepository.toggleFollow(threadKey)
             _events.emit(ThreadEvent.Message(if (nowFollowed) "已加入关注方向" else "已取消关注"))
+        }
+    }
+
+    fun promoteFocusNote() {
+        viewModelScope.launch {
+            val note = uiState.value.focusNote ?: return@launch
+            if (note.status != NoteStatus.IDEA) {
+                _events.emit(ThreadEvent.Message("这条记录已经在推进中了"))
+                return@launch
+            }
+            noteRepository.updateNote(
+                noteId = note.id,
+                content = note.content,
+                topic = note.topic,
+                folderKey = note.folderKey,
+                tags = note.tags,
+                status = NoteStatus.IN_PROGRESS,
+                isArchived = note.isArchived,
+                folderManuallyEdited = note.folderSource == FolderSource.MANUAL,
+                topicManuallyEdited = note.topicSource == TopicSource.MANUAL,
+                tagsManuallyEdited = note.tagSource == TagSource.MANUAL,
+            )
+            _events.emit(ThreadEvent.Message("已开始推进这条记录"))
         }
     }
 
@@ -265,6 +296,23 @@ class ThreadViewModel(
 
     private fun buildSignature(notes: List<NoteEntity>): String =
         "${notes.size}:${notes.maxOfOrNull { it.updatedAt } ?: 0L}"
+
+    private fun pickFocusNote(notes: List<NoteEntity>): NoteEntity? =
+        notes
+            .filter { it.status == NoteStatus.IN_PROGRESS }
+            .maxByOrNull { it.updatedAt }
+            ?: notes
+                .filter { it.status == NoteStatus.IDEA }
+                .maxByOrNull { it.updatedAt }
+            ?: notes.maxByOrNull { it.updatedAt }
+
+    private fun focusReasonFor(note: NoteEntity?): String =
+        when (note?.status) {
+            NoteStatus.IN_PROGRESS -> "这条记录最接近真实推进，可以继续沿着它把方向压实。"
+            NoteStatus.IDEA -> "这条记录最新、最值得先压成动作，别让它只停在想法层。"
+            NoteStatus.DONE -> "这条记录已经做成了，可以把它当作下一轮延展的起点。"
+            null -> ""
+        }
 
     private fun String.compactPreview(maxLength: Int): String =
         replace("\n", " ")
