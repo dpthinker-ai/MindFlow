@@ -65,6 +65,8 @@ class NoteEditorViewModel(
     private val aiSettingsRepository: AiSettingsRepository,
     private val aiServiceClient: AiServiceClient,
     private val noteId: Long?,
+    private val initialContent: String,
+    private val initialTopic: String,
 ) : ViewModel() {
     private data class PersistedSnapshot(
         val content: String = "",
@@ -82,6 +84,10 @@ class NoteEditorViewModel(
             isNew = noteId == null,
             noteId = noteId,
             isLoading = noteId != null,
+            content = if (noteId == null) initialContent else "",
+            topic = if (noteId == null) initialTopic else "",
+            topicEdited = noteId == null && initialTopic.isNotBlank(),
+            hasUnsavedChanges = noteId == null && (initialContent.isNotBlank() || initialTopic.isNotBlank()),
         )
     )
     val uiState = _uiState
@@ -457,6 +463,8 @@ class NoteEditorViewModel(
             aiSettingsRepository: AiSettingsRepository,
             aiServiceClient: AiServiceClient,
             noteId: Long?,
+            initialContent: String,
+            initialTopic: String,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 NoteEditorViewModel(
@@ -464,6 +472,8 @@ class NoteEditorViewModel(
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
                     noteId = noteId,
+                    initialContent = initialContent,
+                    initialTopic = initialTopic,
                 )
             }
         }

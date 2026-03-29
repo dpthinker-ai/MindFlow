@@ -27,10 +27,14 @@ Already implemented:
 - share cards
 - WebDAV backup
 - Today page
+- Flow page and thread detail page
 - AI daily brief
 - note-to-next-action extraction
 - reminder scheduling hooks
 - weekly AI review
+- launcher shortcuts
+- share-to-capture entry
+- home quick capture widget
 
 ## P0: Make It Daily
 
@@ -54,9 +58,14 @@ Planned items:
   - low-frequency local notifications
 
 3. Faster capture
-- widget
-- notification quick capture
-- voice-to-text capture
+- status: first version implemented
+- current shape:
+  - launcher shortcuts
+  - home widget
+  - share-to-capture
+- next step:
+  - notification quick capture
+  - voice-to-text capture
 
 ## P1: AI Insight Layer
 
@@ -140,15 +149,15 @@ Planned items:
 2. Health insight loop
 - surface notes connected to sleep, exercise, stress, mood
 
-## Tonight Build Focus
+## Next Build Focus
 
 Next best order:
 
-1. refine weekly review quality
-2. add idea linking
-3. add theme threads
-4. add fusion suggestions
-5. add faster capture entry points
+1. thread curation and refinement
+2. weekly review quality
+3. external research enrichment
+4. notification quick capture
+5. voice-to-text capture
 
 ## Success Criteria
 

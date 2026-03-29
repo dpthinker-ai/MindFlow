@@ -115,10 +115,11 @@ Current status:
 - weekly review: implemented
 - idea-to-action extraction: implemented
 - morning/evening reminder hooks: implemented
+- faster capture entry points: first version implemented
 
 Next strongest direction:
 
-- weekly review refinement
-- note linking
-- theme threads
-- fusion suggestions
+- thread curation and refinement
+- weekly review quality
+- external research enrichment
+- faster capture follow-ups such as voice input

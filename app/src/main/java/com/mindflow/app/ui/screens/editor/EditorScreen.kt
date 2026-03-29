@@ -92,17 +92,26 @@ fun EditorRoute(
     aiSettingsRepository: AiSettingsRepository,
     aiServiceClient: AiServiceClient,
     noteId: Long?,
+    captureSessionKey: Long? = null,
+    initialContent: String = "",
+    initialTopic: String = "",
     onOpenNote: (Long) -> Unit,
     onBack: () -> Unit,
     onSavedNewNote: () -> Unit,
 ) {
     val viewModel: NoteEditorViewModel = viewModel(
-        key = "editor-$noteId",
+        key = if (noteId == null) {
+            "editor-new-${captureSessionKey ?: 0L}"
+        } else {
+            "editor-$noteId"
+        },
         factory = NoteEditorViewModel.factory(
             noteRepository = noteRepository,
             aiSettingsRepository = aiSettingsRepository,
             aiServiceClient = aiServiceClient,
             noteId = noteId,
+            initialContent = initialContent,
+            initialTopic = initialTopic,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="quick_capture"
+        android:shortcutLongLabel="@string/shortcut_capture_long"
+        android:shortcutShortLabel="@string/shortcut_capture_short">
+        <intent
+            android:action="com.mindflow.app.action.OPEN_CAPTURE"
+            android:targetClass="com.mindflow.app.EntryProxyActivity"
+            android:targetPackage="com.mindflow.app" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="quick_search"
+        android:shortcutLongLabel="@string/shortcut_search_long"
+        android:shortcutShortLabel="@string/shortcut_search_short">
+        <intent
+            android:action="com.mindflow.app.action.OPEN_SEARCH"
+            android:targetClass="com.mindflow.app.EntryProxyActivity"
+            android:targetPackage="com.mindflow.app" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="open_flow"
+        android:shortcutLongLabel="@string/shortcut_flow_long"
+        android:shortcutShortLabel="@string/shortcut_flow_short">
+        <intent
+            android:action="com.mindflow.app.action.OPEN_FLOW"
+            android:targetClass="com.mindflow.app.EntryProxyActivity"
+            android:targetPackage="com.mindflow.app" />
+    </shortcut>
+</shortcuts>

@@ -1,5 +1,6 @@
 package com.mindflow.app
 
+import android.content.Intent
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
@@ -13,16 +14,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.ui.MindFlowApp
+import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 import com.mindflow.app.ui.theme.MindFlowTheme
 
 class MainActivity : ComponentActivity() {
+    private val launchRequestState = mutableStateOf(MindFlowEntryIntents.fromIntent(intent))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launchRequestState.value = MindFlowEntryIntents.fromIntent(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 scrim = AndroidColor.TRANSPARENT,
@@ -62,9 +68,21 @@ class MainActivity : ComponentActivity() {
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
                     aiServiceClient = aiServiceClient,
+                    launchRequest = launchRequestState.value,
+                    onLaunchRequestConsumed = { requestId ->
+                        if (launchRequestState.value?.requestId == requestId) {
+                            launchRequestState.value = null
+                        }
+                    },
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        launchRequestState.value = MindFlowEntryIntents.fromIntent(intent)
     }
 
     override fun onStop() {

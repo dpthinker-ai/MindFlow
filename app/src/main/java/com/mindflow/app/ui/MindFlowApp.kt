@@ -28,6 +28,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -54,7 +57,9 @@ import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.MindFlowDestinations
+import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.FlowRoute
@@ -90,15 +95,52 @@ fun MindFlowApp(
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
     aiServiceClient: AiServiceClient,
+    launchRequest: MindFlowLaunchRequest?,
+    onLaunchRequestConsumed: (Long) -> Unit,
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val captureSeeds = remember { mutableStateMapOf<Long, CaptureSeed>() }
+
+    fun openCapture(seed: CaptureSeed = CaptureSeed()) {
+        captureSeeds[seed.requestId] = seed
+        navController.navigate(MindFlowDestinations.captureRoute(seed.requestId))
+    }
+
+    fun openTopLevel(route: String) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     val openNoteSafely: (Long) -> Unit = { noteId ->
         runCatching {
             navController.navigate(MindFlowDestinations.detailRoute(noteId)) {
                 launchSingleTop = true
             }
+        }
+    }
+
+    LaunchedEffect(launchRequest?.requestId) {
+        when (val request = launchRequest) {
+            is MindFlowLaunchRequest.OpenCapture -> {
+                openCapture(request.seed)
+                onLaunchRequestConsumed(request.requestId)
+            }
+            is MindFlowLaunchRequest.OpenFlow -> {
+                openTopLevel(MindFlowDestinations.FLOW)
+                onLaunchRequestConsumed(request.requestId)
+            }
+            is MindFlowLaunchRequest.OpenSearch -> {
+                openTopLevel(MindFlowDestinations.SEARCH_BASE)
+                onLaunchRequestConsumed(request.requestId)
+            }
+            null -> Unit
         }
     }
 
@@ -133,7 +175,7 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FEED) {
                 FeedRoute(
                     noteRepository = noteRepository,
-                    onCreateNote = { navController.navigate(MindFlowDestinations.CAPTURE) },
+                    onCreateNote = { openCapture() },
                     onOpenStatusFilter = { status, archivedOnly ->
                         navController.navigate(
                             MindFlowDestinations.searchRoute(
@@ -232,15 +274,27 @@ fun MindFlowApp(
                 )
             }
 
-            composable(MindFlowDestinations.CAPTURE) {
+            composable(
+                route = MindFlowDestinations.CAPTURE,
+                arguments = listOf(navArgument(MindFlowDestinations.CAPTURE_ARG) { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val seedId = backStackEntry.arguments?.getLong(MindFlowDestinations.CAPTURE_ARG) ?: 0L
+                val captureSeed = captureSeeds[seedId] ?: CaptureSeed(requestId = seedId)
                 EditorRoute(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
                     noteId = null,
+                    captureSessionKey = seedId,
+                    initialContent = captureSeed.initialContent,
+                    initialTopic = captureSeed.initialTopic,
                     onOpenNote = openNoteSafely,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        captureSeeds.remove(seedId)
+                        navController.popBackStack()
+                    },
                     onSavedNewNote = {
+                        captureSeeds.remove(seedId)
                         navController.navigate(MindFlowDestinations.FEED) {
                             popUpTo(MindFlowDestinations.FEED) { inclusive = false }
                             launchSingleTop = true
@@ -259,6 +313,9 @@ fun MindFlowApp(
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
                     noteId = noteId,
+                    captureSessionKey = null,
+                    initialContent = "",
+                    initialTopic = "",
                     onOpenNote = openNoteSafely,
                     onBack = { navController.popBackStack() },
                     onSavedNewNote = { navController.popBackStack() },
@@ -303,13 +360,7 @@ fun MindFlowApp(
                         ) {
                             TextButton(
                                 onClick = {
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                                    openTopLevel(destination.route)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(vertical = 10.dp),

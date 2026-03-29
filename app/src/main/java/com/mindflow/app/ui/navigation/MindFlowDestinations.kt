@@ -14,7 +14,8 @@ object MindFlowDestinations {
     const val SEARCH_ARCHIVED_ONLY_ARG = "archivedOnly"
     const val STATS = "stats"
     const val SETTINGS = "settings"
-    const val CAPTURE = "capture"
+    const val CAPTURE = "capture/{captureSeedId}"
+    const val CAPTURE_ARG = "captureSeedId"
     const val FOLDER = "folder/{folderKey}"
     const val FOLDER_ARG = "folderKey"
     const val UNCATEGORIZED_FOLDER = "__uncategorized__"
@@ -24,6 +25,7 @@ object MindFlowDestinations {
     fun folderRoute(folderKey: String): String = "folder/$folderKey"
     fun detailRoute(noteId: Long): String = "detail/$noteId"
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
+    fun captureRoute(seedId: Long): String = "capture/$seedId"
     fun searchRoute(
         status: NoteStatus? = null,
         archivedOnly: Boolean = false,

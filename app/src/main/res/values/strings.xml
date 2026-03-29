@@ -2,4 +2,15 @@
     <string name="app_name">MindFlow</string>
     <string name="splash_line_one">灵感易逝</string>
     <string name="splash_line_two">及时行动</string>
+    <string name="shortcut_capture_short">新建记录</string>
+    <string name="shortcut_capture_long">快速写下一条记录</string>
+    <string name="shortcut_search_short">查找记录</string>
+    <string name="shortcut_search_long">打开查找与筛选</string>
+    <string name="shortcut_flow_short">打开 Flow</string>
+    <string name="shortcut_flow_long">查看今天和方向</string>
+    <string name="widget_capture_title">想到就记</string>
+    <string name="widget_capture_subtitle">从桌面直接写下一条念头</string>
+    <string name="widget_capture_button">记一条</string>
+    <string name="widget_flow_button">Flow</string>
+    <string name="share_target_label">存入 MindFlow</string>
 </resources>
