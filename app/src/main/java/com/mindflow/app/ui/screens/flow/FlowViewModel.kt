@@ -6,15 +6,21 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.action.NextActionPlanner
+import com.mindflow.app.data.action.NextActionState
 import com.mindflow.app.data.brief.DailyBriefPlanner
+import com.mindflow.app.data.brief.DailyBriefState
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.connect.FusionSuggestionState
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.ThreadPreferences
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewPlanner
+import com.mindflow.app.data.review.WeeklyReviewState
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -34,6 +40,7 @@ data class FlowUiState(
     val explorationSource: DailyBriefSource = DailyBriefSource.RULE,
     val weeklyReviewLines: List<String> = emptyList(),
     val weeklyReviewSource: DailyBriefSource = DailyBriefSource.RULE,
+    val followedThreads: List<ThemeThread> = emptyList(),
     val themeThreads: List<ThemeThread> = emptyList(),
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
@@ -41,21 +48,39 @@ data class FlowUiState(
 
 class FlowViewModel(
     noteRepository: NoteRepository,
+    threadPreferencesRepository: ThreadPreferencesRepository,
     private val dailyBriefPlanner: DailyBriefPlanner,
     private val nextActionPlanner: NextActionPlanner,
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
 ) : ViewModel() {
-    val uiState: StateFlow<FlowUiState> = combine(
+    private data class FlowPrimaryInputs(
+        val todayCount: Int,
+        val continueNote: NoteEntity?,
+        val nextActionText: String,
+        val nextActionSource: DailyBriefSource,
+        val explorationPrompts: List<String>,
+        val explorationSource: DailyBriefSource,
+        val followedThreads: List<ThemeThread>,
+        val themeThreads: List<ThemeThread>,
+    )
+
+    private val primaryInputs = combine(
         noteRepository.observeAllNotes(),
+        threadPreferencesRepository.settings,
         dailyBriefPlanner.state,
         nextActionPlanner.state,
-        weeklyReviewPlanner.state,
-        fusionSuggestionPlanner.state,
-    ) { allNotes, briefState, nextActionState, weeklyReviewState, fusionState ->
+    ) { allNotes: List<NoteEntity>,
+        threadPreferences: ThreadPreferences,
+        briefState: DailyBriefState,
+        nextActionState: NextActionState ->
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
         val activeNotes = allNotes.filter { !it.isArchived }
+        val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
+        val followedThreads = threadPreferences.followedThreadKeys
+            .map { threadKey -> NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes) }
+            .sortedWith(compareByDescending<ThemeThread> { it.noteCount }.thenBy { it.title })
         val continueNote = pickContinueNote(activeNotes)
         val nextActionText = if (
             continueNote != null &&
@@ -66,16 +91,38 @@ class FlowViewModel(
         } else {
             ""
         }
-        FlowUiState(
+        FlowPrimaryInputs(
             todayCount = activeNotes.count { it.createdAt.toLocalDate(zoneId) == today },
             continueNote = continueNote,
             nextActionText = nextActionText,
             nextActionSource = nextActionState.source,
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
+            followedThreads = followedThreads,
+            themeThreads = analyzedThreads.filterNot { candidate ->
+                followedThreads.any { it.key == candidate.key }
+            },
+        )
+    }
+
+    val uiState: StateFlow<FlowUiState> = combine(
+        primaryInputs,
+        weeklyReviewPlanner.state,
+        fusionSuggestionPlanner.state,
+    ) { primary,
+        weeklyReviewState: WeeklyReviewState,
+        fusionState: FusionSuggestionState ->
+        FlowUiState(
+            todayCount = primary.todayCount,
+            continueNote = primary.continueNote,
+            nextActionText = primary.nextActionText,
+            nextActionSource = primary.nextActionSource,
+            explorationPrompts = primary.explorationPrompts,
+            explorationSource = primary.explorationSource,
             weeklyReviewLines = weeklyReviewState.lines,
             weeklyReviewSource = weeklyReviewState.source,
-            themeThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes),
+            followedThreads = primary.followedThreads,
+            themeThreads = primary.themeThreads,
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
         )
@@ -96,6 +143,7 @@ class FlowViewModel(
     companion object {
         fun factory(
             noteRepository: NoteRepository,
+            threadPreferencesRepository: ThreadPreferencesRepository,
             dailyBriefPlanner: DailyBriefPlanner,
             nextActionPlanner: NextActionPlanner,
             weeklyReviewPlanner: WeeklyReviewPlanner,
@@ -104,6 +152,7 @@ class FlowViewModel(
             initializer {
                 FlowViewModel(
                     noteRepository = noteRepository,
+                    threadPreferencesRepository = threadPreferencesRepository,
                     dailyBriefPlanner = dailyBriefPlanner,
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,

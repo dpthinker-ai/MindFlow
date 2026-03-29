@@ -28,6 +28,7 @@ Already implemented:
 - WebDAV backup
 - Today page
 - Flow page and thread detail page
+- followed directions and thread curation
 - AI daily brief
 - note-to-next-action extraction
 - reminder scheduling hooks
@@ -91,6 +92,11 @@ Planned items:
 - connect similar notes
 - detect repeated topics
 - group notes into threads
+- status: first version implemented
+- current shape:
+  - related notes
+  - thread detail page
+  - followed directions in Flow
 
 4. Fusion suggestions
 - combine multiple notes into one stronger concept

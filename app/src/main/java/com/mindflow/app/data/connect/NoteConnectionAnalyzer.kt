@@ -86,6 +86,29 @@ object NoteConnectionAnalyzer {
             .take(limit)
     }
 
+    fun threadFromKey(
+        threadKey: String,
+        notes: List<NoteEntity>,
+    ): ThemeThread {
+        val groupedNotes = notesForThread(threadKey, notes)
+        val summary = groupedNotes
+            .take(2)
+            .joinToString(" · ") { it.topic.ifBlank { "未命名记录" } }
+            .ifBlank {
+                when {
+                    threadKey.startsWith("folder:") -> "先把这个方向的记录慢慢积累起来。"
+                    threadKey.startsWith("tag:") -> "等更多相关记录出现后，这里会形成更稳定的主线。"
+                    else -> "这个方向还在形成期。"
+                }
+            }
+        return ThemeThread(
+            key = threadKey,
+            title = titleForThread(threadKey),
+            summary = summary,
+            noteCount = groupedNotes.size,
+        )
+    }
+
     fun notesForThread(
         threadKey: String,
         notes: List<NoteEntity>,

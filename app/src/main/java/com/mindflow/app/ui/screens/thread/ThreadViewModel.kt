@@ -11,6 +11,7 @@ import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiServiceClient
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -36,6 +38,7 @@ data class ThreadUiState(
     val threadNextStep: String = "",
     val insightSource: DailyBriefSource = DailyBriefSource.RULE,
     val isRefreshingInsights: Boolean = false,
+    val isFollowed: Boolean = false,
 ) {
     val insightSourceLabel: String
         get() = when {
@@ -53,6 +56,7 @@ sealed interface ThreadEvent {
 class ThreadViewModel(
     private val noteRepository: NoteRepository,
     private val aiSettingsRepository: AiSettingsRepository,
+    private val threadPreferencesRepository: ThreadPreferencesRepository,
     private val aiServiceClient: AiServiceClient,
     private val threadKey: String,
 ) : ViewModel() {
@@ -71,8 +75,9 @@ class ThreadViewModel(
 
     val uiState: StateFlow<ThreadUiState> = combine(
         noteRepository.observeAllNotes(),
+        threadPreferencesRepository.settings.map { it.isFollowed(threadKey) },
         _insightState,
-    ) { allNotes, insight ->
+    ) { allNotes, isFollowed, insight ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
         ThreadUiState(
             threadKey = threadKey,
@@ -87,6 +92,7 @@ class ThreadViewModel(
             threadNextStep = insight.nextStep,
             insightSource = insight.source,
             isRefreshingInsights = insight.isLoading,
+            isFollowed = isFollowed,
         )
     }.stateIn(
         viewModelScope,
@@ -116,6 +122,13 @@ class ThreadViewModel(
         viewModelScope.launch {
             noteRepository.deleteNote(noteId)
             _events.emit(ThreadEvent.Message("已删除记录"))
+        }
+    }
+
+    fun toggleFollow() {
+        viewModelScope.launch {
+            val nowFollowed = threadPreferencesRepository.toggleFollow(threadKey)
+            _events.emit(ThreadEvent.Message(if (nowFollowed) "已加入关注方向" else "已取消关注"))
         }
     }
 
@@ -263,6 +276,7 @@ class ThreadViewModel(
         fun factory(
             noteRepository: NoteRepository,
             aiSettingsRepository: AiSettingsRepository,
+            threadPreferencesRepository: ThreadPreferencesRepository,
             aiServiceClient: AiServiceClient,
             threadKey: String,
         ): ViewModelProvider.Factory = viewModelFactory {
@@ -270,6 +284,7 @@ class ThreadViewModel(
                 ThreadViewModel(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
+                    threadPreferencesRepository = threadPreferencesRepository,
                     aiServiceClient = aiServiceClient,
                     threadKey = threadKey,
                 )

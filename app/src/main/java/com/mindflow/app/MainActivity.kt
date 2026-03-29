@@ -19,6 +19,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.ui.MindFlowApp
 import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 import com.mindflow.app.ui.theme.MindFlowTheme
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
         val cloudBackupSettingsRepository: CloudBackupSettingsRepository =
             appContainer.cloudBackupSettingsRepository
         val reminderSettingsRepository: ReminderSettingsRepository = appContainer.reminderSettingsRepository
+        val threadPreferencesRepository: ThreadPreferencesRepository = appContainer.threadPreferencesRepository
         val cloudBackupCoordinator: CloudBackupCoordinator = appContainer.cloudBackupCoordinator
         val reminderScheduler: ReminderScheduler = appContainer.reminderScheduler
         val dailyBriefPlanner: DailyBriefPlanner = appContainer.dailyBriefPlanner
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
+                    threadPreferencesRepository = threadPreferencesRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     reminderScheduler = reminderScheduler,
                     backgroundFolderOrganizer = appContainer.backgroundFolderOrganizer,

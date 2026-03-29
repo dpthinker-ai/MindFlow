@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
@@ -62,6 +63,7 @@ import kotlinx.coroutines.launch
 fun ThreadRoute(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
+    threadPreferencesRepository: ThreadPreferencesRepository,
     aiServiceClient: AiServiceClient,
     threadKey: String,
     onBack: () -> Unit,
@@ -72,6 +74,7 @@ fun ThreadRoute(
         factory = ThreadViewModel.factory(
             noteRepository = noteRepository,
             aiSettingsRepository = aiSettingsRepository,
+            threadPreferencesRepository = threadPreferencesRepository,
             aiServiceClient = aiServiceClient,
             threadKey = threadKey,
         ),
@@ -118,6 +121,7 @@ fun ThreadRoute(
         snackbarHostState = snackbarHostState,
         onBack = onBack,
         onOpenNote = onOpenNote,
+        onToggleFollow = viewModel::toggleFollow,
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -145,6 +149,7 @@ private fun ThreadScreen(
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
+    onToggleFollow: () -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -199,6 +204,10 @@ private fun ThreadScreen(
                                     color = TextSoft,
                                 )
                             }
+                            com.mindflow.app.ui.components.GhostActionButton(
+                                text = if (uiState.isFollowed) "已关注" else "关注方向",
+                                onClick = onToggleFollow,
+                            )
                         }
                     }
                 }

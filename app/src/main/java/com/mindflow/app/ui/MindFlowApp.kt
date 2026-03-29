@@ -56,6 +56,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.MindFlowDestinations
@@ -87,6 +88,7 @@ fun MindFlowApp(
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
+    threadPreferencesRepository: ThreadPreferencesRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     reminderScheduler: ReminderScheduler,
     backgroundFolderOrganizer: BackgroundFolderOrganizer,
@@ -191,6 +193,7 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FLOW) {
                 FlowRoute(
                     noteRepository = noteRepository,
+                    threadPreferencesRepository = threadPreferencesRepository,
                     dailyBriefPlanner = dailyBriefPlanner,
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
@@ -209,6 +212,7 @@ fun MindFlowApp(
                 ThreadRoute(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
+                    threadPreferencesRepository = threadPreferencesRepository,
                     aiServiceClient = aiServiceClient,
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },

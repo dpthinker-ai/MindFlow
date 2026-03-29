@@ -30,6 +30,7 @@ import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewPlanner
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.PanelCard
@@ -46,6 +47,7 @@ import com.mindflow.app.util.TimeFormatter
 @Composable
 fun FlowRoute(
     noteRepository: NoteRepository,
+    threadPreferencesRepository: ThreadPreferencesRepository,
     dailyBriefPlanner: DailyBriefPlanner,
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
@@ -56,6 +58,7 @@ fun FlowRoute(
     val viewModel: FlowViewModel = viewModel(
         factory = FlowViewModel.factory(
             noteRepository = noteRepository,
+            threadPreferencesRepository = threadPreferencesRepository,
             dailyBriefPlanner = dailyBriefPlanner,
             nextActionPlanner = nextActionPlanner,
             weeklyReviewPlanner = weeklyReviewPlanner,
@@ -134,6 +137,7 @@ private fun FlowScreen(
                     DirectionCard(
                         weeklyLines = uiState.weeklyReviewLines,
                         weeklySource = uiState.weeklyReviewSource,
+                        followedThreads = uiState.followedThreads,
                         threads = uiState.themeThreads,
                         suggestions = uiState.fusionSuggestions,
                         fusionSource = uiState.fusionSource,
@@ -149,6 +153,7 @@ private fun FlowScreen(
 private fun DirectionCard(
     weeklyLines: List<String>,
     weeklySource: DailyBriefSource,
+    followedThreads: List<ThemeThread>,
     threads: List<ThemeThread>,
     suggestions: List<String>,
     fusionSource: DailyBriefSource,
@@ -158,6 +163,7 @@ private fun DirectionCard(
         SectionHeader(
             title = "方向",
             headline = when {
+                followedThreads.isNotEmpty() -> "已关注 ${followedThreads.size} 条"
                 threads.isNotEmpty() -> "${threads.size} 条主题"
                 suggestions.isNotEmpty() -> "有新的建议"
                 else -> null
@@ -168,6 +174,7 @@ private fun DirectionCard(
             source = weeklySource,
         )
         ConnectionCard(
+            followedThreads = followedThreads,
             threads = threads,
             suggestions = suggestions,
             source = fusionSource,
@@ -178,6 +185,7 @@ private fun DirectionCard(
 
 @Composable
 private fun ConnectionCard(
+    followedThreads: List<ThemeThread>,
     threads: List<ThemeThread>,
     suggestions: List<String>,
     source: DailyBriefSource,
@@ -199,39 +207,24 @@ private fun ConnectionCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSoft,
             )
+            if (followedThreads.isNotEmpty()) {
+                Text(
+                    text = "关注方向",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
+                )
+                followedThreads.forEach { thread ->
+                    ThreadRow(thread = thread, onOpenThread = onOpenThread)
+                }
+            }
             if (threads.isNotEmpty()) {
                 Text(
-                    text = "主题线程",
+                    text = if (followedThreads.isNotEmpty()) "更多线索" else "主题线程",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSoft,
                 )
                 threads.forEach { thread ->
-                    Surface(
-                        modifier = Modifier.clickable { onOpenThread(thread.key) },
-                        color = WhiteGlass.copy(alpha = 0.78f),
-                        shape = CardShape,
-                        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = "${thread.title} · ${thread.noteCount} 条",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = TextMain,
-                            )
-                            Text(
-                                text = thread.summary,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                    ThreadRow(thread = thread, onOpenThread = onOpenThread)
                 }
             }
             if (suggestions.isNotEmpty()) {
@@ -255,6 +248,39 @@ private fun ConnectionCard(
                     color = TextSoft,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ThreadRow(
+    thread: ThemeThread,
+    onOpenThread: (String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable { onOpenThread(thread.key) },
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "${thread.title} · ${thread.noteCount} 条",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            Text(
+                text = thread.summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

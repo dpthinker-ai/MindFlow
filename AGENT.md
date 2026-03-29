@@ -116,10 +116,11 @@ Current status:
 - idea-to-action extraction: implemented
 - morning/evening reminder hooks: implemented
 - faster capture entry points: first version implemented
+- thread follow and curation: first version implemented
 
 Next strongest direction:
 
-- thread curation and refinement
 - weekly review quality
 - external research enrichment
 - faster capture follow-ups such as voice input
+- thread-level action refinement
