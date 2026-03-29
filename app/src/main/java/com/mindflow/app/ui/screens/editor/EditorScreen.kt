@@ -1,8 +1,14 @@
 package com.mindflow.app.ui.screens.editor
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.BorderStroke
@@ -117,6 +123,23 @@ fun EditorRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allNotes by noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
+    val speechInputLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val recognizedText = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            ?.trim()
+            .orEmpty()
+        if (recognizedText.isBlank()) return@rememberLauncherForActivityResult
+        val mergedContent = when {
+            uiState.content.isBlank() -> recognizedText
+            else -> uiState.content.trimEnd() + "\n\n" + recognizedText
+        }
+        viewModel.onContentChange(mergedContent)
+        Toast.makeText(context, "已转成正文，可继续编辑", Toast.LENGTH_SHORT).show()
+    }
     val relatedNotes = remember(
         uiState.isLoading,
         uiState.noteId,
@@ -161,6 +184,24 @@ fun EditorRoute(
         onArchiveChange = viewModel::onArchivedChange,
         onSave = { viewModel.save(exitAfterSave = false) },
         onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+        onVoiceCapture = {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                )
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "说出你现在想记下的内容")
+            }
+            runCatching { speechInputLauncher.launch(intent) }
+                .onFailure {
+                    val message = if (it is ActivityNotFoundException) {
+                        "设备上没有可用的语音识别服务"
+                    } else {
+                        "暂时无法启动语音输入"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+        },
         onPolishContent = viewModel::polishContent,
         onApplyPolishedContent = viewModel::applyPolishedContent,
         onDiscardPolishedContent = viewModel::discardPolishedContent,
@@ -190,6 +231,7 @@ private fun EditorScreen(
     onArchiveChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
+    onVoiceCapture: () -> Unit,
     onPolishContent: () -> Unit,
     onApplyPolishedContent: () -> Unit,
     onDiscardPolishedContent: () -> Unit,
@@ -368,14 +410,32 @@ private fun EditorScreen(
                     Text("内容", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = if (isEditingContent) "原文编辑" else "Markdown 预览",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = if (isEditingContent) "原文编辑" else "Markdown 预览",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (isEditingContent) {
+                                Text(
+                                    text = "也可以直接用语音转成正文",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                            }
+                        }
+                        if (isEditingContent) {
+                            GhostActionButton(
+                                text = "语音输入",
+                                onClick = onVoiceCapture,
+                            )
+                        }
                         GhostActionButton(
                             text = if (isEditingContent) "完成预览" else "编辑正文",
                             onClick = {

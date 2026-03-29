@@ -117,10 +117,11 @@ Current status:
 - morning/evening reminder hooks: implemented
 - faster capture entry points: first version implemented
 - thread follow and curation: first version implemented
+- voice capture in editor: first version implemented
 
 Next strongest direction:
 
 - weekly review quality
 - external research enrichment
-- faster capture follow-ups such as voice input
+- notification quick capture
 - thread-level action refinement

@@ -36,6 +36,7 @@ Already implemented:
 - launcher shortcuts
 - share-to-capture entry
 - home quick capture widget
+- voice-to-text capture
 
 ## P0: Make It Daily
 
@@ -64,9 +65,10 @@ Planned items:
   - launcher shortcuts
   - home widget
   - share-to-capture
+  - voice-to-text in editor
 - next step:
   - notification quick capture
-  - voice-to-text capture
+  - faster voice entry from outside the editor
 
 ## P1: AI Insight Layer
 
@@ -163,7 +165,7 @@ Next best order:
 2. weekly review quality
 3. external research enrichment
 4. notification quick capture
-5. voice-to-text capture
+5. external research enrichment for selected threads
 
 ## Success Criteria
 
