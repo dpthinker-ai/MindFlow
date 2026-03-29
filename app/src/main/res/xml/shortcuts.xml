@@ -14,6 +14,17 @@
     <shortcut
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
+        android:shortcutId="voice_capture"
+        android:shortcutLongLabel="@string/shortcut_voice_long"
+        android:shortcutShortLabel="@string/shortcut_voice_short">
+        <intent
+            android:action="com.mindflow.app.action.OPEN_CAPTURE_VOICE"
+            android:targetClass="com.mindflow.app.EntryProxyActivity"
+            android:targetPackage="com.mindflow.app" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
         android:shortcutId="quick_search"
         android:shortcutLongLabel="@string/shortcut_search_long"
         android:shortcutShortLabel="@string/shortcut_search_short">

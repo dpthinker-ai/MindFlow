@@ -6,6 +6,7 @@ data class CaptureSeed(
     val requestId: Long = System.currentTimeMillis(),
     val initialContent: String = "",
     val initialTopic: String = "",
+    val autoStartVoiceInput: Boolean = false,
 )
 
 sealed interface MindFlowLaunchRequest {
@@ -22,6 +23,7 @@ sealed interface MindFlowLaunchRequest {
 
 object MindFlowEntryIntents {
     const val ACTION_OPEN_CAPTURE = "com.mindflow.app.action.OPEN_CAPTURE"
+    const val ACTION_OPEN_CAPTURE_VOICE = "com.mindflow.app.action.OPEN_CAPTURE_VOICE"
     const val ACTION_OPEN_SEARCH = "com.mindflow.app.action.OPEN_SEARCH"
     const val ACTION_OPEN_FLOW = "com.mindflow.app.action.OPEN_FLOW"
 
@@ -31,6 +33,7 @@ object MindFlowEntryIntents {
             Intent.ACTION_SEND -> parseSharedText(safeIntent)
             Intent.ACTION_PROCESS_TEXT -> parseProcessText(safeIntent)
             ACTION_OPEN_CAPTURE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed())
+            ACTION_OPEN_CAPTURE_VOICE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed(autoStartVoiceInput = true))
             ACTION_OPEN_SEARCH -> MindFlowLaunchRequest.OpenSearch()
             ACTION_OPEN_FLOW -> MindFlowLaunchRequest.OpenFlow()
             else -> null

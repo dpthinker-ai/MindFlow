@@ -119,10 +119,11 @@ Current status:
 - thread follow and curation: first version implemented
 - voice capture in editor: first version implemented
 - thread focus and lightweight promotion: first version implemented
+- external voice capture entry: first version implemented
 
 Next strongest direction:
 
 - external research enrichment
-- notification quick capture
 - follow-up prompts for stale notes
 - thread-level weekly review
+- widget-level voice capture

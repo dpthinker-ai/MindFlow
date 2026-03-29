@@ -60,15 +60,16 @@ Planned items:
   - low-frequency local notifications
 
 3. Faster capture
-- status: first version implemented
+- status: refined
 - current shape:
   - launcher shortcuts
+  - launcher voice shortcut
   - home widget
   - share-to-capture
   - voice-to-text in editor
 - next step:
   - richer notification quick capture
-  - faster voice entry from outside the editor
+  - widget-level voice entry
 
 ## P1: AI Insight Layer
 

@@ -292,6 +292,7 @@ fun MindFlowApp(
                     captureSessionKey = seedId,
                     initialContent = captureSeed.initialContent,
                     initialTopic = captureSeed.initialTopic,
+                    autoStartVoiceInput = captureSeed.autoStartVoiceInput,
                     onOpenNote = openNoteSafely,
                     onBack = {
                         captureSeeds.remove(seedId)
@@ -320,6 +321,7 @@ fun MindFlowApp(
                     captureSessionKey = null,
                     initialContent = "",
                     initialTopic = "",
+                    autoStartVoiceInput = false,
                     onOpenNote = openNoteSafely,
                     onBack = { navController.popBackStack() },
                     onSavedNewNote = { navController.popBackStack() },

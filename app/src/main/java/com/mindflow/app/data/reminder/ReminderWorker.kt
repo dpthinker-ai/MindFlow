@@ -150,6 +150,11 @@ class ReminderWorker(
             action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
             requestCodeOffset = 100,
         )
+        val voiceCaptureIntent = quickActionPendingIntent(
+            kind = kind,
+            action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE_VOICE,
+            requestCodeOffset = 150,
+        )
         val flowIntent = quickActionPendingIntent(
             kind = kind,
             action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
@@ -168,6 +173,11 @@ class ReminderWorker(
                 R.drawable.ic_launcher_monochrome_inset,
                 "记一条",
                 quickCaptureIntent,
+            )
+            .addAction(
+                R.drawable.ic_launcher_monochrome_inset,
+                "语音记",
+                voiceCaptureIntent,
             )
             .addAction(
                 R.drawable.ic_launcher_monochrome_inset,

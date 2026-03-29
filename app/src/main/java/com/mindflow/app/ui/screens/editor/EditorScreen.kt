@@ -101,6 +101,7 @@ fun EditorRoute(
     captureSessionKey: Long? = null,
     initialContent: String = "",
     initialTopic: String = "",
+    autoStartVoiceInput: Boolean = false,
     onOpenNote: (Long) -> Unit,
     onBack: () -> Unit,
     onSavedNewNote: () -> Unit,
@@ -123,6 +124,7 @@ fun EditorRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allNotes by noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
+    var autoVoiceStarted by rememberSaveable(captureSessionKey ?: -1L) { mutableStateOf(false) }
     val speechInputLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -139,6 +141,26 @@ fun EditorRoute(
         }
         viewModel.onContentChange(mergedContent)
         Toast.makeText(context, "已转成正文，可继续编辑", Toast.LENGTH_SHORT).show()
+    }
+    val startVoiceCapture: () -> Unit = remember(speechInputLauncher, context) {
+        {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                )
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "说出你现在想记下的内容")
+            }
+            runCatching { speechInputLauncher.launch(intent) }
+                .onFailure {
+                    val message = if (it is ActivityNotFoundException) {
+                        "设备上没有可用的语音识别服务"
+                    } else {
+                        "暂时无法启动语音输入"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+        }
     }
     val relatedNotes = remember(
         uiState.isLoading,
@@ -172,6 +194,18 @@ fun EditorRoute(
         }
     }
 
+    LaunchedEffect(autoStartVoiceInput, uiState.isLoading, uiState.noteId) {
+        if (
+            autoStartVoiceInput &&
+            !autoVoiceStarted &&
+            !uiState.isLoading &&
+            uiState.noteId == null
+        ) {
+            autoVoiceStarted = true
+            startVoiceCapture()
+        }
+    }
+
     EditorScreen(
         uiState = uiState,
         onBack = onBack,
@@ -184,24 +218,7 @@ fun EditorRoute(
         onArchiveChange = viewModel::onArchivedChange,
         onSave = { viewModel.save(exitAfterSave = false) },
         onSaveAndExit = { viewModel.save(exitAfterSave = true) },
-        onVoiceCapture = {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-                )
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "说出你现在想记下的内容")
-            }
-            runCatching { speechInputLauncher.launch(intent) }
-                .onFailure {
-                    val message = if (it is ActivityNotFoundException) {
-                        "设备上没有可用的语音识别服务"
-                    } else {
-                        "暂时无法启动语音输入"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                }
-        },
+        onVoiceCapture = startVoiceCapture,
         onPolishContent = viewModel::polishContent,
         onApplyPolishedContent = viewModel::applyPolishedContent,
         onDiscardPolishedContent = viewModel::discardPolishedContent,
