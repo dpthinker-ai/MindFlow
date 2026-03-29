@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MindFlow</string>
+    <string name="splash_line_one">灵感易逝</string>
+    <string name="splash_line_two">及时行动</string>
+</resources>

@@ -1,0 +1,790 @@
+package com.mindflow.app.ui.screens.settings
+
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RestorePage
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.model.AiSettings
+import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.ui.components.ActionButton
+import com.mindflow.app.ui.components.BottomBarClearance
+import com.mindflow.app.ui.components.GhostActionButton
+import com.mindflow.app.ui.components.GridTwo
+import com.mindflow.app.ui.components.IconPillButton
+import com.mindflow.app.ui.components.MetricTile
+import com.mindflow.app.ui.components.PanelCard
+import com.mindflow.app.ui.components.ScreenBackground
+import com.mindflow.app.ui.components.ScreenHorizontalPadding
+import com.mindflow.app.ui.components.SectionHeader
+import com.mindflow.app.ui.theme.Accent
+import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.WhiteGlass
+import com.mindflow.app.util.TimeFormatter
+import kotlinx.coroutines.flow.collectLatest
+
+private enum class SettingsDestination {
+    HOME,
+    CLOUD,
+    AI,
+}
+
+@Composable
+fun SettingsRoute(
+    noteRepository: NoteRepository,
+    aiSettingsRepository: AiSettingsRepository,
+    cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    cloudBackupCoordinator: CloudBackupCoordinator,
+    aiServiceClient: AiServiceClient,
+) {
+    val viewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModel.factory(
+            noteRepository = noteRepository,
+            aiSettingsRepository = aiSettingsRepository,
+            cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+            cloudBackupCoordinator = cloudBackupCoordinator,
+            aiServiceClient = aiServiceClient,
+        ),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var pendingExport by remember { mutableStateOf<ExportPayload?>(null) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }.onSuccess { content ->
+                viewModel.importMarkdown(content)
+            }.onFailure {
+                Toast.makeText(context, "读取导入文件失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        val payload = pendingExport
+        if (uri != null && payload != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                    writer.write(payload.content)
+                }
+            }.onSuccess {
+                Toast.makeText(context, "导出完成", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "导出失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+        pendingExport = null
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is SettingsEvent.ExportReady -> {
+                    pendingExport = event.payload
+                    exportLauncher.launch(event.payload.fileName)
+                }
+                is SettingsEvent.Message -> Toast.makeText(context, event.text, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    SettingsScreen(
+        uiState = uiState,
+        onAiEnabledChange = viewModel::onAiEnabledChange,
+        onApiKeyChange = viewModel::onApiKeyChange,
+        onBaseUrlChange = viewModel::onBaseUrlChange,
+        onModelChange = viewModel::onModelChange,
+        onSaveAi = viewModel::saveAi,
+        onTestAi = viewModel::testAiConnection,
+        onClearAi = viewModel::clear,
+        onCloudBaseUrlChange = viewModel::onCloudBaseUrlChange,
+        onCloudUsernameChange = viewModel::onCloudUsernameChange,
+        onCloudPasswordChange = viewModel::onCloudPasswordChange,
+        onCloudRemoteDirChange = viewModel::onCloudRemoteDirChange,
+        onCloudAutoBackupChange = viewModel::onCloudAutoBackupChange,
+        onSaveCloud = viewModel::saveCloud,
+        onClearCloud = viewModel::clearCloud,
+        onBackupToCloud = viewModel::backupToCloud,
+        onRestoreRequest = { showRestoreDialog = true },
+        onRestoreConfirmed = {
+            showRestoreDialog = false
+            viewModel.restoreFromCloud()
+        },
+        onRestoreDismissed = { showRestoreDialog = false },
+        onExport = viewModel::exportMarkdown,
+        onImport = { importLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
+        showRestoreDialog = showRestoreDialog,
+    )
+}
+
+@Composable
+private fun SettingsScreen(
+    uiState: SettingsUiState,
+    onAiEnabledChange: (Boolean) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onModelChange: (String) -> Unit,
+    onSaveAi: () -> Unit,
+    onTestAi: () -> Unit,
+    onClearAi: () -> Unit,
+    onCloudBaseUrlChange: (String) -> Unit,
+    onCloudUsernameChange: (String) -> Unit,
+    onCloudPasswordChange: (String) -> Unit,
+    onCloudRemoteDirChange: (String) -> Unit,
+    onCloudAutoBackupChange: (Boolean) -> Unit,
+    onSaveCloud: () -> Unit,
+    onClearCloud: () -> Unit,
+    onBackupToCloud: () -> Unit,
+    onRestoreRequest: () -> Unit,
+    onRestoreConfirmed: () -> Unit,
+    onRestoreDismissed: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+    showRestoreDialog: Boolean,
+) {
+    var destination by rememberSaveable { mutableStateOf(SettingsDestination.HOME) }
+
+    BackHandler(enabled = destination != SettingsDestination.HOME) {
+        destination = SettingsDestination.HOME
+    }
+
+    if (showRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = onRestoreDismissed,
+            title = { Text("从云端恢复") },
+            text = { Text("这会覆盖当前本地记录。建议先做一次 Markdown 导出。") },
+            confirmButton = {
+                TextButton(onClick = onRestoreConfirmed) {
+                    Text("继续恢复")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onRestoreDismissed) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    ScreenBackground {
+        when (destination) {
+            SettingsDestination.HOME -> SettingsHomeScreen(
+                uiState = uiState,
+                onOpenCloud = { destination = SettingsDestination.CLOUD },
+                onOpenAi = { destination = SettingsDestination.AI },
+                onExport = onExport,
+                onImport = onImport,
+            )
+            SettingsDestination.CLOUD -> CloudBackupScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onCloudBaseUrlChange = onCloudBaseUrlChange,
+                onCloudUsernameChange = onCloudUsernameChange,
+                onCloudPasswordChange = onCloudPasswordChange,
+                onCloudRemoteDirChange = onCloudRemoteDirChange,
+                onCloudAutoBackupChange = onCloudAutoBackupChange,
+                onSaveCloud = onSaveCloud,
+                onClearCloud = onClearCloud,
+                onBackupToCloud = onBackupToCloud,
+                onRestoreRequest = onRestoreRequest,
+            )
+            SettingsDestination.AI -> AiSettingsScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onAiEnabledChange = onAiEnabledChange,
+                onApiKeyChange = onApiKeyChange,
+                onBaseUrlChange = onBaseUrlChange,
+                onModelChange = onModelChange,
+                onSaveAi = onSaveAi,
+                onTestAi = onTestAi,
+                onClearAi = onClearAi,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsHomeScreen(
+    uiState: SettingsUiState,
+    onOpenCloud: () -> Unit,
+    onOpenAi: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
+    ) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(
+                start = ScreenHorizontalPadding,
+                top = 6.dp,
+                end = ScreenHorizontalPadding,
+                bottom = BottomBarClearance,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                SettingsEntryCard(
+                    title = "云备份",
+                    summary = if (uiState.cloudIsConfigured) {
+                        if (uiState.cloudLastBackupAt > 0L) "最近备份 ${TimeFormatter.compact(uiState.cloudLastBackupAt)}" else "已连接"
+                    } else {
+                        "未配置"
+                    },
+                    headline = when {
+                        uiState.cloudIsConfigured && uiState.cloudAutoBackupEnabled -> "自动备份"
+                        uiState.cloudIsConfigured -> "已连接"
+                        else -> "未配置"
+                    },
+                    accent = AccentBlue,
+                    onClick = onOpenCloud,
+                )
+            }
+
+            item {
+                SettingsEntryCard(
+                    title = "AI 主题提取",
+                    summary = if (uiState.isConfigured) {
+                        uiState.model.ifBlank { "已配置" }
+                    } else {
+                        "未配置"
+                    },
+                    headline = if (uiState.isConfigured) "AI 优先" else "本地规则",
+                    accent = Accent,
+                    onClick = onOpenAi,
+                )
+            }
+
+            item {
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.95f),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        SectionHeader(title = "本地备份", headline = "Markdown")
+                        GridTwo {
+                            ActionButton(
+                                text = if (uiState.isExporting) "导出中..." else "导出",
+                                onClick = onExport,
+                                enabled = !uiState.isExporting,
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.FileDownload,
+                            )
+                            GhostActionButton(
+                                text = if (uiState.isImporting) "导入中..." else "导入",
+                                onClick = onImport,
+                                modifier = Modifier.weight(1f),
+                                enabled = !uiState.isImporting,
+                                icon = Icons.Outlined.RestorePage,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CloudBackupScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onCloudBaseUrlChange: (String) -> Unit,
+    onCloudUsernameChange: (String) -> Unit,
+    onCloudPasswordChange: (String) -> Unit,
+    onCloudRemoteDirChange: (String) -> Unit,
+    onCloudAutoBackupChange: (Boolean) -> Unit,
+    onSaveCloud: () -> Unit,
+    onClearCloud: () -> Unit,
+    onBackupToCloud: () -> Unit,
+    onRestoreRequest: () -> Unit,
+) {
+    DetailScreenFrame(
+        title = "云备份",
+        subtitle = "坚果云 WebDAV",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "当前状态", headline = if (uiState.cloudIsConfigured) "已连接" else "未配置")
+                GridTwo {
+                    MetricTile(
+                        label = "备份方式",
+                        value = "WebDAV",
+                        modifier = Modifier.weight(1f),
+                        accent = if (uiState.cloudIsConfigured) Accent else MaterialTheme.colorScheme.onSurface,
+                    )
+                    MetricTile(
+                        label = "最近备份",
+                        value = if (uiState.cloudLastBackupAt > 0L) TimeFormatter.compact(uiState.cloudLastBackupAt) else "尚未备份",
+                        modifier = Modifier.weight(1f),
+                        accent = AccentBlue,
+                    )
+                }
+                if (uiState.cloudLastBackupError.isNotBlank()) {
+                    Text(
+                        text = "上次失败：${uiState.cloudLastBackupError}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "WebDAV 配置",
+                description = "用户名填坚果云邮箱，密码填应用密码。",
+            ) {
+                SettingsField(
+                    value = uiState.cloudBaseUrl,
+                    onValueChange = onCloudBaseUrlChange,
+                    label = "WebDAV 地址",
+                    secret = false,
+                )
+                SettingsField(
+                    value = uiState.cloudUsername,
+                    onValueChange = onCloudUsernameChange,
+                    label = "用户名",
+                    secret = false,
+                )
+                SettingsField(
+                    value = uiState.cloudPassword,
+                    onValueChange = onCloudPasswordChange,
+                    label = "应用密码",
+                    secret = true,
+                )
+                SettingsField(
+                    value = uiState.cloudRemoteDir,
+                    onValueChange = onCloudRemoteDirChange,
+                    label = "远端目录",
+                    secret = false,
+                )
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.92f),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "自动备份",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "退到后台时静默同步，每天最多一次",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = uiState.cloudAutoBackupEnabled,
+                            onCheckedChange = onCloudAutoBackupChange,
+                        )
+                    }
+                }
+                ActionButton(
+                    text = if (uiState.isSavingCloud) "保存中..." else "保存云备份配置",
+                    onClick = onSaveCloud,
+                    enabled = !uiState.isSavingCloud,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Save,
+                )
+                GhostActionButton(
+                    text = "清空云配置",
+                    onClick = onClearCloud,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        item {
+            PanelCard {
+                SectionHeader(title = "云端操作")
+                ActionButton(
+                    text = if (uiState.isBackingUpCloud) "备份中..." else "立即备份到云",
+                    onClick = onBackupToCloud,
+                    enabled = !uiState.isBackingUpCloud,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.CloudUpload,
+                )
+                ActionButton(
+                    text = if (uiState.isRestoringCloud) "恢复中..." else "从云端恢复",
+                    onClick = onRestoreRequest,
+                    enabled = !uiState.isRestoringCloud,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.CloudDone,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onAiEnabledChange: (Boolean) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onModelChange: (String) -> Unit,
+    onSaveAi: () -> Unit,
+    onTestAi: () -> Unit,
+    onClearAi: () -> Unit,
+) {
+    val currentFingerprint = AiSettings.fingerprint(
+        apiKey = uiState.apiKey,
+        baseUrl = uiState.baseUrl,
+        model = uiState.model,
+    )
+    val isVerifiedForCurrentConfig = uiState.aiVerifiedFingerprint == currentFingerprint
+    val verificationHeadline = when {
+        !uiState.aiEnabled -> "已关闭"
+        !uiState.isConfigured -> "本地规则"
+        isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess -> "已连通"
+        isVerifiedForCurrentConfig && !uiState.aiLastVerifiedSuccess -> "检查失败"
+        else -> "待验证"
+    }
+
+    DetailScreenFrame(
+        title = "AI 主题提取",
+        subtitle = if (uiState.aiEnabled) "当前优先使用模型" else "当前只用本地规则",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "当前状态", headline = verificationHeadline)
+                Text(
+                    text = if (!uiState.aiEnabled) {
+                        "AI 已关闭。"
+                    } else if (isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess) {
+                        "最近验证 ${TimeFormatter.compact(uiState.aiLastVerifiedAt)}"
+                    } else if (isVerifiedForCurrentConfig && uiState.aiLastVerificationMessage.isNotBlank()) {
+                        uiState.aiLastVerificationMessage
+                    } else if (uiState.isConfigured) {
+                        "当前配置还没验证。"
+                    } else {
+                        "补一个 API Key 就能用。"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "模型配置",
+                description = "默认使用智谱兼容接口。",
+            ) {
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.92f),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("AI 主题提取", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                text = if (uiState.aiEnabled) "创建记录时优先生成主题" else "关闭后只用本地规则",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = uiState.aiEnabled,
+                            onCheckedChange = onAiEnabledChange,
+                        )
+                    }
+                }
+                GridTwo {
+                    MetricTile(
+                        label = "今日请求",
+                        value = uiState.aiRequestsToday.toString(),
+                        modifier = Modifier.weight(1f),
+                        accent = AccentBlue,
+                    )
+                    MetricTile(
+                        label = "今日成功",
+                        value = uiState.aiSuccessesToday.toString(),
+                        modifier = Modifier.weight(1f),
+                        accent = Accent,
+                    )
+                }
+                MetricTile(
+                    label = "今日 Tokens",
+                    value = uiState.aiTokensToday.toString(),
+                    accent = MaterialTheme.colorScheme.onSurface,
+                )
+                SettingsField(value = uiState.baseUrl, onValueChange = onBaseUrlChange, label = "Base URL", secret = false)
+                SettingsField(value = uiState.model, onValueChange = onModelChange, label = "Model", secret = false)
+                SettingsField(value = uiState.apiKey, onValueChange = onApiKeyChange, label = "API Key", secret = true)
+                GhostActionButton(
+                    text = if (uiState.isTestingAi) "测试中..." else "测试连接",
+                    onClick = onTestAi,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isTestingAi && uiState.aiEnabled,
+                )
+                ActionButton(
+                    text = if (uiState.isSavingAi) "保存配置中..." else "保存配置",
+                    onClick = onSaveAi,
+                    enabled = !uiState.isSavingAi,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Save,
+                )
+                GhostActionButton(
+                    text = "清空配置",
+                    onClick = onClearAi,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailScreenFrame(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ScreenHorizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            IconPillButton(
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "返回",
+                onClick = onBack,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(
+                start = ScreenHorizontalPadding,
+                top = 2.dp,
+                end = ScreenHorizontalPadding,
+                bottom = BottomBarClearance,
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun SettingsEntryCard(
+    title: String,
+    summary: String,
+    headline: String,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            SettingsStatusChip(
+                text = headline,
+                accent = accent,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsStatusChip(
+    text: String,
+    accent: Color,
+) {
+    Surface(
+        color = Color.Transparent,
+        shape = MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.22f)),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = accent,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    description: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    PanelCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SectionHeader(title = title)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    secret: Boolean,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = true,
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+                unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+            ),
+        )
+    }
+}

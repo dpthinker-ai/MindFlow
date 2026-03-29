@@ -1,0 +1,9 @@
+<resources>
+    <color name="seed">#24564A</color>
+    <color name="ic_launcher_background">#071B43</color>
+    <color name="splash_deep_space">#05152E</color>
+    <color name="splash_space_mid">#0E2E63</color>
+    <color name="splash_space_glow">#184A9E</color>
+    <color name="splash_earth_blue">#2D79FF</color>
+    <color name="splash_earth_glow">#7FD7FF</color>
+</resources>
