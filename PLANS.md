@@ -67,11 +67,11 @@ Planned items:
   - launcher shortcuts
   - launcher voice shortcut
   - home widget
+  - home widget voice entry
   - share-to-capture
   - voice-to-text in editor
 - next step:
   - richer notification quick capture
-  - widget-level voice entry
 
 ## P1: AI Insight Layer
 
@@ -186,10 +186,10 @@ Planned items:
 Next best order:
 
 1. notification quick capture
-2. widget-level voice capture
-3. thread-level action refinement
-4. research result capture back into threads
-5. richer stale-note reasoning with AI when useful
+2. thread-level action refinement
+3. research result capture back into threads
+4. richer stale-note reasoning with AI when useful
+5. external research capture back into notes
 
 ## Success Criteria
 

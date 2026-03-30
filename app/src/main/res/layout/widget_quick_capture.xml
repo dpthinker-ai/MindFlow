@@ -45,10 +45,24 @@
             android:textStyle="bold" />
 
         <Button
-            android:id="@+id/widget_flow_button"
-            android:layout_width="88dp"
+            android:id="@+id/widget_voice_button"
+            android:layout_width="0dp"
             android:layout_height="40dp"
             android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_button_secondary"
+            android:gravity="center"
+            android:text="@string/widget_voice_button"
+            android:textAllCaps="false"
+            android:textColor="#245BB6"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/widget_flow_button"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
             android:background="@drawable/widget_button_secondary"
             android:gravity="center"
             android:text="@string/widget_flow_button"

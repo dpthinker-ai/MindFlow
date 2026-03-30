@@ -56,6 +56,14 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
                         requestCode = 102,
                     ),
                 )
+                setOnClickPendingIntent(
+                    R.id.widget_voice_button,
+                    quickIntent(
+                        context = context,
+                        action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE_VOICE,
+                        requestCode = 103,
+                    ),
+                )
             }
 
         private fun quickIntent(

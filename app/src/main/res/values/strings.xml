@@ -13,6 +13,7 @@
     <string name="widget_capture_title">想到就记</string>
     <string name="widget_capture_subtitle">从桌面直接写下一条念头</string>
     <string name="widget_capture_button">记一条</string>
+    <string name="widget_voice_button">语音记</string>
     <string name="widget_flow_button">Flow</string>
     <string name="share_target_label">存入 MindFlow</string>
 </resources>

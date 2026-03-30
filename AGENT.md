@@ -120,6 +120,7 @@ Current status:
 - voice capture in editor: first version implemented
 - thread focus and lightweight promotion: first version implemented
 - external voice capture entry: first version implemented
+- widget-level voice capture: first version implemented
 - external research enrichment: first version implemented
 - stale note follow-up prompts: first version implemented
 - thread-level weekly review: first version implemented
@@ -130,6 +131,6 @@ Current status:
 
 Next strongest direction:
 
-- widget-level voice capture
 - thread-level action refinement
 - research result capture back into threads
+- notification quick capture refinement
