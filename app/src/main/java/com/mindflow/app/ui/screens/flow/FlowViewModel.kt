@@ -39,6 +39,8 @@ data class FlowUiState(
     val continueNote: NoteEntity? = null,
     val nextActionText: String = "",
     val nextActionSource: DailyBriefSource = DailyBriefSource.RULE,
+    val staleNote: NoteEntity? = null,
+    val staleReason: String = "",
     val explorationPrompts: List<String> = emptyList(),
     val explorationSource: DailyBriefSource = DailyBriefSource.RULE,
     val weeklyReviewItems: List<WeeklyReviewItem> = emptyList(),
@@ -63,6 +65,8 @@ class FlowViewModel(
         val continueNote: NoteEntity?,
         val nextActionText: String,
         val nextActionSource: DailyBriefSource,
+        val staleNote: NoteEntity?,
+        val staleReason: String,
         val explorationPrompts: List<String>,
         val explorationSource: DailyBriefSource,
         val followedThreads: List<ThemeThread>,
@@ -86,6 +90,7 @@ class FlowViewModel(
             .map { threadKey -> NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes) }
             .sortedWith(compareByDescending<ThemeThread> { it.noteCount }.thenBy { it.title })
         val continueNote = pickContinueNote(activeNotes)
+        val staleNote = pickStaleNote(activeNotes, continueNote?.id)
         val nextActionText = if (
             continueNote != null &&
             nextActionState.noteId == continueNote.id &&
@@ -100,6 +105,8 @@ class FlowViewModel(
             continueNote = continueNote,
             nextActionText = nextActionText,
             nextActionSource = nextActionState.source,
+            staleNote = staleNote,
+            staleReason = staleReasonFor(staleNote),
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
             followedThreads = followedThreads,
@@ -121,6 +128,8 @@ class FlowViewModel(
             continueNote = primary.continueNote,
             nextActionText = primary.nextActionText,
             nextActionSource = primary.nextActionSource,
+            staleNote = primary.staleNote,
+            staleReason = primary.staleReason,
             explorationPrompts = primary.explorationPrompts,
             explorationSource = primary.explorationSource,
             weeklyReviewItems = weeklyReviewState.items,
@@ -175,6 +184,25 @@ private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
         ?: notes
             .filter { it.status == NoteStatus.IDEA }
             .maxByOrNull { it.updatedAt }
+
+private fun pickStaleNote(
+    notes: List<NoteEntity>,
+    excludeNoteId: Long?,
+): NoteEntity? {
+    val threshold = System.currentTimeMillis() - 12L * 24 * 60 * 60 * 1_000
+    return notes
+        .filter { it.id != excludeNoteId }
+        .filter { it.status != NoteStatus.DONE }
+        .filter { it.updatedAt < threshold }
+        .minByOrNull { it.updatedAt }
+}
+
+private fun staleReasonFor(note: NoteEntity?): String =
+    when (note?.status) {
+        NoteStatus.IN_PROGRESS -> "这条方向已经晾了一阵，现在最适合重新接上一小步。"
+        NoteStatus.IDEA -> "这条想法沉下去有点久了，值得重新补一条更具体的记录。"
+        else -> ""
+    }
 
 private fun Long.toLocalDate(zoneId: ZoneId): LocalDate =
     Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()

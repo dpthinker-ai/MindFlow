@@ -132,6 +132,10 @@ Planned items:
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long
+- status: first version implemented
+- current shape:
+  - Flow 中的轻量“重新接上”
+  - 晨间提醒里的低频旧记录唤起
 
 ## P3: Knowledge and Research Layer
 
@@ -175,11 +179,11 @@ Planned items:
 
 Next best order:
 
-1. follow-up prompts for stale notes
-2. thread-level weekly review
-3. notification quick capture
-4. external research enrichment for selected threads
-5. widget-level voice capture
+1. thread-level weekly review
+2. notification quick capture
+3. external research enrichment for selected threads
+4. widget-level voice capture
+5. richer stale-note reasoning
 
 ## Success Criteria
 

@@ -43,6 +43,7 @@ class ReminderWorker(
         val notes = container.noteRepository.observeAllNotes().first()
         val activeNotes = notes.filter { !it.isArchived }
         val continueNote = pickContinueNote(activeNotes)
+        val staleNote = pickStaleNote(activeNotes, continueNote?.id)
 
         createChannel()
 
@@ -51,6 +52,7 @@ class ReminderWorker(
                 container = container,
                 notes = activeNotes,
                 continueNote = continueNote,
+                staleNote = staleNote,
             )
             ReminderKind.EVENING -> buildEveningPayload(activeNotes)
         }
@@ -63,6 +65,7 @@ class ReminderWorker(
         container: com.mindflow.app.di.AppContainer,
         notes: List<NoteEntity>,
         continueNote: NoteEntity?,
+        staleNote: NoteEntity?,
     ): NotificationPayload {
         container.dailyBriefPlanner.refreshIfNeeded(notes)
         val brief = container.dailyBriefPlanner.state.first()
@@ -90,6 +93,9 @@ class ReminderWorker(
                 add("下一步：$nextActionText")
             }
             brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("探索：$it") }
+            if (continueNote == null) {
+                staleNote?.topic?.takeIf { it.isNotBlank() }?.let { add("重新接上：$it") }
+            }
         }.ifEmpty {
             listOf("别让念头只来过一次，先抓住今天最值得写下的一件事。")
         }.joinToString("\n")
@@ -248,3 +254,15 @@ private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
         ?: notes
             .filter { it.status == NoteStatus.IDEA }
             .maxByOrNull { it.updatedAt }
+
+private fun pickStaleNote(
+    notes: List<NoteEntity>,
+    excludeNoteId: Long?,
+): NoteEntity? {
+    val threshold = System.currentTimeMillis() - 12L * 24 * 60 * 60 * 1_000
+    return notes
+        .filter { it.id != excludeNoteId }
+        .filter { it.status != NoteStatus.DONE }
+        .filter { it.updatedAt < threshold }
+        .minByOrNull { it.updatedAt }
+}

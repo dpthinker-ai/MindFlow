@@ -121,10 +121,11 @@ Current status:
 - thread focus and lightweight promotion: first version implemented
 - external voice capture entry: first version implemented
 - external research enrichment: first version implemented
+- stale note follow-up prompts: first version implemented
 
 Next strongest direction:
 
-- follow-up prompts for stale notes
 - thread-level weekly review
 - widget-level voice capture
 - deeper thread research with source handling
+- richer stale-note reasoning

@@ -127,6 +127,13 @@ private fun FlowScreen(
                             modifier = Modifier.fillMaxWidth(),
                             onOpenNote = onOpenNote,
                         )
+                        if (uiState.staleNote != null) {
+                            GentleReconnectCard(
+                                note = uiState.staleNote,
+                                reason = uiState.staleReason,
+                                onOpenNote = onOpenNote,
+                            )
+                        }
                         ExplorationPromptCard(
                             prompts = uiState.explorationPrompts,
                             source = uiState.explorationSource,
@@ -494,6 +501,52 @@ private fun ExplorationPromptCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun GentleReconnectCard(
+    note: NoteEntity,
+    reason: String,
+    onOpenNote: (Long) -> Unit,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft),
+        modifier = Modifier.clickable { onOpenNote(note.id) },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "重新接上",
+                style = MaterialTheme.typography.labelLarge,
+                color = TextSoft,
+            )
+            Text(
+                text = note.topic.ifBlank { "未命名记录" },
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (reason.isNotBlank()) {
+                Text(
+                    text = reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            }
+            Text(
+                text = TimeFormatter.compact(note.updatedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+            )
         }
     }
 }
