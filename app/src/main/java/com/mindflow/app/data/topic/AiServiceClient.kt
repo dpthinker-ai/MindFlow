@@ -201,6 +201,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateResearchActionSummary(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are turning research insight into one immediate action for a personal idea thread. Return exactly 2 concise Chinese lines. Line 1: what the current research most likely means for this direction. Line 2: the single smallest validation step to do next. Do not number the lines. Keep it concrete, not generic.",
+            maxTokens = 220,
+            temperature = 0.45,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun generateReconnectGuidance(
         settings: AiSettings,
         contextSummary: String,

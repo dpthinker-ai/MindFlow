@@ -49,6 +49,9 @@ data class ThreadUiState(
     val researchGap: String = "",
     val researchQueries: List<String> = emptyList(),
     val researchSource: DailyBriefSource = DailyBriefSource.RULE,
+    val researchMeaning: String = "",
+    val researchNextAction: String = "",
+    val researchActionSource: DailyBriefSource = DailyBriefSource.RULE,
     val focusNote: NoteEntity? = null,
     val focusReason: String = "",
     val insightSource: DailyBriefSource = DailyBriefSource.RULE,
@@ -84,6 +87,9 @@ class ThreadViewModel(
         val researchGap: String = "",
         val researchQueries: List<String> = emptyList(),
         val researchSource: DailyBriefSource = DailyBriefSource.RULE,
+        val researchMeaning: String = "",
+        val researchNextAction: String = "",
+        val researchActionSource: DailyBriefSource = DailyBriefSource.RULE,
         val source: DailyBriefSource = DailyBriefSource.RULE,
         val isLoading: Boolean = false,
     )
@@ -119,6 +125,9 @@ class ThreadViewModel(
             researchGap = insight.researchGap,
             researchQueries = insight.researchQueries,
             researchSource = insight.researchSource,
+            researchMeaning = insight.researchMeaning,
+            researchNextAction = insight.researchNextAction,
+            researchActionSource = insight.researchActionSource,
             focusNote = focusNote,
             focusReason = focusReasonFor(focusNote),
             insightSource = insight.source,
@@ -315,6 +324,7 @@ class ThreadViewModel(
                             researchSource = DailyBriefSource.AI,
                             isLoading = if (preserveInsight) false else _insightState.value.isLoading,
                         )
+                        refreshResearchAction(notes, signature)
                         return
                     }
                 }
@@ -331,7 +341,58 @@ class ThreadViewModel(
             researchGap = fallback.gap,
             researchQueries = fallback.queries,
             researchSource = DailyBriefSource.RULE,
+            researchMeaning = fallback.meaning,
+            researchNextAction = fallback.nextAction,
+            researchActionSource = DailyBriefSource.RULE,
             isLoading = if (preserveInsight) false else _insightState.value.isLoading,
+        )
+    }
+
+    private suspend fun refreshResearchAction(
+        notes: List<NoteEntity>,
+        signature: String,
+    ) {
+        val fallback = buildRuleResearch(notes)
+        val settings = aiSettingsRepository.getCurrent()
+        val dayKey = LocalDate.now().toString()
+
+        if (settings.aiEnabled && settings.isConfigured && notes.isNotEmpty()) {
+            aiSettingsRepository.recordUsage(
+                requestIncrement = 1,
+                dayKey = dayKey,
+            )
+            when (val result = aiServiceClient.generateResearchActionSummary(settings, buildAiResearchContext(notes))) {
+                is AiChatResult.Success -> {
+                    val lines = parseAiLines(result.content, limit = 2)
+                    if (lines.size >= 2) {
+                        aiSettingsRepository.recordUsage(
+                            successIncrement = 1,
+                            tokenIncrement = result.totalTokens ?: 0,
+                            dayKey = dayKey,
+                        )
+                        _insightState.value = _insightState.value.copy(
+                            signature = signature,
+                            researchMeaning = lines.getOrElse(0) { fallback.meaning },
+                            researchNextAction = lines.getOrElse(1) { fallback.nextAction },
+                            researchActionSource = DailyBriefSource.AI,
+                            isLoading = false,
+                        )
+                        return
+                    }
+                }
+
+                is AiChatResult.Failure -> {
+                    // Fall back to rule-based summary.
+                }
+            }
+        }
+
+        _insightState.value = _insightState.value.copy(
+            signature = signature,
+            researchMeaning = fallback.meaning,
+            researchNextAction = fallback.nextAction,
+            researchActionSource = DailyBriefSource.RULE,
+            isLoading = false,
         )
     }
 
@@ -404,7 +465,22 @@ class ThreadViewModel(
             add("${primaryKeyword} 产品 方案 案例")
             add("${title} workflow design benchmark")
         }.distinct().take(2)
-        return ResearchBundle(outsideAngle = outsideAngle, gap = gap, queries = queries)
+        val meaning = if (repeatedTag != null) {
+            "如果相邻领域也反复用「$repeatedTag」来切问题，说明这条方向值得继续压成结构化方案。"
+        } else {
+            "如果外部案例都在更小的切口上验证，说明这条方向也更适合先缩成一个具体实验。"
+        }
+        val nextAction = when {
+            queries.isNotEmpty() -> "先用「${queries.first()}」查 2 到 3 个案例，再补一条研究记录说明它们共同验证了什么。"
+            else -> "先找两个相邻案例，比对它们的切入点，再补一条研究记录。"
+        }
+        return ResearchBundle(
+            outsideAngle = outsideAngle,
+            gap = gap,
+            queries = queries,
+            meaning = meaning,
+            nextAction = nextAction,
+        )
     }
 
     private fun buildThreadWeeklyReview(notes: List<NoteEntity>): ThreadWeeklyReview {
@@ -444,7 +520,7 @@ class ThreadViewModel(
         )
     }
 
-    private fun parseAiLines(raw: String): List<String> =
+    private fun parseAiLines(raw: String, limit: Int = 3): List<String> =
         raw.replace("\r", "\n")
             .lineSequence()
             .map { it.trim() }
@@ -458,7 +534,7 @@ class ThreadViewModel(
                     .trim()
             }
             .filter { it.isNotBlank() }
-            .take(3)
+            .take(limit)
             .toList()
 
     private fun buildSignature(notes: List<NoteEntity>): String =
@@ -540,6 +616,8 @@ class ThreadViewModel(
         val outsideAngle: String,
         val gap: String,
         val queries: List<String>,
+        val meaning: String = "",
+        val nextAction: String = "",
     )
 
     private data class ThreadWeeklyReview(

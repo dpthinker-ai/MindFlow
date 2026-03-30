@@ -210,6 +210,38 @@ fun ThreadRoute(
                 ),
             )
         },
+        onCaptureResearchActionNote = {
+            val topic = "${uiState.title.removePrefix("#").trim()} · 研究动作"
+            val seedContent = buildString {
+                appendLine("围绕「${uiState.title}」记下一条研究转行动：")
+                uiState.researchMeaning.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 当前判断：$it")
+                }
+                uiState.researchNextAction.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 先验证这一步：$it")
+                }
+                appendLine("- 我准备怎么验证：")
+                appendLine("- 验证结果要看什么：")
+            }
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
+        },
         onCaptureWeeklyReviewNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 本周推进"
             val seedContent = buildString {
@@ -315,6 +347,7 @@ private fun ThreadScreen(
     onOpenResearchQuery: (String) -> Unit,
     onCreateThreadNote: () -> Unit,
     onCaptureResearchNote: () -> Unit,
+    onCaptureResearchActionNote: () -> Unit,
     onCaptureWeeklyReviewNote: () -> Unit,
     onCaptureInsightNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
@@ -499,6 +532,44 @@ private fun ThreadScreen(
                                 text = "记下研究收获",
                                 onClick = onCaptureResearchNote,
                             )
+                            if (uiState.researchMeaning.isNotBlank() || uiState.researchNextAction.isNotBlank()) {
+                                Surface(
+                                    shape = com.mindflow.app.ui.components.CardShape,
+                                    color = AccentBlue.copy(alpha = 0.08f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = if (uiState.researchActionSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "研究转行动 · AI" else "研究转行动",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = AccentBlue,
+                                        )
+                                        if (uiState.researchMeaning.isNotBlank()) {
+                                            Text(
+                                                text = uiState.researchMeaning,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                        if (uiState.researchNextAction.isNotBlank()) {
+                                            Text(
+                                                text = "先验证这一步：${uiState.researchNextAction}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                        GhostActionButton(
+                                            text = "记下验证动作",
+                                            onClick = onCaptureResearchActionNote,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

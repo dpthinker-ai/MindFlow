@@ -168,6 +168,7 @@ Planned items:
   - AI / rule source cues
   - capture research findings directly into a new thread note
   - recent research-derived notes stay visible inside the thread as lightweight research memory
+  - research can now be compressed into one meaning line and one smallest validation action
 
 2. Topic maps
 - not heavy graph-first UI
@@ -196,9 +197,9 @@ Next best order:
 
 1. external research capture back into notes
 2. widget-level capture polish
-3. thread-level research-to-action summaries
-4. thread follow-up summaries outside the thread page
-5. thread research clustering
+3. thread follow-up summaries outside the thread page
+4. thread research clustering
+5. lighter Flow-to-thread action handoff
 
 ## Success Criteria
 

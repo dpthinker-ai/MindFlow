@@ -138,8 +138,9 @@ Current status:
 - reminder-to-flow contextual focus: first version implemented
 - thread action summaries inside Flow: first version implemented
 - thread-level external research memory: first version implemented
+- thread-level research-to-action summaries: first version implemented
 
 Next strongest direction:
 
 - widget-level capture polish
-- thread-level research-to-action summaries
+- thread follow-up summaries outside the thread page
