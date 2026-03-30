@@ -133,9 +133,10 @@ Current status:
 - thread-level review/action capture back into notes: first version implemented
 - notification quick capture refinement: first version implemented
 - richer stale-note reasoning with AI when useful: first version implemented
+- thread-level follow-up actions for reminders: first version implemented
 
 Next strongest direction:
 
 - external research capture back into notes
-- thread-level follow-up actions for reminders
 - deeper reminder landing context
+- widget-level capture polish

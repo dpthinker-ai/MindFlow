@@ -24,6 +24,11 @@ sealed interface MindFlowLaunchRequest {
     data class OpenSearch(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
 
     data class OpenFlow(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
+
+    data class OpenThread(
+        val threadKey: String,
+        override val requestId: Long = System.currentTimeMillis(),
+    ) : MindFlowLaunchRequest
 }
 
 object MindFlowEntryIntents {
@@ -32,6 +37,7 @@ object MindFlowEntryIntents {
     const val ACTION_OPEN_SEARCH = "com.mindflow.app.action.OPEN_SEARCH"
     const val ACTION_OPEN_FLOW = "com.mindflow.app.action.OPEN_FLOW"
     const val EXTRA_NOTE_ID = "extra_note_id"
+    const val EXTRA_THREAD_KEY = "extra_thread_key"
     const val EXTRA_CAPTURE_CONTENT = "extra_capture_content"
     const val EXTRA_CAPTURE_TOPIC = "extra_capture_topic"
 
@@ -50,8 +56,11 @@ object MindFlowEntryIntents {
 
     private fun parseFlowIntent(intent: Intent): MindFlowLaunchRequest {
         val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+        val threadKey = intent.getStringExtra(EXTRA_THREAD_KEY).orEmpty()
         return if (noteId > 0L) {
             MindFlowLaunchRequest.OpenNote(noteId = noteId)
+        } else if (threadKey.isNotBlank()) {
+            MindFlowLaunchRequest.OpenThread(threadKey = threadKey)
         } else {
             MindFlowLaunchRequest.OpenFlow()
         }

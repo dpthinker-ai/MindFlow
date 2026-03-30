@@ -16,6 +16,7 @@ import androidx.work.WorkerParameters
 import com.mindflow.app.EntryProxyActivity
 import com.mindflow.app.MindFlowApplication
 import com.mindflow.app.R
+import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.ui.navigation.MindFlowEntryIntents
@@ -57,7 +58,7 @@ class ReminderWorker(
         }
 
         val actions = when (kind) {
-            ReminderKind.MORNING -> buildMorningActions(continueNote, staleNote)
+            ReminderKind.MORNING -> buildMorningActions(activeNotes, continueNote, staleNote)
             ReminderKind.EVENING -> buildEveningActions(activeNotes)
         }
 
@@ -214,6 +215,7 @@ class ReminderWorker(
         action: String,
         requestCodeOffset: Int,
         openNoteId: Long? = null,
+        openThreadKey: String = "",
         captureTopic: String = "",
         captureContent: String = "",
     ): PendingIntent {
@@ -221,6 +223,9 @@ class ReminderWorker(
             this.action = action
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             openNoteId?.takeIf { it > 0L }?.let { putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it) }
+            if (openThreadKey.isNotBlank()) {
+                putExtra(MindFlowEntryIntents.EXTRA_THREAD_KEY, openThreadKey)
+            }
             if (captureTopic.isNotBlank()) {
                 putExtra(MindFlowEntryIntents.EXTRA_CAPTURE_TOPIC, captureTopic)
             }
@@ -237,10 +242,17 @@ class ReminderWorker(
     }
 
     private fun buildMorningActions(
+        activeNotes: List<NoteEntity>,
         continueNote: NoteEntity?,
         staleNote: NoteEntity?,
     ): List<ReminderAction> {
         val targetNote = continueNote ?: staleNote
+        val threadKey = targetNote?.let { note ->
+            NoteConnectionAnalyzer.bestThreadKeyFor(
+                note = note,
+                notes = activeNotes,
+            )
+        }
         val openLabel = if (continueNote != null) "继续推进" else if (staleNote != null) "重新接上" else "打开 Flow"
         val seedContent = when {
             continueNote != null -> buildProgressSeed(continueNote)
@@ -251,12 +263,13 @@ class ReminderWorker(
         return buildList {
             add(
                 ReminderAction(
-                    label = openLabel,
+                    label = if (threadKey != null) "打开方向" else openLabel,
                     pendingIntent = quickActionPendingIntent(
                         kind = ReminderKind.MORNING,
                         action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
                         requestCodeOffset = 100,
-                        openNoteId = targetNote?.id,
+                        openNoteId = if (threadKey == null) targetNote?.id else null,
+                        openThreadKey = threadKey.orEmpty(),
                     ),
                 ),
             )

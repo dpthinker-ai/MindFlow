@@ -144,6 +144,12 @@ fun MindFlowApp(
                 openTopLevel(MindFlowDestinations.FLOW)
                 onLaunchRequestConsumed(request.requestId)
             }
+            is MindFlowLaunchRequest.OpenThread -> {
+                navController.navigate(MindFlowDestinations.threadRoute(request.threadKey)) {
+                    launchSingleTop = true
+                }
+                onLaunchRequestConsumed(request.requestId)
+            }
             is MindFlowLaunchRequest.OpenSearch -> {
                 openTopLevel(MindFlowDestinations.SEARCH_BASE)
                 onLaunchRequestConsumed(request.requestId)

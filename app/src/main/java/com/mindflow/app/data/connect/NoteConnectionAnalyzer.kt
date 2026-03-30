@@ -109,6 +109,28 @@ object NoteConnectionAnalyzer {
         )
     }
 
+    fun bestThreadKeyFor(
+        note: NoteEntity,
+        notes: List<NoteEntity>,
+    ): String? {
+        val activeNotes = notes.filter { !it.isArchived }
+        val tagThread = note.tags
+            .distinct()
+            .mapNotNull { tag ->
+                val count = activeNotes.count { candidate -> tag.isNotBlank() && tag in candidate.tags }
+                if (tag.isBlank() || count < 2) null else "tag:$tag" to count
+            }
+            .maxByOrNull { it.second }
+            ?.first
+        if (tagThread != null) {
+            return tagThread
+        }
+
+        val folderKey = MindFolderCatalog.normalizedKey(note.folderKey) ?: return null
+        val folderCount = activeNotes.count { candidate -> MindFolderCatalog.normalizedKey(candidate.folderKey) == folderKey }
+        return if (folderCount >= 2) "folder:$folderKey" else null
+    }
+
     fun notesForThread(
         threadKey: String,
         notes: List<NoteEntity>,
