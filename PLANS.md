@@ -60,6 +60,7 @@ Planned items:
   - low-frequency local notifications
   - main notification tap lands in Flow
   - reminder tap can now open the most relevant note directly
+  - contextual quick actions for continue / reconnect / recap
 
 3. Faster capture
 - status: refined
@@ -70,8 +71,6 @@ Planned items:
   - home widget voice entry
   - share-to-capture
   - voice-to-text in editor
-- next step:
-  - richer notification quick capture
 
 ## P1: AI Insight Layer
 
@@ -189,11 +188,11 @@ Planned items:
 
 Next best order:
 
-1. notification quick capture
-2. external research capture back into notes
-3. richer stale-note reasoning with AI when useful
-4. thread-level follow-up actions for reminders
-5. deeper reminder landing context
+1. external research capture back into notes
+2. richer stale-note reasoning with AI when useful
+3. thread-level follow-up actions for reminders
+4. deeper reminder landing context
+5. widget-level capture polish
 
 ## Success Criteria
 

@@ -32,14 +32,16 @@ object MindFlowEntryIntents {
     const val ACTION_OPEN_SEARCH = "com.mindflow.app.action.OPEN_SEARCH"
     const val ACTION_OPEN_FLOW = "com.mindflow.app.action.OPEN_FLOW"
     const val EXTRA_NOTE_ID = "extra_note_id"
+    const val EXTRA_CAPTURE_CONTENT = "extra_capture_content"
+    const val EXTRA_CAPTURE_TOPIC = "extra_capture_topic"
 
     fun fromIntent(intent: Intent?): MindFlowLaunchRequest? {
         val safeIntent = intent ?: return null
         return when (safeIntent.action) {
             Intent.ACTION_SEND -> parseSharedText(safeIntent)
             Intent.ACTION_PROCESS_TEXT -> parseProcessText(safeIntent)
-            ACTION_OPEN_CAPTURE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed())
-            ACTION_OPEN_CAPTURE_VOICE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed(autoStartVoiceInput = true))
+            ACTION_OPEN_CAPTURE -> parseCaptureIntent(safeIntent, autoStartVoiceInput = false)
+            ACTION_OPEN_CAPTURE_VOICE -> parseCaptureIntent(safeIntent, autoStartVoiceInput = true)
             ACTION_OPEN_SEARCH -> MindFlowLaunchRequest.OpenSearch()
             ACTION_OPEN_FLOW -> parseFlowIntent(safeIntent)
             else -> null
@@ -54,6 +56,18 @@ object MindFlowEntryIntents {
             MindFlowLaunchRequest.OpenFlow()
         }
     }
+
+    private fun parseCaptureIntent(
+        intent: Intent,
+        autoStartVoiceInput: Boolean,
+    ): MindFlowLaunchRequest =
+        MindFlowLaunchRequest.OpenCapture(
+            CaptureSeed(
+                initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT).orEmpty(),
+                initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty(),
+                autoStartVoiceInput = autoStartVoiceInput,
+            ),
+        )
 
     private fun parseSharedText(intent: Intent): MindFlowLaunchRequest? {
         if (intent.type?.startsWith("text/") != true) return null

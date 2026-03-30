@@ -131,9 +131,10 @@ Current status:
 - thread-level action refinement: first version implemented
 - research result capture back into threads: first version implemented
 - thread-level review/action capture back into notes: first version implemented
+- notification quick capture refinement: first version implemented
 
 Next strongest direction:
 
-- notification quick capture refinement
 - external research capture back into notes
 - thread-level follow-up actions for reminders
+- deeper reminder landing context

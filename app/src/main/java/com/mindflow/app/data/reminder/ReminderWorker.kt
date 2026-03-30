@@ -56,7 +56,12 @@ class ReminderWorker(
             ReminderKind.EVENING -> buildEveningPayload(activeNotes)
         }
 
-        notify(kind, payload.title, payload.body, payload.openNoteId)
+        val actions = when (kind) {
+            ReminderKind.MORNING -> buildMorningActions(continueNote, staleNote)
+            ReminderKind.EVENING -> buildEveningActions(activeNotes)
+        }
+
+        notify(kind, payload.title, payload.body, actions, payload.openNoteId)
         return Result.success()
     }
 
@@ -141,6 +146,7 @@ class ReminderWorker(
         kind: ReminderKind,
         title: String,
         body: String,
+        actions: List<ReminderAction>,
         openNoteId: Long? = null,
     ) {
         val launchIntent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
@@ -154,23 +160,7 @@ class ReminderWorker(
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val quickCaptureIntent = quickActionPendingIntent(
-            kind = kind,
-            action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
-            requestCodeOffset = 100,
-        )
-        val voiceCaptureIntent = quickActionPendingIntent(
-            kind = kind,
-            action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE_VOICE,
-            requestCodeOffset = 150,
-        )
-        val flowIntent = quickActionPendingIntent(
-            kind = kind,
-            action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
-            requestCodeOffset = 200,
-        )
-
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+        var notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_monochrome_inset)
             .setContentTitle(title)
             .setContentText(body)
@@ -178,24 +168,15 @@ class ReminderWorker(
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .addAction(
+        actions.forEach { action ->
+            notification = notification.addAction(
                 R.drawable.ic_launcher_monochrome_inset,
-                "记一条",
-                quickCaptureIntent,
+                action.label,
+                action.pendingIntent,
             )
-            .addAction(
-                R.drawable.ic_launcher_monochrome_inset,
-                "语音记",
-                voiceCaptureIntent,
-            )
-            .addAction(
-                R.drawable.ic_launcher_monochrome_inset,
-                "打开 Flow",
-                flowIntent,
-            )
-            .build()
+        }
 
-        NotificationManagerCompat.from(applicationContext).notify(kind.ordinal + 701, notification)
+        NotificationManagerCompat.from(applicationContext).notify(kind.ordinal + 701, notification.build())
     }
 
     private fun createChannel() {
@@ -232,10 +213,20 @@ class ReminderWorker(
         kind: ReminderKind,
         action: String,
         requestCodeOffset: Int,
+        openNoteId: Long? = null,
+        captureTopic: String = "",
+        captureContent: String = "",
     ): PendingIntent {
         val intent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
             this.action = action
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            openNoteId?.takeIf { it > 0L }?.let { putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it) }
+            if (captureTopic.isNotBlank()) {
+                putExtra(MindFlowEntryIntents.EXTRA_CAPTURE_TOPIC, captureTopic)
+            }
+            if (captureContent.isNotBlank()) {
+                putExtra(MindFlowEntryIntents.EXTRA_CAPTURE_CONTENT, captureContent)
+            }
         }
         return PendingIntent.getActivity(
             applicationContext,
@@ -245,11 +236,139 @@ class ReminderWorker(
         )
     }
 
+    private fun buildMorningActions(
+        continueNote: NoteEntity?,
+        staleNote: NoteEntity?,
+    ): List<ReminderAction> {
+        val targetNote = continueNote ?: staleNote
+        val openLabel = if (continueNote != null) "继续推进" else if (staleNote != null) "重新接上" else "打开 Flow"
+        val seedContent = when {
+            continueNote != null -> buildProgressSeed(continueNote)
+            staleNote != null -> buildReconnectSeed(staleNote)
+            else -> ""
+        }
+        val seedTopic = targetNote?.topic.orEmpty()
+        return buildList {
+            add(
+                ReminderAction(
+                    label = openLabel,
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.MORNING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
+                        requestCodeOffset = 100,
+                        openNoteId = targetNote?.id,
+                    ),
+                ),
+            )
+            add(
+                ReminderAction(
+                    label = if (seedContent.isNotBlank()) "补一条" else "记一条",
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.MORNING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
+                        requestCodeOffset = 150,
+                        captureTopic = seedTopic,
+                        captureContent = seedContent,
+                    ),
+                ),
+            )
+            add(
+                ReminderAction(
+                    label = "语音记",
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.MORNING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE_VOICE,
+                        requestCodeOffset = 200,
+                        captureTopic = seedTopic,
+                        captureContent = seedContent,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun buildEveningActions(activeNotes: List<NoteEntity>): List<ReminderAction> {
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now(zoneId)
+        val todayNotes = activeNotes.filter { it.createdAt.toLocalDate(zoneId) == today }
+        val latestToday = todayNotes.maxByOrNull { it.updatedAt }
+        val seedContent = buildEveningSeed(latestToday)
+        return buildList {
+            add(
+                ReminderAction(
+                    label = if (latestToday != null) "打开记录" else "打开 Flow",
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.EVENING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
+                        requestCodeOffset = 100,
+                        openNoteId = latestToday?.id,
+                    ),
+                ),
+            )
+            add(
+                ReminderAction(
+                    label = if (latestToday != null) "记回看" else "记一条",
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.EVENING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
+                        requestCodeOffset = 150,
+                        captureTopic = if (latestToday != null) "今晚回看" else "",
+                        captureContent = seedContent,
+                    ),
+                ),
+            )
+            add(
+                ReminderAction(
+                    label = "语音记",
+                    pendingIntent = quickActionPendingIntent(
+                        kind = ReminderKind.EVENING,
+                        action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE_VOICE,
+                        requestCodeOffset = 200,
+                        captureTopic = if (latestToday != null) "今晚回看" else "",
+                        captureContent = seedContent,
+                    ),
+                ),
+            )
+        }
+    }
+
     companion object {
         private const val CHANNEL_ID = "mindflow_daily_brief"
         const val KEY_KIND = "kind"
     }
 }
+
+private data class ReminderAction(
+    val label: String,
+    val pendingIntent: PendingIntent,
+)
+
+private fun buildProgressSeed(note: NoteEntity): String =
+    buildString {
+        appendLine("围绕「${note.topic.ifBlank { "未命名记录" }}」补一条最新进展：")
+        appendLine("- 今天的进展：")
+        appendLine("- 当前卡点：")
+        appendLine("- 下一步：")
+    }
+
+private fun buildReconnectSeed(note: NoteEntity): String =
+    buildString {
+        appendLine("围绕「${note.topic.ifBlank { "未命名记录" }}」重新接上一条记录：")
+        appendLine("- 现在重新看它的原因：")
+        appendLine("- 今天先做的一步：")
+        appendLine("- 这次新的判断：")
+    }
+
+private fun buildEveningSeed(note: NoteEntity?): String =
+    buildString {
+        appendLine("今晚给今天留一条回看：")
+        note?.topic?.takeIf { it.isNotBlank() }?.let {
+            appendLine("- 今天最值得接着看的：$it")
+        }
+        appendLine("- 今天最重要的变化：")
+        appendLine("- 新的判断：")
+        appendLine("- 明天第一步：")
+    }
 
 private fun buildReminderNextStep(note: NoteEntity): String =
     when (note.status) {
