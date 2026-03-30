@@ -153,6 +153,28 @@ fun ThreadRoute(
             }
             onCreateThreadNote(topic, seedContent)
         },
+        onCaptureResearchNote = {
+            val topic = "${uiState.title.removePrefix("#").trim()} · 研究收获"
+            val seedContent = buildString {
+                appendLine("围绕「${uiState.title}」记一条研究收获：")
+                uiState.researchOutsideAngle.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 外部线索：$it")
+                }
+                uiState.researchGap.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 机会缺口：$it")
+                }
+                if (uiState.researchQueries.isNotEmpty()) {
+                    appendLine("- 继续查：")
+                    uiState.researchQueries.forEach { query ->
+                        appendLine("  - $query")
+                    }
+                }
+                appendLine("- 我查到的内容：")
+                appendLine("- 这对当前方向的判断：")
+                appendLine("- 下一步验证：")
+            }
+            onCreateThreadNote(topic, seedContent)
+        },
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -185,6 +207,7 @@ private fun ThreadScreen(
     onPromoteFocus: () -> Unit,
     onOpenResearchQuery: (String) -> Unit,
     onCreateThreadNote: () -> Unit,
+    onCaptureResearchNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -359,6 +382,10 @@ private fun ThreadScreen(
                                     }
                                 }
                             }
+                            GhostActionButton(
+                                text = "记下研究收获",
+                                onClick = onCaptureResearchNote,
+                            )
                         }
                     }
                 }

@@ -160,6 +160,7 @@ Planned items:
   - opportunity-gap prompt
   - directly usable search queries
   - AI / rule source cues
+  - capture research findings directly into a new thread note
 
 2. Topic maps
 - not heavy graph-first UI
@@ -187,10 +188,10 @@ Planned items:
 Next best order:
 
 1. notification quick capture
-2. research result capture back into threads
-3. thread-level review/action capture back into notes
+2. thread-level review/action capture back into notes
+3. external research capture back into notes
 4. richer stale-note reasoning with AI when useful
-5. external research capture back into notes
+5. thread-level follow-up actions for reminders
 
 ## Success Criteria
 
