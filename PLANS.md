@@ -167,6 +167,7 @@ Planned items:
   - directly usable search queries
   - AI / rule source cues
   - capture research findings directly into a new thread note
+  - recent research-derived notes stay visible inside the thread as lightweight research memory
 
 2. Topic maps
 - not heavy graph-first UI
@@ -194,10 +195,10 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. thread-level external research memory
-3. widget-level capture polish
-4. thread-level research-to-action summaries
-5. thread follow-up summaries outside the thread page
+2. widget-level capture polish
+3. thread-level research-to-action summaries
+4. thread follow-up summaries outside the thread page
+5. thread research clustering
 
 ## Success Criteria
 

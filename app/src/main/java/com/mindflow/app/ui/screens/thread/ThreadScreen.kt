@@ -503,6 +503,52 @@ private fun ThreadScreen(
                     }
                 }
 
+                if (uiState.researchNotes.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "研究记录",
+                                headline = "${uiState.researchNotes.size} 条",
+                            )
+                            uiState.researchNotes.forEach { note ->
+                                Surface(
+                                    shape = com.mindflow.app.ui.components.CardShape,
+                                    color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                    modifier = Modifier.clickable { onOpenNote(note.id) },
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = note.topic.ifBlank { "未命名研究记录" },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSoft,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = com.mindflow.app.util.TimeFormatter.compact(note.updatedAt),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSoft,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (uiState.focusNote != null) {
                     item {
                         PanelCard {

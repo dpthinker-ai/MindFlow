@@ -35,6 +35,7 @@ data class ThreadUiState(
     val threadKey: String,
     val title: String,
     val notes: List<NoteEntity> = emptyList(),
+    val researchNotes: List<NoteEntity> = emptyList(),
     val totalCount: Int = 0,
     val ideaCount: Int = 0,
     val inProgressCount: Int = 0,
@@ -97,12 +98,14 @@ class ThreadViewModel(
         _insightState,
     ) { allNotes, isFollowed, insight ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
+        val researchNotes = notes.filter(::isResearchMemoryNote).take(3)
         val focusNote = pickFocusNote(notes)
         val weeklyReview = buildThreadWeeklyReview(notes)
         ThreadUiState(
             threadKey = threadKey,
             title = NoteConnectionAnalyzer.titleForThread(threadKey),
             notes = notes,
+            researchNotes = researchNotes,
             totalCount = notes.size,
             ideaCount = notes.count { it.status == NoteStatus.IDEA },
             inProgressCount = notes.count { it.status == NoteStatus.IN_PROGRESS },
@@ -477,6 +480,15 @@ class ThreadViewModel(
             NoteStatus.DONE -> "这条记录已经做成了，可以把它当作下一轮延展的起点。"
             null -> ""
         }
+
+    private fun isResearchMemoryNote(note: NoteEntity): Boolean {
+        val topic = note.topic.trim()
+        val content = note.content
+        return topic.contains("研究", ignoreCase = true) ||
+            content.contains("外部线索") ||
+            content.contains("机会缺口") ||
+            content.contains("我查到的内容")
+    }
 
     private fun List<NoteEntity>.currentWeekNotes(): List<NoteEntity> {
         val zoneId = ZoneId.systemDefault()

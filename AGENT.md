@@ -137,8 +137,9 @@ Current status:
 - thread-context capture persistence: first version implemented
 - reminder-to-flow contextual focus: first version implemented
 - thread action summaries inside Flow: first version implemented
+- thread-level external research memory: first version implemented
 
 Next strongest direction:
 
-- thread-level external research memory
 - widget-level capture polish
+- thread-level research-to-action summaries
