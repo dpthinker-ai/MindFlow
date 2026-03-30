@@ -15,7 +15,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.mindflow.app.EntryProxyActivity
 import com.mindflow.app.MindFlowApplication
-import com.mindflow.app.SplashActivity
 import com.mindflow.app.R
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
@@ -138,13 +137,10 @@ class ReminderWorker(
         title: String,
         body: String,
     ) {
-        val launchIntent = applicationContext.packageManager.getLaunchIntentForPackage(applicationContext.packageName)
-            ?.apply {
-                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            ?: Intent(applicationContext, SplashActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
+        val launchIntent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
+            action = MindFlowEntryIntents.ACTION_OPEN_FLOW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
             kind.ordinal,

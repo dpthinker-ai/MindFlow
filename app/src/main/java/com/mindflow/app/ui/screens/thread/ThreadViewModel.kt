@@ -26,7 +26,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 data class ThreadUiState(
     val threadKey: String,
@@ -39,6 +42,8 @@ data class ThreadUiState(
     val threadSummary: String = "",
     val threadBlocker: String = "",
     val threadNextStep: String = "",
+    val weeklyStatsLine: String = "",
+    val weeklyLines: List<String> = emptyList(),
     val researchHighlights: List<String> = emptyList(),
     val researchQueries: List<String> = emptyList(),
     val researchSource: DailyBriefSource = DailyBriefSource.RULE,
@@ -91,6 +96,7 @@ class ThreadViewModel(
     ) { allNotes, isFollowed, insight ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
         val focusNote = pickFocusNote(notes)
+        val weeklyReview = buildThreadWeeklyReview(notes)
         ThreadUiState(
             threadKey = threadKey,
             title = NoteConnectionAnalyzer.titleForThread(threadKey),
@@ -102,6 +108,8 @@ class ThreadViewModel(
             threadSummary = insight.summary,
             threadBlocker = insight.blocker,
             threadNextStep = insight.nextStep,
+            weeklyStatsLine = weeklyReview.statsLine,
+            weeklyLines = weeklyReview.lines,
             researchHighlights = insight.researchHighlights,
             researchQueries = insight.researchQueries,
             researchSource = insight.researchSource,
@@ -391,6 +399,43 @@ class ThreadViewModel(
         return ResearchBundle(highlights = highlights.take(2), queries = queries)
     }
 
+    private fun buildThreadWeeklyReview(notes: List<NoteEntity>): ThreadWeeklyReview {
+        val weeklyNotes = notes.currentWeekNotes()
+        if (weeklyNotes.isEmpty()) {
+            return ThreadWeeklyReview(
+                statsLine = "这周还没有新的推进",
+                lines = listOf("先补一条真实记录，让这个方向重新开始流动起来。"),
+            )
+        }
+        val latest = weeklyNotes.maxByOrNull { it.updatedAt }
+        val repeatedTag = weeklyNotes
+            .flatMap { it.tags.distinct() }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+        val lines = buildList {
+            if (repeatedTag != null) {
+                add("这周主线主要围绕「$repeatedTag」，可以继续把它压成更明确的问题定义。")
+            } else {
+                add("这周这个方向还在继续聚焦，别再往外摊更多分支。")
+            }
+            latest?.let {
+                add("下周先接着推进「${it.topic.ifBlank { "未命名记录" }}」，别让最近这条又沉下去。")
+            }
+        }.take(2)
+        return ThreadWeeklyReview(
+            statsLine = buildList {
+                add("本周 ${weeklyNotes.size} 条")
+                val progressCount = weeklyNotes.count { it.status == NoteStatus.IN_PROGRESS }
+                val doneCount = weeklyNotes.count { it.status == NoteStatus.DONE }
+                if (progressCount > 0) add("推进 ${progressCount} 条")
+                if (doneCount > 0) add("完成 ${doneCount} 条")
+            }.joinToString(" · "),
+            lines = lines,
+        )
+    }
+
     private fun parseAiLines(raw: String): List<String> =
         raw.replace("\r", "\n")
             .lineSequence()
@@ -427,6 +472,16 @@ class ThreadViewModel(
             NoteStatus.DONE -> "这条记录已经做成了，可以把它当作下一轮延展的起点。"
             null -> ""
         }
+
+    private fun List<NoteEntity>.currentWeekNotes(): List<NoteEntity> {
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now(zoneId)
+        val weekStart = today.with(DayOfWeek.MONDAY)
+        return filter { note ->
+            val noteDate = Instant.ofEpochMilli(note.updatedAt).atZone(zoneId).toLocalDate()
+            !noteDate.isBefore(weekStart)
+        }
+    }
 
     private fun String.compactPreview(maxLength: Int): String =
         replace("\n", " ")
@@ -466,5 +521,10 @@ class ThreadViewModel(
     private data class ResearchBundle(
         val highlights: List<String>,
         val queries: List<String>,
+    )
+
+    private data class ThreadWeeklyReview(
+        val statsLine: String,
+        val lines: List<String>,
     )
 }

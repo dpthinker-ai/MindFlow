@@ -58,6 +58,7 @@ Planned items:
   - morning brief
   - evening review
   - low-frequency local notifications
+  - main notification tap lands in Flow
 
 3. Faster capture
 - status: refined
@@ -103,6 +104,7 @@ Planned items:
   - thread detail page
   - followed directions in Flow
   - thread focus and lightweight promotion
+  - thread-level weekly review
 
 4. Fusion suggestions
 - combine multiple notes into one stronger concept
@@ -179,11 +181,11 @@ Planned items:
 
 Next best order:
 
-1. thread-level weekly review
-2. notification quick capture
-3. external research enrichment for selected threads
-4. widget-level voice capture
-5. richer stale-note reasoning
+1. notification quick capture
+2. external research enrichment for selected threads
+3. widget-level voice capture
+4. richer stale-note reasoning
+5. richer notification landing context
 
 ## Success Criteria
 

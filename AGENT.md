@@ -122,10 +122,12 @@ Current status:
 - external voice capture entry: first version implemented
 - external research enrichment: first version implemented
 - stale note follow-up prompts: first version implemented
+- thread-level weekly review: first version implemented
+- reminder main tap deep link to Flow: implemented
 
 Next strongest direction:
 
-- thread-level weekly review
 - widget-level voice capture
 - deeper thread research with source handling
 - richer stale-note reasoning
+- richer notification landing context

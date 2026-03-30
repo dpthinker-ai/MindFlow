@@ -266,6 +266,24 @@ private fun ThreadScreen(
                     }
                 }
 
+                if (uiState.weeklyStatsLine.isNotBlank() || uiState.weeklyLines.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "本周在线程里",
+                                headline = uiState.weeklyStatsLine.ifBlank { null },
+                            )
+                            uiState.weeklyLines.forEach { line ->
+                                Text(
+                                    text = "• $line",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (uiState.researchHighlights.isNotEmpty() || uiState.researchQueries.isNotEmpty()) {
                     item {
                         PanelCard {
