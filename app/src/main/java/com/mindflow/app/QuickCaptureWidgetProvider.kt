@@ -7,7 +7,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.ui.navigation.MindFlowEntryIntents
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class QuickCaptureWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
@@ -30,8 +34,27 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        private fun buildRemoteViews(context: Context): RemoteViews =
-            RemoteViews(context.packageName, R.layout.widget_quick_capture).apply {
+        private fun buildRemoteViews(context: Context): RemoteViews {
+            val notes = runBlocking {
+                val app = context.applicationContext as? MindFlowApplication
+                app?.appContainer?.noteRepository?.observeAllNotes()?.first().orEmpty()
+            }
+            val activeNotes = notes.filter { !it.isArchived }
+            val continueNote = pickContinueNote(activeNotes)
+            val latestNote = activeNotes.maxByOrNull { it.updatedAt }
+            val subtitle = when {
+                continueNote != null -> "当前继续：${continueNote.topic.ifBlank { "未命名记录" }}"
+                latestNote != null -> "最近记录：${latestNote.topic.ifBlank { "未命名记录" }}"
+                else -> context.getString(R.string.widget_capture_subtitle)
+            }
+            val tertiaryLabel = when {
+                continueNote != null -> "继续"
+                latestNote != null -> "最近"
+                else -> context.getString(R.string.widget_flow_button)
+            }
+            return RemoteViews(context.packageName, R.layout.widget_quick_capture).apply {
+                setTextViewText(R.id.widget_subtitle, subtitle)
+                setTextViewText(R.id.widget_flow_button, tertiaryLabel)
                 setOnClickPendingIntent(
                     R.id.widget_root,
                     quickIntent(
@@ -54,6 +77,7 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
                         context = context,
                         action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
                         requestCode = 102,
+                        openNoteId = continueNote?.id ?: latestNote?.id,
                     ),
                 )
                 setOnClickPendingIntent(
@@ -65,14 +89,19 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
                     ),
                 )
             }
+        }
 
         private fun quickIntent(
             context: Context,
             action: String,
             requestCode: Int,
+            openNoteId: Long? = null,
         ): PendingIntent {
             val intent = Intent(context, EntryProxyActivity::class.java).apply {
                 this.action = action
+                openNoteId?.takeIf { it > 0L }?.let {
+                    putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it)
+                }
             }
             return PendingIntent.getActivity(
                 context,
@@ -81,5 +110,13 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         }
+
+        private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
+            notes
+                .filter { it.status == NoteStatus.IN_PROGRESS }
+                .maxByOrNull { it.updatedAt }
+                ?: notes
+                    .filter { it.status == NoteStatus.IDEA }
+                    .maxByOrNull { it.updatedAt }
     }
 }

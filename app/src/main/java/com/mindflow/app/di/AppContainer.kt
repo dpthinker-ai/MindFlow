@@ -111,6 +111,7 @@ class AppContainer(context: Context) {
     )
 
     val noteRepository: NoteRepository = OfflineFirstNoteRepository(
+        appContext = context.applicationContext,
         database = database,
         noteDao = database.noteDao(),
         historyDao = database.noteStatusHistoryDao(),

@@ -71,6 +71,7 @@ Planned items:
   - launcher voice shortcut
   - home widget
   - home widget voice entry
+  - widget can surface the current note to continue or the latest note
   - share-to-capture
   - voice-to-text in editor
 
@@ -196,10 +197,10 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. widget-level capture polish
-3. thread follow-up summaries outside the thread page
-4. thread research clustering
-5. lighter Flow-to-thread action handoff
+2. thread follow-up summaries outside the thread page
+3. thread research clustering
+4. lighter Flow-to-thread action handoff
+5. richer note-to-thread capture hints
 
 ## Success Criteria
 

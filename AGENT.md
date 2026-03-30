@@ -139,8 +139,9 @@ Current status:
 - thread action summaries inside Flow: first version implemented
 - thread-level external research memory: first version implemented
 - thread-level research-to-action summaries: first version implemented
+- widget-level capture polish: first version implemented
 
 Next strongest direction:
 
-- widget-level capture polish
 - thread follow-up summaries outside the thread page
+- thread research clustering

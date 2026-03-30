@@ -1,6 +1,8 @@
 package com.mindflow.app.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
+import com.mindflow.app.QuickCaptureWidgetProvider
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.local.MindFlowDatabase
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class OfflineFirstNoteRepository(
+    private val appContext: Context,
     private val database: MindFlowDatabase,
     private val noteDao: NoteDao,
     private val historyDao: NoteStatusHistoryDao,
@@ -140,6 +143,7 @@ class OfflineFirstNoteRepository(
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)
+            refreshWidget()
         }
 
         return noteId
@@ -212,8 +216,10 @@ class OfflineFirstNoteRepository(
             applicationScope.launch {
                 val result = refreshFolderIfPossible(noteId, updateTimestamp = false)
                 result.notice?.let(::emitSystemNotice)
+                refreshWidget()
             }
         }
+        refreshWidget()
     }
 
     override suspend fun setArchived(noteId: Long, archived: Boolean) {
@@ -226,10 +232,12 @@ class OfflineFirstNoteRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
+        refreshWidget()
     }
 
     override suspend fun deleteNote(noteId: Long) {
         noteDao.deleteById(noteId)
+        refreshWidget()
     }
 
     override suspend fun classifyPendingFolders(): Int {
@@ -420,6 +428,10 @@ class OfflineFirstNoteRepository(
             noteCount = parsedNotes.size,
             historyCount = importedHistoryCount,
         )
+    }
+
+    private fun refreshWidget() {
+        QuickCaptureWidgetProvider.refreshAll(appContext)
     }
 
     private fun emitSystemNotice(message: String) {
