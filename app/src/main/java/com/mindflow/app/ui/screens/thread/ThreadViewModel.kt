@@ -44,7 +44,8 @@ data class ThreadUiState(
     val threadNextStep: String = "",
     val weeklyStatsLine: String = "",
     val weeklyLines: List<String> = emptyList(),
-    val researchHighlights: List<String> = emptyList(),
+    val researchOutsideAngle: String = "",
+    val researchGap: String = "",
     val researchQueries: List<String> = emptyList(),
     val researchSource: DailyBriefSource = DailyBriefSource.RULE,
     val focusNote: NoteEntity? = null,
@@ -78,7 +79,8 @@ class ThreadViewModel(
         val summary: String = "",
         val blocker: String = "",
         val nextStep: String = "",
-        val researchHighlights: List<String> = emptyList(),
+        val researchOutsideAngle: String = "",
+        val researchGap: String = "",
         val researchQueries: List<String> = emptyList(),
         val researchSource: DailyBriefSource = DailyBriefSource.RULE,
         val source: DailyBriefSource = DailyBriefSource.RULE,
@@ -110,7 +112,8 @@ class ThreadViewModel(
             threadNextStep = insight.nextStep,
             weeklyStatsLine = weeklyReview.statsLine,
             weeklyLines = weeklyReview.lines,
-            researchHighlights = insight.researchHighlights,
+            researchOutsideAngle = insight.researchOutsideAngle,
+            researchGap = insight.researchGap,
             researchQueries = insight.researchQueries,
             researchSource = insight.researchSource,
             focusNote = focusNote,
@@ -221,7 +224,8 @@ class ThreadViewModel(
                             summary = lines.getOrElse(0) { fallback.summary },
                             blocker = lines.getOrElse(1) { fallback.blocker },
                             nextStep = lines.getOrElse(2) { fallback.nextStep },
-                            researchHighlights = fallback.researchHighlights,
+                            researchOutsideAngle = fallback.researchOutsideAngle,
+                            researchGap = fallback.researchGap,
                             researchQueries = fallback.researchQueries,
                             researchSource = fallback.researchSource,
                             source = DailyBriefSource.AI,
@@ -243,7 +247,8 @@ class ThreadViewModel(
             summary = fallback.summary,
             blocker = fallback.blocker,
             nextStep = fallback.nextStep,
-            researchHighlights = fallback.researchHighlights,
+            researchOutsideAngle = fallback.researchOutsideAngle,
+            researchGap = fallback.researchGap,
             researchQueries = fallback.researchQueries,
             researchSource = fallback.researchSource,
             source = DailyBriefSource.RULE,
@@ -301,7 +306,8 @@ class ThreadViewModel(
                         )
                         _insightState.value = _insightState.value.copy(
                             signature = signature,
-                            researchHighlights = lines.take(2),
+                            researchOutsideAngle = lines.getOrElse(0) { fallback.outsideAngle },
+                            researchGap = lines.getOrElse(1) { fallback.gap },
                             researchQueries = lines.drop(2).take(2),
                             researchSource = DailyBriefSource.AI,
                             isLoading = if (preserveInsight) false else _insightState.value.isLoading,
@@ -318,7 +324,8 @@ class ThreadViewModel(
 
         _insightState.value = _insightState.value.copy(
             signature = signature,
-            researchHighlights = fallback.highlights,
+            researchOutsideAngle = fallback.outsideAngle,
+            researchGap = fallback.gap,
             researchQueries = fallback.queries,
             researchSource = DailyBriefSource.RULE,
             isLoading = if (preserveInsight) false else _insightState.value.isLoading,
@@ -384,19 +391,17 @@ class ThreadViewModel(
             .maxByOrNull { it.value }
             ?.key
         val primaryKeyword = repeatedTag ?: title
-        val highlights = buildList {
-            add("先找 2 到 3 个做过类似方向的产品、论文或个人实践，确认别人是怎么切入这个问题的。")
-            if (repeatedTag != null) {
-                add("重点关注「$repeatedTag」在相邻领域里的做法，看看有没有可以借过来的结构或验证路径。")
-            } else {
-                add("别只搜同类产品，也试着找相邻场景里的成熟方法，通常突破感会从跨域借法里出来。")
-            }
+        val outsideAngle = "先找 2 到 3 个做过类似方向的产品、论文或个人实践，确认别人是怎么切入这个问题的。"
+        val gap = if (repeatedTag != null) {
+            "重点关注「$repeatedTag」在相邻领域里的做法，看看有没有可以借过来的结构或验证路径。"
+        } else {
+            "别只搜同类产品，也试着找相邻场景里的成熟方法，通常突破感会从跨域借法里出来。"
         }
         val queries = buildList {
             add("${primaryKeyword} 产品 方案 案例")
             add("${title} workflow design benchmark")
         }.distinct().take(2)
-        return ResearchBundle(highlights = highlights.take(2), queries = queries)
+        return ResearchBundle(outsideAngle = outsideAngle, gap = gap, queries = queries)
     }
 
     private fun buildThreadWeeklyReview(notes: List<NoteEntity>): ThreadWeeklyReview {
@@ -513,13 +518,15 @@ class ThreadViewModel(
         val summary: String,
         val blocker: String,
         val nextStep: String,
-        val researchHighlights: List<String> = emptyList(),
+        val researchOutsideAngle: String = "",
+        val researchGap: String = "",
         val researchQueries: List<String> = emptyList(),
         val researchSource: DailyBriefSource = DailyBriefSource.RULE,
     )
 
     private data class ResearchBundle(
-        val highlights: List<String>,
+        val outsideAngle: String,
+        val gap: String,
         val queries: List<String>,
     )
 

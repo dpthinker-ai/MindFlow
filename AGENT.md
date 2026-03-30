@@ -126,9 +126,10 @@ Current status:
 - reminder main tap deep link to Flow: implemented
 - reminder main tap contextual note landing: implemented
 - richer stale-note reasoning: first version implemented
+- thread research structure and source handling: first version implemented
 
 Next strongest direction:
 
 - widget-level voice capture
-- deeper thread research with source handling
 - thread-level action refinement
+- research result capture back into threads

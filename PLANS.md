@@ -155,9 +155,10 @@ Planned items:
 - summarize opportunity gaps
 - status: first version implemented in thread workspace
 - current shape:
-  - external research highlights
+  - external line of inquiry
   - opportunity-gap prompt
   - directly usable search queries
+  - AI / rule source cues
 
 2. Topic maps
 - not heavy graph-first UI
@@ -185,10 +186,10 @@ Planned items:
 Next best order:
 
 1. notification quick capture
-2. external research enrichment for selected threads
-3. widget-level voice capture
-4. deeper thread research with source handling
-5. thread-level action refinement
+2. widget-level voice capture
+3. thread-level action refinement
+4. research result capture back into threads
+5. richer stale-note reasoning with AI when useful
 
 ## Success Criteria
 

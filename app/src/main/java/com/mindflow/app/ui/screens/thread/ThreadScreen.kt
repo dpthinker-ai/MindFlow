@@ -284,18 +284,27 @@ private fun ThreadScreen(
                     }
                 }
 
-                if (uiState.researchHighlights.isNotEmpty() || uiState.researchQueries.isNotEmpty()) {
+                if (
+                    uiState.researchOutsideAngle.isNotBlank() ||
+                    uiState.researchGap.isNotBlank() ||
+                    uiState.researchQueries.isNotEmpty()
+                ) {
                     item {
                         PanelCard {
                             SectionHeader(
                                 title = "外部研究",
-                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI" else null,
+                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 研究" else "规则整理",
                             )
-                            uiState.researchHighlights.forEach { line ->
-                                Text(
-                                    text = "• $line",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                            if (uiState.researchOutsideAngle.isNotBlank()) {
+                                ResearchInsightLine(
+                                    label = "外部线索",
+                                    text = uiState.researchOutsideAngle,
+                                )
+                            }
+                            if (uiState.researchGap.isNotBlank()) {
+                                ResearchInsightLine(
+                                    label = "机会缺口",
+                                    text = uiState.researchGap,
                                 )
                             }
                             if (uiState.researchQueries.isNotEmpty()) {
@@ -308,21 +317,30 @@ private fun ThreadScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    uiState.researchQueries.forEach { query ->
+                                    uiState.researchQueries.forEachIndexed { index, query ->
                                         Surface(
                                             shape = com.mindflow.app.ui.components.CardShape,
                                             border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
                                             color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
                                             modifier = Modifier.clickable { onOpenResearchQuery(query) },
                                         ) {
-                                            Text(
-                                                text = query,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
+                                            Column(
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            )
+                                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                            ) {
+                                                Text(
+                                                    text = if (index == 0) "中文检索" else "技术检索",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSoft,
+                                                )
+                                                Text(
+                                                    text = query,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -454,6 +472,25 @@ private fun ThreadScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
+        )
+    }
+}
+
+@Composable
+private fun ResearchInsightLine(
+    label: String,
+    text: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSoft,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
