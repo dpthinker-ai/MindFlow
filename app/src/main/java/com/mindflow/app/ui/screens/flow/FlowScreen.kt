@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +43,7 @@ import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.noteStatusAccent
+import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
@@ -55,6 +59,7 @@ fun FlowRoute(
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
+    initialFocus: FlowFocus? = null,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
@@ -72,6 +77,7 @@ fun FlowRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     FlowScreen(
         uiState = uiState,
+        focus = initialFocus,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
     )
@@ -80,9 +86,35 @@ fun FlowRoute(
 @Composable
 private fun FlowScreen(
     uiState: FlowUiState,
+    focus: FlowFocus?,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val highlightToday = focus == FlowFocus.TODAY
+    val highlightReconnect = focus == FlowFocus.RECONNECT
+    val highlightReview = focus == FlowFocus.REVIEW
+    val highlightDirection = focus == FlowFocus.DIRECTION
+    val subtitle = remember(focus) {
+        when (focus) {
+            FlowFocus.TODAY -> "从提醒回来，先把今天最值得做的一步接上。"
+            FlowFocus.RECONNECT -> "从提醒回来，先把那条该重新接上的想法接回来。"
+            FlowFocus.REVIEW -> "从提醒回来，先看这周最值得留下来的判断。"
+            FlowFocus.DIRECTION -> "从提醒回来，先看这条更长的方向。"
+            null -> "先推进一件最值得做的事，再看一个更长的方向。"
+        }
+    }
+
+    LaunchedEffect(focus) {
+        when (focus) {
+            FlowFocus.TODAY,
+            FlowFocus.RECONNECT,
+            null -> listState.scrollToItem(0)
+            FlowFocus.REVIEW,
+            FlowFocus.DIRECTION -> listState.scrollToItem(2)
+        }
+    }
+
     ScreenBackground {
         Column(
             modifier = Modifier
@@ -90,6 +122,7 @@ private fun FlowScreen(
                 .statusBarsPadding(),
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = ScreenHorizontalPadding,
@@ -107,7 +140,7 @@ private fun FlowScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "先推进一件最值得做的事，再看一个更长的方向。",
+                            text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
@@ -127,6 +160,7 @@ private fun FlowScreen(
                             accent = noteStatusAccent(uiState.continueNote?.status ?: NoteStatus.IN_PROGRESS),
                             nextActionText = uiState.nextActionText,
                             nextActionSource = uiState.nextActionSource,
+                            highlighted = highlightToday,
                             modifier = Modifier.fillMaxWidth(),
                             onOpenNote = onOpenNote,
                         )
@@ -137,6 +171,7 @@ private fun FlowScreen(
                                 bridge = uiState.staleBridge,
                                 nextStep = uiState.staleNextStep,
                                 source = uiState.staleSource,
+                                highlighted = highlightReconnect,
                                 onOpenNote = onOpenNote,
                             )
                         }
@@ -156,6 +191,8 @@ private fun FlowScreen(
                         threads = uiState.themeThreads,
                         suggestions = uiState.fusionSuggestions,
                         fusionSource = uiState.fusionSource,
+                        highlightReview = highlightReview,
+                        highlightConnection = highlightDirection,
                         onOpenThread = onOpenThread,
                     )
                 }
@@ -173,6 +210,8 @@ private fun DirectionCard(
     threads: List<ThemeThread>,
     suggestions: List<String>,
     fusionSource: DailyBriefSource,
+    highlightReview: Boolean,
+    highlightConnection: Boolean,
     onOpenThread: (String) -> Unit,
 ) {
     PanelCard {
@@ -189,12 +228,14 @@ private fun DirectionCard(
             items = weeklyItems,
             source = weeklySource,
             statsLine = weeklyStatsLine,
+            highlighted = highlightReview,
         )
         ConnectionCard(
             followedThreads = followedThreads,
             threads = threads,
             suggestions = suggestions,
             source = fusionSource,
+            highlighted = highlightConnection,
             onOpenThread = onOpenThread,
         )
     }
@@ -206,12 +247,16 @@ private fun ConnectionCard(
     threads: List<ThemeThread>,
     suggestions: List<String>,
     source: DailyBriefSource,
+    highlighted: Boolean,
     onOpenThread: (String) -> Unit,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -307,11 +352,15 @@ private fun WeeklyReviewCard(
     items: List<WeeklyReviewItem>,
     source: DailyBriefSource,
     statsLine: String,
+    highlighted: Boolean,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -375,13 +424,17 @@ private fun TodayNoteCard(
     accent: Color,
     nextActionText: String,
     nextActionSource: DailyBriefSource,
+    highlighted: Boolean,
     modifier: Modifier = Modifier,
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) accent.copy(alpha = 0.45f) else BorderSoft,
+        ),
         modifier = modifier.then(
             if (note != null) {
                 Modifier.clickable { onOpenNote(note.id) }
@@ -518,12 +571,16 @@ private fun GentleReconnectCard(
     bridge: String,
     nextStep: String,
     source: DailyBriefSource,
+    highlighted: Boolean,
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+        ),
         modifier = Modifier.clickable { onOpenNote(note.id) },
     ) {
         Column(

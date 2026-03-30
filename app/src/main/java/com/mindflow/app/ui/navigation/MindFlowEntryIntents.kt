@@ -2,6 +2,13 @@ package com.mindflow.app.ui.navigation
 
 import android.content.Intent
 
+enum class FlowFocus {
+    TODAY,
+    RECONNECT,
+    REVIEW,
+    DIRECTION,
+}
+
 data class CaptureSeed(
     val requestId: Long = System.currentTimeMillis(),
     val initialContent: String = "",
@@ -25,7 +32,10 @@ sealed interface MindFlowLaunchRequest {
 
     data class OpenSearch(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
 
-    data class OpenFlow(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
+    data class OpenFlow(
+        val focus: FlowFocus? = null,
+        override val requestId: Long = System.currentTimeMillis(),
+    ) : MindFlowLaunchRequest
 
     data class OpenThread(
         val threadKey: String,
@@ -44,6 +54,7 @@ object MindFlowEntryIntents {
     const val EXTRA_CAPTURE_TOPIC = "extra_capture_topic"
     const val EXTRA_CAPTURE_FOLDER = "extra_capture_folder"
     const val EXTRA_CAPTURE_TAGS = "extra_capture_tags"
+    const val EXTRA_FLOW_FOCUS = "extra_flow_focus"
 
     fun fromIntent(intent: Intent?): MindFlowLaunchRequest? {
         val safeIntent = intent ?: return null
@@ -61,12 +72,14 @@ object MindFlowEntryIntents {
     private fun parseFlowIntent(intent: Intent): MindFlowLaunchRequest {
         val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
         val threadKey = intent.getStringExtra(EXTRA_THREAD_KEY).orEmpty()
+        val focus = intent.getStringExtra(EXTRA_FLOW_FOCUS)
+            ?.let { raw -> FlowFocus.entries.firstOrNull { it.name == raw } }
         return if (noteId > 0L) {
             MindFlowLaunchRequest.OpenNote(noteId = noteId)
         } else if (threadKey.isNotBlank()) {
             MindFlowLaunchRequest.OpenThread(threadKey = threadKey)
         } else {
-            MindFlowLaunchRequest.OpenFlow()
+            MindFlowLaunchRequest.OpenFlow(focus = focus)
         }
     }
 

@@ -141,7 +141,7 @@ fun MindFlowApp(
                 onLaunchRequestConsumed(request.requestId)
             }
             is MindFlowLaunchRequest.OpenFlow -> {
-                openTopLevel(MindFlowDestinations.FLOW)
+                openTopLevel(MindFlowDestinations.flowRoute(request.focus))
                 onLaunchRequestConsumed(request.requestId)
             }
             is MindFlowLaunchRequest.OpenThread -> {
@@ -160,7 +160,7 @@ fun MindFlowApp(
 
     val topLevelDestinations = listOf(
         TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.SpaceDashboard),
-        TopLevelDestination(MindFlowDestinations.FLOW, "Flow", Icons.Outlined.AutoAwesome),
+        TopLevelDestination(MindFlowDestinations.FLOW_BASE, "Flow", Icons.Outlined.AutoAwesome),
         TopLevelDestination(MindFlowDestinations.SEARCH_BASE, "查找", Icons.Outlined.Search),
         TopLevelDestination(MindFlowDestinations.STATS, "统计", Icons.Outlined.QueryStats),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
@@ -168,13 +168,14 @@ fun MindFlowApp(
 
     val normalizedRoute = when {
         currentRoute == null -> null
+        currentRoute.startsWith(MindFlowDestinations.FLOW_BASE) -> MindFlowDestinations.FLOW_BASE
         currentRoute.startsWith(MindFlowDestinations.SEARCH_BASE) -> MindFlowDestinations.SEARCH_BASE
         else -> currentRoute
     }
 
     val showBottomBar = normalizedRoute in setOf(
         MindFlowDestinations.FEED,
-        MindFlowDestinations.FLOW,
+        MindFlowDestinations.FLOW_BASE,
         MindFlowDestinations.SEARCH_BASE,
         MindFlowDestinations.STATS,
         MindFlowDestinations.SETTINGS,
@@ -202,7 +203,20 @@ fun MindFlowApp(
                 )
             }
 
-            composable(MindFlowDestinations.FLOW) {
+            composable(
+                route = MindFlowDestinations.FLOW,
+                arguments = listOf(
+                    navArgument(MindFlowDestinations.FLOW_FOCUS_ARG) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { backStackEntry ->
+                val focus = backStackEntry.arguments?.getString(MindFlowDestinations.FLOW_FOCUS_ARG)
+                    ?.let { raw ->
+                        com.mindflow.app.ui.navigation.FlowFocus.entries.firstOrNull { it.name == raw }
+                    }
                 FlowRoute(
                     noteRepository = noteRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
@@ -211,6 +225,7 @@ fun MindFlowApp(
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
+                    initialFocus = focus,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                 )

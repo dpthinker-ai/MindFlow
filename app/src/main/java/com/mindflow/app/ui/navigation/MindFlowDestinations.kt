@@ -5,7 +5,9 @@ import com.mindflow.app.data.model.NoteStatus
 
 object MindFlowDestinations {
     const val FEED = "feed"
-    const val FLOW = "flow"
+    const val FLOW_BASE = "flow"
+    const val FLOW = "flow?focus={focus}"
+    const val FLOW_FOCUS_ARG = "focus"
     const val THREAD = "flow/thread/{threadKey}"
     const val THREAD_ARG = "threadKey"
     const val SEARCH_BASE = "search"
@@ -26,6 +28,8 @@ object MindFlowDestinations {
     fun detailRoute(noteId: Long): String = "detail/$noteId"
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
     fun captureRoute(seedId: Long): String = "capture/$seedId"
+    fun flowRoute(focus: FlowFocus? = null): String =
+        if (focus == null) FLOW_BASE else "$FLOW_BASE?$FLOW_FOCUS_ARG=${focus.name}"
     fun searchRoute(
         status: NoteStatus? = null,
         archivedOnly: Boolean = false,

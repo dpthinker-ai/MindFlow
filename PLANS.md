@@ -62,6 +62,7 @@ Planned items:
   - reminder tap can now open the most relevant note directly
   - contextual quick actions for continue / reconnect / recap
   - can jump directly back into a matching thread when a reminder note belongs to a clear direction
+  - when a reminder lands in Flow, it can focus the relevant section (today / reconnect / review / direction)
 
 3. Faster capture
 - status: refined
@@ -192,10 +193,10 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. deeper reminder landing context
+2. thread-level external research memory
 3. widget-level capture polish
-4. thread-level external research memory
-5. thread action summaries outside the thread page
+4. thread action summaries outside the thread page
+5. thread-level research-to-action summaries
 
 ## Success Criteria
 

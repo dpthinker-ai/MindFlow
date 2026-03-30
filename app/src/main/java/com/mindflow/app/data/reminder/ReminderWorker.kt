@@ -19,6 +19,7 @@ import com.mindflow.app.R
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 import kotlinx.coroutines.flow.first
 import java.time.Instant
@@ -62,7 +63,7 @@ class ReminderWorker(
             ReminderKind.EVENING -> buildEveningActions(activeNotes)
         }
 
-        notify(kind, payload.title, payload.body, actions, payload.openNoteId)
+        notify(kind, payload.title, payload.body, actions, payload.openNoteId, payload.flowFocus)
         return Result.success()
     }
 
@@ -108,8 +109,19 @@ class ReminderWorker(
             listOf("别让念头只来过一次，先抓住今天最值得写下的一件事。")
         }.joinToString("\n")
 
-        return NotificationPayload(title = title, body = body)
-            .copy(openNoteId = continueNote?.id ?: staleNote?.id)
+        val openNoteId = continueNote?.id ?: staleNote?.id
+        val hasTargetNote = openNoteId != null && openNoteId > 0L
+        val flowFocus = when {
+            continueNote != null -> FlowFocus.TODAY
+            staleNote != null -> FlowFocus.RECONNECT
+            else -> FlowFocus.TODAY
+        }
+        return NotificationPayload(
+            title = title,
+            body = body,
+            openNoteId = openNoteId,
+            flowFocus = if (hasTargetNote) null else flowFocus,
+        )
     }
 
     private fun buildEveningPayload(
@@ -139,6 +151,7 @@ class ReminderWorker(
             else -> NotificationPayload(
                 title = "今天记了 ${todayNotes.size} 条",
                 body = "睡前挑一条最值得继续推进的记录，明天会更容易接上。",
+                flowFocus = FlowFocus.REVIEW,
             )
         }
     }
@@ -149,11 +162,13 @@ class ReminderWorker(
         body: String,
         actions: List<ReminderAction>,
         openNoteId: Long? = null,
+        flowFocus: FlowFocus? = null,
     ) {
         val launchIntent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
             action = MindFlowEntryIntents.ACTION_OPEN_FLOW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             openNoteId?.takeIf { it > 0L }?.let { putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it) }
+            flowFocus?.let { putExtra(MindFlowEntryIntents.EXTRA_FLOW_FOCUS, it.name) }
         }
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
@@ -208,6 +223,7 @@ class ReminderWorker(
         val title: String,
         val body: String,
         val openNoteId: Long? = null,
+        val flowFocus: FlowFocus? = null,
     )
 
     private fun quickActionPendingIntent(
@@ -218,6 +234,7 @@ class ReminderWorker(
         openThreadKey: String = "",
         captureTopic: String = "",
         captureContent: String = "",
+        flowFocus: FlowFocus? = null,
     ): PendingIntent {
         val intent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
             this.action = action
@@ -225,6 +242,9 @@ class ReminderWorker(
             openNoteId?.takeIf { it > 0L }?.let { putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it) }
             if (openThreadKey.isNotBlank()) {
                 putExtra(MindFlowEntryIntents.EXTRA_THREAD_KEY, openThreadKey)
+            }
+            flowFocus?.let {
+                putExtra(MindFlowEntryIntents.EXTRA_FLOW_FOCUS, it.name)
             }
             if (captureTopic.isNotBlank()) {
                 putExtra(MindFlowEntryIntents.EXTRA_CAPTURE_TOPIC, captureTopic)
@@ -270,6 +290,11 @@ class ReminderWorker(
                         requestCodeOffset = 100,
                         openNoteId = if (threadKey == null) targetNote?.id else null,
                         openThreadKey = threadKey.orEmpty(),
+                        flowFocus = when {
+                            continueNote != null -> FlowFocus.TODAY
+                            staleNote != null && threadKey == null -> FlowFocus.RECONNECT
+                            else -> FlowFocus.TODAY
+                        },
                     ),
                 ),
             )
@@ -315,6 +340,7 @@ class ReminderWorker(
                         action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
                         requestCodeOffset = 100,
                         openNoteId = latestToday?.id,
+                        flowFocus = if (latestToday == null) FlowFocus.REVIEW else null,
                     ),
                 ),
             )
