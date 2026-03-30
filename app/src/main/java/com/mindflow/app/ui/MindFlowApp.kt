@@ -221,6 +221,14 @@ fun MindFlowApp(
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },
                     onOpenNote = openNoteSafely,
+                    onCreateThreadNote = { initialTopic, initialContent ->
+                        openCapture(
+                            CaptureSeed(
+                                initialTopic = initialTopic,
+                                initialContent = initialContent,
+                            ),
+                        )
+                    },
                 )
             }
 

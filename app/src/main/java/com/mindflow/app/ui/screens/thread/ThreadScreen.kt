@@ -80,6 +80,7 @@ fun ThreadRoute(
     threadKey: String,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateThreadNote: (String, String) -> Unit,
 ) {
     val viewModel: ThreadViewModel = viewModel(
         key = "thread-$threadKey",
@@ -140,6 +141,18 @@ fun ThreadRoute(
             val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
             uriHandler.openUri("https://www.baidu.com/s?wd=$encoded")
         },
+        onCreateThreadNote = {
+            val topic = uiState.focusNote?.topic?.takeIf { it.isNotBlank() }
+                ?: uiState.title.removePrefix("#").trim()
+            val seedContent = buildString {
+                append("围绕「${uiState.title}」继续补一条记录：")
+                uiState.focusNote?.topic?.takeIf { it.isNotBlank() }?.let { focusTopic ->
+                    append("\n- 接着看：$focusTopic")
+                }
+                append("\n- 这次新增的观察 / 判断 / 动作：")
+            }
+            onCreateThreadNote(topic, seedContent)
+        },
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -171,6 +184,7 @@ private fun ThreadScreen(
     onToggleFollow: () -> Unit,
     onPromoteFocus: () -> Unit,
     onOpenResearchQuery: (String) -> Unit,
+    onCreateThreadNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -440,10 +454,22 @@ private fun ThreadScreen(
                 }
 
                 item {
-                    SectionHeader(
-                        title = "记录",
-                        headline = "${visibleNotes.size} 条",
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            SectionHeader(
+                                title = "记录",
+                                headline = "${visibleNotes.size} 条",
+                            )
+                        }
+                        GhostActionButton(
+                            text = "补一条记录",
+                            onClick = onCreateThreadNote,
+                        )
+                    }
                 }
 
                 if (visibleNotes.isEmpty()) {

@@ -132,6 +132,7 @@ Planned items:
   - focus note inside a thread
   - quick open
   - promote from idea to in progress
+  - add a new note directly from the thread workspace
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long
@@ -186,8 +187,8 @@ Planned items:
 Next best order:
 
 1. notification quick capture
-2. thread-level action refinement
-3. research result capture back into threads
+2. research result capture back into threads
+3. thread-level review/action capture back into notes
 4. richer stale-note reasoning with AI when useful
 5. external research capture back into notes
 

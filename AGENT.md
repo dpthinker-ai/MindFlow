@@ -128,9 +128,10 @@ Current status:
 - reminder main tap contextual note landing: implemented
 - richer stale-note reasoning: first version implemented
 - thread research structure and source handling: first version implemented
+- thread-level action refinement: first version implemented
 
 Next strongest direction:
 
-- thread-level action refinement
 - research result capture back into threads
 - notification quick capture refinement
+- thread-level review/action capture back into notes
