@@ -67,6 +67,8 @@ class NoteEditorViewModel(
     private val noteId: Long?,
     private val initialContent: String,
     private val initialTopic: String,
+    private val initialFolderKey: String?,
+    private val initialTags: List<String>,
 ) : ViewModel() {
     private data class PersistedSnapshot(
         val content: String = "",
@@ -86,8 +88,19 @@ class NoteEditorViewModel(
             isLoading = noteId != null,
             content = if (noteId == null) initialContent else "",
             topic = if (noteId == null) initialTopic else "",
+            folderKey = if (noteId == null) initialFolderKey else null,
+            folderSource = if (noteId == null && initialFolderKey != null) FolderSource.MANUAL else FolderSource.RULE,
+            tags = if (noteId == null) initialTags else emptyList(),
+            tagSource = if (noteId == null && initialTags.isNotEmpty()) TagSource.MANUAL else TagSource.RULE,
             topicEdited = noteId == null && initialTopic.isNotBlank(),
-            hasUnsavedChanges = noteId == null && (initialContent.isNotBlank() || initialTopic.isNotBlank()),
+            folderEdited = noteId == null && initialFolderKey != null,
+            tagsEdited = noteId == null && initialTags.isNotEmpty(),
+            hasUnsavedChanges = noteId == null && (
+                initialContent.isNotBlank() ||
+                    initialTopic.isNotBlank() ||
+                    initialFolderKey != null ||
+                    initialTags.isNotEmpty()
+                ),
         )
     )
     val uiState = _uiState
@@ -255,8 +268,14 @@ class NoteEditorViewModel(
             if (state.isNew) {
                 noteRepository.createNote(
                     content = state.content,
+                    topic = state.topic,
                     folderKey = state.folderKey,
+                    tags = state.tags,
+                    status = state.status,
+                    isArchived = state.isArchived,
                     folderManuallyEdited = state.folderEdited,
+                    topicManuallyEdited = state.topicEdited,
+                    tagsManuallyEdited = state.tagsEdited,
                 )
                 _uiState.update { it.copy(isSaving = false) }
                 _events.emit(NoteEditorEvent.Message("已保存到 MindFlow"))
@@ -465,6 +484,8 @@ class NoteEditorViewModel(
             noteId: Long?,
             initialContent: String,
             initialTopic: String,
+            initialFolderKey: String?,
+            initialTags: List<String>,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 NoteEditorViewModel(
@@ -474,6 +495,8 @@ class NoteEditorViewModel(
                     noteId = noteId,
                     initialContent = initialContent,
                     initialTopic = initialTopic,
+                    initialFolderKey = initialFolderKey,
+                    initialTags = initialTags,
                 )
             }
         }

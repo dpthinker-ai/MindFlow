@@ -69,12 +69,19 @@ class OfflineFirstNoteRepository(
 
     override suspend fun createNote(
         content: String,
+        topic: String,
         folderKey: String?,
+        tags: List<String>,
+        status: NoteStatus,
+        isArchived: Boolean,
         folderManuallyEdited: Boolean,
+        topicManuallyEdited: Boolean,
+        tagsManuallyEdited: Boolean,
     ): Long {
         val normalizedContent = content.trim()
         val now = System.currentTimeMillis()
         val fallbackTopic = topicExtractor.extractRule(normalizedContent)
+        val manualTopic = topic.trim()
         val ruleFolder = folderClassifier.classifyRule(normalizedContent)
         val fallbackFolder = if (folderManuallyEdited) {
             com.mindflow.app.data.model.FolderSuggestion(
@@ -85,19 +92,20 @@ class OfflineFirstNoteRepository(
             ruleFolder
         }
         val fallbackTags = tagExtractor.extractRule(normalizedContent)
+        val normalizedManualTags = NoteTagCodec.normalize(tags)
 
         val noteId = database.withTransaction {
             val id = noteDao.insertNote(
                 NoteEntity(
                     content = normalizedContent,
-                    topic = fallbackTopic.topic,
-                    topicSource = fallbackTopic.source,
+                    topic = if (topicManuallyEdited && manualTopic.isNotBlank()) manualTopic else fallbackTopic.topic,
+                    topicSource = if (topicManuallyEdited && manualTopic.isNotBlank()) TopicSource.MANUAL else fallbackTopic.source,
                     folderKey = fallbackFolder.folderKey,
                     folderSource = fallbackFolder.source,
-                    tags = fallbackTags.tags,
-                    tagSource = fallbackTags.source,
-                    status = NoteStatus.IDEA,
-                    isArchived = false,
+                    tags = if (tagsManuallyEdited) normalizedManualTags else fallbackTags.tags,
+                    tagSource = if (tagsManuallyEdited) TagSource.MANUAL else fallbackTags.source,
+                    status = status,
+                    isArchived = isArchived,
                     createdAt = now,
                     updatedAt = now,
                 )
@@ -106,7 +114,7 @@ class OfflineFirstNoteRepository(
                 NoteStatusHistoryEntity(
                     noteId = id,
                     fromStatus = null,
-                    toStatus = NoteStatus.IDEA,
+                    toStatus = status,
                     changedAt = now,
                 )
             )
@@ -114,13 +122,21 @@ class OfflineFirstNoteRepository(
         }
 
         applicationScope.launch {
-            val topicResult = refreshTopicIfPossible(noteId, updateTimestamp = false)
+            val topicResult = if (topicManuallyEdited) {
+                TopicRefreshResult()
+            } else {
+                refreshTopicIfPossible(noteId, updateTimestamp = false)
+            }
             val folderResult = if (folderManuallyEdited) {
                 FolderRefreshResult()
             } else {
                 refreshFolderIfPossible(noteId, updateTimestamp = false)
             }
-            val tagResult = refreshTagsIfPossible(noteId, updateTimestamp = false)
+            val tagResult = if (tagsManuallyEdited) {
+                TagRefreshResult()
+            } else {
+                refreshTagsIfPossible(noteId, updateTimestamp = false)
+            }
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)

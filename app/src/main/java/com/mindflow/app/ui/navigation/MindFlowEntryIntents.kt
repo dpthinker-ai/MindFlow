@@ -6,6 +6,8 @@ data class CaptureSeed(
     val requestId: Long = System.currentTimeMillis(),
     val initialContent: String = "",
     val initialTopic: String = "",
+    val initialFolderKey: String? = null,
+    val initialTags: List<String> = emptyList(),
     val autoStartVoiceInput: Boolean = false,
 )
 
@@ -40,6 +42,8 @@ object MindFlowEntryIntents {
     const val EXTRA_THREAD_KEY = "extra_thread_key"
     const val EXTRA_CAPTURE_CONTENT = "extra_capture_content"
     const val EXTRA_CAPTURE_TOPIC = "extra_capture_topic"
+    const val EXTRA_CAPTURE_FOLDER = "extra_capture_folder"
+    const val EXTRA_CAPTURE_TAGS = "extra_capture_tags"
 
     fun fromIntent(intent: Intent?): MindFlowLaunchRequest? {
         val safeIntent = intent ?: return null
@@ -74,6 +78,8 @@ object MindFlowEntryIntents {
             CaptureSeed(
                 initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT).orEmpty(),
                 initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty(),
+                initialFolderKey = intent.getStringExtra(EXTRA_CAPTURE_FOLDER)?.takeIf { it.isNotBlank() },
+                initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty(),
                 autoStartVoiceInput = autoStartVoiceInput,
             ),
         )

@@ -134,6 +134,7 @@ Current status:
 - notification quick capture refinement: first version implemented
 - richer stale-note reasoning with AI when useful: first version implemented
 - thread-level follow-up actions for reminders: first version implemented
+- thread-context capture persistence: first version implemented
 
 Next strongest direction:
 

@@ -101,6 +101,8 @@ fun EditorRoute(
     captureSessionKey: Long? = null,
     initialContent: String = "",
     initialTopic: String = "",
+    initialFolderKey: String? = null,
+    initialTags: List<String> = emptyList(),
     autoStartVoiceInput: Boolean = false,
     onOpenNote: (Long) -> Unit,
     onBack: () -> Unit,
@@ -119,6 +121,8 @@ fun EditorRoute(
             noteId = noteId,
             initialContent = initialContent,
             initialTopic = initialTopic,
+            initialFolderKey = initialFolderKey,
+            initialTags = initialTags,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

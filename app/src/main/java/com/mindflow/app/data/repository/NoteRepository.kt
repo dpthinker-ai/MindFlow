@@ -25,8 +25,14 @@ interface NoteRepository {
     suspend fun getNote(noteId: Long): NoteEntity?
     suspend fun createNote(
         content: String,
+        topic: String = "",
         folderKey: String? = null,
+        tags: List<String> = emptyList(),
+        status: NoteStatus = NoteStatus.IDEA,
+        isArchived: Boolean = false,
         folderManuallyEdited: Boolean = false,
+        topicManuallyEdited: Boolean = false,
+        tagsManuallyEdited: Boolean = false,
     ): Long
     suspend fun updateNote(
         noteId: Long,

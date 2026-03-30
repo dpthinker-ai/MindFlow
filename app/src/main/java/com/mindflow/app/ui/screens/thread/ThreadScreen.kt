@@ -48,6 +48,7 @@ import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
+import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
 import com.mindflow.app.ui.components.GridTwo
@@ -80,7 +81,7 @@ fun ThreadRoute(
     threadKey: String,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
-    onCreateThreadNote: (String, String) -> Unit,
+    onCreateThreadNote: (CaptureSeed) -> Unit,
 ) {
     val viewModel: ThreadViewModel = viewModel(
         key = "thread-$threadKey",
@@ -151,7 +152,24 @@ fun ThreadRoute(
                 }
                 append("\n- 这次新增的观察 / 判断 / 动作：")
             }
-            onCreateThreadNote(topic, seedContent)
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
         },
         onCaptureResearchNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 研究收获"
@@ -173,7 +191,24 @@ fun ThreadRoute(
                 appendLine("- 这对当前方向的判断：")
                 appendLine("- 下一步验证：")
             }
-            onCreateThreadNote(topic, seedContent)
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
         },
         onCaptureWeeklyReviewNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 本周推进"
@@ -192,7 +227,24 @@ fun ThreadRoute(
                 appendLine("- 关键变化：")
                 appendLine("- 下周先做什么：")
             }
-            onCreateThreadNote(topic, seedContent)
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
         },
         onCaptureInsightNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 当前判断"
@@ -211,7 +263,24 @@ fun ThreadRoute(
                 appendLine("- 为什么这样判断：")
                 appendLine("- 接下来要继续验证什么：")
             }
-            onCreateThreadNote(topic, seedContent)
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
         },
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->

@@ -135,6 +135,7 @@ Planned items:
   - promote from idea to in progress
   - add a new note directly from the thread workspace
   - capture current thread judgment into a new note
+  - notes created from a thread preserve that thread's tag or folder context
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long

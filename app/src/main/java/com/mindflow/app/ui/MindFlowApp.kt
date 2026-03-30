@@ -230,14 +230,7 @@ fun MindFlowApp(
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },
                     onOpenNote = openNoteSafely,
-                    onCreateThreadNote = { initialTopic, initialContent ->
-                        openCapture(
-                            CaptureSeed(
-                                initialTopic = initialTopic,
-                                initialContent = initialContent,
-                            ),
-                        )
-                    },
+                    onCreateThreadNote = ::openCapture,
                 )
             }
 
@@ -313,6 +306,8 @@ fun MindFlowApp(
                     captureSessionKey = seedId,
                     initialContent = captureSeed.initialContent,
                     initialTopic = captureSeed.initialTopic,
+                    initialFolderKey = captureSeed.initialFolderKey,
+                    initialTags = captureSeed.initialTags,
                     autoStartVoiceInput = captureSeed.autoStartVoiceInput,
                     onOpenNote = openNoteSafely,
                     onBack = {
@@ -342,6 +337,8 @@ fun MindFlowApp(
                     captureSessionKey = null,
                     initialContent = "",
                     initialTopic = "",
+                    initialFolderKey = null,
+                    initialTags = emptyList(),
                     autoStartVoiceInput = false,
                     onOpenNote = openNoteSafely,
                     onBack = { navController.popBackStack() },
