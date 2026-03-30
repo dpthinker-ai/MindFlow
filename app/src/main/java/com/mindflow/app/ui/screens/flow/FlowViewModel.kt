@@ -14,6 +14,8 @@ import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.FusionSuggestionState
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
+import com.mindflow.app.data.followup.StaleReconnectPlanner
+import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.ThreadPreferences
@@ -43,6 +45,7 @@ data class FlowUiState(
     val staleReason: String = "",
     val staleBridge: String = "",
     val staleNextStep: String = "",
+    val staleSource: DailyBriefSource = DailyBriefSource.RULE,
     val explorationPrompts: List<String> = emptyList(),
     val explorationSource: DailyBriefSource = DailyBriefSource.RULE,
     val weeklyReviewItems: List<WeeklyReviewItem> = emptyList(),
@@ -61,6 +64,7 @@ class FlowViewModel(
     private val nextActionPlanner: NextActionPlanner,
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
+    private val staleReconnectPlanner: StaleReconnectPlanner,
 ) : ViewModel() {
     private data class FlowPrimaryInputs(
         val todayCount: Int,
@@ -71,6 +75,7 @@ class FlowViewModel(
         val staleReason: String,
         val staleBridge: String,
         val staleNextStep: String,
+        val staleSource: DailyBriefSource,
         val explorationPrompts: List<String>,
         val explorationSource: DailyBriefSource,
         val followedThreads: List<ThemeThread>,
@@ -82,10 +87,12 @@ class FlowViewModel(
         threadPreferencesRepository.settings,
         dailyBriefPlanner.state,
         nextActionPlanner.state,
+        staleReconnectPlanner.state,
     ) { allNotes: List<NoteEntity>,
         threadPreferences: ThreadPreferences,
         briefState: DailyBriefState,
-        nextActionState: NextActionState ->
+        nextActionState: NextActionState,
+        reconnectState: StaleReconnectState ->
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
         val activeNotes = allNotes.filter { !it.isArchived }
@@ -95,6 +102,10 @@ class FlowViewModel(
             .sortedWith(compareByDescending<ThemeThread> { it.noteCount }.thenBy { it.title })
         val continueNote = pickContinueNote(activeNotes)
         val staleNote = pickStaleNote(activeNotes, continueNote?.id)
+        val hasReconnectMatch = staleNote != null &&
+            reconnectState.noteId == staleNote.id &&
+            reconnectState.noteUpdatedAt == staleNote.updatedAt &&
+            reconnectState.continueNoteId == continueNote?.id
         val nextActionText = if (
             continueNote != null &&
             nextActionState.noteId == continueNote.id &&
@@ -111,12 +122,9 @@ class FlowViewModel(
             nextActionSource = nextActionState.source,
             staleNote = staleNote,
             staleReason = staleReasonFor(staleNote),
-            staleBridge = staleBridgeFor(
-                note = staleNote,
-                continueNote = continueNote,
-                notes = activeNotes,
-            ),
-            staleNextStep = staleNextStepFor(staleNote),
+            staleBridge = if (hasReconnectMatch) reconnectState.bridge else staleBridgeFallback(staleNote, continueNote, activeNotes),
+            staleNextStep = if (hasReconnectMatch) reconnectState.nextStep else staleNextStepFallback(staleNote),
+            staleSource = if (hasReconnectMatch) reconnectState.source else DailyBriefSource.RULE,
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
             followedThreads = followedThreads,
@@ -142,6 +150,7 @@ class FlowViewModel(
             staleReason = primary.staleReason,
             staleBridge = primary.staleBridge,
             staleNextStep = primary.staleNextStep,
+            staleSource = primary.staleSource,
             explorationPrompts = primary.explorationPrompts,
             explorationSource = primary.explorationSource,
             weeklyReviewItems = weeklyReviewState.items,
@@ -162,6 +171,12 @@ class FlowViewModel(
                 nextActionPlanner.refreshIfNeeded(pickContinueNote(activeNotes))
                 weeklyReviewPlanner.refreshIfNeeded(notes)
                 fusionSuggestionPlanner.refreshIfNeeded(notes)
+                val continueNote = pickContinueNote(activeNotes)
+                staleReconnectPlanner.refreshIfNeeded(
+                    staleNote = pickStaleNote(activeNotes, continueNote?.id),
+                    continueNote = continueNote,
+                    notes = activeNotes,
+                )
             }
         }
     }
@@ -174,6 +189,7 @@ class FlowViewModel(
             nextActionPlanner: NextActionPlanner,
             weeklyReviewPlanner: WeeklyReviewPlanner,
             fusionSuggestionPlanner: FusionSuggestionPlanner,
+            staleReconnectPlanner: StaleReconnectPlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FlowViewModel(
@@ -183,6 +199,7 @@ class FlowViewModel(
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    staleReconnectPlanner = staleReconnectPlanner,
                 )
             }
         }
@@ -216,7 +233,7 @@ private fun staleReasonFor(note: NoteEntity?): String =
         else -> ""
     }
 
-private fun staleBridgeFor(
+private fun staleBridgeFallback(
     note: NoteEntity?,
     continueNote: NoteEntity?,
     notes: List<NoteEntity>,
@@ -254,7 +271,7 @@ private fun staleBridgeFor(
     }.orEmpty()
 }
 
-private fun staleNextStepFor(note: NoteEntity?): String =
+private fun staleNextStepFallback(note: NoteEntity?): String =
     when {
         note == null -> ""
         note.status == NoteStatus.IN_PROGRESS -> "先补一句最新进展，再把它往前拱一小步。"

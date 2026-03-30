@@ -48,6 +48,7 @@ import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -96,6 +97,7 @@ fun MindFlowApp(
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
+    staleReconnectPlanner: StaleReconnectPlanner,
     aiServiceClient: AiServiceClient,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
@@ -202,6 +204,7 @@ fun MindFlowApp(
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    staleReconnectPlanner = staleReconnectPlanner,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                 )

@@ -26,6 +26,7 @@ import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.ThemeThread
+import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
@@ -53,6 +54,7 @@ fun FlowRoute(
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
+    staleReconnectPlanner: StaleReconnectPlanner,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
@@ -64,6 +66,7 @@ fun FlowRoute(
             nextActionPlanner = nextActionPlanner,
             weeklyReviewPlanner = weeklyReviewPlanner,
             fusionSuggestionPlanner = fusionSuggestionPlanner,
+            staleReconnectPlanner = staleReconnectPlanner,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -133,6 +136,7 @@ private fun FlowScreen(
                                 reason = uiState.staleReason,
                                 bridge = uiState.staleBridge,
                                 nextStep = uiState.staleNextStep,
+                                source = uiState.staleSource,
                                 onOpenNote = onOpenNote,
                             )
                         }
@@ -513,6 +517,7 @@ private fun GentleReconnectCard(
     reason: String,
     bridge: String,
     nextStep: String,
+    source: DailyBriefSource,
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
@@ -528,9 +533,9 @@ private fun GentleReconnectCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "重新接上",
+                text = if (source == DailyBriefSource.AI) "重新接上 · AI" else "重新接上",
                 style = MaterialTheme.typography.labelLarge,
-                color = TextSoft,
+                color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
             )
             Text(
                 text = note.topic.ifBlank { "未命名记录" },

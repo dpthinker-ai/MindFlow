@@ -143,6 +143,7 @@ Planned items:
   - 晨间提醒里的低频旧记录唤起
   - 会说明为什么现在值得接上
   - 会给一条最小下一步
+  - AI 可用时会优先生成更贴近当前主线的桥接理由与接上动作
 
 ## P3: Knowledge and Research Layer
 
@@ -189,10 +190,10 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. richer stale-note reasoning with AI when useful
-3. thread-level follow-up actions for reminders
-4. deeper reminder landing context
-5. widget-level capture polish
+2. thread-level follow-up actions for reminders
+3. deeper reminder landing context
+4. widget-level capture polish
+5. thread-level external research memory
 
 ## Success Criteria
 

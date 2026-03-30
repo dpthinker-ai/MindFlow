@@ -5,6 +5,7 @@ import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.topic.AiServiceClient
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
         val nextActionPlanner: NextActionPlanner = appContainer.nextActionPlanner
         val weeklyReviewPlanner: WeeklyReviewPlanner = appContainer.weeklyReviewPlanner
         val fusionSuggestionPlanner: FusionSuggestionPlanner = appContainer.fusionSuggestionPlanner
+        val staleReconnectPlanner: StaleReconnectPlanner = appContainer.staleReconnectPlanner
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
         setContent {
             MindFlowTheme {
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    staleReconnectPlanner = staleReconnectPlanner,
                     aiServiceClient = aiServiceClient,
                     launchRequest = launchRequestState.value,
                     onLaunchRequestConsumed = { requestId ->

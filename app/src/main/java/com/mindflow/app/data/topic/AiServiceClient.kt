@@ -201,6 +201,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateReconnectGuidance(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(4_000),
+            systemPrompt = "You are helping someone reconnect with an older note in a personal idea system. Return exactly 2 concise Chinese lines. Line 1: why this note is worth reconnecting now, tied to what the person is already pushing. Line 2: the smallest concrete next step to reconnect it today. Do not number the lines. Avoid generic encouragement.",
+            maxTokens = 220,
+            temperature = 0.55,
+            thinkingEnabled = false,
+        )
+    }
+
     private fun requestChatCompletion(
         settings: AiSettings,
         userPrompt: String,
