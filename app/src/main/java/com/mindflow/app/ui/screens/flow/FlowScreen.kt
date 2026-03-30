@@ -276,7 +276,11 @@ private fun ConnectionCard(
                     color = TextSoft,
                 )
                 followedThreads.forEach { thread ->
-                    ThreadRow(thread = thread, onOpenThread = onOpenThread)
+                    ThreadRow(
+                        thread = thread,
+                        showFocus = true,
+                        onOpenThread = onOpenThread,
+                    )
                 }
             }
             if (threads.isNotEmpty()) {
@@ -286,7 +290,11 @@ private fun ConnectionCard(
                     color = TextSoft,
                 )
                 threads.forEach { thread ->
-                    ThreadRow(thread = thread, onOpenThread = onOpenThread)
+                    ThreadRow(
+                        thread = thread,
+                        showFocus = false,
+                        onOpenThread = onOpenThread,
+                    )
                 }
             }
             if (suggestions.isNotEmpty()) {
@@ -317,6 +325,7 @@ private fun ConnectionCard(
 @Composable
 private fun ThreadRow(
     thread: ThemeThread,
+    showFocus: Boolean,
     onOpenThread: (String) -> Unit,
 ) {
     Surface(
@@ -336,6 +345,15 @@ private fun ThreadRow(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = TextMain,
             )
+            if (showFocus && thread.focusLine.isNotBlank()) {
+                Text(
+                    text = thread.focusLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = thread.summary,
                 style = MaterialTheme.typography.bodySmall,

@@ -106,6 +106,7 @@ Planned items:
   - related notes
   - thread detail page
   - followed directions in Flow
+  - followed directions surface a current focus line
   - thread focus and lightweight promotion
   - thread-level weekly review
 
@@ -195,8 +196,8 @@ Next best order:
 1. external research capture back into notes
 2. thread-level external research memory
 3. widget-level capture polish
-4. thread action summaries outside the thread page
-5. thread-level research-to-action summaries
+4. thread-level research-to-action summaries
+5. thread follow-up summaries outside the thread page
 
 ## Success Criteria
 

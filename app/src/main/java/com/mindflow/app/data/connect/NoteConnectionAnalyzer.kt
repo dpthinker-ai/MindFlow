@@ -2,6 +2,7 @@ package com.mindflow.app.data.connect
 
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.MindFolderCatalog
+import com.mindflow.app.data.model.NoteStatus
 import java.util.Locale
 
 data class ThemeThread(
@@ -9,6 +10,7 @@ data class ThemeThread(
     val title: String,
     val summary: String,
     val noteCount: Int,
+    val focusLine: String = "",
 )
 
 object NoteConnectionAnalyzer {
@@ -52,14 +54,15 @@ object NoteConnectionAnalyzer {
             .groupBy({ it.first }, { it.second })
             .filter { (tag, groupedNotes) -> tag.isNotBlank() && groupedNotes.size >= 2 }
             .map { (tag, groupedNotes) ->
+                val sortedNotes = groupedNotes.sortedByDescending { it.updatedAt }
                 ThemeThread(
                     key = "tag:$tag",
                     title = "#$tag",
-                    summary = groupedNotes
-                        .sortedByDescending { it.updatedAt }
+                    summary = sortedNotes
                         .take(2)
                         .joinToString(" · ") { it.topic.ifBlank { "未命名记录" } },
                     noteCount = groupedNotes.size,
+                    focusLine = focusLineFor(sortedNotes),
                 )
             }
 
@@ -68,14 +71,15 @@ object NoteConnectionAnalyzer {
             if (groupedNotes.size < 2) {
                 null
             } else {
+                val sortedNotes = groupedNotes.sortedByDescending { it.updatedAt }
                 ThemeThread(
                     key = "folder:${folder.key}",
                     title = folder.name,
-                    summary = groupedNotes
-                        .sortedByDescending { it.updatedAt }
+                    summary = sortedNotes
                         .take(2)
                         .joinToString(" · ") { it.topic.ifBlank { "未命名记录" } },
                     noteCount = groupedNotes.size,
+                    focusLine = focusLineFor(sortedNotes),
                 )
             }
         }
@@ -106,6 +110,7 @@ object NoteConnectionAnalyzer {
             title = titleForThread(threadKey),
             summary = summary,
             noteCount = groupedNotes.size,
+            focusLine = focusLineFor(groupedNotes),
         )
     }
 
@@ -191,5 +196,22 @@ object NoteConnectionAnalyzer {
             .map { it.value.trim() }
             .filter { it.isNotBlank() }
             .toSet()
+    }
+
+    private fun focusLineFor(notes: List<NoteEntity>): String {
+        val note = notes
+            .filter { it.status == NoteStatus.IN_PROGRESS }
+            .maxByOrNull { it.updatedAt }
+            ?: notes
+                .filter { it.status == NoteStatus.IDEA }
+                .maxByOrNull { it.updatedAt }
+            ?: notes.maxByOrNull { it.updatedAt }
+            ?: return ""
+        val title = note.topic.ifBlank { "未命名记录" }
+        return when (note.status) {
+            NoteStatus.IN_PROGRESS -> "继续推进：$title"
+            NoteStatus.IDEA -> "先压成动作：$title"
+            else -> "延展结果：$title"
+        }
     }
 }

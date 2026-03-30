@@ -136,9 +136,9 @@ Current status:
 - thread-level follow-up actions for reminders: first version implemented
 - thread-context capture persistence: first version implemented
 - reminder-to-flow contextual focus: first version implemented
+- thread action summaries inside Flow: first version implemented
 
 Next strongest direction:
 
-- external research capture back into notes
 - thread-level external research memory
 - widget-level capture polish
