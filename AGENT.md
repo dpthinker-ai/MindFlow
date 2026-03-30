@@ -130,9 +130,10 @@ Current status:
 - thread research structure and source handling: first version implemented
 - thread-level action refinement: first version implemented
 - research result capture back into threads: first version implemented
+- thread-level review/action capture back into notes: first version implemented
 
 Next strongest direction:
 
 - notification quick capture refinement
-- thread-level review/action capture back into notes
 - external research capture back into notes
+- thread-level follow-up actions for reminders

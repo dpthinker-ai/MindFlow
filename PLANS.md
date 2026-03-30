@@ -94,6 +94,7 @@ Planned items:
   - one stalled direction worth reviving
   - one synthesis / breakthrough suggestion
   - light weekly progress stats
+  - capture thread weekly review into a new note
 
 3. Idea linking
 - connect similar notes
@@ -133,6 +134,7 @@ Planned items:
   - quick open
   - promote from idea to in progress
   - add a new note directly from the thread workspace
+  - capture current thread judgment into a new note
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long
@@ -188,10 +190,10 @@ Planned items:
 Next best order:
 
 1. notification quick capture
-2. thread-level review/action capture back into notes
-3. external research capture back into notes
-4. richer stale-note reasoning with AI when useful
-5. thread-level follow-up actions for reminders
+2. external research capture back into notes
+3. richer stale-note reasoning with AI when useful
+4. thread-level follow-up actions for reminders
+5. deeper reminder landing context
 
 ## Success Criteria
 

@@ -175,6 +175,44 @@ fun ThreadRoute(
             }
             onCreateThreadNote(topic, seedContent)
         },
+        onCaptureWeeklyReviewNote = {
+            val topic = "${uiState.title.removePrefix("#").trim()} · 本周推进"
+            val seedContent = buildString {
+                appendLine("围绕「${uiState.title}」记一条本周推进：")
+                uiState.weeklyStatsLine.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 本周概览：$it")
+                }
+                if (uiState.weeklyLines.isNotEmpty()) {
+                    appendLine("- 本周判断：")
+                    uiState.weeklyLines.forEach { line ->
+                        appendLine("  - $line")
+                    }
+                }
+                appendLine("- 这周实际发生了什么：")
+                appendLine("- 关键变化：")
+                appendLine("- 下周先做什么：")
+            }
+            onCreateThreadNote(topic, seedContent)
+        },
+        onCaptureInsightNote = {
+            val topic = "${uiState.title.removePrefix("#").trim()} · 当前判断"
+            val seedContent = buildString {
+                appendLine("围绕「${uiState.title}」沉淀一条当前判断：")
+                uiState.threadSummary.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 当前判断：$it")
+                }
+                uiState.threadBlocker.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 当前卡点：$it")
+                }
+                uiState.threadNextStep.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 下一步：$it")
+                }
+                appendLine("- 我现在更明确的判断：")
+                appendLine("- 为什么这样判断：")
+                appendLine("- 接下来要继续验证什么：")
+            }
+            onCreateThreadNote(topic, seedContent)
+        },
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -208,6 +246,8 @@ private fun ThreadScreen(
     onOpenResearchQuery: (String) -> Unit,
     onCreateThreadNote: () -> Unit,
     onCaptureResearchNote: () -> Unit,
+    onCaptureWeeklyReviewNote: () -> Unit,
+    onCaptureInsightNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -317,6 +357,10 @@ private fun ThreadScreen(
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
+                            GhostActionButton(
+                                text = "记下本周推进",
+                                onClick = onCaptureWeeklyReviewNote,
+                            )
                         }
                     }
                 }
@@ -477,6 +521,10 @@ private fun ThreadScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
+                        GhostActionButton(
+                            text = "沉淀当前判断",
+                            onClick = onCaptureInsightNote,
+                        )
                     }
                 }
 
