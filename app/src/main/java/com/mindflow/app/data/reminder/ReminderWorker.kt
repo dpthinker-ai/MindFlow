@@ -56,7 +56,7 @@ class ReminderWorker(
             ReminderKind.EVENING -> buildEveningPayload(activeNotes)
         }
 
-        notify(kind, payload.title, payload.body)
+        notify(kind, payload.title, payload.body, payload.openNoteId)
         return Result.success()
     }
 
@@ -94,12 +94,16 @@ class ReminderWorker(
             brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("探索：$it") }
             if (continueNote == null) {
                 staleNote?.topic?.takeIf { it.isNotBlank() }?.let { add("重新接上：$it") }
+                staleNote?.let { note ->
+                    buildReminderNextStep(note).takeIf { it.isNotBlank() }?.let { add("先做：$it") }
+                }
             }
         }.ifEmpty {
             listOf("别让念头只来过一次，先抓住今天最值得写下的一件事。")
         }.joinToString("\n")
 
         return NotificationPayload(title = title, body = body)
+            .copy(openNoteId = continueNote?.id ?: staleNote?.id)
     }
 
     private fun buildEveningPayload(
@@ -124,6 +128,7 @@ class ReminderWorker(
                         append("\n当前还有 $inProgressCount 条在推进中，明天继续往前拱一步。")
                     }
                 },
+                openNoteId = latestToday.id,
             )
             else -> NotificationPayload(
                 title = "今天记了 ${todayNotes.size} 条",
@@ -136,10 +141,12 @@ class ReminderWorker(
         kind: ReminderKind,
         title: String,
         body: String,
+        openNoteId: Long? = null,
     ) {
         val launchIntent = Intent(applicationContext, EntryProxyActivity::class.java).apply {
             action = MindFlowEntryIntents.ACTION_OPEN_FLOW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            openNoteId?.takeIf { it > 0L }?.let { putExtra(MindFlowEntryIntents.EXTRA_NOTE_ID, it) }
         }
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
@@ -218,6 +225,7 @@ class ReminderWorker(
     data class NotificationPayload(
         val title: String,
         val body: String,
+        val openNoteId: Long? = null,
     )
 
     private fun quickActionPendingIntent(
@@ -242,6 +250,13 @@ class ReminderWorker(
         const val KEY_KIND = "kind"
     }
 }
+
+private fun buildReminderNextStep(note: NoteEntity): String =
+    when (note.status) {
+        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再往前拱一步。"
+        NoteStatus.DONE -> ""
+        NoteStatus.IDEA -> "先补一条更具体的记录，把它重新压回到可推进状态。"
+    }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes

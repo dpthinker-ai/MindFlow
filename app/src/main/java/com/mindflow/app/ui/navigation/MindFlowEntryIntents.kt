@@ -16,6 +16,11 @@ sealed interface MindFlowLaunchRequest {
         override val requestId: Long = seed.requestId
     }
 
+    data class OpenNote(
+        val noteId: Long,
+        override val requestId: Long = System.currentTimeMillis(),
+    ) : MindFlowLaunchRequest
+
     data class OpenSearch(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
 
     data class OpenFlow(override val requestId: Long = System.currentTimeMillis()) : MindFlowLaunchRequest
@@ -26,6 +31,7 @@ object MindFlowEntryIntents {
     const val ACTION_OPEN_CAPTURE_VOICE = "com.mindflow.app.action.OPEN_CAPTURE_VOICE"
     const val ACTION_OPEN_SEARCH = "com.mindflow.app.action.OPEN_SEARCH"
     const val ACTION_OPEN_FLOW = "com.mindflow.app.action.OPEN_FLOW"
+    const val EXTRA_NOTE_ID = "extra_note_id"
 
     fun fromIntent(intent: Intent?): MindFlowLaunchRequest? {
         val safeIntent = intent ?: return null
@@ -35,8 +41,17 @@ object MindFlowEntryIntents {
             ACTION_OPEN_CAPTURE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed())
             ACTION_OPEN_CAPTURE_VOICE -> MindFlowLaunchRequest.OpenCapture(CaptureSeed(autoStartVoiceInput = true))
             ACTION_OPEN_SEARCH -> MindFlowLaunchRequest.OpenSearch()
-            ACTION_OPEN_FLOW -> MindFlowLaunchRequest.OpenFlow()
+            ACTION_OPEN_FLOW -> parseFlowIntent(safeIntent)
             else -> null
+        }
+    }
+
+    private fun parseFlowIntent(intent: Intent): MindFlowLaunchRequest {
+        val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+        return if (noteId > 0L) {
+            MindFlowLaunchRequest.OpenNote(noteId = noteId)
+        } else {
+            MindFlowLaunchRequest.OpenFlow()
         }
     }
 

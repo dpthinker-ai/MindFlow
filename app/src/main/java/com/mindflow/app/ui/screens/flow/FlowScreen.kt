@@ -131,6 +131,8 @@ private fun FlowScreen(
                             GentleReconnectCard(
                                 note = uiState.staleNote,
                                 reason = uiState.staleReason,
+                                bridge = uiState.staleBridge,
+                                nextStep = uiState.staleNextStep,
                                 onOpenNote = onOpenNote,
                             )
                         }
@@ -509,6 +511,8 @@ private fun ExplorationPromptCard(
 private fun GentleReconnectCard(
     note: NoteEntity,
     reason: String,
+    bridge: String,
+    nextStep: String,
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
@@ -541,6 +545,38 @@ private fun GentleReconnectCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
+            }
+            if (bridge.isNotBlank()) {
+                Text(
+                    text = bridge,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            }
+            if (nextStep.isNotBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    shape = CardShape,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = "先做这一步",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = nextStep,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMain,
+                        )
+                    }
+                }
             }
             Text(
                 text = TimeFormatter.compact(note.updatedAt),

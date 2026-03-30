@@ -41,6 +41,8 @@ data class FlowUiState(
     val nextActionSource: DailyBriefSource = DailyBriefSource.RULE,
     val staleNote: NoteEntity? = null,
     val staleReason: String = "",
+    val staleBridge: String = "",
+    val staleNextStep: String = "",
     val explorationPrompts: List<String> = emptyList(),
     val explorationSource: DailyBriefSource = DailyBriefSource.RULE,
     val weeklyReviewItems: List<WeeklyReviewItem> = emptyList(),
@@ -67,6 +69,8 @@ class FlowViewModel(
         val nextActionSource: DailyBriefSource,
         val staleNote: NoteEntity?,
         val staleReason: String,
+        val staleBridge: String,
+        val staleNextStep: String,
         val explorationPrompts: List<String>,
         val explorationSource: DailyBriefSource,
         val followedThreads: List<ThemeThread>,
@@ -107,6 +111,12 @@ class FlowViewModel(
             nextActionSource = nextActionState.source,
             staleNote = staleNote,
             staleReason = staleReasonFor(staleNote),
+            staleBridge = staleBridgeFor(
+                note = staleNote,
+                continueNote = continueNote,
+                notes = activeNotes,
+            ),
+            staleNextStep = staleNextStepFor(staleNote),
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
             followedThreads = followedThreads,
@@ -130,6 +140,8 @@ class FlowViewModel(
             nextActionSource = primary.nextActionSource,
             staleNote = primary.staleNote,
             staleReason = primary.staleReason,
+            staleBridge = primary.staleBridge,
+            staleNextStep = primary.staleNextStep,
             explorationPrompts = primary.explorationPrompts,
             explorationSource = primary.explorationSource,
             weeklyReviewItems = weeklyReviewState.items,
@@ -203,6 +215,57 @@ private fun staleReasonFor(note: NoteEntity?): String =
         NoteStatus.IDEA -> "这条想法沉下去有点久了，值得重新补一条更具体的记录。"
         else -> ""
     }
+
+private fun staleBridgeFor(
+    note: NoteEntity?,
+    continueNote: NoteEntity?,
+    notes: List<NoteEntity>,
+): String {
+    note ?: return ""
+    val sharedTag = continueNote
+        ?.tags
+        ?.firstOrNull { candidate -> candidate.isNotBlank() && candidate in note.tags }
+    if (sharedTag != null) {
+        return "它和你正在推进的内容都围绕「$sharedTag」，适合顺手接回同一条主线。"
+    }
+
+    val noteFolder = note.folderKey
+    val continueFolder = continueNote?.folderKey
+    if (!noteFolder.isNullOrBlank() && noteFolder == continueFolder) {
+        val folderName = note.folderName()
+        return if (folderName != null) {
+            "它和你最近在推的内容都在「$folderName」里，说明这不是一次性念头。"
+        } else {
+            "它和你最近推进的内容在同一类问题里，值得重新接上。"
+        }
+    }
+
+    val repeatedTag = note.tags
+        .firstOrNull { candidate ->
+            candidate.isNotBlank() &&
+                notes.count { active -> !active.isArchived && candidate in active.tags } >= 2
+        }
+    if (repeatedTag != null) {
+        return "它属于「#$repeatedTag」这条持续出现的方向，可以重新补一笔，把线索接回来。"
+    }
+
+    return note.folderName()?.let { folderName ->
+        "它还落在「$folderName」这类问题里，说明这个方向仍然值得保留。"
+    }.orEmpty()
+}
+
+private fun staleNextStepFor(note: NoteEntity?): String =
+    when {
+        note == null -> ""
+        note.status == NoteStatus.IN_PROGRESS -> "先补一句最新进展，再把它往前拱一小步。"
+        note.folderName() == "工作" -> "先把它压成一个最想验证的问题，再补一条更具体的记录。"
+        note.folderName() == "项目" -> "先写下一个最小可验证版本，别直接摊开完整方案。"
+        note.folderName() == "健康" -> "先把它变成今天就能执行的一次小动作，再看后续反馈。"
+        else -> "先补一条更具体的记录，把这个想法重新压回到可推进的状态。"
+    }
+
+private fun NoteEntity.folderName(): String? =
+    com.mindflow.app.data.model.MindFolderCatalog.fromKey(folderKey)?.name
 
 private fun Long.toLocalDate(zoneId: ZoneId): LocalDate =
     Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()

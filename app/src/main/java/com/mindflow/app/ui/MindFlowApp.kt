@@ -134,6 +134,10 @@ fun MindFlowApp(
                 openCapture(request.seed)
                 onLaunchRequestConsumed(request.requestId)
             }
+            is MindFlowLaunchRequest.OpenNote -> {
+                openNoteSafely(request.noteId)
+                onLaunchRequestConsumed(request.requestId)
+            }
             is MindFlowLaunchRequest.OpenFlow -> {
                 openTopLevel(MindFlowDestinations.FLOW)
                 onLaunchRequestConsumed(request.requestId)

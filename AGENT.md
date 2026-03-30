@@ -124,10 +124,11 @@ Current status:
 - stale note follow-up prompts: first version implemented
 - thread-level weekly review: first version implemented
 - reminder main tap deep link to Flow: implemented
+- reminder main tap contextual note landing: implemented
+- richer stale-note reasoning: first version implemented
 
 Next strongest direction:
 
 - widget-level voice capture
 - deeper thread research with source handling
-- richer stale-note reasoning
-- richer notification landing context
+- thread-level action refinement

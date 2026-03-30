@@ -59,6 +59,7 @@ Planned items:
   - evening review
   - low-frequency local notifications
   - main notification tap lands in Flow
+  - reminder tap can now open the most relevant note directly
 
 3. Faster capture
 - status: refined
@@ -138,6 +139,8 @@ Planned items:
 - current shape:
   - Flow 中的轻量“重新接上”
   - 晨间提醒里的低频旧记录唤起
+  - 会说明为什么现在值得接上
+  - 会给一条最小下一步
 
 ## P3: Knowledge and Research Layer
 
@@ -184,8 +187,8 @@ Next best order:
 1. notification quick capture
 2. external research enrichment for selected threads
 3. widget-level voice capture
-4. richer stale-note reasoning
-5. richer notification landing context
+4. deeper thread research with source handling
+5. thread-level action refinement
 
 ## Success Criteria
 
