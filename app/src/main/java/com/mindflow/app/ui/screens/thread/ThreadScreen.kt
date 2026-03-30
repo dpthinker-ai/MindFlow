@@ -1,9 +1,13 @@
 package com.mindflow.app.ui.screens.thread
 
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +23,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,7 +67,10 @@ import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.TextSoft
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ThreadRoute(
     noteRepository: NoteRepository,
@@ -83,6 +93,7 @@ fun ThreadRoute(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -125,6 +136,10 @@ fun ThreadRoute(
         onOpenNote = onOpenNote,
         onToggleFollow = viewModel::toggleFollow,
         onPromoteFocus = viewModel::promoteFocusNote,
+        onOpenResearchQuery = { query ->
+            val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
+            uriHandler.openUri("https://www.baidu.com/s?wd=$encoded")
+        },
         onArchiveNote = viewModel::archiveNote,
         onDeleteNote = { note ->
             scope.launch {
@@ -146,6 +161,7 @@ fun ThreadRoute(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun ThreadScreen(
     uiState: ThreadUiState,
     hiddenNoteIds: Set<Long>,
@@ -154,6 +170,7 @@ private fun ThreadScreen(
     onOpenNote: (Long) -> Unit,
     onToggleFollow: () -> Unit,
     onPromoteFocus: () -> Unit,
+    onOpenResearchQuery: (String) -> Unit,
     onArchiveNote: (Long) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -246,6 +263,53 @@ private fun ThreadScreen(
                             value = uiState.doneCount.toString(),
                             accent = noteStatusAccent(com.mindflow.app.data.model.NoteStatus.DONE),
                         )
+                    }
+                }
+
+                if (uiState.researchHighlights.isNotEmpty() || uiState.researchQueries.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "外部研究",
+                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI" else null,
+                            )
+                            uiState.researchHighlights.forEach { line ->
+                                Text(
+                                    text = "• $line",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            if (uiState.researchQueries.isNotEmpty()) {
+                                Text(
+                                    text = "可直接去查",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    uiState.researchQueries.forEach { query ->
+                                        Surface(
+                                            shape = com.mindflow.app.ui.components.CardShape,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                            color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
+                                            modifier = Modifier.clickable { onOpenResearchQuery(query) },
+                                        ) {
+                                            Text(
+                                                text = query,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

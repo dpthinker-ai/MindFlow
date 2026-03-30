@@ -187,6 +187,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateResearchBrief(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are preparing external research enrichment for a personal idea thread. Return exactly 4 concise Chinese lines in this order: 1) one outside-world angle worth looking at, 2) one likely opportunity gap or contrarian question, 3) one concise Chinese web search query, 4) one concise technical or English search query. Do not number the lines. Do not repeat note titles mechanically. Keep the search queries short and directly usable.",
+            maxTokens = 320,
+            temperature = 0.55,
+            thinkingEnabled = false,
+        )
+    }
+
     private fun requestChatCompletion(
         settings: AiSettings,
         userPrompt: String,

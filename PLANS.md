@@ -144,6 +144,11 @@ Planned items:
 - enrich selected notes with industry examples
 - identify related attempts in the outside world
 - summarize opportunity gaps
+- status: first version implemented in thread workspace
+- current shape:
+  - external research highlights
+  - opportunity-gap prompt
+  - directly usable search queries
 
 2. Topic maps
 - not heavy graph-first UI
@@ -170,11 +175,11 @@ Planned items:
 
 Next best order:
 
-1. external research enrichment
-2. notification quick capture
-3. external research enrichment for selected threads
-4. thread-level weekly review
-5. follow-up prompts for stale notes
+1. follow-up prompts for stale notes
+2. thread-level weekly review
+3. notification quick capture
+4. external research enrichment for selected threads
+5. widget-level voice capture
 
 ## Success Criteria
 
