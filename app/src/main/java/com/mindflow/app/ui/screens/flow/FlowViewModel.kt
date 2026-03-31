@@ -65,6 +65,7 @@ data class FollowedDirectionSummary(
     val nextStep: String = "",
     val researchLabel: String = "",
     val researchStep: String = "",
+    val researchWhyNow: String = "",
 )
 
 class FlowViewModel(
@@ -244,6 +245,7 @@ private fun buildFollowedDirectionSummary(
         nextStep = nextStepForThread(thread, focusNote),
         researchLabel = researchLead?.label.orEmpty(),
         researchStep = researchLead?.validationStep.orEmpty(),
+        researchWhyNow = researchLead?.followUpReason.orEmpty(),
     )
 }
 

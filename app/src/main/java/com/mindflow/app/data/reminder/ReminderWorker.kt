@@ -110,6 +110,9 @@ class ReminderWorker(
             if (nextActionText.isNotBlank()) {
                 add("下一步：$nextActionText")
             }
+            researchContext?.followUpReason
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add("现在值得验证：$it") }
             researchContext?.validationStep
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("研究验证：$it") }
@@ -408,6 +411,7 @@ private data class ResearchReminderContext(
     val threadTitle: String,
     val label: String,
     val validationStep: String,
+    val followUpReason: String,
 ) {
     val topic: String
         get() = "${threadTitle.removePrefix("#").trim()} · 验证动作"
@@ -444,6 +448,9 @@ private fun buildResearchValidationSeed(context: ResearchReminderContext): Strin
     buildString {
         appendLine("围绕「${context.threadTitle.removePrefix("#").trim()}」记一条验证记录：")
         appendLine("- 研究线索：${context.label}")
+        context.followUpReason
+            .takeIf { it.isNotBlank() }
+            ?.let { appendLine("- 为什么现在做：$it") }
         appendLine("- 先验证：${context.validationStep}")
         appendLine("- 我准备怎么验证：")
         appendLine("- 看什么结果算成立：")
@@ -499,6 +506,7 @@ private fun buildResearchReminderContext(
                 threadTitle = thread.title,
                 label = researchLead.label,
                 validationStep = validationStep,
+                followUpReason = researchLead.followUpReason,
             )
         }
 }

@@ -149,8 +149,9 @@ Current status:
 - lighter capture-back from research loops: first version implemented
 - thread-aware research-to-action carry-over in reminders: first version implemented
 - richer capture-back from clustered research: first version implemented
+- thread-aware research follow-up summaries: first version implemented
+- reminder summaries that explain why a validation step matters now: first version implemented
 
 Next strongest direction:
 
-- thread-aware research follow-up summaries
-- reminder summaries that explain why a validation step matters now
+- research-derived prompts that bridge from validation back into execution

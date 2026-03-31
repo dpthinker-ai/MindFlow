@@ -1,12 +1,16 @@
 package com.mindflow.app.data.connect
 
 import com.mindflow.app.data.local.entity.NoteEntity
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 data class ResearchCluster(
     val label: String,
     val summary: String,
     val noteCount: Int,
     val validationStep: String = "",
+    val followUpReason: String = "",
 )
 
 object ThreadResearchAnalyzer {
@@ -54,6 +58,7 @@ object ThreadResearchAnalyzer {
                 summary = summary,
                 noteCount = groupedNotes.size,
                 validationStep = buildValidationStep(label, groupedNotes),
+                followUpReason = buildFollowUpReason(label, groupedNotes),
             )
         }
     }
@@ -93,6 +98,35 @@ object ThreadResearchAnalyzer {
                 "先围绕「$latestTopic」补一条验证记录，写清楚预期、指标和结果判断。"
             else ->
                 "先围绕「$label」补一条验证记录，明确要验证什么和怎么看结果。"
+        }
+    }
+
+    private fun buildFollowUpReason(
+        label: String,
+        notes: List<NoteEntity>,
+    ): String {
+        val latest = notes.maxByOrNull { it.updatedAt }
+        val zoneId = ZoneId.systemDefault()
+        val latestDate = latest
+            ?.let { Instant.ofEpochMilli(it.updatedAt).atZone(zoneId).toLocalDate() }
+        val daysSinceLatest = latestDate
+            ?.let { java.time.temporal.ChronoUnit.DAYS.between(it, LocalDate.now(zoneId)).toInt() }
+            ?: 0
+        val latestTopic = latest
+            ?.topic
+            ?.substringBefore("·")
+            ?.trim()
+            ?.ifBlank { null }
+
+        return when {
+            notes.size >= 3 && daysSinceLatest <= 7 ->
+                "这组研究最近反复出现，已经到了该把判断压成验证动作的时候。"
+            notes.size >= 2 && latestTopic != null ->
+                "最近的线索已经开始收敛到「$latestTopic」，现在最适合先做一次小验证。"
+            daysSinceLatest <= 3 ->
+                "这组研究刚被补充过，趁记忆和问题还新，先验证一小步最划算。"
+            else ->
+                "这组研究已经具备稳定主线，现在值得从线索往验证再推一步。"
         }
     }
 

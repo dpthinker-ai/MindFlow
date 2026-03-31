@@ -116,6 +116,7 @@ Planned items:
   - editor now hints when a record appears to belong to an existing direction
   - thread focus and lightweight promotion
   - thread-level weekly review
+  - followed directions now explain why the current research validation step matters now
 
 4. Fusion suggestions
 - combine multiple notes into one stronger concept
@@ -181,6 +182,7 @@ Planned items:
   - clustered research can be captured back into a new note as a more stable thread judgment
   - followed directions in Flow can now turn a research validation loop directly into a seeded note
   - thread workspace can now directly capture the most valuable clustered validation loop into a dedicated note
+  - reminder payloads can now explain why a validation step matters now before surfacing the concrete validation action
 
 2. Topic maps
 - not heavy graph-first UI
@@ -210,6 +212,11 @@ Next best order:
 1. thread-aware research follow-up summaries
 2. reminder summaries that explain why a validation step matters now
 3. research-derived prompts that bridge from validation back into execution
+
+Current progress:
+
+- 1: implemented in Flow followed directions and validation capture seeds
+- 2: implemented in morning reminder summaries and validation capture seeds
 
 ## Success Criteria
 
