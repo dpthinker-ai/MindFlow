@@ -17,6 +17,7 @@ import com.mindflow.app.EntryProxyActivity
 import com.mindflow.app.MindFlowApplication
 import com.mindflow.app.R
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.ui.navigation.FlowFocus
@@ -45,6 +46,10 @@ class ReminderWorker(
         val activeNotes = notes.filter { !it.isArchived }
         val continueNote = pickContinueNote(activeNotes)
         val staleNote = pickStaleNote(activeNotes, continueNote?.id)
+        val researchContext = buildResearchReminderContext(
+            note = continueNote ?: staleNote,
+            activeNotes = activeNotes,
+        )
 
         createChannel()
 
@@ -54,12 +59,18 @@ class ReminderWorker(
                 notes = activeNotes,
                 continueNote = continueNote,
                 staleNote = staleNote,
+                researchContext = researchContext,
             )
             ReminderKind.EVENING -> buildEveningPayload(activeNotes)
         }
 
         val actions = when (kind) {
-            ReminderKind.MORNING -> buildMorningActions(activeNotes, continueNote, staleNote)
+            ReminderKind.MORNING -> buildMorningActions(
+                activeNotes = activeNotes,
+                continueNote = continueNote,
+                staleNote = staleNote,
+                researchContext = researchContext,
+            )
             ReminderKind.EVENING -> buildEveningActions(activeNotes)
         }
 
@@ -72,6 +83,7 @@ class ReminderWorker(
         notes: List<NoteEntity>,
         continueNote: NoteEntity?,
         staleNote: NoteEntity?,
+        researchContext: ResearchReminderContext?,
     ): NotificationPayload {
         container.dailyBriefPlanner.refreshIfNeeded(notes)
         val brief = container.dailyBriefPlanner.state.first()
@@ -98,6 +110,9 @@ class ReminderWorker(
             if (nextActionText.isNotBlank()) {
                 add("下一步：$nextActionText")
             }
+            researchContext?.validationStep
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add("研究验证：$it") }
             brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("探索：$it") }
             if (continueNote == null) {
                 staleNote?.topic?.takeIf { it.isNotBlank() }?.let { add("重新接上：$it") }
@@ -265,6 +280,7 @@ class ReminderWorker(
         activeNotes: List<NoteEntity>,
         continueNote: NoteEntity?,
         staleNote: NoteEntity?,
+        researchContext: ResearchReminderContext?,
     ): List<ReminderAction> {
         val targetNote = continueNote ?: staleNote
         val threadKey = targetNote?.let { note ->
@@ -275,11 +291,12 @@ class ReminderWorker(
         }
         val openLabel = if (continueNote != null) "继续推进" else if (staleNote != null) "重新接上" else "打开 Flow"
         val seedContent = when {
+            researchContext != null -> buildResearchValidationSeed(researchContext)
             continueNote != null -> buildProgressSeed(continueNote)
             staleNote != null -> buildReconnectSeed(staleNote)
             else -> ""
         }
-        val seedTopic = targetNote?.topic.orEmpty()
+        val seedTopic = researchContext?.topic ?: targetNote?.topic.orEmpty()
         return buildList {
             add(
                 ReminderAction(
@@ -300,7 +317,11 @@ class ReminderWorker(
             )
             add(
                 ReminderAction(
-                    label = if (seedContent.isNotBlank()) "补一条" else "记一条",
+                    label = when {
+                        researchContext != null -> "记验证"
+                        seedContent.isNotBlank() -> "补一条"
+                        else -> "记一条"
+                    },
                     pendingIntent = quickActionPendingIntent(
                         kind = ReminderKind.MORNING,
                         action = MindFlowEntryIntents.ACTION_OPEN_CAPTURE,
@@ -382,6 +403,16 @@ private data class ReminderAction(
     val pendingIntent: PendingIntent,
 )
 
+private data class ResearchReminderContext(
+    val threadKey: String,
+    val threadTitle: String,
+    val label: String,
+    val validationStep: String,
+) {
+    val topic: String
+        get() = "${threadTitle.removePrefix("#").trim()} · 验证动作"
+}
+
 private fun buildProgressSeed(note: NoteEntity): String =
     buildString {
         appendLine("围绕「${note.topic.ifBlank { "未命名记录" }}」补一条最新进展：")
@@ -409,6 +440,16 @@ private fun buildEveningSeed(note: NoteEntity?): String =
         appendLine("- 明天第一步：")
     }
 
+private fun buildResearchValidationSeed(context: ResearchReminderContext): String =
+    buildString {
+        appendLine("围绕「${context.threadTitle.removePrefix("#").trim()}」记一条验证记录：")
+        appendLine("- 研究线索：${context.label}")
+        appendLine("- 先验证：${context.validationStep}")
+        appendLine("- 我准备怎么验证：")
+        appendLine("- 看什么结果算成立：")
+        appendLine("- 这次新的判断：")
+    }
+
 private fun buildReminderNextStep(note: NoteEntity): String =
     when (note.status) {
         NoteStatus.IN_PROGRESS -> "先补一句最新进展，再往前拱一步。"
@@ -434,4 +475,30 @@ private fun pickStaleNote(
         .filter { it.status != NoteStatus.DONE }
         .filter { it.updatedAt < threshold }
         .minByOrNull { it.updatedAt }
+}
+
+private fun buildResearchReminderContext(
+    note: NoteEntity?,
+    activeNotes: List<NoteEntity>,
+): ResearchReminderContext? {
+    val target = note ?: return null
+    val threadKey = NoteConnectionAnalyzer.bestThreadKeyFor(target, activeNotes) ?: return null
+    val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
+    val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
+        notes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
+            .filter(ThreadResearchAnalyzer::isResearchMemoryNote)
+            .take(3),
+        threadTitle = thread.title,
+    ).firstOrNull() ?: return null
+
+    return researchLead.validationStep
+        .takeIf { it.isNotBlank() }
+        ?.let { validationStep ->
+            ResearchReminderContext(
+                threadKey = threadKey,
+                threadTitle = thread.title,
+                label = researchLead.label,
+                validationStep = validationStep,
+            )
+        }
 }

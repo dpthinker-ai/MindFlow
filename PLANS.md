@@ -63,6 +63,7 @@ Planned items:
   - contextual quick actions for continue / reconnect / recap
   - can jump directly back into a matching thread when a reminder note belongs to a clear direction
   - when a reminder lands in Flow, it can focus the relevant section (today / reconnect / review / direction)
+  - when a reminder note belongs to a direction with live research memory, the morning reminder can now carry one validation step and a direct `记验证` action
 
 3. Faster capture
 - status: refined
@@ -206,8 +207,8 @@ Planned items:
 Next best order:
 
 1. thread-aware research follow-up summaries
-2. thread-aware research-to-action carry-over in reminders
-3. richer capture-back from clustered research
+2. richer capture-back from clustered research
+3. reminder summaries that explain why a validation step matters now
 
 ## Success Criteria
 
