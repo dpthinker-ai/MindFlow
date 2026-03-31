@@ -110,6 +110,7 @@ Planned items:
   - followed directions surface a current focus line
   - followed directions now also explain why to continue now and the smallest next step
   - can jump directly from a followed direction to its current focus note
+  - followed directions can now surface one lightweight research cue and a smallest validation step
   - editor now hints when a record appears to belong to an existing direction
   - thread focus and lightweight promotion
   - thread-level weekly review
@@ -174,6 +175,7 @@ Planned items:
   - recent research-derived notes stay visible inside the thread as lightweight research memory
   - research can now be compressed into one meaning line and one smallest validation action
   - recent research notes can now be clustered into lightweight research themes
+  - grouped research themes now carry lightweight validation loops
   - clustered research can be captured back into a new note as a more stable thread judgment
 
 2. Topic maps
@@ -202,8 +204,8 @@ Planned items:
 Next best order:
 
 1. lighter Flow-to-thread action handoff
-2. richer research surfaces outside the thread page
-3. grouped validation loops for research themes
+2. thread-aware research follow-up summaries
+3. lighter capture-back from research loops
 
 ## Success Criteria
 

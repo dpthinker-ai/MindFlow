@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.ResearchCluster
+import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.NoteStatus
@@ -26,10 +28,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.DayOfWeek
 
 data class ThreadUiState(
     val threadKey: String,
@@ -68,12 +70,6 @@ data class ThreadUiState(
     }
 }
 
-data class ResearchCluster(
-    val label: String,
-    val summary: String,
-    val noteCount: Int,
-)
-
 sealed interface ThreadEvent {
     data class Message(val text: String) : ThreadEvent
 }
@@ -111,8 +107,11 @@ class ThreadViewModel(
         _insightState,
     ) { allNotes, isFollowed, insight ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
-        val researchNotes = notes.filter(::isResearchMemoryNote).take(3)
-        val researchClusters = buildResearchClusters(researchNotes, NoteConnectionAnalyzer.titleForThread(threadKey))
+        val researchNotes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3)
+        val researchClusters = ThreadResearchAnalyzer.buildResearchClusters(
+            notes = researchNotes,
+            threadTitle = NoteConnectionAnalyzer.titleForThread(threadKey),
+        )
         val focusNote = pickFocusNote(notes)
         val weeklyReview = buildThreadWeeklyReview(notes)
         ThreadUiState(
@@ -566,86 +565,6 @@ class ThreadViewModel(
             null -> ""
         }
 
-    private fun isResearchMemoryNote(note: NoteEntity): Boolean {
-        val topic = note.topic.trim()
-        val content = note.content
-        return topic.contains("研究", ignoreCase = true) ||
-            content.contains("外部线索") ||
-            content.contains("机会缺口") ||
-            content.contains("我查到的内容")
-    }
-
-    private fun buildResearchClusters(
-        notes: List<NoteEntity>,
-        threadTitle: String,
-    ): List<ResearchCluster> {
-        if (notes.isEmpty()) return emptyList()
-
-        val grouped = notes
-            .map { note -> pickResearchClusterKey(note, threadTitle) to note }
-            .groupBy({ it.first }, { it.second })
-            .entries
-            .sortedWith(
-                compareByDescending<Map.Entry<String, List<NoteEntity>>> { it.value.size }
-                    .thenBy { it.key.length },
-            )
-            .take(3)
-
-        return grouped.map { (label, groupedNotes) ->
-            val sampleTopics = groupedNotes
-                .take(2)
-                .joinToString(" · ") { note ->
-                    note.topic
-                        .substringBefore("·")
-                        .trim()
-                        .ifBlank { "未命名研究记录" }
-                }
-            val summary = if (groupedNotes.size >= 2) {
-                "最近有 ${groupedNotes.size} 条研究都落在「$label」上，主线包括：$sampleTopics"
-            } else {
-                "最近新增的研究主要落在「$label」，适合先把它沉淀成一条更稳定的判断。"
-            }
-            ResearchCluster(
-                label = label,
-                summary = summary,
-                noteCount = groupedNotes.size,
-            )
-        }
-    }
-
-    private fun pickResearchClusterKey(
-        note: NoteEntity,
-        threadTitle: String,
-    ): String {
-        val usefulTag = note.tags
-            .map { it.trim() }
-            .firstOrNull { candidate ->
-                candidate.isNotBlank() &&
-                    candidate !in genericResearchWords &&
-                    candidate !in threadTitle.asResearchStopWords()
-            }
-        if (usefulTag != null) return usefulTag
-
-        val token = researchTokens(note.topic, threadTitle)
-            .plus(researchTokens(note.content.take(180), threadTitle))
-            .firstOrNull()
-        return token ?: "最近研究"
-    }
-
-    private fun researchTokens(
-        raw: String,
-        threadTitle: String,
-    ): List<String> {
-        val stopWords = genericResearchWords + threadTitle.asResearchStopWords()
-        val regex = Regex("[\\p{IsHan}]{2,6}|[A-Za-z][A-Za-z0-9+-]{3,}")
-        return regex.findAll(raw)
-            .map { it.value.trim().lowercase() }
-            .filter { it.isNotBlank() }
-            .filterNot { token -> stopWords.any { stop -> token.contains(stop) || stop.contains(token) } }
-            .distinct()
-            .toList()
-    }
-
     private fun List<NoteEntity>.currentWeekNotes(): List<NoteEntity> {
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
@@ -705,31 +624,3 @@ class ThreadViewModel(
         val lines: List<String>,
     )
 }
-
-private val genericResearchWords = setOf(
-    "研究",
-    "收获",
-    "动作",
-    "验证",
-    "记录",
-    "当前",
-    "方向",
-    "外部",
-    "线索",
-    "机会",
-    "缺口",
-    "最近",
-    "继续",
-    "结果",
-    "主线",
-    "主题",
-    "问题",
-)
-
-private fun String.asResearchStopWords(): Set<String> =
-    replace("#", " ")
-        .replace("·", " ")
-        .split(Regex("[\\s/、]+"))
-        .map { it.trim().lowercase() }
-        .filter { it.isNotBlank() && it.length >= 2 }
-        .toSet()

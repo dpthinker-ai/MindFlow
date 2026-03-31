@@ -47,6 +47,7 @@ import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.navigation.FlowFocus
+import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
@@ -376,6 +377,35 @@ private fun FollowedDirectionRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (summary.researchStep.isNotBlank()) {
+                Surface(
+                    color = AccentBlue.copy(alpha = 0.08f),
+                    shape = CardShape,
+                    border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = if (summary.researchLabel.isNotBlank()) "研究线索 · ${summary.researchLabel}" else "研究线索",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AccentBlue,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "先验证：${summary.researchStep}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMain,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

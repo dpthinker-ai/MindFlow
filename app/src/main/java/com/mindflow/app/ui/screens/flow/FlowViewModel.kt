@@ -14,6 +14,7 @@ import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.FusionSuggestionState
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
+import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
@@ -62,6 +63,8 @@ data class FollowedDirectionSummary(
     val focusNoteId: Long? = null,
     val whyNow: String = "",
     val nextStep: String = "",
+    val researchLabel: String = "",
+    val researchStep: String = "",
 )
 
 class FlowViewModel(
@@ -230,11 +233,17 @@ private fun buildFollowedDirectionSummary(
 ): FollowedDirectionSummary {
     val focusNote = pickContinueNote(notes)
         ?: notes.maxByOrNull { it.updatedAt }
+    val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
+        notes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3),
+        threadTitle = thread.title,
+    ).firstOrNull()
     return FollowedDirectionSummary(
         thread = thread,
         focusNoteId = focusNote?.id,
         whyNow = whyNowForThread(thread, notes, focusNote),
         nextStep = nextStepForThread(thread, focusNote),
+        researchLabel = researchLead?.label.orEmpty(),
+        researchStep = researchLead?.validationStep.orEmpty(),
     )
 }
 

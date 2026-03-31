@@ -250,6 +250,11 @@ fun ThreadRoute(
                     appendLine("- 当前聚合出来的研究主线：")
                     uiState.researchClusters.forEach { cluster ->
                         appendLine("  - ${cluster.label}：${cluster.summary}")
+                        cluster.validationStep
+                            .takeIf { it.isNotBlank() }
+                            ?.let { validation ->
+                                appendLine("    - 先验证：$validation")
+                            }
                     }
                 }
                 appendLine("- 我现在更稳定的判断：")
@@ -640,6 +645,15 @@ private fun ThreadScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = TextSoft,
                                             )
+                                            cluster.validationStep
+                                                .takeIf { it.isNotBlank() }
+                                                ?.let { validationStep ->
+                                                    Text(
+                                                        text = "先验证：$validationStep",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = AccentBlue,
+                                                    )
+                                                }
                                         }
                                     }
                                 }

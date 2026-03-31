@@ -143,8 +143,10 @@ Current status:
 - thread follow-up summaries outside the thread page: first version implemented
 - thread research clustering: first version implemented
 - richer note-to-thread capture hints: first version implemented
+- richer research surfaces outside the thread page: first version implemented
+- grouped validation loops for research themes: first version implemented
 
 Next strongest direction:
 
 - lighter Flow-to-thread action handoff
-- richer research surfaces outside the thread page
+- thread-aware research follow-up summaries
