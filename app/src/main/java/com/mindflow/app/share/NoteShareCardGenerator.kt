@@ -4,19 +4,22 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import androidx.core.content.FileProvider
+import com.mindflow.app.R
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.markdown.MarkdownBlock
 import com.mindflow.app.markdown.MarkdownHeading
 import com.mindflow.app.markdown.SimpleMarkdown
-import com.mindflow.app.R
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -24,6 +27,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.ceil
 
 enum class NoteShareStyle {
     LIGHT,
@@ -67,46 +71,60 @@ class NoteShareCardGenerator(
         style: NoteShareStyle,
     ): Bitmap {
         val palette = paletteFor(style)
-        val outer = 36f
+        val outer = 28f
+        val innerHorizontal = 34f
+        val innerVertical = 30f
         val corner = 30f
+        val maxBodyWidth = 860
+
         val namePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
-            textSize = 29f
+            textSize = 26f
             isFakeBoldText = true
         }
         val handlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.meta
-            textSize = 23f
+            textSize = 20f
         }
         val topicPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.title
-            textSize = 50f
-            isFakeBoldText = true
-        }
-        val headingPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.title
-            textSize = 36f
-            isFakeBoldText = true
-        }
-        val contentPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.body
-            textSize = 32f
-        }
-        val tagPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.accent
             textSize = 22f
             isFakeBoldText = true
         }
+        val headingLargePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.title
+            textSize = 34f
+            isFakeBoldText = true
+        }
+        val headingPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.title
+            textSize = 29f
+            isFakeBoldText = true
+        }
+        val contentPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.body
+            textSize = 25f
+        }
+        val tagPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.accent
+            textSize = 18f
+            isFakeBoldText = true
+        }
         val metaPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.meta
-            textSize = 24f
+            textSize = 19f
+        }
+        val sourcePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.metaStrong
+            textSize = 18f
+            isFakeBoldText = true
         }
         val statusPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.statusText
-            textSize = 24f
+            textSize = 18f
             isFakeBoldText = true
         }
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.background }
+        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.card }
         val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.halo }
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -120,56 +138,82 @@ class NoteShareCardGenerator(
             strokeWidth = 2f
         }
         val statusBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.statusBackground }
+        val sourceBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.sourceBackground }
 
         val topic = buildTopic(payload)
         val markdownBlocks = buildMarkdownBlocks(payload, topic)
-        val contentWidth = computeContentWidth(
-            topicPaint = topicPaint,
-            headingPaint = headingPaint,
-            contentPaint = contentPaint,
+        val measuredLayouts = measureLayouts(
             topic = topic,
             blocks = markdownBlocks,
+            topicPaint = topicPaint,
+            headingLargePaint = headingLargePaint,
+            headingPaint = headingPaint,
+            contentPaint = contentPaint,
+            maxBodyWidth = maxBodyWidth,
+            minimumWidth = measureHeaderWidth(namePaint, handlePaint, sourcePaint),
         )
-        val width = (contentWidth + outer * 2f + 74f).toInt().coerceIn(780, 1080)
-        val contentWidthInt = contentWidth.toInt()
-        val topicLayout = buildLayout(
-            text = topic.ifBlank { "未命名想法" },
-            paint = topicPaint,
-            width = contentWidthInt,
-            maxLines = 2,
-            lineSpacing = 1.04f,
-        )
-        val blockLayouts = markdownBlocks.map { block ->
-            val paint = if (block is MarkdownHeading) headingPaint else contentPaint
+
+        val contentWidth = measuredLayouts.contentWidth
+        val width = ceil(contentWidth + outer * 2f + innerHorizontal * 2f).toInt().coerceIn(660, 1040)
+        val bodyWidth = (width - outer * 2f - innerHorizontal * 2f).toInt()
+
+        val topicLayout = if (topic.isBlank()) {
+            null
+        } else {
             buildLayout(
-                text = SimpleMarkdown.toSpannable(block),
-                paint = paint,
-                width = contentWidthInt,
-                maxLines = if (block is MarkdownHeading) 2 else 8,
-                lineSpacing = if (block is MarkdownHeading) 1.04f else 1.15f,
+                text = topic,
+                paint = topicPaint,
+                width = bodyWidth,
+                maxLines = 2,
+                lineSpacing = 1.02f,
             )
         }
-        val tags = payload.tags.take(3)
-        val tagsHeight = if (tags.isNotEmpty()) 40f else 0f
-        val blockSpacing = 16
+        val blockLayouts = markdownBlocks.map { block ->
+            buildLayout(
+                text = SimpleMarkdown.toSpannable(block),
+                paint = paintFor(block, headingLargePaint, headingPaint, contentPaint),
+                width = bodyWidth,
+                maxLines = maxLinesFor(block),
+                lineSpacing = lineSpacingFor(block),
+            )
+        }
+
+        val tags = payload.tags.take(2)
+        val blockSpacing = 14f
         val blocksHeight = blockLayouts.sumOf { it.height } +
             ((blockLayouts.size - 1).coerceAtLeast(0) * blockSpacing)
-        val height = (
+        val headerHeight = 72f
+        val topicHeight = topicLayout?.height?.toFloat() ?: 0f
+        val topicGap = if (topicLayout != null) 14f else 0f
+        val dividerGap = 24f
+        val footerHeight = 52f
+        val height = ceil(
             outer * 2f +
-                120f +
-                topicLayout.height +
-                16f +
+                innerVertical * 2f +
+                headerHeight +
+                topicHeight +
+                topicGap +
                 blocksHeight +
-                tagsHeight +
-                108f
-            ).toInt().coerceIn(760, 1160)
+                dividerGap +
+                footerHeight
+        ).toInt().coerceIn(500, 1680)
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
+        backgroundPaint.shader = LinearGradient(
+            0f,
+            0f,
+            width.toFloat(),
+            height.toFloat(),
+            palette.backgroundStart,
+            palette.backgroundEnd,
+            Shader.TileMode.CLAMP,
+        )
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
-        canvas.drawCircle(width - 130f, 120f, 120f, haloPaint)
-        canvas.drawCircle(100f, height - 120f, 86f, haloPaint)
+        canvas.drawCircle(width - 128f, 110f, 136f, haloPaint)
+        canvas.drawCircle(108f, height - 118f, 92f, haloPaint)
+        drawGlow(canvas, width - 96f, 98f, 176f, palette.glow)
 
         val cardRect = RectF(
             outer,
@@ -180,12 +224,11 @@ class NoteShareCardGenerator(
         canvas.drawRoundRect(cardRect, corner, corner, cardPaint)
         canvas.drawRoundRect(cardRect, corner, corner, cardBorderPaint)
 
-        val innerLeft = cardRect.left + 34f
-        val innerRight = cardRect.right - 34f
-
+        val innerLeft = cardRect.left + innerHorizontal
+        val innerRight = cardRect.right - innerHorizontal
         val avatarRadius = 30f
         val avatarCenterX = innerLeft + avatarRadius
-        val avatarCenterY = cardRect.top + 70f
+        val avatarCenterY = cardRect.top + innerVertical + avatarRadius
         canvas.drawCircle(avatarCenterX, avatarCenterY, avatarRadius, avatarPaint)
         drawAppIconAvatar(
             canvas = canvas,
@@ -196,70 +239,105 @@ class NoteShareCardGenerator(
 
         val nameX = avatarCenterX + avatarRadius + 18f
         canvas.drawText("dpthinker", nameX, avatarCenterY - 6f, namePaint)
-        canvas.drawText("公众号", nameX, avatarCenterY + 28f, handlePaint)
+        canvas.drawText("公众号", nameX, avatarCenterY + 23f, handlePaint)
+        drawSourcePill(
+            canvas = canvas,
+            text = "From MindFlow",
+            right = innerRight,
+            centerY = avatarCenterY,
+            backgroundPaint = sourceBackgroundPaint,
+            textPaint = sourcePaint,
+        )
 
+        var cursorY = cardRect.top + innerVertical + headerHeight
+        if (topicLayout != null) {
+            drawLayout(canvas, topicLayout, innerLeft, cursorY)
+            cursorY += topicLayout.height + topicGap
+        }
+
+        blockLayouts.forEachIndexed { index, layout ->
+            drawLayout(canvas, layout, innerLeft, cursorY)
+            cursorY += layout.height
+            if (index != blockLayouts.lastIndex) {
+                cursorY += blockSpacing
+            }
+        }
+
+        val dividerY = cursorY + dividerGap
+        canvas.drawLine(innerLeft, dividerY, innerRight, dividerY, dividerPaint)
+
+        val statusWidth = pillWidth(payload.status.label, statusPaint, horizontal = 14f)
+        val tagsStart = innerLeft + statusWidth + if (tags.isNotEmpty()) 10f else 0f
+        val footerBaseline = dividerY + 34f
         drawStatusPill(
             canvas = canvas,
             text = payload.status.label,
-            right = innerRight,
-            centerY = avatarCenterY,
+            left = innerLeft,
+            baselineY = footerBaseline,
             backgroundPaint = statusBackgroundPaint,
             textPaint = statusPaint,
         )
 
-        var cursorY = cardRect.top + 136f
-        drawLayout(
-            canvas = canvas,
-            layout = topicLayout,
-            x = innerLeft,
-            y = cursorY,
+        val timeText = formatTimestamp(payload.timestampMillis)
+        val timeWidth = metaPaint.measureText(timeText)
+        canvas.drawText(
+            timeText,
+            innerRight - timeWidth,
+            footerBaseline,
+            metaPaint,
         )
-        cursorY += topicLayout.height + 16f
 
-        blockLayouts.forEachIndexed { index, layout ->
-            drawLayout(
-                canvas = canvas,
-                layout = layout,
-                x = innerLeft,
-                y = cursorY,
-            )
-            cursorY += layout.height
-            if (index != blockLayouts.lastIndex) {
-                cursorY += blockSpacing.toFloat()
-            }
-        }
-
-        val chipsTop = (cardRect.bottom - 120f).coerceAtLeast(cursorY + 16f)
         if (tags.isNotEmpty()) {
             drawTagPills(
                 canvas = canvas,
                 tags = tags,
-                startX = innerLeft,
-                top = chipsTop,
-                maxRight = innerRight,
+                startX = tagsStart,
+                top = dividerY + 18f,
+                maxRight = innerRight - timeWidth - 18f,
                 fillPaint = statusBackgroundPaint,
                 textPaint = tagPaint,
             )
         }
 
-        val dividerY = cardRect.bottom - 74f
-        canvas.drawLine(innerLeft, dividerY, innerRight, dividerY, dividerPaint)
-        val timeText = formatTimestamp(payload.timestampMillis)
-        canvas.drawText(
-            timeText,
-            innerLeft,
-            dividerY + 46f,
-            metaPaint,
-        )
-        val fromText = "From MindFlow"
-        canvas.drawText(
-            fromText,
-            innerRight - metaPaint.measureText(fromText),
-            dividerY + 46f,
-            metaPaint,
-        )
-
         return bitmap
+    }
+
+    private fun measureLayouts(
+        topic: String,
+        blocks: List<MarkdownBlock>,
+        topicPaint: TextPaint,
+        headingLargePaint: TextPaint,
+        headingPaint: TextPaint,
+        contentPaint: TextPaint,
+        maxBodyWidth: Int,
+        minimumWidth: Float,
+    ): ShareMeasuredLayouts {
+        val provisionalTopic = if (topic.isBlank()) {
+            null
+        } else {
+            buildLayout(
+                text = topic,
+                paint = topicPaint,
+                width = maxBodyWidth,
+                maxLines = 2,
+                lineSpacing = 1.02f,
+            )
+        }
+        val provisionalBlocks = blocks.map { block ->
+            buildLayout(
+                text = SimpleMarkdown.toSpannable(block),
+                paint = paintFor(block, headingLargePaint, headingPaint, contentPaint),
+                width = maxBodyWidth,
+                maxLines = maxLinesFor(block),
+                lineSpacing = lineSpacingFor(block),
+            )
+        }
+        val widestLine = maxOf(
+            minimumWidth,
+            provisionalTopic?.maxLineWidth() ?: 0f,
+            provisionalBlocks.maxOfOrNull { it.maxLineWidth() } ?: 0f,
+        )
+        return ShareMeasuredLayouts(contentWidth = (widestLine + 8f).coerceIn(520f, maxBodyWidth.toFloat()))
     }
 
     private fun buildLayout(
@@ -356,25 +434,16 @@ class NoteShareCardGenerator(
         canvas.restore()
     }
 
-    private fun computeContentWidth(
-        topicPaint: TextPaint,
-        headingPaint: TextPaint,
-        contentPaint: TextPaint,
-        topic: String,
-        blocks: List<MarkdownBlock>,
+    private fun measureHeaderWidth(
+        namePaint: TextPaint,
+        handlePaint: TextPaint,
+        sourcePaint: TextPaint,
     ): Float {
-        val topicPreview = topic.take(14).ifBlank { "未命名想法" }
-        val blockPreviewWidth = blocks.take(3).maxOfOrNull { block ->
-            val preview = SimpleMarkdown.toPlainText(block).replace("\n", " ").take(24)
-            val paint = if (block is MarkdownHeading) headingPaint else contentPaint
-            if (preview.isBlank()) 0f else paint.measureText(preview)
-        } ?: 0f
-        val previewWidth = maxOf(
-            640f,
-            topicPaint.measureText(topicPreview),
-            blockPreviewWidth,
+        val authorWidth = maxOf(
+            namePaint.measureText("dpthinker"),
+            handlePaint.measureText("公众号"),
         )
-        return previewWidth.coerceIn(640f, 920f)
+        return authorWidth + sourcePaint.measureText("From MindFlow") + 198f
     }
 
     private fun drawTagPills(
@@ -387,9 +456,9 @@ class NoteShareCardGenerator(
         textPaint: TextPaint,
     ) {
         var cursorX = startX
-        val horizontal = 14f
-        val height = 34f
-        val gap = 10f
+        val horizontal = 12f
+        val height = 28f
+        val gap = 8f
         tags.forEach { tag ->
             val label = "#$tag"
             val width = textPaint.measureText(label) + horizontal * 2f
@@ -404,7 +473,7 @@ class NoteShareCardGenerator(
             canvas.drawText(
                 label,
                 rect.left + horizontal,
-                rect.top + 23f,
+                rect.top + 20f,
                 textPaint,
             )
             cursorX += width + gap
@@ -414,14 +483,39 @@ class NoteShareCardGenerator(
     private fun drawStatusPill(
         canvas: Canvas,
         text: String,
+        left: Float,
+        baselineY: Float,
+        backgroundPaint: Paint,
+        textPaint: TextPaint,
+    ) {
+        val horizontal = 14f
+        val width = pillWidth(text, textPaint, horizontal)
+        val rect = RectF(
+            left,
+            baselineY - 22f,
+            left + width,
+            baselineY + 8f,
+        )
+        canvas.drawRoundRect(rect, 999f, 999f, backgroundPaint)
+        canvas.drawText(
+            text,
+            rect.left + horizontal,
+            baselineY,
+            textPaint,
+        )
+    }
+
+    private fun drawSourcePill(
+        canvas: Canvas,
+        text: String,
         right: Float,
         centerY: Float,
         backgroundPaint: Paint,
         textPaint: TextPaint,
     ) {
-        val horizontal = 18f
-        val height = 42f
-        val width = textPaint.measureText(text) + horizontal * 2f
+        val horizontal = 14f
+        val height = 30f
+        val width = pillWidth(text, textPaint, horizontal)
         val rect = RectF(
             right - width,
             centerY - height / 2f,
@@ -432,51 +526,121 @@ class NoteShareCardGenerator(
         canvas.drawText(
             text,
             rect.left + horizontal,
-            centerY + 8f,
+            centerY + 6f,
             textPaint,
         )
     }
+
+    private fun drawGlow(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        color: Int,
+    ) {
+        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = RadialGradient(
+                centerX,
+                centerY,
+                radius,
+                intArrayOf(color, color and 0x00FFFFFF),
+                floatArrayOf(0f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+        }
+        canvas.drawCircle(centerX, centerY, radius, glowPaint)
+    }
 }
 
+private data class ShareMeasuredLayouts(
+    val contentWidth: Float,
+)
+
 private data class SharePalette(
-    val background: Int,
+    val backgroundStart: Int,
+    val backgroundEnd: Int,
     val card: Int,
     val title: Int,
     val body: Int,
     val meta: Int,
+    val metaStrong: Int,
     val accent: Int,
     val halo: Int,
+    val glow: Int,
     val border: Int,
     val statusBackground: Int,
     val statusText: Int,
+    val sourceBackground: Int,
     val divider: Int,
 )
 
 private fun paletteFor(style: NoteShareStyle): SharePalette = when (style) {
     NoteShareStyle.LIGHT -> SharePalette(
-        background = 0xFFF4F1EA.toInt(),
+        backgroundStart = 0xFFF6F8FC.toInt(),
+        backgroundEnd = 0xFFF1F5FF.toInt(),
         card = 0xFFFFFFFF.toInt(),
         title = 0xFF0F172A.toInt(),
-        body = 0xFF334155.toInt(),
+        body = 0xFF243244.toInt(),
         meta = 0xFF6B7280.toInt(),
-        accent = 0xFF3F7DFF.toInt(),
-        halo = 0x164BA3FF,
-        border = 0x0F0F172A,
-        statusBackground = 0x123F7DFF,
-        statusText = 0xFF2F5FD2.toInt(),
+        metaStrong = 0xFF56687C.toInt(),
+        accent = 0xFF3E7BFF.toInt(),
+        halo = 0x123E7BFF,
+        glow = 0x223E7BFF,
+        border = 0x120F172A,
+        statusBackground = 0x123E7BFF,
+        statusText = 0xFF2E63D4.toInt(),
+        sourceBackground = 0x0E3E7BFF,
         divider = 0x140F172A,
     )
     NoteShareStyle.DARK -> SharePalette(
-        background = 0xFF0E1726.toInt(),
-        card = 0xFF162235.toInt(),
+        backgroundStart = 0xFF0F172A.toInt(),
+        backgroundEnd = 0xFF12223C.toInt(),
+        card = 0xFF132338.toInt(),
         title = 0xFFF8FAFC.toInt(),
-        body = 0xFFDCE6EF.toInt(),
-        meta = 0xFF98A7BA.toInt(),
-        accent = 0xFF79A7FF.toInt(),
-        halo = 0x183F7DFF,
+        body = 0xFFD9E5F2.toInt(),
+        meta = 0xFFA2B3C6.toInt(),
+        metaStrong = 0xFFC4D3E6.toInt(),
+        accent = 0xFF7DB2FF.toInt(),
+        halo = 0x147DB2FF,
+        glow = 0x287DB2FF,
         border = 0x22FFFFFF,
         statusBackground = 0x1E79A7FF,
         statusText = 0xFFDCE6FF.toInt(),
+        sourceBackground = 0x167DB2FF,
         divider = 0x26FFFFFF,
     )
+}
+
+private fun paintFor(
+    block: MarkdownBlock,
+    headingLargePaint: TextPaint,
+    headingPaint: TextPaint,
+    contentPaint: TextPaint,
+): TextPaint = when (block) {
+    is MarkdownHeading -> if (block.level == 1) headingLargePaint else headingPaint
+    else -> contentPaint
+}
+
+private fun maxLinesFor(block: MarkdownBlock): Int = when (block) {
+    is MarkdownHeading -> 3
+    else -> 10
+}
+
+private fun lineSpacingFor(block: MarkdownBlock): Float = when (block) {
+    is MarkdownHeading -> 1.06f
+    else -> 1.16f
+}
+
+private fun pillWidth(
+    text: String,
+    paint: TextPaint,
+    horizontal: Float,
+): Float = paint.measureText(text) + horizontal * 2f
+
+private fun StaticLayout.maxLineWidth(): Float {
+    var maxWidth = 0f
+    for (index in 0 until lineCount) {
+        maxWidth = maxOf(maxWidth, getLineWidth(index))
+    }
+    return ceil(maxWidth)
 }
