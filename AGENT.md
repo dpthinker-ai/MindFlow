@@ -141,8 +141,9 @@ Current status:
 - thread-level research-to-action summaries: first version implemented
 - widget-level capture polish: first version implemented
 - thread follow-up summaries outside the thread page: first version implemented
+- thread research clustering: first version implemented
 
 Next strongest direction:
 
-- thread research clustering
 - lighter Flow-to-thread action handoff
+- richer note-to-thread capture hints

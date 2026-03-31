@@ -242,6 +242,39 @@ fun ThreadRoute(
                 ),
             )
         },
+        onCaptureResearchClusterNote = {
+            val topic = "${uiState.title.removePrefix("#").trim()} · 研究脉络"
+            val seedContent = buildString {
+                appendLine("围绕「${uiState.title}」整理当前研究脉络：")
+                if (uiState.researchClusters.isNotEmpty()) {
+                    appendLine("- 当前聚合出来的研究主线：")
+                    uiState.researchClusters.forEach { cluster ->
+                        appendLine("  - ${cluster.label}：${cluster.summary}")
+                    }
+                }
+                appendLine("- 我现在更稳定的判断：")
+                appendLine("- 这几条研究之间的共同点：")
+                appendLine("- 接下来优先验证：")
+            }
+            onCreateThreadNote(
+                CaptureSeed(
+                    initialTopic = topic,
+                    initialContent = seedContent,
+                    initialFolderKey = threadKey
+                        .takeIf { it.startsWith("folder:") }
+                        ?.removePrefix("folder:")
+                        ?.trim()
+                        ?.ifBlank { null },
+                    initialTags = threadKey
+                        .takeIf { it.startsWith("tag:") }
+                        ?.removePrefix("tag:")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::listOf)
+                        .orEmpty(),
+                ),
+            )
+        },
         onCaptureWeeklyReviewNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 本周推进"
             val seedContent = buildString {
@@ -348,6 +381,7 @@ private fun ThreadScreen(
     onCreateThreadNote: () -> Unit,
     onCaptureResearchNote: () -> Unit,
     onCaptureResearchActionNote: () -> Unit,
+    onCaptureResearchClusterNote: () -> Unit,
     onCaptureWeeklyReviewNote: () -> Unit,
     onCaptureInsightNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
@@ -577,6 +611,43 @@ private fun ThreadScreen(
                 if (uiState.researchNotes.isNotEmpty()) {
                     item {
                         PanelCard {
+                            if (uiState.researchClusters.isNotEmpty()) {
+                                SectionHeader(
+                                    title = "研究脉络",
+                                    headline = "${uiState.researchClusters.size} 组",
+                                )
+                                uiState.researchClusters.forEach { cluster ->
+                                    Surface(
+                                        shape = com.mindflow.app.ui.components.CardShape,
+                                        color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                text = "${cluster.label} · ${cluster.noteCount} 条",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = cluster.summary,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSoft,
+                                            )
+                                        }
+                                    }
+                                }
+                                GhostActionButton(
+                                    text = "沉淀研究脉络",
+                                    onClick = onCaptureResearchClusterNote,
+                                )
+                            }
                             SectionHeader(
                                 title = "研究记录",
                                 headline = "${uiState.researchNotes.size} 条",

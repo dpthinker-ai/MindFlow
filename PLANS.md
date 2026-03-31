@@ -172,6 +172,8 @@ Planned items:
   - capture research findings directly into a new thread note
   - recent research-derived notes stay visible inside the thread as lightweight research memory
   - research can now be compressed into one meaning line and one smallest validation action
+  - recent research notes can now be clustered into lightweight research themes
+  - clustered research can be captured back into a new note as a more stable thread judgment
 
 2. Topic maps
 - not heavy graph-first UI
@@ -199,9 +201,8 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. thread research clustering
-3. lighter Flow-to-thread action handoff
-4. richer note-to-thread capture hints
+2. lighter Flow-to-thread action handoff
+3. richer note-to-thread capture hints
 
 ## Success Criteria
 
