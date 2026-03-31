@@ -249,8 +249,14 @@ fun ThreadRoute(
                     appendLine("围绕「${uiState.title}」记下当前最值得验证的一组研究：")
                     appendLine("- 研究主线：${cluster.label}")
                     appendLine("- 当前判断：${cluster.summary}")
+                    cluster.followUpReason.takeIf { it.isNotBlank() }?.let {
+                        appendLine("- 为什么现在做：$it")
+                    }
                     cluster.validationStep.takeIf { it.isNotBlank() }?.let {
                         appendLine("- 先验证：$it")
+                    }
+                    cluster.executionPrompt.takeIf { it.isNotBlank() }?.let {
+                        appendLine("- 如果成立，下一步：$it")
                     }
                     appendLine("- 我准备怎么验证：")
                     appendLine("- 看什么结果算成立：")
@@ -284,10 +290,20 @@ fun ThreadRoute(
                     appendLine("- 当前聚合出来的研究主线：")
                     uiState.researchClusters.forEach { cluster ->
                         appendLine("  - ${cluster.label}：${cluster.summary}")
+                        cluster.followUpReason
+                            .takeIf { it.isNotBlank() }
+                            ?.let { reason ->
+                                appendLine("    - 为什么现在做：$reason")
+                            }
                         cluster.validationStep
                             .takeIf { it.isNotBlank() }
                             ?.let { validation ->
                                 appendLine("    - 先验证：$validation")
+                            }
+                        cluster.executionPrompt
+                            .takeIf { it.isNotBlank() }
+                            ?.let { execution ->
+                                appendLine("    - 如果成立，下一步：$execution")
                             }
                     }
                 }
@@ -689,6 +705,15 @@ private fun ThreadScreen(
                                                         color = AccentBlue,
                                                     )
                                                 }
+                                            cluster.executionPrompt
+                                                .takeIf { it.isNotBlank() }
+                                                ?.let { execution ->
+                                                    Text(
+                                                        text = "如果成立：$execution",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                    )
+                                                }
                                         }
                                     }
                                 }
@@ -716,6 +741,15 @@ private fun ThreadScreen(
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurface,
                                                 )
+                                                cluster.executionPrompt
+                                                    .takeIf { it.isNotBlank() }
+                                                    ?.let { execution ->
+                                                        Text(
+                                                            text = "如果成立：$execution",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = TextSoft,
+                                                        )
+                                                    }
                                                 GhostActionButton(
                                                     text = "记下验证循环",
                                                     onClick = onCaptureTopValidationLoopNote,

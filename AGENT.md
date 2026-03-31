@@ -151,7 +151,8 @@ Current status:
 - richer capture-back from clustered research: first version implemented
 - thread-aware research follow-up summaries: first version implemented
 - reminder summaries that explain why a validation step matters now: first version implemented
+- research-derived prompts that bridge from validation back into execution: first version implemented
 
 Next strongest direction:
 
-- research-derived prompts that bridge from validation back into execution
+- thread-aware execution summaries outside the thread page

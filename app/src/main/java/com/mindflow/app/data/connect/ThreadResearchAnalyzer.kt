@@ -11,6 +11,7 @@ data class ResearchCluster(
     val noteCount: Int,
     val validationStep: String = "",
     val followUpReason: String = "",
+    val executionPrompt: String = "",
 )
 
 object ThreadResearchAnalyzer {
@@ -58,7 +59,8 @@ object ThreadResearchAnalyzer {
                 summary = summary,
                 noteCount = groupedNotes.size,
                 validationStep = buildValidationStep(label, groupedNotes),
-                followUpReason = buildFollowUpReason(label, groupedNotes),
+                followUpReason = buildFollowUpReason(groupedNotes),
+                executionPrompt = buildExecutionPrompt(label, groupedNotes),
             )
         }
     }
@@ -101,10 +103,7 @@ object ThreadResearchAnalyzer {
         }
     }
 
-    private fun buildFollowUpReason(
-        label: String,
-        notes: List<NoteEntity>,
-    ): String {
+    private fun buildFollowUpReason(notes: List<NoteEntity>): String {
         val latest = notes.maxByOrNull { it.updatedAt }
         val zoneId = ZoneId.systemDefault()
         val latestDate = latest
@@ -127,6 +126,28 @@ object ThreadResearchAnalyzer {
                 "这组研究刚被补充过，趁记忆和问题还新，先验证一小步最划算。"
             else ->
                 "这组研究已经具备稳定主线，现在值得从线索往验证再推一步。"
+        }
+    }
+
+    private fun buildExecutionPrompt(
+        label: String,
+        notes: List<NoteEntity>,
+    ): String {
+        val latestTopic = notes.maxByOrNull { it.updatedAt }
+            ?.topic
+            ?.substringBefore("·")
+            ?.trim()
+            ?.ifBlank { null }
+
+        return when {
+            notes.size >= 3 && latestTopic != null ->
+                "如果验证成立，就把结果压成一条「$latestTopic」的推进记录，并明确谁来继续跟。"
+            notes.size >= 2 ->
+                "如果验证成立，就补一条新的推进记录，把这组研究从线索推进到实际动作。"
+            latestTopic != null ->
+                "如果验证成立，就围绕「$latestTopic」写一条执行记录，明确接下来要改什么。"
+            else ->
+                "如果验证成立，就补一条执行记录，写清要推进的改动、实验或下一步。"
         }
     }
 

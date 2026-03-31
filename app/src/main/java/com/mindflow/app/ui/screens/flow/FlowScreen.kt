@@ -425,6 +425,17 @@ private fun FollowedDirectionRow(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                        summary.researchExecution
+                            .takeIf { it.isNotBlank() }
+                            ?.let { execution ->
+                                Text(
+                                    text = "如果成立：$execution",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMain,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                     }
                 }
             }
@@ -485,6 +496,9 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
             appendLine("- 先验证：$researchStep")
             researchWhyNow.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 为什么现在做：$it")
+            }
+            researchExecution.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 如果成立，下一步：$it")
             }
             appendLine("- 我准备怎么验证：")
             appendLine("- 看什么结果算成立：")

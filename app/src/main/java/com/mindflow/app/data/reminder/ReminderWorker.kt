@@ -412,6 +412,7 @@ private data class ResearchReminderContext(
     val label: String,
     val validationStep: String,
     val followUpReason: String,
+    val executionPrompt: String,
 ) {
     val topic: String
         get() = "${threadTitle.removePrefix("#").trim()} · 验证动作"
@@ -452,6 +453,9 @@ private fun buildResearchValidationSeed(context: ResearchReminderContext): Strin
             .takeIf { it.isNotBlank() }
             ?.let { appendLine("- 为什么现在做：$it") }
         appendLine("- 先验证：${context.validationStep}")
+        context.executionPrompt
+            .takeIf { it.isNotBlank() }
+            ?.let { appendLine("- 如果成立，下一步：$it") }
         appendLine("- 我准备怎么验证：")
         appendLine("- 看什么结果算成立：")
         appendLine("- 这次新的判断：")
@@ -507,6 +511,7 @@ private fun buildResearchReminderContext(
                 label = researchLead.label,
                 validationStep = validationStep,
                 followUpReason = researchLead.followUpReason,
+                executionPrompt = researchLead.executionPrompt,
             )
         }
 }
