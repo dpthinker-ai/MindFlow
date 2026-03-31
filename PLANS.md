@@ -110,6 +110,7 @@ Planned items:
   - followed directions surface a current focus line
   - followed directions now also explain why to continue now and the smallest next step
   - can jump directly from a followed direction to its current focus note
+  - editor now hints when a record appears to belong to an existing direction
   - thread focus and lightweight promotion
   - thread-level weekly review
 
@@ -200,9 +201,9 @@ Planned items:
 
 Next best order:
 
-1. external research capture back into notes
-2. lighter Flow-to-thread action handoff
-3. richer note-to-thread capture hints
+1. lighter Flow-to-thread action handoff
+2. richer research surfaces outside the thread page
+3. grouped validation loops for research themes
 
 ## Success Criteria
 

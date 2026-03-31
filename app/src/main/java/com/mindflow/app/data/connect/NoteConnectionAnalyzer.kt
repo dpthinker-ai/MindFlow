@@ -136,6 +136,40 @@ object NoteConnectionAnalyzer {
         return if (folderCount >= 2) "folder:$folderKey" else null
     }
 
+    fun bestThreadForDraft(
+        currentNoteId: Long?,
+        topic: String,
+        content: String,
+        folderKey: String?,
+        tags: List<String>,
+        notes: List<NoteEntity>,
+    ): ThemeThread? {
+        val activeNotes = notes.filter { !it.isArchived && it.id != currentNoteId }
+        if (activeNotes.size < 2) return null
+
+        val currentTags = tags.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val currentFolder = MindFolderCatalog.normalizedKey(folderKey)
+        val currentTokens = tokenize(topic).union(tokenize(content.take(280)))
+
+        val bestKey = buildThemeThreads(activeNotes, limit = 8)
+            .map { thread ->
+                val threadNotes = notesForThread(thread.key, activeNotes)
+                val score = scoreDraftAgainstThread(
+                    thread = thread,
+                    threadNotes = threadNotes,
+                    currentTags = currentTags,
+                    currentFolder = currentFolder,
+                    currentTokens = currentTokens,
+                )
+                thread.key to score
+            }
+            .filter { it.second > 0 }
+            .maxByOrNull { it.second }
+            ?.first
+
+        return bestKey?.let { threadFromKey(it, activeNotes) }
+    }
+
     fun notesForThread(
         threadKey: String,
         notes: List<NoteEntity>,
@@ -196,6 +230,36 @@ object NoteConnectionAnalyzer {
             .map { it.value.trim() }
             .filter { it.isNotBlank() }
             .toSet()
+    }
+
+    private fun scoreDraftAgainstThread(
+        thread: ThemeThread,
+        threadNotes: List<NoteEntity>,
+        currentTags: Set<String>,
+        currentFolder: String?,
+        currentTokens: Set<String>,
+    ): Int {
+        val tagScore = thread.key
+            .takeIf { it.startsWith("tag:") }
+            ?.removePrefix("tag:")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() && it in currentTags }
+            ?.let { 8 }
+            ?: 0
+        val folderScore = thread.key
+            .takeIf { it.startsWith("folder:") }
+            ?.removePrefix("folder:")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() && it == currentFolder }
+            ?.let { 6 }
+            ?: 0
+        val threadTokens = threadNotes
+            .flatMap { note ->
+                tokenize(note.topic).union(tokenize(note.content.take(220))).toList()
+            }
+            .toSet()
+        val sharedTokenScore = currentTokens.intersect(threadTokens).size.coerceAtMost(6)
+        return tagScore + folderScore + sharedTokenScore
     }
 
     private fun focusLineFor(notes: List<NoteEntity>): String {

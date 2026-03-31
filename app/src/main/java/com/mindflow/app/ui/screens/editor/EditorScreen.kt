@@ -105,6 +105,7 @@ fun EditorRoute(
     initialTags: List<String> = emptyList(),
     autoStartVoiceInput: Boolean = false,
     onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
     onBack: () -> Unit,
     onSavedNewNote: () -> Unit,
 ) {
@@ -188,6 +189,28 @@ fun EditorRoute(
             )
         }
     }
+    val suggestedThread = remember(
+        uiState.isLoading,
+        uiState.noteId,
+        uiState.topic,
+        uiState.content,
+        uiState.folderKey,
+        uiState.tags,
+        allNotes,
+    ) {
+        if (uiState.isLoading) {
+            null
+        } else {
+            NoteConnectionAnalyzer.bestThreadForDraft(
+                currentNoteId = uiState.noteId,
+                topic = uiState.topic,
+                content = uiState.content,
+                folderKey = uiState.folderKey,
+                tags = uiState.tags,
+                notes = allNotes,
+            )
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -229,6 +252,8 @@ fun EditorRoute(
         onRetriggerFolder = viewModel::retriggerFolderClassification,
         onRetriggerTopic = viewModel::retriggerTopicExtraction,
         onRetriggerTag = viewModel::retriggerTagExtraction,
+        suggestedThread = suggestedThread,
+        onOpenSuggestedThread = onOpenThread,
         relatedNotes = relatedNotes,
         onOpenRelatedNote = onOpenNote,
     )
@@ -259,6 +284,8 @@ private fun EditorScreen(
     onRetriggerFolder: () -> Unit,
     onRetriggerTopic: () -> Unit,
     onRetriggerTag: () -> Unit,
+    suggestedThread: com.mindflow.app.data.connect.ThemeThread?,
+    onOpenSuggestedThread: (String) -> Unit,
     relatedNotes: List<NoteEntity>,
     onOpenRelatedNote: (Long) -> Unit,
 ) {
@@ -596,6 +623,47 @@ private fun EditorScreen(
 
                 PanelCard {
                     SectionHeader(title = "整理")
+
+                    if (suggestedThread != null) {
+                        Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(
+                            color = WhiteGlass.copy(alpha = 0.9f),
+                            shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, BorderSoft),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = "这条记录更像是在「${suggestedThread.title}」这条主线里。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                if (suggestedThread.focusLine.isNotBlank()) {
+                                    Text(
+                                        text = suggestedThread.focusLine,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AccentBlue,
+                                    )
+                                }
+                                if (uiState.hasUnsavedChanges) {
+                                    Text(
+                                        text = "保存后可直接打开这条方向。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSoft,
+                                    )
+                                } else {
+                                    GhostActionButton(
+                                        text = "打开方向",
+                                        onClick = { onOpenSuggestedThread(suggestedThread.key) },
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Text("文件夹", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(

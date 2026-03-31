@@ -325,6 +325,7 @@ fun MindFlowApp(
                     initialTags = captureSeed.initialTags,
                     autoStartVoiceInput = captureSeed.autoStartVoiceInput,
                     onOpenNote = openNoteSafely,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onBack = {
                         captureSeeds.remove(seedId)
                         navController.popBackStack()
@@ -356,6 +357,7 @@ fun MindFlowApp(
                     initialTags = emptyList(),
                     autoStartVoiceInput = false,
                     onOpenNote = openNoteSafely,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onBack = { navController.popBackStack() },
                     onSavedNewNote = { navController.popBackStack() },
                 )
