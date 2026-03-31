@@ -108,6 +108,8 @@ Planned items:
   - thread detail page
   - followed directions in Flow
   - followed directions surface a current focus line
+  - followed directions now also explain why to continue now and the smallest next step
+  - can jump directly from a followed direction to its current focus note
   - thread focus and lightweight promotion
   - thread-level weekly review
 
@@ -197,10 +199,9 @@ Planned items:
 Next best order:
 
 1. external research capture back into notes
-2. thread follow-up summaries outside the thread page
-3. thread research clustering
-4. lighter Flow-to-thread action handoff
-5. richer note-to-thread capture hints
+2. thread research clustering
+3. lighter Flow-to-thread action handoff
+4. richer note-to-thread capture hints
 
 ## Success Criteria
 

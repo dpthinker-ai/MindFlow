@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.ui.screens.flow.FollowedDirectionSummary
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
@@ -38,6 +40,7 @@ import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
+import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -187,13 +190,14 @@ private fun FlowScreen(
                         weeklyItems = uiState.weeklyReviewItems,
                         weeklySource = uiState.weeklyReviewSource,
                         weeklyStatsLine = uiState.weeklyReviewStatsLine,
-                        followedThreads = uiState.followedThreads,
+                        followedDirections = uiState.followedDirections,
                         threads = uiState.themeThreads,
                         suggestions = uiState.fusionSuggestions,
                         fusionSource = uiState.fusionSource,
                         highlightReview = highlightReview,
                         highlightConnection = highlightDirection,
                         onOpenThread = onOpenThread,
+                        onOpenNote = onOpenNote,
                     )
                 }
             }
@@ -206,19 +210,20 @@ private fun DirectionCard(
     weeklyItems: List<WeeklyReviewItem>,
     weeklySource: DailyBriefSource,
     weeklyStatsLine: String,
-    followedThreads: List<ThemeThread>,
+    followedDirections: List<FollowedDirectionSummary>,
     threads: List<ThemeThread>,
     suggestions: List<String>,
     fusionSource: DailyBriefSource,
     highlightReview: Boolean,
     highlightConnection: Boolean,
     onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
 ) {
     PanelCard {
         SectionHeader(
             title = "方向",
             headline = when {
-                followedThreads.isNotEmpty() -> "已关注 ${followedThreads.size} 条"
+                followedDirections.isNotEmpty() -> "已关注 ${followedDirections.size} 条"
                 threads.isNotEmpty() -> "${threads.size} 条主题"
                 suggestions.isNotEmpty() -> "有新的建议"
                 else -> null
@@ -231,24 +236,26 @@ private fun DirectionCard(
             highlighted = highlightReview,
         )
         ConnectionCard(
-            followedThreads = followedThreads,
+            followedDirections = followedDirections,
             threads = threads,
             suggestions = suggestions,
             source = fusionSource,
             highlighted = highlightConnection,
             onOpenThread = onOpenThread,
+            onOpenNote = onOpenNote,
         )
     }
 }
 
 @Composable
 private fun ConnectionCard(
-    followedThreads: List<ThemeThread>,
+    followedDirections: List<FollowedDirectionSummary>,
     threads: List<ThemeThread>,
     suggestions: List<String>,
     source: DailyBriefSource,
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
@@ -269,23 +276,23 @@ private fun ConnectionCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSoft,
             )
-            if (followedThreads.isNotEmpty()) {
+            if (followedDirections.isNotEmpty()) {
                 Text(
                     text = "关注方向",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSoft,
                 )
-                followedThreads.forEach { thread ->
-                    ThreadRow(
-                        thread = thread,
-                        showFocus = true,
+                followedDirections.forEach { summary ->
+                    FollowedDirectionRow(
+                        summary = summary,
                         onOpenThread = onOpenThread,
+                        onOpenNote = onOpenNote,
                     )
                 }
             }
             if (threads.isNotEmpty()) {
                 Text(
-                    text = if (followedThreads.isNotEmpty()) "更多线索" else "主题线程",
+                    text = if (followedDirections.isNotEmpty()) "更多线索" else "主题线程",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSoft,
                 )
@@ -311,12 +318,78 @@ private fun ConnectionCard(
                     )
                 }
             }
-            if (threads.isEmpty() && suggestions.isEmpty()) {
+            if (followedDirections.isEmpty() && threads.isEmpty() && suggestions.isEmpty()) {
                 Text(
                     text = "记录再多一点，这里就会帮你把反复出现的方向串起来。",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FollowedDirectionRow(
+    summary: FollowedDirectionSummary,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable { onOpenThread(summary.thread.key) },
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "${summary.thread.title} · ${summary.thread.noteCount} 条",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            if (summary.thread.focusLine.isNotBlank()) {
+                Text(
+                    text = summary.thread.focusLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = summary.whyNow,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (summary.nextStep.isNotBlank()) {
+                Text(
+                    text = "先做这一步：${summary.nextStep}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMain,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GhostActionButton(
+                    text = "打开方向",
+                    onClick = { onOpenThread(summary.thread.key) },
+                )
+                summary.focusNoteId?.let { noteId ->
+                    GhostActionButton(
+                        text = "打开焦点",
+                        onClick = { onOpenNote(noteId) },
+                    )
+                }
             }
         }
     }

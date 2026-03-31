@@ -140,8 +140,9 @@ Current status:
 - thread-level external research memory: first version implemented
 - thread-level research-to-action summaries: first version implemented
 - widget-level capture polish: first version implemented
+- thread follow-up summaries outside the thread page: first version implemented
 
 Next strongest direction:
 
-- thread follow-up summaries outside the thread page
 - thread research clustering
+- lighter Flow-to-thread action handoff

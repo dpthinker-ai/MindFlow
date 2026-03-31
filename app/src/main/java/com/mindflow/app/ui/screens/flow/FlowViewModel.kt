@@ -51,10 +51,17 @@ data class FlowUiState(
     val weeklyReviewItems: List<WeeklyReviewItem> = emptyList(),
     val weeklyReviewSource: DailyBriefSource = DailyBriefSource.RULE,
     val weeklyReviewStatsLine: String = "",
-    val followedThreads: List<ThemeThread> = emptyList(),
+    val followedDirections: List<FollowedDirectionSummary> = emptyList(),
     val themeThreads: List<ThemeThread> = emptyList(),
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
+)
+
+data class FollowedDirectionSummary(
+    val thread: ThemeThread,
+    val focusNoteId: Long? = null,
+    val whyNow: String = "",
+    val nextStep: String = "",
 )
 
 class FlowViewModel(
@@ -78,7 +85,7 @@ class FlowViewModel(
         val staleSource: DailyBriefSource,
         val explorationPrompts: List<String>,
         val explorationSource: DailyBriefSource,
-        val followedThreads: List<ThemeThread>,
+        val followedDirections: List<FollowedDirectionSummary>,
         val themeThreads: List<ThemeThread>,
     )
 
@@ -97,9 +104,20 @@ class FlowViewModel(
         val today = LocalDate.now(zoneId)
         val activeNotes = allNotes.filter { !it.isArchived }
         val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
-        val followedThreads = threadPreferences.followedThreadKeys
-            .map { threadKey -> NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes) }
-            .sortedWith(compareByDescending<ThemeThread> { it.noteCount }.thenBy { it.title })
+        val followedDirections = threadPreferences.followedThreadKeys
+            .mapNotNull { threadKey ->
+                val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
+                if (threadNotes.isEmpty()) {
+                    null
+                } else {
+                    val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
+                    buildFollowedDirectionSummary(thread, threadNotes)
+                }
+            }
+            .sortedWith(
+                compareByDescending<FollowedDirectionSummary> { it.thread.noteCount }
+                    .thenBy { it.thread.title },
+            )
         val continueNote = pickContinueNote(activeNotes)
         val staleNote = pickStaleNote(activeNotes, continueNote?.id)
         val hasReconnectMatch = staleNote != null &&
@@ -127,9 +145,9 @@ class FlowViewModel(
             staleSource = if (hasReconnectMatch) reconnectState.source else DailyBriefSource.RULE,
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
-            followedThreads = followedThreads,
+            followedDirections = followedDirections,
             themeThreads = analyzedThreads.filterNot { candidate ->
-                followedThreads.any { it.key == candidate.key }
+                followedDirections.any { it.thread.key == candidate.key }
             },
         )
     }
@@ -156,7 +174,7 @@ class FlowViewModel(
             weeklyReviewItems = weeklyReviewState.items,
             weeklyReviewSource = weeklyReviewState.source,
             weeklyReviewStatsLine = weeklyReviewState.statsLine,
-            followedThreads = primary.followedThreads,
+            followedDirections = primary.followedDirections,
             themeThreads = primary.themeThreads,
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
@@ -204,6 +222,20 @@ class FlowViewModel(
             }
         }
     }
+}
+
+private fun buildFollowedDirectionSummary(
+    thread: ThemeThread,
+    notes: List<NoteEntity>,
+): FollowedDirectionSummary {
+    val focusNote = pickContinueNote(notes)
+        ?: notes.maxByOrNull { it.updatedAt }
+    return FollowedDirectionSummary(
+        thread = thread,
+        focusNoteId = focusNote?.id,
+        whyNow = whyNowForThread(thread, notes, focusNote),
+        nextStep = nextStepForThread(thread, focusNote),
+    )
 }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
@@ -280,6 +312,46 @@ private fun staleNextStepFallback(note: NoteEntity?): String =
         note.folderName() == "健康" -> "先把它变成今天就能执行的一次小动作，再看后续反馈。"
         else -> "先补一条更具体的记录，把这个想法重新压回到可推进的状态。"
     }
+
+private fun whyNowForThread(
+    thread: ThemeThread,
+    notes: List<NoteEntity>,
+    focusNote: NoteEntity?,
+): String {
+    focusNote ?: return "这条方向已经形成了连续记录，值得先接着整理成一条主线。"
+    val repeatedTag = notes
+        .flatMap { it.tags.distinct() }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+    return when (focusNote.status) {
+        NoteStatus.IN_PROGRESS -> "这条方向已经在推进里，顺着「${focusNote.topic.ifBlank { thread.title }}」继续最省力。"
+        NoteStatus.IDEA -> when {
+            repeatedTag != null -> "它和你反复记录的「$repeatedTag」是同一条线，现在最适合压成动作。"
+            notes.size >= 3 -> "这条方向已经连续出现 ${notes.size} 次，再拖下去只会重新散开。"
+            else -> "这条方向刚冒出新线索，趁上下文还热，先把它压成一小步。"
+        }
+        NoteStatus.DONE -> "这里已经有做成的结果，可以沿着结果外扩，而不是从头再起一条线。"
+    }
+}
+
+private fun nextStepForThread(
+    thread: ThemeThread,
+    focusNote: NoteEntity?,
+): String {
+    focusNote ?: return "先补一条更具体的记录，把这个方向重新压回到可推进状态。"
+    return when (focusNote.status) {
+        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再写一个今天能验证的小动作。"
+        NoteStatus.IDEA -> when (focusNote.folderName()) {
+            "工作" -> "先把它压成一个待验证的问题，再补一条更具体的工作记录。"
+            "项目" -> "先写出最小可验证版本，再看要不要继续扩。"
+            "健康" -> "先把它改成今天能执行的一次小实验，再观察反馈。"
+            else -> "先把「${focusNote.topic.ifBlank { thread.title }}」压成一个今天能动手的小动作。"
+        }
+        NoteStatus.DONE -> "先补一条结果延展记录，说明这个结果还能往哪一步继续放大。"
+    }
+}
 
 private fun NoteEntity.folderName(): String? =
     com.mindflow.app.data.model.MindFolderCatalog.fromKey(folderKey)?.name
