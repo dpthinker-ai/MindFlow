@@ -145,8 +145,10 @@ Current status:
 - richer note-to-thread capture hints: first version implemented
 - richer research surfaces outside the thread page: first version implemented
 - grouped validation loops for research themes: first version implemented
+- lighter Flow-to-thread action handoff: first version implemented
+- lighter capture-back from research loops: first version implemented
 
 Next strongest direction:
 
-- lighter Flow-to-thread action handoff
 - thread-aware research follow-up summaries
+- thread-aware research-to-action carry-over in reminders

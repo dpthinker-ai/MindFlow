@@ -29,7 +29,6 @@ import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
-import com.mindflow.app.ui.screens.flow.FollowedDirectionSummary
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
@@ -38,6 +37,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.GhostActionButton
@@ -46,6 +46,7 @@ import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.noteStatusAccent
+import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
@@ -66,6 +67,7 @@ fun FlowRoute(
     initialFocus: FlowFocus? = null,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     val viewModel: FlowViewModel = viewModel(
         factory = FlowViewModel.factory(
@@ -84,6 +86,7 @@ fun FlowRoute(
         focus = initialFocus,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
+        onCreateCapture = onCreateCapture,
     )
 }
 
@@ -93,6 +96,7 @@ private fun FlowScreen(
     focus: FlowFocus?,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val highlightToday = focus == FlowFocus.TODAY
@@ -199,6 +203,7 @@ private fun FlowScreen(
                         highlightConnection = highlightDirection,
                         onOpenThread = onOpenThread,
                         onOpenNote = onOpenNote,
+                        onCreateCapture = onCreateCapture,
                     )
                 }
             }
@@ -219,6 +224,7 @@ private fun DirectionCard(
     highlightConnection: Boolean,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     PanelCard {
         SectionHeader(
@@ -244,6 +250,7 @@ private fun DirectionCard(
             highlighted = highlightConnection,
             onOpenThread = onOpenThread,
             onOpenNote = onOpenNote,
+            onCreateCapture = onCreateCapture,
         )
     }
 }
@@ -257,6 +264,7 @@ private fun ConnectionCard(
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
@@ -288,6 +296,7 @@ private fun ConnectionCard(
                         summary = summary,
                         onOpenThread = onOpenThread,
                         onOpenNote = onOpenNote,
+                        onCreateCapture = onCreateCapture,
                     )
                 }
             }
@@ -335,6 +344,7 @@ private fun FollowedDirectionRow(
     summary: FollowedDirectionSummary,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     Surface(
         modifier = Modifier.clickable { onOpenThread(summary.thread.key) },
@@ -408,21 +418,66 @@ private fun FollowedDirectionRow(
                 }
             }
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                GhostActionButton(
-                    text = "打开方向",
-                    onClick = { onOpenThread(summary.thread.key) },
+                ActionButton(
+                    text = "继续推进",
+                    onClick = {
+                        summary.focusNoteId?.let(onOpenNote) ?: onOpenThread(summary.thread.key)
+                    },
+                    modifier = Modifier.weight(1f),
                 )
-                summary.focusNoteId?.let { noteId ->
+                if (summary.researchStep.isNotBlank()) {
                     GhostActionButton(
-                        text = "打开焦点",
-                        onClick = { onOpenNote(noteId) },
+                        text = "记验证",
+                        onClick = { onCreateCapture(summary.toResearchCaptureSeed()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    GhostActionButton(
+                        text = "看方向",
+                        onClick = { onOpenThread(summary.thread.key) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
         }
     }
+}
+
+private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
+    val cleanTitle = thread.title.removePrefix("#").trim()
+    val initialFolderKey = thread.key
+        .takeIf { it.startsWith("folder:") }
+        ?.removePrefix("folder:")
+        ?.trim()
+        ?.ifBlank { null }
+    val initialTags = thread.key
+        .takeIf { it.startsWith("tag:") }
+        ?.removePrefix("tag:")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::listOf)
+        .orEmpty()
+    return CaptureSeed(
+        initialTopic = "$cleanTitle · 验证动作",
+        initialContent = buildString {
+            appendLine("围绕「$cleanTitle」补一条验证记录：")
+            appendLine("- 为什么现在接：$whyNow")
+            nextStep.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 当前最小动作：$it")
+            }
+            researchLabel.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 研究线索：$it")
+            }
+            appendLine("- 先验证：$researchStep")
+            appendLine("- 我准备怎么验证：")
+            appendLine("- 看什么结果算成立：")
+        },
+        initialFolderKey = initialFolderKey,
+        initialTags = initialTags,
+    )
 }
 
 @Composable

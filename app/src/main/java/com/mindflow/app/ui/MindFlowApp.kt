@@ -228,6 +228,7 @@ fun MindFlowApp(
                     initialFocus = focus,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
+                    onCreateCapture = ::openCapture,
                 )
             }
 
