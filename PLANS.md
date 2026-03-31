@@ -180,6 +180,7 @@ Planned items:
   - grouped research themes now carry lightweight validation loops
   - clustered research can be captured back into a new note as a more stable thread judgment
   - followed directions in Flow can now turn a research validation loop directly into a seeded note
+  - thread workspace can now directly capture the most valuable clustered validation loop into a dedicated note
 
 2. Topic maps
 - not heavy graph-first UI
@@ -207,8 +208,8 @@ Planned items:
 Next best order:
 
 1. thread-aware research follow-up summaries
-2. richer capture-back from clustered research
-3. reminder summaries that explain why a validation step matters now
+2. reminder summaries that explain why a validation step matters now
+3. research-derived prompts that bridge from validation back into execution
 
 ## Success Criteria
 
