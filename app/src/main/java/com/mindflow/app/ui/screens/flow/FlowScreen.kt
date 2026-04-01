@@ -29,7 +29,9 @@ import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThemeThread
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
@@ -64,6 +66,8 @@ fun FlowRoute(
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
+    threadExecutionPlanner: ThreadExecutionPlanner,
+    externalResearchPlanner: ExternalResearchPlanner,
     initialFocus: FlowFocus? = null,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -78,6 +82,8 @@ fun FlowRoute(
             weeklyReviewPlanner = weeklyReviewPlanner,
             fusionSuggestionPlanner = fusionSuggestionPlanner,
             staleReconnectPlanner = staleReconnectPlanner,
+            threadExecutionPlanner = threadExecutionPlanner,
+            externalResearchPlanner = externalResearchPlanner,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -372,23 +378,7 @@ private fun FollowedDirectionRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = summary.whyNow,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (summary.nextStep.isNotBlank()) {
-                Text(
-                    text = "先做这一步：${summary.nextStep}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMain,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (summary.researchStep.isNotBlank()) {
+            if (summary.summary.isNotBlank() || summary.blocker.isNotBlank() || summary.nextStep.isNotBlank()) {
                 Surface(
                     color = AccentBlue.copy(alpha = 0.08f),
                     shape = CardShape,
@@ -401,31 +391,79 @@ private fun FollowedDirectionRow(
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         Text(
-                            text = if (summary.researchLabel.isNotBlank()) "研究线索 · ${summary.researchLabel}" else "研究线索",
+                            text = if (summary.source == DailyBriefSource.AI) "当前执行 · AI" else "当前执行",
                             style = MaterialTheme.typography.labelSmall,
                             color = AccentBlue,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            text = "先验证：${summary.researchStep}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMain,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        summary.researchWhyNow
+                        summary.summary
                             .takeIf { it.isNotBlank() }
-                            ?.let { reason ->
+                            ?.let { text ->
                                 Text(
-                                    text = reason,
+                                    text = text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMain,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        summary.blocker
+                            .takeIf { it.isNotBlank() }
+                            ?.let { blocker ->
+                                Text(
+                                    text = "卡点：$blocker",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSoft,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                        summary.researchExecution
+                        summary.whyNow
+                            .takeIf { it.isNotBlank() }
+                            ?.let { reason ->
+                                Text(
+                                    text = "为什么现在：$reason",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        summary.nextStep
+                            .takeIf { it.isNotBlank() }
+                            ?.let { action ->
+                                Text(
+                                    text = "先做：$action",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMain,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        summary.validationStep
+                            .takeIf { it.isNotBlank() }
+                            ?.let { validation ->
+                                Text(
+                                    text = "先验证：$validation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMain,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        summary.validationReason
+                            .takeIf { it.isNotBlank() }
+                            ?.let { reason ->
+                                Text(
+                                    text = "为什么现在做：$reason",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        summary.postValidationAction
                             .takeIf { it.isNotBlank() }
                             ?.let { execution ->
                                 Text(
@@ -436,6 +474,43 @@ private fun FollowedDirectionRow(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                    }
+                }
+            }
+            if (
+                summary.outsideAngle.isNotBlank() ||
+                summary.opportunityGap.isNotBlank() ||
+                summary.contrarianQuestion.isNotBlank() ||
+                summary.externalHypothesis.isNotBlank()
+            ) {
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.78f),
+                    shape = CardShape,
+                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = if (summary.source == DailyBriefSource.AI) "AI 外部视角" else "外部视角",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                        summary.outsideAngle.takeIf { it.isNotBlank() }?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodySmall, color = TextMain, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
+                            Text(text = "机会缺口：$it", style = MaterialTheme.typography.bodySmall, color = TextSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        summary.contrarianQuestion.takeIf { it.isNotBlank() }?.let {
+                            Text(text = "反问：$it", style = MaterialTheme.typography.bodySmall, color = TextSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        summary.externalHypothesis.takeIf { it.isNotBlank() }?.let {
+                            Text(text = "外部假设：$it", style = MaterialTheme.typography.bodySmall, color = TextMain, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
@@ -450,7 +525,7 @@ private fun FollowedDirectionRow(
                     },
                     modifier = Modifier.weight(1f),
                 )
-                if (summary.researchStep.isNotBlank()) {
+                if (summary.validationStep.isNotBlank()) {
                     GhostActionButton(
                         text = "记验证",
                         onClick = { onCreateCapture(summary.toResearchCaptureSeed()) },
@@ -490,14 +565,20 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
             nextStep.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 当前最小动作：$it")
             }
-            researchLabel.takeIf { it.isNotBlank() }?.let {
-                appendLine("- 研究线索：$it")
+            outsideAngle.takeIf { it.isNotBlank() }?.let {
+                appendLine("- AI 外部视角：$it")
             }
-            appendLine("- 先验证：$researchStep")
-            researchWhyNow.takeIf { it.isNotBlank() }?.let {
+            opportunityGap.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 机会缺口：$it")
+            }
+            contrarianQuestion.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 反问：$it")
+            }
+            appendLine("- 先验证：$validationStep")
+            validationReason.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 为什么现在做：$it")
             }
-            researchExecution.takeIf { it.isNotBlank() }?.let {
+            postValidationAction.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 如果成立，下一步：$it")
             }
             appendLine("- 我准备怎么验证：")

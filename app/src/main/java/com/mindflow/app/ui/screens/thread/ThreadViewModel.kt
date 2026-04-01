@@ -6,19 +6,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.brief.DailyBriefSource
+import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ResearchCluster
 import com.mindflow.app.data.connect.ThreadResearchAnalyzer
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
-import com.mindflow.app.data.topic.AiChatResult
-import com.mindflow.app.data.topic.AiServiceClient
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,13 +49,16 @@ data class ThreadUiState(
     val weeklyLines: List<String> = emptyList(),
     val researchOutsideAngle: String = "",
     val researchGap: String = "",
+    val researchContrarianQuestion: String = "",
+    val researchExternalHypothesis: String = "",
     val researchQueries: List<String> = emptyList(),
     val researchSource: DailyBriefSource = DailyBriefSource.RULE,
-    val researchMeaning: String = "",
-    val researchNextAction: String = "",
-    val researchActionSource: DailyBriefSource = DailyBriefSource.RULE,
     val focusNote: NoteEntity? = null,
     val focusReason: String = "",
+    val executionWhyNow: String = "",
+    val validationStep: String = "",
+    val validationReason: String = "",
+    val postValidationAction: String = "",
     val insightSource: DailyBriefSource = DailyBriefSource.RULE,
     val isRefreshingInsights: Boolean = false,
     val isFollowed: Boolean = false,
@@ -76,9 +78,9 @@ sealed interface ThreadEvent {
 
 class ThreadViewModel(
     private val noteRepository: NoteRepository,
-    private val aiSettingsRepository: AiSettingsRepository,
     private val threadPreferencesRepository: ThreadPreferencesRepository,
-    private val aiServiceClient: AiServiceClient,
+    private val threadExecutionPlanner: ThreadExecutionPlanner,
+    private val externalResearchPlanner: ExternalResearchPlanner,
     private val threadKey: String,
 ) : ViewModel() {
     private data class ThreadInsightState(
@@ -86,13 +88,16 @@ class ThreadViewModel(
         val summary: String = "",
         val blocker: String = "",
         val nextStep: String = "",
+        val executionWhyNow: String = "",
+        val validationStep: String = "",
+        val validationReason: String = "",
+        val postValidationAction: String = "",
         val researchOutsideAngle: String = "",
         val researchGap: String = "",
+        val researchContrarianQuestion: String = "",
+        val researchExternalHypothesis: String = "",
         val researchQueries: List<String> = emptyList(),
         val researchSource: DailyBriefSource = DailyBriefSource.RULE,
-        val researchMeaning: String = "",
-        val researchNextAction: String = "",
-        val researchActionSource: DailyBriefSource = DailyBriefSource.RULE,
         val source: DailyBriefSource = DailyBriefSource.RULE,
         val isLoading: Boolean = false,
     )
@@ -131,13 +136,16 @@ class ThreadViewModel(
             weeklyLines = weeklyReview.lines,
             researchOutsideAngle = insight.researchOutsideAngle,
             researchGap = insight.researchGap,
+            researchContrarianQuestion = insight.researchContrarianQuestion,
+            researchExternalHypothesis = insight.researchExternalHypothesis,
             researchQueries = insight.researchQueries,
             researchSource = insight.researchSource,
-            researchMeaning = insight.researchMeaning,
-            researchNextAction = insight.researchNextAction,
-            researchActionSource = insight.researchActionSource,
             focusNote = focusNote,
             focusReason = focusReasonFor(focusNote),
+            executionWhyNow = insight.executionWhyNow,
+            validationStep = insight.validationStep,
+            validationReason = insight.validationReason,
+            postValidationAction = insight.postValidationAction,
             insightSource = insight.source,
             isRefreshingInsights = insight.isLoading,
             isFollowed = isFollowed,
@@ -210,284 +218,29 @@ class ThreadViewModel(
             _insightState.value = ThreadInsightState(signature = signature)
             return
         }
-        if (current.signature == signature && (current.summary.isNotBlank() || current.nextStep.isNotBlank())) {
+        if (current.signature == signature && (current.summary.isNotBlank() || current.researchOutsideAngle.isNotBlank())) {
             return
         }
-        refreshInsights(notes, signature)
-    }
-
-    private suspend fun refreshInsights(
-        notes: List<NoteEntity>,
-        signature: String,
-    ) {
         _insightState.value = _insightState.value.copy(isLoading = true, signature = signature)
-        val fallback = buildRuleInsights(notes)
-        val settings = aiSettingsRepository.getCurrent()
-        val dayKey = LocalDate.now().toString()
-
-        if (settings.aiEnabled && settings.isConfigured && notes.isNotEmpty()) {
-            aiSettingsRepository.recordUsage(
-                requestIncrement = 1,
-                dayKey = dayKey,
-            )
-            when (val result = aiServiceClient.generateThreadWorkspace(settings, buildAiContext(notes))) {
-                is AiChatResult.Success -> {
-                    val lines = parseAiLines(result.content)
-                    if (lines.isNotEmpty()) {
-                        aiSettingsRepository.recordUsage(
-                            successIncrement = 1,
-                            tokenIncrement = result.totalTokens ?: 0,
-                            dayKey = dayKey,
-                        )
-                        _insightState.value = ThreadInsightState(
-                            signature = signature,
-                            summary = lines.getOrElse(0) { fallback.summary },
-                            blocker = lines.getOrElse(1) { fallback.blocker },
-                            nextStep = lines.getOrElse(2) { fallback.nextStep },
-                            researchOutsideAngle = fallback.researchOutsideAngle,
-                            researchGap = fallback.researchGap,
-                            researchQueries = fallback.researchQueries,
-                            researchSource = fallback.researchSource,
-                            source = DailyBriefSource.AI,
-                            isLoading = false,
-                        )
-                        refreshResearch(notes, signature, preserveInsight = true)
-                        return
-                    }
-                }
-
-                is AiChatResult.Failure -> {
-                    // Fall back to rule-based insights.
-                }
-            }
-        }
-
+        val execution = threadExecutionPlanner.summarize(threadKey, notes)
+        val research = externalResearchPlanner.summarize(threadKey, notes)
         _insightState.value = ThreadInsightState(
             signature = signature,
-            summary = fallback.summary,
-            blocker = fallback.blocker,
-            nextStep = fallback.nextStep,
-            researchOutsideAngle = fallback.researchOutsideAngle,
-            researchGap = fallback.researchGap,
-            researchQueries = fallback.researchQueries,
-            researchSource = fallback.researchSource,
-            source = DailyBriefSource.RULE,
+            summary = execution.summary,
+            blocker = execution.blocker,
+            nextStep = execution.nextStep,
+            executionWhyNow = execution.whyNow,
+            validationStep = execution.validationStep,
+            validationReason = execution.validationReason,
+            postValidationAction = execution.postValidationAction,
+            researchOutsideAngle = research.outsideAngle,
+            researchGap = research.opportunityGap,
+            researchContrarianQuestion = research.contrarianQuestion,
+            researchExternalHypothesis = research.externalHypothesis,
+            researchQueries = research.queries,
+            researchSource = research.source,
+            source = execution.source,
             isLoading = false,
-        )
-        refreshResearch(notes, signature, preserveInsight = true)
-    }
-
-    private fun buildAiContext(notes: List<NoteEntity>): String {
-        val latestNotes = notes.sortedByDescending { it.updatedAt }.take(10)
-        val tags = notes
-            .flatMap { it.tags.distinct() }
-            .groupingBy { it }
-            .eachCount()
-            .entries
-            .sortedByDescending { it.value }
-            .take(5)
-            .joinToString("、") { "${it.key}(${it.value})" }
-        return buildString {
-            appendLine("你正在为一个长期方向生成线程工作台。")
-            appendLine("线程标题：${NoteConnectionAnalyzer.titleForThread(threadKey)}")
-            appendLine("总记录：${notes.size} 条；想法${notes.count { it.status == NoteStatus.IDEA }}条，进行中${notes.count { it.status == NoteStatus.IN_PROGRESS }}条，已实现${notes.count { it.status == NoteStatus.DONE }}条。")
-            if (tags.isNotBlank()) {
-                appendLine("高频标签：$tags")
-            }
-            appendLine("最近记录：")
-            latestNotes.forEach { note ->
-                appendLine("${note.topic.ifBlank { "未命名记录" }}｜${note.status.label}｜${note.content.compactPreview(120)}")
-            }
-        }
-    }
-
-    private suspend fun refreshResearch(
-        notes: List<NoteEntity>,
-        signature: String,
-        preserveInsight: Boolean,
-    ) {
-        val fallback = buildRuleResearch(notes)
-        val settings = aiSettingsRepository.getCurrent()
-        val dayKey = LocalDate.now().toString()
-
-        if (settings.aiEnabled && settings.isConfigured && notes.isNotEmpty()) {
-            aiSettingsRepository.recordUsage(
-                requestIncrement = 1,
-                dayKey = dayKey,
-            )
-            when (val result = aiServiceClient.generateResearchBrief(settings, buildAiResearchContext(notes))) {
-                is AiChatResult.Success -> {
-                    val lines = parseAiLines(result.content)
-                    if (lines.size >= 3) {
-                        aiSettingsRepository.recordUsage(
-                            successIncrement = 1,
-                            tokenIncrement = result.totalTokens ?: 0,
-                            dayKey = dayKey,
-                        )
-                        _insightState.value = _insightState.value.copy(
-                            signature = signature,
-                            researchOutsideAngle = lines.getOrElse(0) { fallback.outsideAngle },
-                            researchGap = lines.getOrElse(1) { fallback.gap },
-                            researchQueries = lines.drop(2).take(2),
-                            researchSource = DailyBriefSource.AI,
-                            isLoading = if (preserveInsight) false else _insightState.value.isLoading,
-                        )
-                        refreshResearchAction(notes, signature)
-                        return
-                    }
-                }
-
-                is AiChatResult.Failure -> {
-                    // Fall back to rule-based research.
-                }
-            }
-        }
-
-        _insightState.value = _insightState.value.copy(
-            signature = signature,
-            researchOutsideAngle = fallback.outsideAngle,
-            researchGap = fallback.gap,
-            researchQueries = fallback.queries,
-            researchSource = DailyBriefSource.RULE,
-            researchMeaning = fallback.meaning,
-            researchNextAction = fallback.nextAction,
-            researchActionSource = DailyBriefSource.RULE,
-            isLoading = if (preserveInsight) false else _insightState.value.isLoading,
-        )
-    }
-
-    private suspend fun refreshResearchAction(
-        notes: List<NoteEntity>,
-        signature: String,
-    ) {
-        val fallback = buildRuleResearch(notes)
-        val settings = aiSettingsRepository.getCurrent()
-        val dayKey = LocalDate.now().toString()
-
-        if (settings.aiEnabled && settings.isConfigured && notes.isNotEmpty()) {
-            aiSettingsRepository.recordUsage(
-                requestIncrement = 1,
-                dayKey = dayKey,
-            )
-            when (val result = aiServiceClient.generateResearchActionSummary(settings, buildAiResearchContext(notes))) {
-                is AiChatResult.Success -> {
-                    val lines = parseAiLines(result.content, limit = 2)
-                    if (lines.size >= 2) {
-                        aiSettingsRepository.recordUsage(
-                            successIncrement = 1,
-                            tokenIncrement = result.totalTokens ?: 0,
-                            dayKey = dayKey,
-                        )
-                        _insightState.value = _insightState.value.copy(
-                            signature = signature,
-                            researchMeaning = lines.getOrElse(0) { fallback.meaning },
-                            researchNextAction = lines.getOrElse(1) { fallback.nextAction },
-                            researchActionSource = DailyBriefSource.AI,
-                            isLoading = false,
-                        )
-                        return
-                    }
-                }
-
-                is AiChatResult.Failure -> {
-                    // Fall back to rule-based summary.
-                }
-            }
-        }
-
-        _insightState.value = _insightState.value.copy(
-            signature = signature,
-            researchMeaning = fallback.meaning,
-            researchNextAction = fallback.nextAction,
-            researchActionSource = DailyBriefSource.RULE,
-            isLoading = false,
-        )
-    }
-
-    private fun buildRuleInsights(notes: List<NoteEntity>): TripleInsight {
-        val latest = notes.firstOrNull()
-        val inProgress = notes.filter { it.status == NoteStatus.IN_PROGRESS }
-        val repeatedTag = notes
-            .flatMap { it.tags.distinct() }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
-        val summary = when {
-            inProgress.isNotEmpty() -> "这条方向已经从想法积累进入推进阶段，重点在于把零散记录压成一条连续主线。"
-            notes.size >= 3 -> "这条方向已经有了重复出现的线索，适合从记录层升级成一个长期主题。"
-            else -> "这条方向还在形成期，先把核心问题写得更具体，别急着摊开太多分支。"
-        }
-        val blocker = when {
-            repeatedTag != null -> "目前最大的卡点，是围绕「$repeatedTag」还没有形成一个被持续验证的问题定义。"
-            latest != null -> "目前最大的卡点，是最近这条记录还停在描述层，没有被压成一个明确的验证动作。"
-            else -> "目前最大的卡点，是有效记录还不够多，暂时难以稳定出主线。"
-        }
-        val nextStep = when {
-            latest != null -> "下一步先围绕「${latest.topic.ifBlank { "未命名记录" }}」补一条最小可验证动作，再继续往下推进。"
-            else -> "下一步先补一条更具体的真实记录，让这个方向有可以继续组织的抓手。"
-        }
-        return TripleInsight(summary = summary, blocker = blocker, nextStep = nextStep)
-    }
-
-    private fun buildAiResearchContext(notes: List<NoteEntity>): String {
-        val latestNotes = notes.sortedByDescending { it.updatedAt }.take(8)
-        val tags = notes
-            .flatMap { it.tags.distinct() }
-            .groupingBy { it }
-            .eachCount()
-            .entries
-            .sortedByDescending { it.value }
-            .take(5)
-            .joinToString("、") { "${it.key}(${it.value})" }
-        return buildString {
-            appendLine("你正在为一个人的长期方向生成外部研究增强。")
-            appendLine("方向标题：${NoteConnectionAnalyzer.titleForThread(threadKey)}")
-            appendLine("记录数：${notes.size} 条；进行中${notes.count { it.status == NoteStatus.IN_PROGRESS }}条，已实现${notes.count { it.status == NoteStatus.DONE }}条。")
-            if (tags.isNotBlank()) {
-                appendLine("高频标签：$tags")
-            }
-            appendLine("最近记录：")
-            latestNotes.forEach { note ->
-                appendLine("${note.topic.ifBlank { "未命名记录" }}｜${note.content.compactPreview(100)}")
-            }
-        }
-    }
-
-    private fun buildRuleResearch(notes: List<NoteEntity>): ResearchBundle {
-        val title = NoteConnectionAnalyzer.titleForThread(threadKey)
-        val repeatedTag = notes
-            .flatMap { it.tags.distinct() }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
-        val primaryKeyword = repeatedTag ?: title
-        val outsideAngle = "先找 2 到 3 个做过类似方向的产品、论文或个人实践，确认别人是怎么切入这个问题的。"
-        val gap = if (repeatedTag != null) {
-            "重点关注「$repeatedTag」在相邻领域里的做法，看看有没有可以借过来的结构或验证路径。"
-        } else {
-            "别只搜同类产品，也试着找相邻场景里的成熟方法，通常突破感会从跨域借法里出来。"
-        }
-        val queries = buildList {
-            add("${primaryKeyword} 产品 方案 案例")
-            add("${title} workflow design benchmark")
-        }.distinct().take(2)
-        val meaning = if (repeatedTag != null) {
-            "如果相邻领域也反复用「$repeatedTag」来切问题，说明这条方向值得继续压成结构化方案。"
-        } else {
-            "如果外部案例都在更小的切口上验证，说明这条方向也更适合先缩成一个具体实验。"
-        }
-        val nextAction = when {
-            queries.isNotEmpty() -> "先用「${queries.first()}」查 2 到 3 个案例，再补一条研究记录说明它们共同验证了什么。"
-            else -> "先找两个相邻案例，比对它们的切入点，再补一条研究记录。"
-        }
-        return ResearchBundle(
-            outsideAngle = outsideAngle,
-            gap = gap,
-            queries = queries,
-            meaning = meaning,
-            nextAction = nextAction,
         )
     }
 
@@ -528,23 +281,6 @@ class ThreadViewModel(
         )
     }
 
-    private fun parseAiLines(raw: String, limit: Int = 3): List<String> =
-        raw.replace("\r", "\n")
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map {
-                it.removePrefix("-")
-                    .removePrefix("•")
-                    .removePrefix("1.")
-                    .removePrefix("2.")
-                    .removePrefix("3.")
-                    .trim()
-            }
-            .filter { it.isNotBlank() }
-            .take(limit)
-            .toList()
-
     private fun buildSignature(notes: List<NoteEntity>): String =
         "${notes.size}:${notes.maxOfOrNull { it.updatedAt } ?: 0L}"
 
@@ -575,49 +311,25 @@ class ThreadViewModel(
         }
     }
 
-    private fun String.compactPreview(maxLength: Int): String =
-        replace("\n", " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .take(maxLength)
-
     companion object {
         fun factory(
             noteRepository: NoteRepository,
-            aiSettingsRepository: AiSettingsRepository,
             threadPreferencesRepository: ThreadPreferencesRepository,
-            aiServiceClient: AiServiceClient,
+            threadExecutionPlanner: ThreadExecutionPlanner,
+            externalResearchPlanner: ExternalResearchPlanner,
             threadKey: String,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ThreadViewModel(
                     noteRepository = noteRepository,
-                    aiSettingsRepository = aiSettingsRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
-                    aiServiceClient = aiServiceClient,
+                    threadExecutionPlanner = threadExecutionPlanner,
+                    externalResearchPlanner = externalResearchPlanner,
                     threadKey = threadKey,
                 )
             }
         }
     }
-
-    private data class TripleInsight(
-        val summary: String,
-        val blocker: String,
-        val nextStep: String,
-        val researchOutsideAngle: String = "",
-        val researchGap: String = "",
-        val researchQueries: List<String> = emptyList(),
-        val researchSource: DailyBriefSource = DailyBriefSource.RULE,
-    )
-
-    private data class ResearchBundle(
-        val outsideAngle: String,
-        val gap: String,
-        val queries: List<String>,
-        val meaning: String = "",
-        val nextAction: String = "",
-    )
 
     private data class ThreadWeeklyReview(
         val statsLine: String,

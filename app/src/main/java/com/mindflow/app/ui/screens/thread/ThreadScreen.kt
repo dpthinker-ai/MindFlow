@@ -42,9 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
-import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.connect.ExternalResearchPlanner
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
@@ -75,9 +75,9 @@ import java.nio.charset.StandardCharsets
 @Composable
 fun ThreadRoute(
     noteRepository: NoteRepository,
-    aiSettingsRepository: AiSettingsRepository,
     threadPreferencesRepository: ThreadPreferencesRepository,
-    aiServiceClient: AiServiceClient,
+    threadExecutionPlanner: ThreadExecutionPlanner,
+    externalResearchPlanner: ExternalResearchPlanner,
     threadKey: String,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -87,9 +87,9 @@ fun ThreadRoute(
         key = "thread-$threadKey",
         factory = ThreadViewModel.factory(
             noteRepository = noteRepository,
-            aiSettingsRepository = aiSettingsRepository,
             threadPreferencesRepository = threadPreferencesRepository,
-            aiServiceClient = aiServiceClient,
+            threadExecutionPlanner = threadExecutionPlanner,
+            externalResearchPlanner = externalResearchPlanner,
             threadKey = threadKey,
         ),
     )
@@ -214,11 +214,14 @@ fun ThreadRoute(
             val topic = "${uiState.title.removePrefix("#").trim()} · 研究动作"
             val seedContent = buildString {
                 appendLine("围绕「${uiState.title}」记下一条研究转行动：")
-                uiState.researchMeaning.takeIf { it.isNotBlank() }?.let {
+                uiState.researchExternalHypothesis.takeIf { it.isNotBlank() }?.let {
                     appendLine("- 当前判断：$it")
                 }
-                uiState.researchNextAction.takeIf { it.isNotBlank() }?.let {
+                uiState.validationStep.takeIf { it.isNotBlank() }?.let {
                     appendLine("- 先验证这一步：$it")
+                }
+                uiState.postValidationAction.takeIf { it.isNotBlank() }?.let {
+                    appendLine("- 如果成立，下一步：$it")
                 }
                 appendLine("- 我准备怎么验证：")
                 appendLine("- 验证结果要看什么：")
@@ -560,13 +563,15 @@ private fun ThreadScreen(
                 if (
                     uiState.researchOutsideAngle.isNotBlank() ||
                     uiState.researchGap.isNotBlank() ||
+                    uiState.researchContrarianQuestion.isNotBlank() ||
+                    uiState.researchExternalHypothesis.isNotBlank() ||
                     uiState.researchQueries.isNotEmpty()
                 ) {
                     item {
                         PanelCard {
                             SectionHeader(
-                                title = "外部研究",
-                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 研究" else "规则整理",
+                                title = "研究",
+                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理",
                             )
                             if (uiState.researchOutsideAngle.isNotBlank()) {
                                 ResearchInsightLine(
@@ -578,6 +583,18 @@ private fun ThreadScreen(
                                 ResearchInsightLine(
                                     label = "机会缺口",
                                     text = uiState.researchGap,
+                                )
+                            }
+                            if (uiState.researchContrarianQuestion.isNotBlank()) {
+                                ResearchInsightLine(
+                                    label = "反常识问题",
+                                    text = uiState.researchContrarianQuestion,
+                                )
+                            }
+                            if (uiState.researchExternalHypothesis.isNotBlank()) {
+                                ResearchInsightLine(
+                                    label = "外部假设",
+                                    text = uiState.researchExternalHypothesis,
                                 )
                             }
                             if (uiState.researchQueries.isNotEmpty()) {
@@ -622,44 +639,6 @@ private fun ThreadScreen(
                                 text = "记下研究收获",
                                 onClick = onCaptureResearchNote,
                             )
-                            if (uiState.researchMeaning.isNotBlank() || uiState.researchNextAction.isNotBlank()) {
-                                Surface(
-                                    shape = com.mindflow.app.ui.components.CardShape,
-                                    color = AccentBlue.copy(alpha = 0.08f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Text(
-                                            text = if (uiState.researchActionSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "研究转行动 · AI" else "研究转行动",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AccentBlue,
-                                        )
-                                        if (uiState.researchMeaning.isNotBlank()) {
-                                            Text(
-                                                text = uiState.researchMeaning,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                        }
-                                        if (uiState.researchNextAction.isNotBlank()) {
-                                            Text(
-                                                text = "先验证这一步：${uiState.researchNextAction}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                        }
-                                        GhostActionButton(
-                                            text = "记下验证动作",
-                                            onClick = onCaptureResearchActionNote,
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -809,7 +788,7 @@ private fun ThreadScreen(
                     item {
                         PanelCard {
                             SectionHeader(
-                                title = "当前焦点",
+                                title = "执行",
                                 headline = uiState.focusNote.status.label,
                             )
                             Text(
@@ -824,9 +803,21 @@ private fun ThreadScreen(
                                     color = TextSoft,
                                 )
                             }
+                            if (uiState.executionWhyNow.isNotBlank()) {
+                                Text(
+                                    text = "为什么现在",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.executionWhyNow,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                             if (uiState.threadNextStep.isNotBlank()) {
                                 Text(
-                                    text = "这一条先这样推进",
+                                    text = "当前最小动作",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -835,6 +826,59 @@ private fun ThreadScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
+                            }
+                            if (uiState.validationStep.isNotBlank()) {
+                                Text(
+                                    text = "当前验证动作",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.validationStep,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            if (uiState.validationReason.isNotBlank()) {
+                                Text(
+                                    text = "为什么现在做",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.validationReason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
+                            if (uiState.postValidationAction.isNotBlank()) {
+                                Surface(
+                                    shape = com.mindflow.app.ui.components.CardShape,
+                                    color = AccentBlue.copy(alpha = 0.08f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = "验证成立后",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = AccentBlue,
+                                        )
+                                        Text(
+                                            text = uiState.postValidationAction,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        GhostActionButton(
+                                            text = "记下验证动作",
+                                            onClick = onCaptureResearchActionNote,
+                                        )
+                                    }
+                                }
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

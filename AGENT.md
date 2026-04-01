@@ -152,7 +152,10 @@ Current status:
 - thread-aware research follow-up summaries: first version implemented
 - reminder summaries that explain why a validation step matters now: first version implemented
 - research-derived prompts that bridge from validation back into execution: first version implemented
+- shared thread execution summaries across Flow / thread / reminders: first version implemented
+- AI external perspective snapshots for directions: first version implemented
+- thread page restructured into judgement / research / execution: first version implemented
 
 Next strongest direction:
 
-- thread-aware execution summaries outside the thread page
+- direction-stage execution rhythm and stronger external research grounding

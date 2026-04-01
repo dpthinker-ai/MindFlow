@@ -211,15 +211,15 @@ Planned items:
 
 Next best order:
 
-1. thread-aware research follow-up summaries
-2. reminder summaries that explain why a validation step matters now
-3. research-derived prompts that bridge from validation back into execution
+1. thread-aware execution summaries outside the thread page
+2. model-direct external research snapshots that stay consistent across Flow / thread / reminders
+3. direction-stage execution rhythm beyond one-step follow-ups
 
 Current progress:
 
-- 1: implemented in Flow followed directions and validation capture seeds
-- 2: implemented in morning reminder summaries and validation capture seeds
-- 3: implemented in Flow followed directions, thread validation loops, and reminder capture seeds
+- 1: implemented in followed directions, thread execution section, and reminder validation context
+- 2: implemented with shared external research snapshots and AI 外部视角 surfaces
+- 3: not fully complete yet; current execution is still centered on immediate next-step loops
 
 ## Success Criteria
 

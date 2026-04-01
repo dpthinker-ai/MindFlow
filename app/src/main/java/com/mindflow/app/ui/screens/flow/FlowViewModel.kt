@@ -10,16 +10,16 @@ import com.mindflow.app.data.action.NextActionState
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.brief.DailyBriefState
 import com.mindflow.app.data.brief.DailyBriefSource
+import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.FusionSuggestionState
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
-import com.mindflow.app.data.connect.ThreadResearchAnalyzer
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.model.ThreadPreferences
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
@@ -32,8 +32,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -61,12 +63,19 @@ data class FlowUiState(
 data class FollowedDirectionSummary(
     val thread: ThemeThread,
     val focusNoteId: Long? = null,
+    val summary: String = "",
+    val blocker: String = "",
     val whyNow: String = "",
     val nextStep: String = "",
-    val researchLabel: String = "",
-    val researchStep: String = "",
-    val researchWhyNow: String = "",
-    val researchExecution: String = "",
+    val validationStep: String = "",
+    val validationReason: String = "",
+    val postValidationAction: String = "",
+    val outsideAngle: String = "",
+    val opportunityGap: String = "",
+    val contrarianQuestion: String = "",
+    val externalHypothesis: String = "",
+    val researchQueries: List<String> = emptyList(),
+    val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
 class FlowViewModel(
@@ -77,7 +86,14 @@ class FlowViewModel(
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
     private val staleReconnectPlanner: StaleReconnectPlanner,
+    private val threadExecutionPlanner: ThreadExecutionPlanner,
+    private val externalResearchPlanner: ExternalResearchPlanner,
 ) : ViewModel() {
+    private data class DirectionState(
+        val followedDirections: List<FollowedDirectionSummary> = emptyList(),
+        val themeThreads: List<ThemeThread> = emptyList(),
+    )
+
     private data class FlowPrimaryInputs(
         val todayCount: Int,
         val continueNote: NoteEntity?,
@@ -90,39 +106,22 @@ class FlowViewModel(
         val staleSource: DailyBriefSource,
         val explorationPrompts: List<String>,
         val explorationSource: DailyBriefSource,
-        val followedDirections: List<FollowedDirectionSummary>,
-        val themeThreads: List<ThemeThread>,
     )
+
+    private val directionState = MutableStateFlow(DirectionState())
 
     private val primaryInputs = combine(
         noteRepository.observeAllNotes(),
-        threadPreferencesRepository.settings,
         dailyBriefPlanner.state,
         nextActionPlanner.state,
         staleReconnectPlanner.state,
     ) { allNotes: List<NoteEntity>,
-        threadPreferences: ThreadPreferences,
         briefState: DailyBriefState,
         nextActionState: NextActionState,
         reconnectState: StaleReconnectState ->
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
         val activeNotes = allNotes.filter { !it.isArchived }
-        val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
-        val followedDirections = threadPreferences.followedThreadKeys
-            .mapNotNull { threadKey ->
-                val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
-                if (threadNotes.isEmpty()) {
-                    null
-                } else {
-                    val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
-                    buildFollowedDirectionSummary(thread, threadNotes)
-                }
-            }
-            .sortedWith(
-                compareByDescending<FollowedDirectionSummary> { it.thread.noteCount }
-                    .thenBy { it.thread.title },
-            )
         val continueNote = pickContinueNote(activeNotes)
         val staleNote = pickStaleNote(activeNotes, continueNote?.id)
         val hasReconnectMatch = staleNote != null &&
@@ -150,10 +149,6 @@ class FlowViewModel(
             staleSource = if (hasReconnectMatch) reconnectState.source else DailyBriefSource.RULE,
             explorationPrompts = briefState.lines,
             explorationSource = briefState.source,
-            followedDirections = followedDirections,
-            themeThreads = analyzedThreads.filterNot { candidate ->
-                followedDirections.any { it.thread.key == candidate.key }
-            },
         )
     }
 
@@ -161,9 +156,11 @@ class FlowViewModel(
         primaryInputs,
         weeklyReviewPlanner.state,
         fusionSuggestionPlanner.state,
+        directionState,
     ) { primary,
         weeklyReviewState: WeeklyReviewState,
-        fusionState: FusionSuggestionState ->
+        fusionState: FusionSuggestionState,
+        directions: DirectionState ->
         FlowUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
@@ -179,14 +176,66 @@ class FlowViewModel(
             weeklyReviewItems = weeklyReviewState.items,
             weeklyReviewSource = weeklyReviewState.source,
             weeklyReviewStatsLine = weeklyReviewState.statsLine,
-            followedDirections = primary.followedDirections,
-            themeThreads = primary.themeThreads,
+            followedDirections = directions.followedDirections,
+            themeThreads = directions.themeThreads,
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
 
     init {
+        viewModelScope.launch {
+            combine(
+                noteRepository.observeAllNotes(),
+                threadPreferencesRepository.settings,
+            ) { notes, prefs -> notes to prefs }
+                .collectLatest { (allNotes, threadPreferences) ->
+                    val activeNotes = allNotes.filter { !it.isArchived }
+                    val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
+                    val followedDirections = threadPreferences.followedThreadKeys
+                        .mapNotNull { threadKey ->
+                            val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
+                            if (threadNotes.isEmpty()) {
+                                null
+                            } else {
+                                val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
+                                val execution = threadExecutionPlanner.summarize(threadKey, threadNotes)
+                                val research = externalResearchPlanner.summarize(threadKey, threadNotes)
+                                FollowedDirectionSummary(
+                                    thread = thread,
+                                    focusNoteId = execution.focusNoteId,
+                                    summary = execution.summary,
+                                    blocker = execution.blocker,
+                                    whyNow = execution.whyNow,
+                                    nextStep = execution.nextStep,
+                                    validationStep = execution.validationStep,
+                                    validationReason = execution.validationReason,
+                                    postValidationAction = execution.postValidationAction,
+                                    outsideAngle = research.outsideAngle,
+                                    opportunityGap = research.opportunityGap,
+                                    contrarianQuestion = research.contrarianQuestion,
+                                    externalHypothesis = research.externalHypothesis,
+                                    researchQueries = research.queries,
+                                    source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
+                                        DailyBriefSource.AI
+                                    } else {
+                                        DailyBriefSource.RULE
+                                    },
+                                )
+                            }
+                        }
+                        .sortedWith(
+                            compareByDescending<FollowedDirectionSummary> { it.thread.noteCount }
+                                .thenBy { it.thread.title },
+                        )
+                    directionState.value = DirectionState(
+                        followedDirections = followedDirections,
+                        themeThreads = analyzedThreads.filterNot { candidate ->
+                            followedDirections.any { it.thread.key == candidate.key }
+                        },
+                    )
+                }
+        }
         viewModelScope.launch {
             noteRepository.observeAllNotes().collect { notes ->
                 val activeNotes = notes.filter { !it.isArchived }
@@ -213,6 +262,8 @@ class FlowViewModel(
             weeklyReviewPlanner: WeeklyReviewPlanner,
             fusionSuggestionPlanner: FusionSuggestionPlanner,
             staleReconnectPlanner: StaleReconnectPlanner,
+            threadExecutionPlanner: ThreadExecutionPlanner,
+            externalResearchPlanner: ExternalResearchPlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FlowViewModel(
@@ -223,32 +274,12 @@ class FlowViewModel(
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
+                    threadExecutionPlanner = threadExecutionPlanner,
+                    externalResearchPlanner = externalResearchPlanner,
                 )
             }
         }
     }
-}
-
-private fun buildFollowedDirectionSummary(
-    thread: ThemeThread,
-    notes: List<NoteEntity>,
-): FollowedDirectionSummary {
-    val focusNote = pickContinueNote(notes)
-        ?: notes.maxByOrNull { it.updatedAt }
-    val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
-        notes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3),
-        threadTitle = thread.title,
-    ).firstOrNull()
-    return FollowedDirectionSummary(
-        thread = thread,
-        focusNoteId = focusNote?.id,
-        whyNow = whyNowForThread(thread, notes, focusNote),
-        nextStep = nextStepForThread(thread, focusNote),
-        researchLabel = researchLead?.label.orEmpty(),
-        researchStep = researchLead?.validationStep.orEmpty(),
-        researchWhyNow = researchLead?.followUpReason.orEmpty(),
-        researchExecution = researchLead?.executionPrompt.orEmpty(),
-    )
 }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =

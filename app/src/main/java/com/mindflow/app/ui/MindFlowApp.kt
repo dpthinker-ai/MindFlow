@@ -48,6 +48,8 @@ import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.connect.ExternalResearchPlanner
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
@@ -98,6 +100,8 @@ fun MindFlowApp(
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
+    threadExecutionPlanner: ThreadExecutionPlanner,
+    externalResearchPlanner: ExternalResearchPlanner,
     aiServiceClient: AiServiceClient,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
@@ -225,6 +229,8 @@ fun MindFlowApp(
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
+                    threadExecutionPlanner = threadExecutionPlanner,
+                    externalResearchPlanner = externalResearchPlanner,
                     initialFocus = focus,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
@@ -240,9 +246,9 @@ fun MindFlowApp(
                 val threadKey = Uri.decode(rawThreadKey)
                 ThreadRoute(
                     noteRepository = noteRepository,
-                    aiSettingsRepository = aiSettingsRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
-                    aiServiceClient = aiServiceClient,
+                    threadExecutionPlanner = threadExecutionPlanner,
+                    externalResearchPlanner = externalResearchPlanner,
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },
                     onOpenNote = openNoteSafely,

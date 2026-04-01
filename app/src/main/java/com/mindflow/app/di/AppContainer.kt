@@ -10,6 +10,8 @@ import com.mindflow.app.BuildConfig
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
+import com.mindflow.app.data.connect.ExternalResearchPlanner
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
@@ -168,6 +170,16 @@ class AppContainer(context: Context) {
 
     val staleReconnectPlanner = StaleReconnectPlanner(
         context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val threadExecutionPlanner = ThreadExecutionPlanner(
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val externalResearchPlanner = ExternalResearchPlanner(
         aiSettingsRepository = aiSettingsRepository,
         aiServiceClient = aiServiceClient,
     )

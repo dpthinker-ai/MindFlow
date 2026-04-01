@@ -49,6 +49,8 @@ class ReminderWorker(
         val researchContext = buildResearchReminderContext(
             note = continueNote ?: staleNote,
             activeNotes = activeNotes,
+            threadExecutionPlanner = container.threadExecutionPlanner,
+            externalResearchPlanner = container.externalResearchPlanner,
         )
 
         createChannel()
@@ -116,6 +118,9 @@ class ReminderWorker(
             researchContext?.validationStep
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("研究验证：$it") }
+            researchContext?.executionPrompt
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add("如果成立：$it") }
             brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("探索：$it") }
             if (continueNote == null) {
                 staleNote?.topic?.takeIf { it.isNotBlank() }?.let { add("重新接上：$it") }
@@ -488,30 +493,29 @@ private fun pickStaleNote(
         .minByOrNull { it.updatedAt }
 }
 
-private fun buildResearchReminderContext(
+private suspend fun buildResearchReminderContext(
     note: NoteEntity?,
     activeNotes: List<NoteEntity>,
+    threadExecutionPlanner: com.mindflow.app.data.connect.ThreadExecutionPlanner,
+    externalResearchPlanner: com.mindflow.app.data.connect.ExternalResearchPlanner,
 ): ResearchReminderContext? {
     val target = note ?: return null
     val threadKey = NoteConnectionAnalyzer.bestThreadKeyFor(target, activeNotes) ?: return null
     val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
-    val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
-        notes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
-            .filter(ThreadResearchAnalyzer::isResearchMemoryNote)
-            .take(3),
-        threadTitle = thread.title,
-    ).firstOrNull() ?: return null
+    val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
+    val execution = threadExecutionPlanner.summarize(threadKey, threadNotes)
+    val research = externalResearchPlanner.summarize(threadKey, threadNotes)
 
-    return researchLead.validationStep
+    return execution.validationStep
         .takeIf { it.isNotBlank() }
         ?.let { validationStep ->
             ResearchReminderContext(
                 threadKey = threadKey,
                 threadTitle = thread.title,
-                label = researchLead.label,
+                label = research.outsideAngle.ifBlank { thread.title },
                 validationStep = validationStep,
-                followUpReason = researchLead.followUpReason,
-                executionPrompt = researchLead.executionPrompt,
+                followUpReason = execution.validationReason.ifBlank { execution.whyNow },
+                executionPrompt = execution.postValidationAction,
             )
         }
 }

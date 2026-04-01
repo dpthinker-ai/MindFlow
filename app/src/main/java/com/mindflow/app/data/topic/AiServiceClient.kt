@@ -215,6 +215,34 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateThreadExecutionSummary(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(6_000),
+            systemPrompt = "You are generating an execution summary for one long-term direction in a personal idea system. Return exactly 7 concise Chinese lines in this order: 1) current direction summary, 2) main blocker, 3) why it matters now, 4) the smallest next step, 5) the current validation step, 6) why this validation matters now, 7) if validation succeeds, what to push next. Do not number the lines. Be concrete and execution-oriented.",
+            maxTokens = 420,
+            temperature = 0.45,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateExternalResearchSnapshot(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(6_000),
+            systemPrompt = "You are generating an external perspective snapshot for one long-term direction in a personal idea system. Return exactly 6 concise Chinese lines in this order: 1) one outside-world angle worth checking, 2) one opportunity gap, 3) one contrarian question or competitive judgment, 4) one testable external hypothesis, 5) one concise Chinese search query, 6) one concise technical or English search query. Do not number the lines. No citations. Make it exploratory but useful.",
+            maxTokens = 360,
+            temperature = 0.55,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun generateReconnectGuidance(
         settings: AiSettings,
         contextSummary: String,
