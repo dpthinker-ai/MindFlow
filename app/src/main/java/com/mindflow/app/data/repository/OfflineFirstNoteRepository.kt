@@ -16,6 +16,7 @@ import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.model.FolderRefreshResult
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.ImportResult
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.NoteStats
@@ -76,6 +77,7 @@ class OfflineFirstNoteRepository(
         folderKey: String?,
         tags: List<String>,
         status: NoteStatus,
+        horizon: NoteHorizon,
         isArchived: Boolean,
         folderManuallyEdited: Boolean,
         topicManuallyEdited: Boolean,
@@ -108,6 +110,7 @@ class OfflineFirstNoteRepository(
                     tags = if (tagsManuallyEdited) normalizedManualTags else fallbackTags.tags,
                     tagSource = if (tagsManuallyEdited) TagSource.MANUAL else fallbackTags.source,
                     status = status,
+                    horizon = horizon,
                     isArchived = isArchived,
                     createdAt = now,
                     updatedAt = now,
@@ -156,6 +159,7 @@ class OfflineFirstNoteRepository(
         folderKey: String?,
         tags: List<String>,
         status: NoteStatus,
+        horizon: NoteHorizon,
         isArchived: Boolean,
         folderManuallyEdited: Boolean,
         topicManuallyEdited: Boolean,
@@ -195,6 +199,7 @@ class OfflineFirstNoteRepository(
                     tags = normalizedTags,
                     tagSource = nextTagSource,
                     status = status,
+                    horizon = horizon,
                     isArchived = isArchived,
                     updatedAt = now,
                 )
@@ -405,6 +410,7 @@ class OfflineFirstNoteRepository(
                         tags = importedNote.tags,
                         tagSource = TagSource.MANUAL,
                         status = importedNote.status,
+                        horizon = importedNote.horizon,
                         isArchived = importedNote.isArchived,
                         createdAt = importedNote.createdAt,
                         updatedAt = importedNote.updatedAt,

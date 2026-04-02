@@ -77,6 +77,11 @@ class ThreadExecutionPlanner(
         notes: List<NoteEntity>,
     ): ThreadExecutionSummary {
         val focusNote = pickFocusNote(notes)
+        val rhythm = DirectionRhythmAnalyzer.analyze(
+            notes = notes,
+            focusNote = focusNote,
+            hasResearch = notes.any(ThreadResearchAnalyzer::isResearchMemoryNote),
+        )
         val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
             notes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3),
             threadTitle = threadTitle,
@@ -112,9 +117,9 @@ class ThreadExecutionPlanner(
             researchLead?.followUpReason?.isNotBlank() == true ->
                 researchLead.followUpReason
             notes.size >= 3 ->
-                "最近的记录已经开始收敛成同一方向，现在最值得先做一次小验证。"
+                "${rhythm.stageReason} 现在最值得先做一次小验证。"
             else ->
-                "现在先把最具体的一条记录推成动作，比继续积累更多想法更值钱。"
+                "${rhythm.stageReason} 比继续积累更多想法更值钱。"
         }
         val nextStep = when {
             focusNote != null -> focusNote.topic.ifBlank { "先把当前焦点记录补成一个最小动作" }
@@ -152,6 +157,10 @@ class ThreadExecutionPlanner(
             focusNoteId = focusNote?.id,
             summary = summary,
             blocker = blocker,
+            stage = rhythm.stage,
+            stageReason = rhythm.stageReason,
+            rhythmLine = rhythm.rhythmLine,
+            dominantHorizon = rhythm.dominantHorizon,
             whyNow = whyNow,
             nextStep = nextStep,
             validationStep = validationStep,
@@ -238,11 +247,13 @@ class ThreadExecutionPlanner(
     private fun pickFocusNote(notes: List<NoteEntity>): NoteEntity? =
         notes
             .filter { it.status == NoteStatus.IN_PROGRESS }
-            .maxByOrNull { it.updatedAt }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
             ?: notes
                 .filter { it.status == NoteStatus.IDEA }
-                .maxByOrNull { it.updatedAt }
-            ?: notes.maxByOrNull { it.updatedAt }
+                .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+                .firstOrNull()
+            ?: notes.sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt }).firstOrNull()
 }
 
 private fun String.compactPreview(maxLength: Int): String =

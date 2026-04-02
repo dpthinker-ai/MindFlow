@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.TagSource
@@ -242,6 +243,7 @@ fun EditorRoute(
         onAddTag = viewModel::addTag,
         onRemoveTag = viewModel::removeTag,
         onStatusChange = viewModel::onStatusChange,
+        onHorizonChange = viewModel::onHorizonChange,
         onArchiveChange = viewModel::onArchivedChange,
         onSave = { viewModel.save(exitAfterSave = false) },
         onSaveAndExit = { viewModel.save(exitAfterSave = true) },
@@ -274,6 +276,7 @@ private fun EditorScreen(
     onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
     onStatusChange: (NoteStatus) -> Unit,
+    onHorizonChange: (NoteHorizon) -> Unit,
     onArchiveChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
@@ -623,6 +626,30 @@ private fun EditorScreen(
 
                 PanelCard {
                     SectionHeader(title = "整理")
+
+                    Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        NoteHorizon.entries.forEach { horizon ->
+                            val accent = horizonColor(horizon)
+                            FilterChip(
+                                selected = uiState.horizon == horizon,
+                                onClick = { onHorizonChange(horizon) },
+                                label = { Text("${horizon.label} · ${horizon.windowLabel}") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.14f),
+                                    selectedLabelColor = accent,
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "先判断这条记录是短期推进、中期验证，还是长期经营，后面的提醒会更有节奏。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     if (suggestedThread != null) {
                         Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1088,3 +1115,10 @@ private fun folderSourceLabel(source: com.mindflow.app.data.model.FolderSource):
 
 private fun folderColor(folderKey: String): Color =
     Color(AndroidColor.parseColor(MindFolderCatalog.fromKey(folderKey)?.colorHex ?: "#64748B"))
+
+private fun horizonColor(horizon: NoteHorizon): Color =
+    when (horizon) {
+        NoteHorizon.SHORT -> Color(0xFF0EA5E9)
+        NoteHorizon.MEDIUM -> Color(0xFF7C3AED)
+        NoteHorizon.LONG -> Color(0xFF0F766E)
+    }

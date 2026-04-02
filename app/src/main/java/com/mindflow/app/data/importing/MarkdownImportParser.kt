@@ -2,6 +2,7 @@ package com.mindflow.app.data.importing
 
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.MindFolderCatalog
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.util.TimeFormatter
 
@@ -23,6 +24,13 @@ class MarkdownImportParser {
 
     private fun parseSection(topic: String, section: String): ImportedNote {
         val status = parseStatus(requireMatch(section, "(?m)^- 状态: (.+)$"))
+        val horizon = Regex("(?m)^- 周期: (.+)$")
+            .find(section)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.let(::parseHorizon)
+            ?: NoteHorizon.MEDIUM
         val folderKey = Regex("(?m)^- 文件夹: (.+)$")
             .find(section)
             ?.groupValues
@@ -71,6 +79,7 @@ class MarkdownImportParser {
             tags = tags,
             content = content,
             status = status,
+            horizon = horizon,
             isArchived = isArchived,
             createdAt = createdAt,
             updatedAt = updatedAt,
@@ -96,6 +105,16 @@ class MarkdownImportParser {
 
     private fun parseOptionalStatus(label: String): NoteStatus? =
         if (label == "初始") null else parseStatus(label)
+
+    private fun parseHorizon(raw: String): NoteHorizon {
+        val label = raw.substringBefore("（").trim()
+        return when (label) {
+            NoteHorizon.SHORT.label -> NoteHorizon.SHORT
+            NoteHorizon.MEDIUM.label -> NoteHorizon.MEDIUM
+            NoteHorizon.LONG.label -> NoteHorizon.LONG
+            else -> NoteHorizon.MEDIUM
+        }
+    }
 
     private fun parseTime(raw: String): Long =
         TimeFormatter.parseFull(raw) ?: throw IllegalArgumentException("无法解析时间: $raw")

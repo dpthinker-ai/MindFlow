@@ -5,6 +5,7 @@ import com.mindflow.app.data.importing.ImportedStatusHistory
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 import com.mindflow.app.data.model.MindFolderCatalog
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.util.TimeFormatter
@@ -26,6 +27,7 @@ class CloudNoteDocumentCodec {
         append("- 文件夹: ${MindFolderCatalog.fromKey(note.folderKey)?.name ?: "未分类"}\n")
         append("- 标签: ${note.tags.joinToString("、").ifBlank { "无" }}\n")
         append("- 状态: ${note.status.label}\n")
+        append("- 周期: ${note.horizon.label}（${note.horizon.windowLabel}）\n")
         append("- 创建时间: ${TimeFormatter.full(note.createdAt)}\n")
         append("- 更新时间: ${TimeFormatter.full(note.updatedAt)}\n")
         append("- 已归档: ${if (note.isArchived) "是" else "否"}\n\n")
@@ -68,6 +70,13 @@ class CloudNoteDocumentCodec {
                 .orEmpty()
         )
         val status = parseStatus(requireMatch(normalized, "(?m)^- 状态: (.+)$"))
+        val horizon = Regex("(?m)^- 周期: (.+)$")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.let(::parseHorizon)
+            ?: NoteHorizon.MEDIUM
         val createdAt = parseTime(requireMatch(normalized, "(?m)^- 创建时间: (.+)$"))
         val updatedAt = parseTime(requireMatch(normalized, "(?m)^- 更新时间: (.+)$"))
         val isArchived = requireMatch(normalized, "(?m)^- 已归档: (.+)$") == "是"
@@ -88,6 +97,7 @@ class CloudNoteDocumentCodec {
                 tags = tags,
                 content = content,
                 status = status,
+                horizon = horizon,
                 isArchived = isArchived,
                 createdAt = createdAt,
                 updatedAt = updatedAt,
@@ -114,6 +124,16 @@ class CloudNoteDocumentCodec {
 
     private fun parseOptionalStatus(label: String): NoteStatus? =
         if (label == "初始") null else parseStatus(label)
+
+    private fun parseHorizon(raw: String): NoteHorizon {
+        val label = raw.substringBefore("（").trim()
+        return when (label) {
+            NoteHorizon.SHORT.label -> NoteHorizon.SHORT
+            NoteHorizon.MEDIUM.label -> NoteHorizon.MEDIUM
+            NoteHorizon.LONG.label -> NoteHorizon.LONG
+            else -> NoteHorizon.MEDIUM
+        }
+    }
 
     private fun parseTime(raw: String): Long =
         TimeFormatter.parseFull(raw) ?: throw IllegalArgumentException("无法解析时间：$raw")

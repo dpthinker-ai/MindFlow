@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
@@ -41,6 +42,7 @@ data class NoteEditorUiState(
     val tags: List<String> = emptyList(),
     val tagSource: TagSource = TagSource.RULE,
     val status: NoteStatus = NoteStatus.IDEA,
+    val horizon: NoteHorizon = NoteHorizon.MEDIUM,
     val isArchived: Boolean = false,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,
@@ -76,6 +78,7 @@ class NoteEditorViewModel(
         val folderKey: String? = null,
         val tags: List<String> = emptyList(),
         val status: NoteStatus = NoteStatus.IDEA,
+        val horizon: NoteHorizon = NoteHorizon.MEDIUM,
         val isArchived: Boolean = false,
     )
 
@@ -88,6 +91,7 @@ class NoteEditorViewModel(
             isLoading = noteId != null,
             content = if (noteId == null) initialContent else "",
             topic = if (noteId == null) initialTopic else "",
+            horizon = if (noteId == null) NoteHorizon.inferFrom(initialContent, initialTopic) else NoteHorizon.MEDIUM,
             folderKey = if (noteId == null) initialFolderKey else null,
             folderSource = if (noteId == null && initialFolderKey != null) FolderSource.MANUAL else FolderSource.RULE,
             tags = if (noteId == null) initialTags else emptyList(),
@@ -166,6 +170,10 @@ class NoteEditorViewModel(
 
     fun onStatusChange(status: NoteStatus) {
         updateDirtyState { it.copy(status = status) }
+    }
+
+    fun onHorizonChange(horizon: NoteHorizon) {
+        updateDirtyState { it.copy(horizon = horizon) }
     }
 
     fun onArchivedChange(archived: Boolean) {
@@ -272,6 +280,7 @@ class NoteEditorViewModel(
                     folderKey = state.folderKey,
                     tags = state.tags,
                     status = state.status,
+                    horizon = state.horizon,
                     isArchived = state.isArchived,
                     folderManuallyEdited = state.folderEdited,
                     topicManuallyEdited = state.topicEdited,
@@ -289,6 +298,7 @@ class NoteEditorViewModel(
                     folderKey = state.folderKey,
                     tags = state.tags,
                     status = state.status,
+                    horizon = state.horizon,
                     isArchived = state.isArchived,
                     folderManuallyEdited = state.folderEdited,
                     topicManuallyEdited = state.topicEdited,
@@ -300,6 +310,7 @@ class NoteEditorViewModel(
                     folderKey = state.folderKey,
                     tags = state.tags,
                     status = state.status,
+                    horizon = state.horizon,
                     isArchived = state.isArchived,
                 )
                 loadNote(existingId)
@@ -406,6 +417,7 @@ class NoteEditorViewModel(
                 folderKey = note.folderKey,
                 tags = note.tags,
                 status = note.status,
+                horizon = note.horizon,
                 isArchived = note.isArchived,
             )
             _uiState.update {
@@ -421,6 +433,7 @@ class NoteEditorViewModel(
                     tags = note.tags,
                     tagSource = note.tagSource,
                     status = note.status,
+                    horizon = note.horizon,
                     isArchived = note.isArchived,
                     createdAt = note.createdAt,
                     updatedAt = note.updatedAt,
@@ -442,6 +455,7 @@ class NoteEditorViewModel(
             state.folderKey != persistedSnapshot.folderKey ||
             state.tags != persistedSnapshot.tags ||
             state.status != persistedSnapshot.status ||
+            state.horizon != persistedSnapshot.horizon ||
             state.isArchived != persistedSnapshot.isArchived ||
             state.folderEdited ||
             state.topicEdited ||
@@ -459,6 +473,7 @@ class NoteEditorViewModel(
                     next.folderKey != persistedSnapshot.folderKey ||
                     next.tags != persistedSnapshot.tags ||
                     next.status != persistedSnapshot.status ||
+                    next.horizon != persistedSnapshot.horizon ||
                     next.isArchived != persistedSnapshot.isArchived ||
                     next.folderEdited ||
                     next.topicEdited ||

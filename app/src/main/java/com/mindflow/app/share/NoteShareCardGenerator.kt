@@ -71,39 +71,41 @@ class NoteShareCardGenerator(
         style: NoteShareStyle,
     ): Bitmap {
         val palette = paletteFor(style)
-        val outer = 28f
-        val innerHorizontal = 34f
-        val innerVertical = 30f
+        val plainContent = SimpleMarkdown.toPlainText(payload.content).trim()
+        val compactMode = plainContent.length in 1..88 && plainContent.lineSequence().count() <= 3
+        val outer = if (compactMode) 24f else 28f
+        val innerHorizontal = if (compactMode) 30f else 34f
+        val innerVertical = if (compactMode) 26f else 30f
         val corner = 30f
-        val maxBodyWidth = 860
+        val maxBodyWidth = if (compactMode) 760 else 860
 
         val namePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
-            textSize = 26f
+            textSize = if (compactMode) 24f else 26f
             isFakeBoldText = true
         }
         val handlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.meta
-            textSize = 20f
+            textSize = if (compactMode) 18f else 20f
         }
         val topicPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.accent
-            textSize = 22f
+            textSize = if (compactMode) 20f else 22f
             isFakeBoldText = true
         }
         val headingLargePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
-            textSize = 34f
+            textSize = if (compactMode) 36f else 34f
             isFakeBoldText = true
         }
         val headingPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
-            textSize = 29f
+            textSize = if (compactMode) 30f else 29f
             isFakeBoldText = true
         }
         val contentPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.body
-            textSize = 25f
+            textSize = if (compactMode) 28f else 25f
         }
         val tagPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.accent
@@ -154,7 +156,9 @@ class NoteShareCardGenerator(
         )
 
         val contentWidth = measuredLayouts.contentWidth
-        val width = ceil(contentWidth + outer * 2f + innerHorizontal * 2f).toInt().coerceIn(660, 1040)
+        val width = ceil(contentWidth + outer * 2f + innerHorizontal * 2f)
+            .toInt()
+            .coerceIn(if (compactMode) 500 else 660, 1040)
         val bodyWidth = (width - outer * 2f - innerHorizontal * 2f).toInt()
 
         val topicLayout = if (topic.isBlank()) {
@@ -166,6 +170,7 @@ class NoteShareCardGenerator(
                 width = bodyWidth,
                 maxLines = 2,
                 lineSpacing = 1.02f,
+                alignment = Layout.Alignment.ALIGN_NORMAL,
             )
         }
         val blockLayouts = markdownBlocks.map { block ->
@@ -175,18 +180,23 @@ class NoteShareCardGenerator(
                 width = bodyWidth,
                 maxLines = maxLinesFor(block),
                 lineSpacing = lineSpacingFor(block),
+                alignment = if (compactMode && markdownBlocks.size == 1 && block !is MarkdownHeading) {
+                    Layout.Alignment.ALIGN_CENTER
+                } else {
+                    Layout.Alignment.ALIGN_NORMAL
+                },
             )
         }
 
         val tags = payload.tags.take(2)
-        val blockSpacing = 14f
+        val blockSpacing = if (compactMode) 10f else 14f
         val blocksHeight = blockLayouts.sumOf { it.height } +
             ((blockLayouts.size - 1).coerceAtLeast(0) * blockSpacing)
-        val headerHeight = 72f
+        val headerHeight = if (compactMode) 66f else 72f
         val topicHeight = topicLayout?.height?.toFloat() ?: 0f
-        val topicGap = if (topicLayout != null) 14f else 0f
-        val dividerGap = 24f
-        val footerHeight = 52f
+        val topicGap = if (topicLayout != null) if (compactMode) 10f else 14f else 0f
+        val dividerGap = if (compactMode) 18f else 24f
+        val footerHeight = if (compactMode) 46f else 52f
         val height = ceil(
             outer * 2f +
                 innerVertical * 2f +
@@ -196,7 +206,7 @@ class NoteShareCardGenerator(
                 blocksHeight +
                 dividerGap +
                 footerHeight
-        ).toInt().coerceIn(500, 1680)
+        ).toInt().coerceIn(if (compactMode) 360 else 500, 1680)
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -249,7 +259,7 @@ class NoteShareCardGenerator(
             textPaint = sourcePaint,
         )
 
-        var cursorY = cardRect.top + innerVertical + headerHeight
+        var cursorY = cardRect.top + innerVertical + headerHeight + if (compactMode) 6f else 0f
         if (topicLayout != null) {
             drawLayout(canvas, topicLayout, innerLeft, cursorY)
             cursorY += topicLayout.height + topicGap
@@ -321,6 +331,7 @@ class NoteShareCardGenerator(
                 width = maxBodyWidth,
                 maxLines = 2,
                 lineSpacing = 1.02f,
+                alignment = Layout.Alignment.ALIGN_NORMAL,
             )
         }
         val provisionalBlocks = blocks.map { block ->
@@ -330,6 +341,7 @@ class NoteShareCardGenerator(
                 width = maxBodyWidth,
                 maxLines = maxLinesFor(block),
                 lineSpacing = lineSpacingFor(block),
+                alignment = Layout.Alignment.ALIGN_NORMAL,
             )
         }
         val widestLine = maxOf(
@@ -337,7 +349,7 @@ class NoteShareCardGenerator(
             provisionalTopic?.maxLineWidth() ?: 0f,
             provisionalBlocks.maxOfOrNull { it.maxLineWidth() } ?: 0f,
         )
-        return ShareMeasuredLayouts(contentWidth = (widestLine + 8f).coerceIn(520f, maxBodyWidth.toFloat()))
+        return ShareMeasuredLayouts(contentWidth = (widestLine + 8f).coerceIn(420f, maxBodyWidth.toFloat()))
     }
 
     private fun buildLayout(
@@ -346,11 +358,12 @@ class NoteShareCardGenerator(
         width: Int,
         maxLines: Int,
         lineSpacing: Float,
+        alignment: Layout.Alignment,
     ): StaticLayout {
         val safeText = if (text.isBlank()) "记下一条想法。" else text
         return StaticLayout.Builder
             .obtain(safeText, 0, safeText.length, paint, width)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setAlignment(alignment)
             .setIncludePad(false)
             .setEllipsize(TextUtils.TruncateAt.END)
             .setMaxLines(maxLines)

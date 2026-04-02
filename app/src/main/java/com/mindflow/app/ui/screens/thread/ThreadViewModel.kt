@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.brief.DailyBriefSource
+import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ResearchCluster
@@ -13,6 +14,7 @@ import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
@@ -45,6 +47,10 @@ data class ThreadUiState(
     val threadSummary: String = "",
     val threadBlocker: String = "",
     val threadNextStep: String = "",
+    val stage: DirectionStage = DirectionStage.FORMING,
+    val stageReason: String = "",
+    val rhythmLine: String = "",
+    val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
     val weeklyStatsLine: String = "",
     val weeklyLines: List<String> = emptyList(),
     val researchOutsideAngle: String = "",
@@ -88,6 +94,10 @@ class ThreadViewModel(
         val summary: String = "",
         val blocker: String = "",
         val nextStep: String = "",
+        val stage: DirectionStage = DirectionStage.FORMING,
+        val stageReason: String = "",
+        val rhythmLine: String = "",
+        val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
         val executionWhyNow: String = "",
         val validationStep: String = "",
         val validationReason: String = "",
@@ -132,6 +142,10 @@ class ThreadViewModel(
             threadSummary = insight.summary,
             threadBlocker = insight.blocker,
             threadNextStep = insight.nextStep,
+            stage = insight.stage,
+            stageReason = insight.stageReason,
+            rhythmLine = insight.rhythmLine,
+            dominantHorizon = insight.dominantHorizon,
             weeklyStatsLine = weeklyReview.statsLine,
             weeklyLines = weeklyReview.lines,
             researchOutsideAngle = insight.researchOutsideAngle,
@@ -202,6 +216,7 @@ class ThreadViewModel(
                 folderKey = note.folderKey,
                 tags = note.tags,
                 status = NoteStatus.IN_PROGRESS,
+                horizon = note.horizon,
                 isArchived = note.isArchived,
                 folderManuallyEdited = note.folderSource == FolderSource.MANUAL,
                 topicManuallyEdited = note.topicSource == TopicSource.MANUAL,
@@ -229,6 +244,10 @@ class ThreadViewModel(
             summary = execution.summary,
             blocker = execution.blocker,
             nextStep = execution.nextStep,
+            stage = execution.stage,
+            stageReason = execution.stageReason,
+            rhythmLine = execution.rhythmLine,
+            dominantHorizon = execution.dominantHorizon,
             executionWhyNow = execution.whyNow,
             validationStep = execution.validationStep,
             validationReason = execution.validationReason,
@@ -287,16 +306,18 @@ class ThreadViewModel(
     private fun pickFocusNote(notes: List<NoteEntity>): NoteEntity? =
         notes
             .filter { it.status == NoteStatus.IN_PROGRESS }
-            .maxByOrNull { it.updatedAt }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
             ?: notes
                 .filter { it.status == NoteStatus.IDEA }
-                .maxByOrNull { it.updatedAt }
-            ?: notes.maxByOrNull { it.updatedAt }
+                .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+                .firstOrNull()
+            ?: notes.sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt }).firstOrNull()
 
     private fun focusReasonFor(note: NoteEntity?): String =
         when (note?.status) {
-            NoteStatus.IN_PROGRESS -> "这条记录最接近真实推进，可以继续沿着它把方向压实。"
-            NoteStatus.IDEA -> "这条记录最新、最值得先压成动作，别让它只停在想法层。"
+            NoteStatus.IN_PROGRESS -> "这条${note.horizon.label}记录最接近真实推进，可以继续沿着它把方向压实。"
+            NoteStatus.IDEA -> "这条${note.horizon.label}记录最新、最值得先压成动作，别让它只停在想法层。"
             NoteStatus.DONE -> "这条记录已经做成了，可以把它当作下一轮延展的起点。"
             null -> ""
         }

@@ -3,6 +3,7 @@ package com.mindflow.app.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
@@ -18,6 +19,7 @@ data class NoteEntity(
     val tags: List<String> = emptyList(),
     val tagSource: TagSource = TagSource.RULE,
     val status: NoteStatus,
+    val horizon: NoteHorizon = NoteHorizon.MEDIUM,
     val isArchived: Boolean,
     val createdAt: Long,
     val updatedAt: Long,

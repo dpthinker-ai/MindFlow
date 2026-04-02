@@ -42,6 +42,7 @@ Core record fields:
 - topic
 - tags
 - status
+- horizon
 - folder
 - createdAt
 - updatedAt
@@ -91,6 +92,7 @@ Notes:
 - Prefer folded controls over long filter walls.
 - Swipe actions should reveal buttons first, never perform destructive actions immediately.
 - Share visuals should stay elegant and minimal.
+- Secondary planning widgets such as time-bank data should stay supportive, never outrank capture.
 
 ## Engineering Rules
 
@@ -155,7 +157,10 @@ Current status:
 - shared thread execution summaries across Flow / thread / reminders: first version implemented
 - AI external perspective snapshots for directions: first version implemented
 - thread page restructured into judgement / research / execution: first version implemented
+- note horizons for short / medium / long follow-up: implemented
+- direction-stage execution rhythm across Flow / thread / reminders: first version implemented
+- home time bank planning card: first version implemented
 
 Next strongest direction:
 
-- direction-stage execution rhythm and stronger external research grounding
+- stronger research grounding and direction-stage persistence beyond immediate next steps

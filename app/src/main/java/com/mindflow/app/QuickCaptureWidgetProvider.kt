@@ -114,9 +114,11 @@ class QuickCaptureWidgetProvider : AppWidgetProvider() {
         private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
             notes
                 .filter { it.status == NoteStatus.IN_PROGRESS }
-                .maxByOrNull { it.updatedAt }
+                .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+                .firstOrNull()
                 ?: notes
                     .filter { it.status == NoteStatus.IDEA }
-                    .maxByOrNull { it.updatedAt }
+                    .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+                    .firstOrNull()
     }
 }

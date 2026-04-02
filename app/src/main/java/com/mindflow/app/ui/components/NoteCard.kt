@@ -84,6 +84,7 @@ fun NoteCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         StatusBadge(status = note.status)
+                        NoteHorizonBadge(label = note.horizon.label)
                         MindFolderCatalog.fromKey(note.folderKey)?.let { folder ->
                             NoteFolderBadge(
                                 name = folder.name,
@@ -197,6 +198,25 @@ private fun NoteFolderBadge(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
             color = accent,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun NoteHorizonBadge(
+    label: String,
+) {
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSoft,
             maxLines = 1,
         )
     }

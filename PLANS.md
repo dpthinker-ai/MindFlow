@@ -37,6 +37,9 @@ Already implemented:
 - share-to-capture entry
 - home quick capture widget
 - voice-to-text capture
+- note horizons for short / medium / long implementation windows
+- home time bank planning
+- direction-stage execution rhythm across Flow / thread / reminders
 
 ## P0: Make It Daily
 
@@ -146,7 +149,8 @@ Planned items:
   - promote from idea to in progress
   - add a new note directly from the thread workspace
   - capture current thread judgment into a new note
-  - notes created from a thread preserve that thread's tag or folder context
+- notes created from a thread preserve that thread's tag or folder context
+- short / medium / long horizons now influence reminder copy and execution priority
 
 3. Follow-up prompts
 - revisit notes that have stayed untouched too long
@@ -184,7 +188,8 @@ Planned items:
   - followed directions in Flow can now turn a research validation loop directly into a seeded note
   - thread workspace can now directly capture the most valuable clustered validation loop into a dedicated note
   - reminder payloads can now explain why a validation step matters now before surfacing the concrete validation action
-  - validation capture seeds now carry a lightweight “if this holds, what to push next” execution prompt
+- validation capture seeds now carry a lightweight “if this holds, what to push next” execution prompt
+- directions now expose a stage-aware execution rhythm so research and action can stay in one loop
 
 2. Topic maps
 - not heavy graph-first UI
@@ -211,14 +216,14 @@ Planned items:
 
 Next best order:
 
-1. thread-aware execution summaries outside the thread page
-2. model-direct external research snapshots that stay consistent across Flow / thread / reminders
-3. direction-stage execution rhythm beyond one-step follow-ups
+1. stronger external research grounding beyond model-only perspective
+2. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
+3. direction-level execution summaries that feel continuous, not episodic
 
 Current progress:
 
-- 1: implemented in followed directions, thread execution section, and reminder validation context
-- 2: implemented with shared external research snapshots and AI 外部视角 surfaces
+- 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
+- 2: first version implemented with short / medium / long horizons and direction-stage rhythm
 - 3: not fully complete yet; current execution is still centered on immediate next-step loops
 
 ## Success Criteria

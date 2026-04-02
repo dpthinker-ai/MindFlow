@@ -1,11 +1,16 @@
 package com.mindflow.app.data.connect
 
 import com.mindflow.app.data.brief.DailyBriefSource
+import com.mindflow.app.data.model.NoteHorizon
 
 data class ThreadExecutionSummary(
     val focusNoteId: Long? = null,
     val summary: String = "",
     val blocker: String = "",
+    val stage: DirectionStage = DirectionStage.FORMING,
+    val stageReason: String = "",
+    val rhythmLine: String = "",
+    val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
     val whyNow: String = "",
     val nextStep: String = "",
     val validationStep: String = "",

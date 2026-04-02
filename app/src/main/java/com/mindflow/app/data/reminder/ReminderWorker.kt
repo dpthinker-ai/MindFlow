@@ -18,6 +18,7 @@ import com.mindflow.app.MindFlowApplication
 import com.mindflow.app.R
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThreadResearchAnalyzer
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.ui.navigation.FlowFocus
@@ -115,6 +116,9 @@ class ReminderWorker(
             researchContext?.followUpReason
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("现在值得验证：$it") }
+            researchContext?.rhythmLine
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(it) }
             researchContext?.validationStep
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("研究验证：$it") }
@@ -415,6 +419,8 @@ private data class ResearchReminderContext(
     val threadKey: String,
     val threadTitle: String,
     val label: String,
+    val stageLabel: String,
+    val rhythmLine: String,
     val validationStep: String,
     val followUpReason: String,
     val executionPrompt: String,
@@ -453,6 +459,7 @@ private fun buildEveningSeed(note: NoteEntity?): String =
 private fun buildResearchValidationSeed(context: ResearchReminderContext): String =
     buildString {
         appendLine("围绕「${context.threadTitle.removePrefix("#").trim()}」记一条验证记录：")
+        appendLine("- 当前阶段：${context.stageLabel}")
         appendLine("- 研究线索：${context.label}")
         context.followUpReason
             .takeIf { it.isNotBlank() }
@@ -468,18 +475,28 @@ private fun buildResearchValidationSeed(context: ResearchReminderContext): Strin
 
 private fun buildReminderNextStep(note: NoteEntity): String =
     when (note.status) {
-        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再往前拱一步。"
+        NoteStatus.IN_PROGRESS -> when (note.horizon) {
+            NoteHorizon.SHORT -> "先把这一周内最小的一步推进掉。"
+            NoteHorizon.MEDIUM -> "先补一句最新进展，再把两三周内的验证接上。"
+            NoteHorizon.LONG -> "先补一句最新进展，再确认这个长期方向本月最该推进什么。"
+        }
         NoteStatus.DONE -> ""
-        NoteStatus.IDEA -> "先补一条更具体的记录，把它重新压回到可推进状态。"
+        NoteStatus.IDEA -> when (note.horizon) {
+            NoteHorizon.SHORT -> "先把它压成这周内能完成的一步。"
+            NoteHorizon.MEDIUM -> "先补一条更具体的记录，把它压回到两三周内可验证的状态。"
+            NoteHorizon.LONG -> "先把它压成一个月内最值得验证的问题。"
+        }
     }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes
         .filter { it.status == NoteStatus.IN_PROGRESS }
-        .maxByOrNull { it.updatedAt }
+        .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+        .firstOrNull()
         ?: notes
             .filter { it.status == NoteStatus.IDEA }
-            .maxByOrNull { it.updatedAt }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
 
 private fun pickStaleNote(
     notes: List<NoteEntity>,
@@ -490,7 +507,8 @@ private fun pickStaleNote(
         .filter { it.id != excludeNoteId }
         .filter { it.status != NoteStatus.DONE }
         .filter { it.updatedAt < threshold }
-        .minByOrNull { it.updatedAt }
+        .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenBy { it.updatedAt })
+        .firstOrNull()
 }
 
 private suspend fun buildResearchReminderContext(
@@ -513,6 +531,8 @@ private suspend fun buildResearchReminderContext(
                 threadKey = threadKey,
                 threadTitle = thread.title,
                 label = research.outsideAngle.ifBlank { thread.title },
+                stageLabel = execution.stage.label,
+                rhythmLine = execution.rhythmLine,
                 validationStep = validationStep,
                 followUpReason = execution.validationReason.ifBlank { execution.whyNow },
                 executionPrompt = execution.postValidationAction,

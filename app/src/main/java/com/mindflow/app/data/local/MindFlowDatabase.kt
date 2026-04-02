@@ -12,7 +12,7 @@ import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 
 @Database(
     entities = [NoteEntity::class, NoteStatusHistoryEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(MindFlowConverters::class)
@@ -38,6 +38,22 @@ abstract class MindFlowDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("UPDATE notes SET folderKey = 'health' WHERE folderKey = 'fitness'")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN horizon TEXT NOT NULL DEFAULT 'MEDIUM'")
+                db.execSQL(
+                    """
+                    UPDATE notes
+                    SET horizon = CASE
+                        WHEN status = 'IN_PROGRESS' THEN 'SHORT'
+                        WHEN status = 'DONE' OR isArchived = 1 THEN 'LONG'
+                        ELSE 'MEDIUM'
+                    END
+                    """.trimIndent(),
+                )
             }
         }
     }

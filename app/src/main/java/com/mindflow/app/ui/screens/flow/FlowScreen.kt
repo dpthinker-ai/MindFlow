@@ -369,6 +369,22 @@ private fun FollowedDirectionRow(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = TextMain,
             )
+            Text(
+                text = "${summary.stage.label} · ${summary.dominantHorizon.label}",
+                style = MaterialTheme.typography.labelSmall,
+                color = AccentBlue,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (summary.rhythmLine.isNotBlank()) {
+                Text(
+                    text = summary.rhythmLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (summary.thread.focusLine.isNotBlank()) {
                 Text(
                     text = summary.thread.focusLine,
@@ -561,6 +577,7 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
         initialTopic = "$cleanTitle · 验证动作",
         initialContent = buildString {
             appendLine("围绕「$cleanTitle」补一条验证记录：")
+            appendLine("- 当前阶段：${stage.label} · ${dominantHorizon.label}")
             appendLine("- 为什么现在接：$whyNow")
             nextStep.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 当前最小动作：$it")
@@ -790,7 +807,7 @@ private fun TodayNoteCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${note.status.label} · ${TimeFormatter.compact(note.updatedAt)}",
+                    text = "${note.horizon.label} · ${note.status.label} · ${TimeFormatter.compact(note.updatedAt)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = accent,
                     maxLines = 1,
@@ -885,6 +902,11 @@ private fun GentleReconnectCard(
                 color = TextMain,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${note.horizon.label} · ${note.status.label}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
             )
             if (reason.isNotBlank()) {
                 Text(

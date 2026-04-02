@@ -789,12 +789,17 @@ private fun ThreadScreen(
                         PanelCard {
                             SectionHeader(
                                 title = "执行",
-                                headline = uiState.focusNote.status.label,
+                                headline = "${uiState.stage.label} · ${uiState.focusNote.status.label}",
                             )
                             Text(
                                 text = uiState.focusNote.topic.ifBlank { "未命名记录" },
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "${uiState.focusNote.horizon.label} · ${uiState.rhythmLine}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AccentBlue,
                             )
                             if (uiState.focusReason.isNotBlank()) {
                                 Text(
@@ -908,10 +913,29 @@ private fun ThreadScreen(
                             headline = if (uiState.insightSourceLabel.isNotBlank()) uiState.insightSourceLabel else null,
                         )
                         Text(
+                            text = "${uiState.stage.label} · ${uiState.dominantHorizon.label}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AccentBlue,
+                        )
+                        if (uiState.rhythmLine.isNotBlank()) {
+                            Text(
+                                text = uiState.rhythmLine,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+                        }
+                        Text(
                             text = uiState.threadSummary.ifBlank { "这条方向正在形成，还需要更多真实记录来稳定主线。" },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+                        if (uiState.stageReason.isNotBlank()) {
+                            Text(
+                                text = uiState.stageReason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+                        }
                         if (uiState.threadBlocker.isNotBlank()) {
                             Text(
                                 text = "卡点",

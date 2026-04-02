@@ -16,9 +16,11 @@ import com.mindflow.app.data.connect.FusionSuggestionState
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
@@ -65,6 +67,10 @@ data class FollowedDirectionSummary(
     val focusNoteId: Long? = null,
     val summary: String = "",
     val blocker: String = "",
+    val stage: DirectionStage = DirectionStage.FORMING,
+    val stageReason: String = "",
+    val rhythmLine: String = "",
+    val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
     val whyNow: String = "",
     val nextStep: String = "",
     val validationStep: String = "",
@@ -206,6 +212,10 @@ class FlowViewModel(
                                     focusNoteId = execution.focusNoteId,
                                     summary = execution.summary,
                                     blocker = execution.blocker,
+                                    stage = execution.stage,
+                                    stageReason = execution.stageReason,
+                                    rhythmLine = execution.rhythmLine,
+                                    dominantHorizon = execution.dominantHorizon,
                                     whyNow = execution.whyNow,
                                     nextStep = execution.nextStep,
                                     validationStep = execution.validationStep,
@@ -285,10 +295,12 @@ class FlowViewModel(
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes
         .filter { it.status == NoteStatus.IN_PROGRESS }
-        .maxByOrNull { it.updatedAt }
+        .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+        .firstOrNull()
         ?: notes
             .filter { it.status == NoteStatus.IDEA }
-            .maxByOrNull { it.updatedAt }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
 
 private fun pickStaleNote(
     notes: List<NoteEntity>,
@@ -299,13 +311,14 @@ private fun pickStaleNote(
         .filter { it.id != excludeNoteId }
         .filter { it.status != NoteStatus.DONE }
         .filter { it.updatedAt < threshold }
-        .minByOrNull { it.updatedAt }
+        .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenBy { it.updatedAt })
+        .firstOrNull()
 }
 
 private fun staleReasonFor(note: NoteEntity?): String =
     when (note?.status) {
-        NoteStatus.IN_PROGRESS -> "这条方向已经晾了一阵，现在最适合重新接上一小步。"
-        NoteStatus.IDEA -> "这条想法沉下去有点久了，值得重新补一条更具体的记录。"
+        NoteStatus.IN_PROGRESS -> "这条${note.horizon.label}方向已经晾了一阵，现在最适合重新接上一小步。"
+        NoteStatus.IDEA -> "这条${note.horizon.label}想法沉下去有点久了，值得重新补一条更具体的记录。"
         else -> ""
     }
 
@@ -350,6 +363,8 @@ private fun staleBridgeFallback(
 private fun staleNextStepFallback(note: NoteEntity?): String =
     when {
         note == null -> ""
+        note.horizon == NoteHorizon.SHORT -> "先把这周内最小的一步落下来，再决定后面要不要放大。"
+        note.horizon == NoteHorizon.LONG -> "先把长期目标压成一个月内要验证的最小问题。"
         note.status == NoteStatus.IN_PROGRESS -> "先补一句最新进展，再把它往前拱一小步。"
         note.folderName() == "工作" -> "先把它压成一个最想验证的问题，再补一条更具体的记录。"
         note.folderName() == "项目" -> "先写下一个最小可验证版本，别直接摊开完整方案。"

@@ -26,6 +26,7 @@ class MarkdownExporter {
             notes.forEachIndexed { index, note ->
                 append("## ${index + 1}. ${note.topic.ifBlank { "未命名想法" }}\n\n")
                 append("- 状态: ${note.status.label}\n")
+                append("- 周期: ${note.horizon.label}（${note.horizon.windowLabel}）\n")
                 append("- 文件夹: ${MindFolderCatalog.fromKey(note.folderKey)?.name ?: "未分类"}\n")
                 append("- 标签: ${note.tags.joinToString("、").ifBlank { "无" }}\n")
                 append("- 创建时间: ${TimeFormatter.full(note.createdAt)}\n")

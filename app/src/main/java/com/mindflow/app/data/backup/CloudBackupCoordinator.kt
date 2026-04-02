@@ -7,6 +7,7 @@ import com.mindflow.app.data.local.dao.NoteDao
 import com.mindflow.app.data.local.dao.NoteStatusHistoryDao
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
+import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
@@ -103,9 +104,12 @@ class CloudBackupCoordinator(
                         content = restored.note.content,
                         topic = restored.note.topic.ifBlank { "未命名想法" },
                         topicSource = TopicSource.MANUAL,
+                        folderKey = restored.note.folderKey,
+                        folderSource = FolderSource.MANUAL,
                         tags = restored.note.tags,
                         tagSource = TagSource.MANUAL,
                         status = restored.note.status,
+                        horizon = restored.note.horizon,
                         isArchived = restored.note.isArchived,
                         createdAt = restored.note.createdAt,
                         updatedAt = restored.note.updatedAt,

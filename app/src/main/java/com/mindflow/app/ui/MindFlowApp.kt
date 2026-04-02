@@ -59,6 +59,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.navigation.CaptureSeed
@@ -91,6 +92,7 @@ fun MindFlowApp(
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
+    timeBankSettingsRepository: TimeBankSettingsRepository,
     threadPreferencesRepository: ThreadPreferencesRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     reminderScheduler: ReminderScheduler,
@@ -194,6 +196,7 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FEED) {
                 FeedRoute(
                     noteRepository = noteRepository,
+                    timeBankSettingsRepository = timeBankSettingsRepository,
                     onCreateNote = { openCapture() },
                     onOpenStatusFilter = { status, archivedOnly ->
                         navController.navigate(

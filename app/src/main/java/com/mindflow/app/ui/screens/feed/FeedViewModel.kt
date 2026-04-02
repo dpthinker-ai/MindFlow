@@ -7,7 +7,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +26,7 @@ data class FeedUiState(
     val inProgressCount: Int = 0,
     val doneCount: Int = 0,
     val archivedCount: Int = 0,
+    val timeBank: TimeBankSettings = TimeBankSettings(),
 )
 
 sealed interface FeedEvent {
@@ -32,11 +35,13 @@ sealed interface FeedEvent {
 
 class FeedViewModel(
     private val noteRepository: NoteRepository,
+    private val timeBankSettingsRepository: TimeBankSettingsRepository,
 ) : ViewModel() {
     val uiState: StateFlow<FeedUiState> = combine(
         noteRepository.observeFeed(),
         noteRepository.observeAllNotes(),
-    ) { feedNotes, allNotes ->
+        timeBankSettingsRepository.settings,
+    ) { feedNotes, allNotes, timeBankSettings ->
         FeedUiState(
             notes = feedNotes,
             totalCount = allNotes.size,
@@ -44,6 +49,7 @@ class FeedViewModel(
             inProgressCount = allNotes.count { it.status == NoteStatus.IN_PROGRESS },
             doneCount = allNotes.count { it.status == NoteStatus.DONE },
             archivedCount = allNotes.count { it.isArchived },
+            timeBank = timeBankSettings,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FeedUiState())
 
@@ -72,11 +78,19 @@ class FeedViewModel(
         }
     }
 
+    fun saveTimeBank(settings: TimeBankSettings) {
+        viewModelScope.launch {
+            timeBankSettingsRepository.save(settings)
+            _events.emit(FeedEvent.Message("时间银行已更新"))
+        }
+    }
+
     companion object {
         fun factory(
             noteRepository: NoteRepository,
+            timeBankSettingsRepository: TimeBankSettingsRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { FeedViewModel(noteRepository) }
+            initializer { FeedViewModel(noteRepository, timeBankSettingsRepository) }
         }
     }
 }

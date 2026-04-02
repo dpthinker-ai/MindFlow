@@ -1,5 +1,6 @@
 package com.mindflow.app.data.importing
 
+import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 
 data class ImportedNote(
@@ -8,6 +9,7 @@ data class ImportedNote(
     val tags: List<String>,
     val content: String,
     val status: NoteStatus,
+    val horizon: NoteHorizon,
     val isArchived: Boolean,
     val createdAt: Long,
     val updatedAt: Long,

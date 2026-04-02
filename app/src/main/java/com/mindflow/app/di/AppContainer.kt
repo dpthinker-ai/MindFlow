@@ -27,8 +27,10 @@ import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
+import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.topic.AiFolderClassifier
@@ -53,6 +55,7 @@ class AppContainer(context: Context) {
         MindFlowDatabase.MIGRATION_1_2,
         MindFlowDatabase.MIGRATION_2_3,
         MindFlowDatabase.MIGRATION_3_4,
+        MindFlowDatabase.MIGRATION_4_5,
     )
         .build()
 
@@ -74,6 +77,11 @@ class AppContainer(context: Context) {
 
     val reminderSettingsRepository: ReminderSettingsRepository =
         PreferencesReminderSettingsRepository(
+            context = context.applicationContext,
+        )
+
+    val timeBankSettingsRepository: TimeBankSettingsRepository =
+        PreferencesTimeBankSettingsRepository(
             context = context.applicationContext,
         )
 
