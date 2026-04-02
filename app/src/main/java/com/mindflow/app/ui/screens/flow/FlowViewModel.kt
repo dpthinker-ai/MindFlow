@@ -13,6 +13,7 @@ import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.FusionSuggestionState
+import com.mindflow.app.data.connect.DirectionAssetAnalyzer
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
@@ -81,6 +82,9 @@ data class FollowedDirectionSummary(
     val contrarianQuestion: String = "",
     val externalHypothesis: String = "",
     val researchQueries: List<String> = emptyList(),
+    val assetLabel: String = "",
+    val assetSummary: String = "",
+    val assetNoteId: Long? = null,
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
@@ -207,6 +211,7 @@ class FlowViewModel(
                                 val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, activeNotes)
                                 val execution = threadExecutionPlanner.summarize(threadKey, threadNotes)
                                 val research = externalResearchPlanner.summarize(threadKey, threadNotes)
+                                val asset = DirectionAssetAnalyzer.build(threadNotes).firstOrNull()
                                 FollowedDirectionSummary(
                                     thread = thread,
                                     focusNoteId = execution.focusNoteId,
@@ -226,6 +231,9 @@ class FlowViewModel(
                                     contrarianQuestion = research.contrarianQuestion,
                                     externalHypothesis = research.externalHypothesis,
                                     researchQueries = research.queries,
+                                    assetLabel = asset?.type?.label.orEmpty(),
+                                    assetSummary = asset?.summary.orEmpty(),
+                                    assetNoteId = asset?.noteId,
                                     source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
                                         DailyBriefSource.AI
                                     } else {

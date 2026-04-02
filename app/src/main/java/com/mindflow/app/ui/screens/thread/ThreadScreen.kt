@@ -998,6 +998,48 @@ private fun ThreadScreen(
                     }
                 }
 
+                if (uiState.directionAssets.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "方向资产",
+                                headline = "${uiState.directionAssets.size} 条",
+                            )
+                            uiState.directionAssets.forEach { asset ->
+                                Surface(
+                                    shape = com.mindflow.app.ui.components.CardShape,
+                                    color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                    modifier = Modifier.clickable { onOpenNote(asset.noteId) },
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = asset.type.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = AccentBlue,
+                                        )
+                                        Text(
+                                            text = asset.summary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = com.mindflow.app.util.TimeFormatter.compact(asset.updatedAt),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSoft,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

@@ -394,6 +394,17 @@ private fun FollowedDirectionRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            summary.assetSummary
+                .takeIf { it.isNotBlank() }
+                ?.let { asset ->
+                    Text(
+                        text = "${summary.assetLabel}：$asset",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             if (summary.summary.isNotBlank() || summary.blocker.isNotBlank() || summary.nextStep.isNotBlank()) {
                 Surface(
                     color = AccentBlue.copy(alpha = 0.08f),
@@ -545,6 +556,12 @@ private fun FollowedDirectionRow(
                     GhostActionButton(
                         text = "记验证",
                         onClick = { onCreateCapture(summary.toResearchCaptureSeed()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (summary.assetNoteId != null) {
+                    GhostActionButton(
+                        text = "看沉淀",
+                        onClick = { onOpenNote(summary.assetNoteId) },
                         modifier = Modifier.weight(1f),
                     )
                 } else {

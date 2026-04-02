@@ -163,6 +163,7 @@ Current status:
 - thread-level stage history: first version implemented
 - research evidence stratification inside thread workspace: first version implemented
 - horizon-aware reminder cadence: first version implemented
+- direction assets surfaced from verified and grounded research: first version implemented
 
 Next strongest direction:
 

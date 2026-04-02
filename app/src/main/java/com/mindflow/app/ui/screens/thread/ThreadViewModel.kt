@@ -9,6 +9,8 @@ import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.connect.DirectionStageHistoryAnalyzer
 import com.mindflow.app.data.connect.DirectionStageHistoryEntry
+import com.mindflow.app.data.connect.DirectionAsset
+import com.mindflow.app.data.connect.DirectionAssetAnalyzer
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
@@ -56,6 +58,7 @@ data class ThreadUiState(
     val rhythmLine: String = "",
     val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
     val stageHistory: List<DirectionStageHistoryEntry> = emptyList(),
+    val directionAssets: List<DirectionAsset> = emptyList(),
     val weeklyStatsLine: String = "",
     val weeklyLines: List<String> = emptyList(),
     val researchOutsideAngle: String = "",
@@ -134,6 +137,7 @@ class ThreadViewModel(
             threadTitle = NoteConnectionAnalyzer.titleForThread(threadKey),
         )
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
+        val directionAssets = DirectionAssetAnalyzer.build(notes)
         val focusNote = pickFocusNote(notes)
         val weeklyReview = buildThreadWeeklyReview(notes)
         ThreadUiState(
@@ -154,6 +158,7 @@ class ThreadViewModel(
             rhythmLine = insight.rhythmLine,
             dominantHorizon = insight.dominantHorizon,
             stageHistory = stageHistory,
+            directionAssets = directionAssets,
             weeklyStatsLine = weeklyReview.statsLine,
             weeklyLines = weeklyReview.lines,
             researchOutsideAngle = insight.researchOutsideAngle,

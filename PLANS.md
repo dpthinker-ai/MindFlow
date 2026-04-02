@@ -43,6 +43,7 @@ Already implemented:
 - thread-level stage history
 - research evidence stratification in thread workspace
 - horizon-aware reminder cadence
+- direction assets from verified and grounded research
 
 ## P0: Make It Daily
 
@@ -228,6 +229,7 @@ Current progress:
 - 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
 - 2: first version implemented with short / medium / long horizons and direction-stage rhythm
 - 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
+- stable direction assets: first version implemented in thread workspace and followed-direction summaries
 
 ## Success Criteria
 
