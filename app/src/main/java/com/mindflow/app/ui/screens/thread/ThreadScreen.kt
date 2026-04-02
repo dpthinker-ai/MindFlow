@@ -65,6 +65,7 @@ import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextSoft
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -573,6 +574,15 @@ private fun ThreadScreen(
                                 title = "研究",
                                 headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理",
                             )
+                            uiState.researchEvidence.summaryLine
+                                .takeIf { it.isNotBlank() }
+                                ?.let { line ->
+                                    Text(
+                                        text = line,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSoft,
+                                    )
+                                }
                             if (uiState.researchOutsideAngle.isNotBlank()) {
                                 ResearchInsightLine(
                                     label = "外部线索",
@@ -917,6 +927,27 @@ private fun ThreadScreen(
                             style = MaterialTheme.typography.labelLarge,
                             color = AccentBlue,
                         )
+                        if (uiState.stageHistory.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                uiState.stageHistory.forEach { entry ->
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                        shape = MaterialTheme.shapes.small,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.7f)),
+                                    ) {
+                                        Text(
+                                            text = "${entry.label} · ${entry.stage.label}",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSoft,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (uiState.rhythmLine.isNotBlank()) {
                             Text(
                                 text = uiState.rhythmLine,

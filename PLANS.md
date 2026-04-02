@@ -40,6 +40,9 @@ Already implemented:
 - note horizons for short / medium / long implementation windows
 - home time bank planning
 - direction-stage execution rhythm across Flow / thread / reminders
+- thread-level stage history
+- research evidence stratification in thread workspace
+- horizon-aware reminder cadence
 
 ## P0: Make It Daily
 
@@ -224,7 +227,7 @@ Current progress:
 
 - 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
 - 2: first version implemented with short / medium / long horizons and direction-stage rhythm
-- 3: not fully complete yet; current execution is still centered on immediate next-step loops
+- 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 
 ## Success Criteria
 

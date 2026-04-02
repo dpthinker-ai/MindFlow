@@ -160,7 +160,10 @@ Current status:
 - note horizons for short / medium / long follow-up: implemented
 - direction-stage execution rhythm across Flow / thread / reminders: first version implemented
 - home time bank planning card: first version implemented
+- thread-level stage history: first version implemented
+- research evidence stratification inside thread workspace: first version implemented
+- horizon-aware reminder cadence: first version implemented
 
 Next strongest direction:
 
-- stronger research grounding and direction-stage persistence beyond immediate next steps
+- stronger external research grounding and direction-stage persistence beyond immediate next steps

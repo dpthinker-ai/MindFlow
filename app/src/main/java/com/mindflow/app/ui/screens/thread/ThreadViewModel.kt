@@ -7,8 +7,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.brief.DailyBriefSource
 import com.mindflow.app.data.connect.DirectionStage
+import com.mindflow.app.data.connect.DirectionStageHistoryAnalyzer
+import com.mindflow.app.data.connect.DirectionStageHistoryEntry
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
+import com.mindflow.app.data.connect.ResearchEvidenceSummary
 import com.mindflow.app.data.connect.ResearchCluster
 import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
@@ -51,6 +55,7 @@ data class ThreadUiState(
     val stageReason: String = "",
     val rhythmLine: String = "",
     val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
+    val stageHistory: List<DirectionStageHistoryEntry> = emptyList(),
     val weeklyStatsLine: String = "",
     val weeklyLines: List<String> = emptyList(),
     val researchOutsideAngle: String = "",
@@ -59,6 +64,7 @@ data class ThreadUiState(
     val researchExternalHypothesis: String = "",
     val researchQueries: List<String> = emptyList(),
     val researchSource: DailyBriefSource = DailyBriefSource.RULE,
+    val researchEvidence: ResearchEvidenceSummary = ResearchEvidenceSummary(),
     val focusNote: NoteEntity? = null,
     val focusReason: String = "",
     val executionWhyNow: String = "",
@@ -127,6 +133,7 @@ class ThreadViewModel(
             notes = researchNotes,
             threadTitle = NoteConnectionAnalyzer.titleForThread(threadKey),
         )
+        val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
         val focusNote = pickFocusNote(notes)
         val weeklyReview = buildThreadWeeklyReview(notes)
         ThreadUiState(
@@ -146,6 +153,7 @@ class ThreadViewModel(
             stageReason = insight.stageReason,
             rhythmLine = insight.rhythmLine,
             dominantHorizon = insight.dominantHorizon,
+            stageHistory = stageHistory,
             weeklyStatsLine = weeklyReview.statsLine,
             weeklyLines = weeklyReview.lines,
             researchOutsideAngle = insight.researchOutsideAngle,
@@ -154,6 +162,7 @@ class ThreadViewModel(
             researchExternalHypothesis = insight.researchExternalHypothesis,
             researchQueries = insight.researchQueries,
             researchSource = insight.researchSource,
+            researchEvidence = ResearchEvidenceAnalyzer.summarize(researchNotes),
             focusNote = focusNote,
             focusReason = focusReasonFor(focusNote),
             executionWhyNow = insight.executionWhyNow,

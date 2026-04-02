@@ -488,11 +488,47 @@ private fun buildReminderNextStep(note: NoteEntity): String =
         }
     }
 
+private fun continueEligible(kind: ReminderKind, note: NoteEntity, now: Long = System.currentTimeMillis()): Boolean {
+    val elapsed = now - note.updatedAt
+    val threshold = when (kind) {
+        ReminderKind.MORNING -> when (note.status) {
+            NoteStatus.IN_PROGRESS -> when (note.horizon) {
+                NoteHorizon.SHORT -> 18L * 60 * 60 * 1_000
+                NoteHorizon.MEDIUM -> 2L * 24 * 60 * 60 * 1_000
+                NoteHorizon.LONG -> 5L * 24 * 60 * 60 * 1_000
+            }
+            NoteStatus.IDEA -> when (note.horizon) {
+                NoteHorizon.SHORT -> 8L * 60 * 60 * 1_000
+                NoteHorizon.MEDIUM -> 24L * 60 * 60 * 1_000
+                NoteHorizon.LONG -> 3L * 24 * 60 * 60 * 1_000
+            }
+            NoteStatus.DONE -> Long.MAX_VALUE
+        }
+
+        ReminderKind.EVENING -> when (note.horizon) {
+            NoteHorizon.SHORT -> 12L * 60 * 60 * 1_000
+            NoteHorizon.MEDIUM -> 2L * 24 * 60 * 60 * 1_000
+            NoteHorizon.LONG -> 6L * 24 * 60 * 60 * 1_000
+        }
+    }
+    return elapsed >= threshold
+}
+
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes
         .filter { it.status == NoteStatus.IN_PROGRESS }
+        .filter { continueEligible(ReminderKind.MORNING, it) }
         .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
         .firstOrNull()
+        ?: notes
+            .filter { it.status == NoteStatus.IDEA }
+            .filter { continueEligible(ReminderKind.MORNING, it) }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
+        ?: notes
+            .filter { it.status == NoteStatus.IN_PROGRESS }
+            .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
+            .firstOrNull()
         ?: notes
             .filter { it.status == NoteStatus.IDEA }
             .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenByDescending { it.updatedAt })
@@ -502,11 +538,18 @@ private fun pickStaleNote(
     notes: List<NoteEntity>,
     excludeNoteId: Long?,
 ): NoteEntity? {
-    val threshold = System.currentTimeMillis() - 12L * 24 * 60 * 60 * 1_000
+    val now = System.currentTimeMillis()
     return notes
         .filter { it.id != excludeNoteId }
         .filter { it.status != NoteStatus.DONE }
-        .filter { it.updatedAt < threshold }
+        .filter { note ->
+            val staleThreshold = when (note.horizon) {
+                NoteHorizon.SHORT -> 3L * 24 * 60 * 60 * 1_000
+                NoteHorizon.MEDIUM -> 10L * 24 * 60 * 60 * 1_000
+                NoteHorizon.LONG -> 28L * 24 * 60 * 60 * 1_000
+            }
+            now - note.updatedAt >= staleThreshold
+        }
         .sortedWith(compareByDescending<NoteEntity> { it.horizon.priority }.thenBy { it.updatedAt })
         .firstOrNull()
 }
