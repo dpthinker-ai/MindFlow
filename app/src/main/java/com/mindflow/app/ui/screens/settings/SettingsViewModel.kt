@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
+    val aiProviderPreset: AiProviderPreset = AiProviderPreset.OPENAI,
     val apiKey: String = "",
     val baseUrl: String = AiSettings.DEFAULT_BASE_URL,
     val model: String = AiSettings.DEFAULT_MODEL,
@@ -98,6 +100,7 @@ class SettingsViewModel(
                         apiKey = settings.apiKey,
                         baseUrl = settings.baseUrl,
                         model = settings.model,
+                        aiProviderPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
                         aiEnabled = settings.aiEnabled,
                         isConfigured = settings.isConfigured,
                         aiLastVerifiedAt = settings.lastVerifiedAt,
@@ -164,6 +167,24 @@ class SettingsViewModel(
 
     fun onAiEnabledChange(value: Boolean) {
         _uiState.update { it.copy(aiEnabled = value) }
+    }
+
+    fun onAiProviderPresetChange(value: AiProviderPreset) {
+        _uiState.update { state ->
+            when (value) {
+                AiProviderPreset.OPENAI,
+                AiProviderPreset.ZHIPU,
+                -> state.copy(
+                    aiProviderPreset = value,
+                    baseUrl = value.baseUrl,
+                    model = value.defaultModel,
+                )
+
+                AiProviderPreset.CUSTOM -> state.copy(
+                    aiProviderPreset = value,
+                )
+            }
+        }
     }
 
     fun onCloudBaseUrlChange(value: String) {

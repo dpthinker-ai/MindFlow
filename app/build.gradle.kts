@@ -29,6 +29,14 @@ fun escaped(value: String): String = value.replace("\\", "\\\\").replace("\"", "
 fun localOrEnv(key: String, envKey: String = key): String =
     (localProperties.getProperty(key) ?: System.getenv(envKey) ?: "").trim()
 
+fun localOrEnvAny(key: String, vararg envKeys: String): String {
+    localProperties.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    envKeys.forEach { envKey ->
+        System.getenv(envKey)?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    return ""
+}
+
 android {
     namespace = "com.mindflow.app"
     compileSdk = 35
@@ -55,17 +63,17 @@ android {
         buildConfigField(
             "String",
             "AI_API_KEY",
-            "\"${escaped(localOrEnv("mindflow.ai.apiKey", "MINDFLOW_AI_API_KEY"))}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.apiKey", "MINDFLOW_AI_API_KEY", "OPENAI_API_KEY"))}\""
         )
         buildConfigField(
             "String",
             "AI_BASE_URL",
-            "\"${escaped(localOrEnv("mindflow.ai.baseUrl", "MINDFLOW_AI_BASE_URL").ifBlank { "https://open.bigmodel.cn/api/paas/v4" })}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.baseUrl", "MINDFLOW_AI_BASE_URL", "OPENAI_BASE_URL").ifBlank { "https://api.openai.com/v1" })}\""
         )
         buildConfigField(
             "String",
             "AI_MODEL",
-            "\"${escaped(localOrEnv("mindflow.ai.model", "MINDFLOW_AI_MODEL").ifBlank { "glm-4.7" })}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.model", "MINDFLOW_AI_MODEL", "OPENAI_MODEL").ifBlank { "gpt-5.4" })}\""
         )
     }
 

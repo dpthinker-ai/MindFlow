@@ -139,21 +139,38 @@ sdk.dir=/your/android/sdk
 
 AI 能力是增强层，不配置也能正常使用，本地规则会兜底。
 
-可通过 `local.properties` 或环境变量配置：
+支持三种接入方式：
+- `OpenAI`：默认方案
+- `智谱`：保留原有兼容接口接法
+- `自定义`：任何 OpenAI 兼容接口
+
+OpenAI 默认配置示例，可通过 `local.properties` 或环境变量注入：
 
 ```properties
 mindflow.ai.apiKey=YOUR_API_KEY
-mindflow.ai.baseUrl=https://open.bigmodel.cn/api/paas/v4
-mindflow.ai.model=glm-4.7
+mindflow.ai.baseUrl=https://api.openai.com/v1
+mindflow.ai.model=gpt-5.4
 ```
 
 对应环境变量：
 
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
 - `MINDFLOW_AI_API_KEY`
 - `MINDFLOW_AI_BASE_URL`
 - `MINDFLOW_AI_MODEL`
 
+如果你想切到智谱，也可以直接在应用里选择 `智谱` 预设，或手动填：
+
+```properties
+mindflow.ai.apiKey=YOUR_ZHIPU_API_KEY
+mindflow.ai.baseUrl=https://open.bigmodel.cn/api/paas/v4
+mindflow.ai.model=glm-4.7
+```
+
 如果 `apiKey`、`baseUrl` 或 `model` 缺失，应用会直接回退本地规则提取。
+默认模型现在是 OpenAI 官方当前更强的 `gpt-5.4`；如果你更在意速度和成本，也可以手动改成 `gpt-5-mini`。
 
 ## 每日提醒
 

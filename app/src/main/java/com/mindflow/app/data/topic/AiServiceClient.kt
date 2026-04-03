@@ -1,5 +1,6 @@
 package com.mindflow.app.data.topic
 
+import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -66,7 +67,7 @@ class AiServiceClient {
         return@withContext when (result) {
             is AiChatResult.Success -> AiConnectionResult(
                 isConfiguredCorrectly = true,
-                message = "连接成功，智谱模型可以正常调用",
+                message = "连接成功，${AiProviderPreset.fromBaseUrl(settings.baseUrl).label} 模型可以正常调用",
             )
             is AiChatResult.Failure -> AiConnectionResult(
                 isConfiguredCorrectly = result.isConfiguredCorrectly,
@@ -272,7 +273,10 @@ class AiServiceClient {
             )
         }
         var lastFailure: AiChatResult.Failure? = null
-        val authCandidates = buildAuthCandidates(settings.apiKey.trim())
+        val authCandidates = buildAuthCandidates(
+            apiKey = settings.apiKey.trim(),
+            providerPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
+        )
         authCandidates.forEachIndexed { index, authHeader ->
             when (
                 val result = executeChatCompletion(
@@ -364,7 +368,11 @@ class AiServiceClient {
             }.orEmpty()
 
             if (responseCode !in 200..299) {
-                return parseFailure(responseCode, responseBody)
+                return parseFailure(
+                    httpCode = responseCode,
+                    responseBody = responseBody,
+                    providerPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
+                )
             }
 
             val message = JSONObject(responseBody)
@@ -403,15 +411,20 @@ class AiServiceClient {
         }
     }
 
-    private fun buildAuthCandidates(apiKey: String): List<String> {
+    private fun buildAuthCandidates(
+        apiKey: String,
+        providerPreset: AiProviderPreset,
+    ): List<String> {
         val trimmed = apiKey.trim()
         if (trimmed.isBlank()) return emptyList()
 
         val rawKey = trimmed.removePrefix("Bearer").trim()
-        return listOf(
-            rawKey,
-            "Bearer $rawKey",
-        ).distinct()
+        return when (providerPreset) {
+            AiProviderPreset.OPENAI -> listOf("Bearer $rawKey", rawKey).distinct()
+            AiProviderPreset.ZHIPU,
+            AiProviderPreset.CUSTOM,
+            -> listOf(rawKey, "Bearer $rawKey").distinct()
+        }
     }
 
     private fun extractMessageContent(message: JSONObject?): String? {
@@ -443,6 +456,7 @@ class AiServiceClient {
     private fun parseFailure(
         httpCode: Int,
         responseBody: String,
+        providerPreset: AiProviderPreset,
     ): AiChatResult.Failure {
         val root = runCatching { JSONObject(responseBody) }.getOrNull()
         val errorObject = root?.optJSONObject("error")
@@ -453,7 +467,7 @@ class AiServiceClient {
             errorCode == "1302" || errorMessage.contains("速率限制") || errorMessage.contains("rate limit", ignoreCase = true) -> {
                 AiChatResult.Failure(
                     reason = AiFailureReason.RATE_LIMIT,
-                    message = "已连通智谱，但当前触发了速率限制，请稍后再试",
+                    message = "已连通${providerPreset.label}，但当前触发了速率限制，请稍后再试",
                     isConfiguredCorrectly = true,
                 )
             }

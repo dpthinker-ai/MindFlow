@@ -30,8 +30,8 @@ data class AiSettings(
         get() = verifiedFingerprint.isNotBlank() && verifiedFingerprint == configFingerprint
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-        const val DEFAULT_MODEL = "glm-4.7"
+        val DEFAULT_BASE_URL = AiProviderPreset.OPENAI.baseUrl
+        val DEFAULT_MODEL = AiProviderPreset.OPENAI.defaultModel
 
         fun fingerprint(
             apiKey: String,

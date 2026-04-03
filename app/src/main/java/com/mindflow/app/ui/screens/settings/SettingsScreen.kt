@@ -28,6 +28,8 @@ import androidx.compose.material.icons.outlined.RestorePage
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Timelapse
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,6 +56,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -175,6 +178,7 @@ fun SettingsRoute(
     SettingsScreen(
         uiState = uiState,
         onAiEnabledChange = viewModel::onAiEnabledChange,
+        onAiProviderPresetChange = viewModel::onAiProviderPresetChange,
         onApiKeyChange = viewModel::onApiKeyChange,
         onBaseUrlChange = viewModel::onBaseUrlChange,
         onModelChange = viewModel::onModelChange,
@@ -225,6 +229,7 @@ fun SettingsRoute(
 private fun SettingsScreen(
     uiState: SettingsUiState,
     onAiEnabledChange: (Boolean) -> Unit,
+    onAiProviderPresetChange: (AiProviderPreset) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onBaseUrlChange: (String) -> Unit,
     onModelChange: (String) -> Unit,
@@ -306,6 +311,7 @@ private fun SettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
                 onAiEnabledChange = onAiEnabledChange,
+                onAiProviderPresetChange = onAiProviderPresetChange,
                 onApiKeyChange = onApiKeyChange,
                 onBaseUrlChange = onBaseUrlChange,
                 onModelChange = onModelChange,
@@ -764,6 +770,7 @@ private fun AiSettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onAiEnabledChange: (Boolean) -> Unit,
+    onAiProviderPresetChange: (AiProviderPreset) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onBaseUrlChange: (String) -> Unit,
     onModelChange: (String) -> Unit,
@@ -803,7 +810,7 @@ private fun AiSettingsScreen(
                     } else if (uiState.isConfigured) {
                         "当前配置还没验证。"
                     } else {
-                        "补一个 API Key 就能用。"
+                        "补一个 ${uiState.aiProviderPreset.label} API Key 就能用。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -814,8 +821,12 @@ private fun AiSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "默认使用智谱兼容接口。",
+                description = "支持 OpenAI、智谱和自定义兼容接口；默认使用 OpenAI 官方接口。",
             ) {
+                ProviderPresetSelector(
+                    selectedPreset = uiState.aiProviderPreset,
+                    onSelect = onAiProviderPresetChange,
+                )
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.92f),
                     shape = MaterialTheme.shapes.medium,
@@ -860,7 +871,13 @@ private fun AiSettingsScreen(
                     value = uiState.aiTokensToday.toString(),
                     accent = MaterialTheme.colorScheme.onSurface,
                 )
-                SettingsField(value = uiState.baseUrl, onValueChange = onBaseUrlChange, label = "Base URL", secret = false)
+                SettingsField(
+                    value = uiState.baseUrl,
+                    onValueChange = onBaseUrlChange,
+                    label = "Base URL",
+                    secret = false,
+                    enabled = uiState.aiProviderPreset == AiProviderPreset.CUSTOM,
+                )
                 SettingsField(value = uiState.model, onValueChange = onModelChange, label = "Model", secret = false)
                 SettingsField(value = uiState.apiKey, onValueChange = onApiKeyChange, label = "API Key", secret = true)
                 GhostActionButton(
@@ -883,6 +900,39 @@ private fun AiSettingsScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ProviderPresetSelector(
+    selectedPreset: AiProviderPreset,
+    onSelect: (AiProviderPreset) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        GridTwo {
+            AiProviderPreset.entries.take(2).forEach { preset ->
+                FilterChip(
+                    selected = selectedPreset == preset,
+                    onClick = { onSelect(preset) },
+                    label = { Text(preset.label) },
+                    modifier = Modifier.weight(1f),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            }
+        }
+        FilterChip(
+            selected = selectedPreset == AiProviderPreset.CUSTOM,
+            onClick = { onSelect(AiProviderPreset.CUSTOM) },
+            label = { Text(AiProviderPreset.CUSTOM.label) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        )
     }
 }
 
@@ -1038,6 +1088,7 @@ private fun SettingsField(
     onValueChange: (String) -> Unit,
     label: String,
     secret: Boolean,
+    enabled: Boolean = true,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
@@ -1048,6 +1099,7 @@ private fun SettingsField(
             onValueChange = onValueChange,
             label = { Text(label) },
             singleLine = true,
+            enabled = enabled,
             visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
