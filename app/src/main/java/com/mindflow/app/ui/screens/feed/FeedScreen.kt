@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,15 +15,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.Timelapse
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,7 +39,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.share.NoteShareCardGenerator
@@ -59,9 +57,12 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
+import com.mindflow.app.ui.theme.AccentDanger
 import com.mindflow.app.ui.theme.AccentSuccess
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun FeedRoute(
@@ -121,7 +122,6 @@ fun FeedRoute(
         onOpenStatusFilter = onOpenStatusFilter,
         onOpenNote = onOpenNote,
         onArchiveNote = viewModel::archiveNote,
-        onSaveTimeBank = viewModel::saveTimeBank,
         onDeleteNote = { note ->
             scope.launch {
                 pendingDeletedIds = pendingDeletedIds + note.id
@@ -150,7 +150,6 @@ private fun FeedScreen(
     onOpenStatusFilter: (NoteStatus?, Boolean) -> Unit,
     onOpenNote: (Long) -> Unit,
     onArchiveNote: (Long) -> Unit,
-    onSaveTimeBank: (TimeBankSettings) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
@@ -158,18 +157,6 @@ private fun FeedScreen(
     val completionPercent = (completionProgress * 100).toInt()
     val visibleNotes = remember(uiState.notes, hiddenNoteIds) {
         uiState.notes.filterNot { it.id in hiddenNoteIds }
-    }
-    var showTimeBankDialog by remember { mutableStateOf(false) }
-
-    if (showTimeBankDialog) {
-        TimeBankDialog(
-            initial = uiState.timeBank,
-            onDismiss = { showTimeBankDialog = false },
-            onSave = {
-                showTimeBankDialog = false
-                onSaveTimeBank(it)
-            },
-        )
     }
 
     ScreenBackground {
@@ -189,11 +176,18 @@ private fun FeedScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
                             text = "灵感易逝，及时行动",
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        TimeBankBadge(
+                            remainingActiveDays = uiState.timeBank.remainingActiveDays,
                         )
                     }
                 }
@@ -269,7 +263,7 @@ private fun FeedScreen(
                     PanelCard {
                         SectionHeader(
                             title = "时间银行",
-                            headline = "还剩 ${uiState.timeBank.remainingLifeDays} 天",
+                            headline = "可主动投入 ${formatDays(uiState.timeBank.remainingActiveDays)} 天",
                         )
                         Text(
                             text = "按预期 ${uiState.timeBank.expectedLifespan} 岁、当前 ${uiState.timeBank.currentAge} 岁估算。",
@@ -277,15 +271,9 @@ private fun FeedScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = "如果按每周 ${uiState.timeBank.activeDaysPerWeek} 天主动投入来算，还能认真用上的时间大约还有 ${uiState.timeBank.remainingActiveDays} 天。",
+                            text = "如果按每周 ${uiState.timeBank.activeDaysPerWeek} 天主动投入来算，还能认真用上的时间大约还有 ${formatDays(uiState.timeBank.remainingActiveDays)} 天。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        ActionButton(
-                            text = "调整参数",
-                            onClick = { showTimeBankDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            icon = Icons.Outlined.Timelapse,
                         )
                     }
                 }
@@ -328,59 +316,32 @@ private fun FeedScreen(
 }
 
 @Composable
-private fun TimeBankDialog(
-    initial: TimeBankSettings,
-    onDismiss: () -> Unit,
-    onSave: (TimeBankSettings) -> Unit,
+private fun TimeBankBadge(
+    remainingActiveDays: Int,
 ) {
-    var age by remember(initial.currentAge) { mutableStateOf(initial.currentAge.toString()) }
-    var lifespan by remember(initial.expectedLifespan) { mutableStateOf(initial.expectedLifespan.toString()) }
-    var activeDays by remember(initial.activeDaysPerWeek) { mutableStateOf(initial.activeDaysPerWeek.toString()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("调整时间银行") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = age,
-                    onValueChange = { age = it.filter(Char::isDigit).take(3) },
-                    label = { Text("当前年龄") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = lifespan,
-                    onValueChange = { lifespan = it.filter(Char::isDigit).take(3) },
-                    label = { Text("预期寿命") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = activeDays,
-                    onValueChange = { activeDays = it.filter(Char::isDigit).take(1) },
-                    label = { Text("每周主动投入天数") },
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        TimeBankSettings(
-                            currentAge = age.toIntOrNull() ?: initial.currentAge,
-                            expectedLifespan = lifespan.toIntOrNull() ?: initial.expectedLifespan,
-                            activeDaysPerWeek = (activeDays.toIntOrNull() ?: initial.activeDaysPerWeek).coerceIn(1, 7),
-                        ),
-                    )
-                },
-            ) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        },
-    )
+    Surface(
+        color = AccentDanger,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "时间银行",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.82f),
+            )
+            Text(
+                text = "可用 ${formatDays(remainingActiveDays)} 天",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
+
+private fun formatDays(days: Int): String = NumberFormat.getIntegerInstance(Locale.CHINA).format(days)

@@ -311,6 +311,7 @@ fun MindFlowApp(
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
+                    timeBankSettingsRepository = timeBankSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.RestorePage
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Timelapse
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -60,6 +61,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
@@ -82,6 +84,7 @@ private enum class SettingsDestination {
     CLOUD,
     AI,
     REMINDER,
+    TIME_BANK,
 }
 
 @Composable
@@ -90,6 +93,7 @@ fun SettingsRoute(
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
+    timeBankSettingsRepository: TimeBankSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     reminderScheduler: ReminderScheduler,
     aiServiceClient: AiServiceClient,
@@ -100,6 +104,7 @@ fun SettingsRoute(
             aiSettingsRepository = aiSettingsRepository,
             cloudBackupSettingsRepository = cloudBackupSettingsRepository,
             reminderSettingsRepository = reminderSettingsRepository,
+            timeBankSettingsRepository = timeBankSettingsRepository,
             cloudBackupCoordinator = cloudBackupCoordinator,
             reminderScheduler = reminderScheduler,
             aiServiceClient = aiServiceClient,
@@ -183,8 +188,12 @@ fun SettingsRoute(
         onCloudAutoBackupChange = viewModel::onCloudAutoBackupChange,
         onMorningBriefEnabledChange = viewModel::onMorningBriefEnabledChange,
         onEveningReviewEnabledChange = viewModel::onEveningReviewEnabledChange,
+        onTimeBankCurrentAgeChange = viewModel::onTimeBankCurrentAgeChange,
+        onTimeBankExpectedLifespanChange = viewModel::onTimeBankExpectedLifespanChange,
+        onTimeBankActiveDaysPerWeekChange = viewModel::onTimeBankActiveDaysPerWeekChange,
         onSaveCloud = viewModel::saveCloud,
         onSaveReminder = viewModel::saveReminder,
+        onSaveTimeBank = viewModel::saveTimeBank,
         onClearCloud = viewModel::clearCloud,
         onBackupToCloud = viewModel::backupToCloud,
         onRestoreRequest = { showRestoreDialog = true },
@@ -229,8 +238,12 @@ private fun SettingsScreen(
     onCloudAutoBackupChange: (Boolean) -> Unit,
     onMorningBriefEnabledChange: (Boolean) -> Unit,
     onEveningReviewEnabledChange: (Boolean) -> Unit,
+    onTimeBankCurrentAgeChange: (String) -> Unit,
+    onTimeBankExpectedLifespanChange: (String) -> Unit,
+    onTimeBankActiveDaysPerWeekChange: (String) -> Unit,
     onSaveCloud: () -> Unit,
     onSaveReminder: () -> Unit,
+    onSaveTimeBank: () -> Unit,
     onClearCloud: () -> Unit,
     onBackupToCloud: () -> Unit,
     onRestoreRequest: () -> Unit,
@@ -272,6 +285,7 @@ private fun SettingsScreen(
                 onOpenCloud = { destination = SettingsDestination.CLOUD },
                 onOpenAi = { destination = SettingsDestination.AI },
                 onOpenReminder = { destination = SettingsDestination.REMINDER },
+                onOpenTimeBank = { destination = SettingsDestination.TIME_BANK },
                 onExport = onExport,
                 onImport = onImport,
             )
@@ -307,6 +321,14 @@ private fun SettingsScreen(
                 onSaveReminder = onSaveReminder,
                 onRequestNotificationPermission = onRequestNotificationPermission,
             )
+            SettingsDestination.TIME_BANK -> TimeBankSettingsScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onTimeBankCurrentAgeChange = onTimeBankCurrentAgeChange,
+                onTimeBankExpectedLifespanChange = onTimeBankExpectedLifespanChange,
+                onTimeBankActiveDaysPerWeekChange = onTimeBankActiveDaysPerWeekChange,
+                onSaveTimeBank = onSaveTimeBank,
+            )
         }
     }
 }
@@ -317,6 +339,7 @@ private fun SettingsHomeScreen(
     onOpenCloud: () -> Unit,
     onOpenAi: () -> Unit,
     onOpenReminder: () -> Unit,
+    onOpenTimeBank: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
@@ -383,6 +406,16 @@ private fun SettingsHomeScreen(
             }
 
             item {
+                SettingsEntryCard(
+                    title = "时间银行",
+                    summary = "按每周 ${uiState.timeBankPreview.activeDaysPerWeek} 天估算，还可主动投入 ${uiState.timeBankPreview.remainingActiveDays} 天",
+                    headline = "可用时间",
+                    accent = Accent,
+                    onClick = onOpenTimeBank,
+                )
+            }
+
+            item {
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.95f),
                     shape = MaterialTheme.shapes.large,
@@ -412,6 +445,70 @@ private fun SettingsHomeScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeBankSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onTimeBankCurrentAgeChange: (String) -> Unit,
+    onTimeBankExpectedLifespanChange: (String) -> Unit,
+    onTimeBankActiveDaysPerWeekChange: (String) -> Unit,
+    onSaveTimeBank: () -> Unit,
+) {
+    val preview = uiState.timeBankPreview
+    DetailScreenFrame(
+        title = "时间银行",
+        subtitle = "按真正能主动投入的时间来估算",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(
+                    title = "当前估算",
+                    headline = "可用 ${preview.remainingActiveDays} 天",
+                )
+                Text(
+                    text = "当前 ${preview.currentAge} 岁，预期 ${preview.expectedLifespan} 岁；如果按每周 ${preview.activeDaysPerWeek} 天主动投入来算，还能认真用上的时间大约还有 ${preview.remainingActiveDays} 天。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "参数设置",
+                description = "把时间银行调成你的真实状态，首页会优先按可主动投入的时间来显示。",
+            ) {
+                SettingsField(
+                    value = uiState.timeBankCurrentAge,
+                    onValueChange = onTimeBankCurrentAgeChange,
+                    label = "当前年龄",
+                    secret = false,
+                )
+                SettingsField(
+                    value = uiState.timeBankExpectedLifespan,
+                    onValueChange = onTimeBankExpectedLifespanChange,
+                    label = "预期寿命",
+                    secret = false,
+                )
+                SettingsField(
+                    value = uiState.timeBankActiveDaysPerWeek,
+                    onValueChange = onTimeBankActiveDaysPerWeekChange,
+                    label = "每周主动投入天数",
+                    secret = false,
+                )
+                ActionButton(
+                    text = if (uiState.isSavingTimeBank) "保存中..." else "保存时间银行",
+                    onClick = onSaveTimeBank,
+                    enabled = !uiState.isSavingTimeBank,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Timelapse,
+                )
             }
         }
     }

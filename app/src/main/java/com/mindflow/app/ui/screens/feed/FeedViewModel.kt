@@ -78,13 +78,6 @@ class FeedViewModel(
         }
     }
 
-    fun saveTimeBank(settings: TimeBankSettings) {
-        viewModelScope.launch {
-            timeBankSettingsRepository.save(settings)
-            _events.emit(FeedEvent.Message("时间银行已更新"))
-        }
-    }
-
     companion object {
         fun factory(
             noteRepository: NoteRepository,

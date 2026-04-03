@@ -10,11 +10,13 @@ import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.model.ReminderSettings
+import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
+import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,15 +48,26 @@ data class SettingsUiState(
     val cloudLastBackupError: String = "",
     val morningBriefEnabled: Boolean = false,
     val eveningReviewEnabled: Boolean = false,
+    val timeBankCurrentAge: String = TimeBankSettings().currentAge.toString(),
+    val timeBankExpectedLifespan: String = TimeBankSettings().expectedLifespan.toString(),
+    val timeBankActiveDaysPerWeek: String = TimeBankSettings().activeDaysPerWeek.toString(),
     val isSavingAi: Boolean = false,
     val isSavingCloud: Boolean = false,
     val isSavingReminder: Boolean = false,
+    val isSavingTimeBank: Boolean = false,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
     val isTestingAi: Boolean = false,
     val isBackingUpCloud: Boolean = false,
     val isRestoringCloud: Boolean = false,
-)
+) {
+    val timeBankPreview: TimeBankSettings
+        get() = TimeBankSettings(
+            currentAge = timeBankCurrentAge.toIntOrNull() ?: TimeBankSettings().currentAge,
+            expectedLifespan = timeBankExpectedLifespan.toIntOrNull() ?: TimeBankSettings().expectedLifespan,
+            activeDaysPerWeek = (timeBankActiveDaysPerWeek.toIntOrNull() ?: TimeBankSettings().activeDaysPerWeek).coerceIn(1, 7),
+        )
+}
 
 sealed interface SettingsEvent {
     data class Message(val text: String) : SettingsEvent
@@ -66,6 +79,7 @@ class SettingsViewModel(
     private val aiSettingsRepository: AiSettingsRepository,
     private val cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     private val reminderSettingsRepository: ReminderSettingsRepository,
+    private val timeBankSettingsRepository: TimeBankSettingsRepository,
     private val cloudBackupCoordinator: CloudBackupCoordinator,
     private val reminderScheduler: ReminderScheduler,
     private val aiServiceClient: AiServiceClient,
@@ -123,6 +137,17 @@ class SettingsViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            timeBankSettingsRepository.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(
+                        timeBankCurrentAge = settings.currentAge.toString(),
+                        timeBankExpectedLifespan = settings.expectedLifespan.toString(),
+                        timeBankActiveDaysPerWeek = settings.activeDaysPerWeek.toString(),
+                    )
+                }
+            }
+        }
     }
 
     fun onApiKeyChange(value: String) {
@@ -167,6 +192,18 @@ class SettingsViewModel(
 
     fun onEveningReviewEnabledChange(value: Boolean) {
         _uiState.update { it.copy(eveningReviewEnabled = value) }
+    }
+
+    fun onTimeBankCurrentAgeChange(value: String) {
+        _uiState.update { it.copy(timeBankCurrentAge = value.filter(Char::isDigit).take(3)) }
+    }
+
+    fun onTimeBankExpectedLifespanChange(value: String) {
+        _uiState.update { it.copy(timeBankExpectedLifespan = value.filter(Char::isDigit).take(3)) }
+    }
+
+    fun onTimeBankActiveDaysPerWeekChange(value: String) {
+        _uiState.update { it.copy(timeBankActiveDaysPerWeek = value.filter(Char::isDigit).take(1)) }
     }
 
     fun saveAi() {
@@ -271,6 +308,16 @@ class SettingsViewModel(
         }
     }
 
+    fun saveTimeBank() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingTimeBank = true) }
+            timeBankSettingsRepository.save(state.timeBankPreview)
+            _uiState.update { it.copy(isSavingTimeBank = false) }
+            _events.emit(SettingsEvent.Message("时间银行已更新"))
+        }
+    }
+
     fun backupToCloud() {
         viewModelScope.launch {
             _uiState.update { it.copy(isBackingUpCloud = true) }
@@ -323,6 +370,7 @@ class SettingsViewModel(
             aiSettingsRepository: AiSettingsRepository,
             cloudBackupSettingsRepository: CloudBackupSettingsRepository,
             reminderSettingsRepository: ReminderSettingsRepository,
+            timeBankSettingsRepository: TimeBankSettingsRepository,
             cloudBackupCoordinator: CloudBackupCoordinator,
             reminderScheduler: ReminderScheduler,
             aiServiceClient: AiServiceClient,
@@ -333,6 +381,7 @@ class SettingsViewModel(
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
+                    timeBankSettingsRepository = timeBankSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,
