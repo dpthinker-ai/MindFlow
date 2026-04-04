@@ -55,6 +55,10 @@ import com.mindflow.app.ui.components.GridTwo
 import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.GhostActionButton
+import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightChip
+import com.mindflow.app.ui.components.InsightLine
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.MetricTile
 import com.mindflow.app.ui.components.NeonProgress
 import com.mindflow.app.ui.components.PanelCard
@@ -553,10 +557,9 @@ private fun ThreadScreen(
                         uiState.insightSourceLabel
                             .takeIf { it.isNotBlank() }
                             ?.let { sourceLabel ->
-                                Text(
+                                InsightChip(
                                     text = threadInsightSourceText(sourceLabel),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (sourceLabel == "AI") AccentBlue else TextSoft,
+                                    tone = if (sourceLabel == "AI") InsightTone.Primary else InsightTone.Neutral,
                                 )
                             }
                         if (uiState.stageHistory.isNotEmpty()) {
@@ -680,25 +683,25 @@ private fun ThreadScreen(
                                     )
                                 }
                             if (uiState.researchOutsideAngle.isNotBlank()) {
-                                ResearchInsightLine(
+                                InsightLine(
                                     label = "外部视角",
                                     text = uiState.researchOutsideAngle,
                                 )
                             }
                             if (uiState.researchGap.isNotBlank()) {
-                                ResearchInsightLine(
+                                InsightLine(
                                     label = "机会缺口",
                                     text = uiState.researchGap,
                                 )
                             }
                             if (uiState.researchContrarianQuestion.isNotBlank()) {
-                                ResearchInsightLine(
+                                InsightLine(
                                     label = "值得追问",
                                     text = uiState.researchContrarianQuestion,
                                 )
                             }
                             if (uiState.researchExternalHypothesis.isNotBlank()) {
-                                ResearchInsightLine(
+                                InsightLine(
                                     label = "外部假设",
                                     text = uiState.researchExternalHypothesis,
                                 )
@@ -805,41 +808,24 @@ private fun ThreadScreen(
                                 uiState.researchClusters.firstOrNull()
                                     ?.takeIf { it.validationStep.isNotBlank() }
                                     ?.let { cluster ->
-                                        Surface(
-                                            shape = com.mindflow.app.ui.components.CardShape,
-                                            color = AccentBlue.copy(alpha = 0.08f),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                                        InsightBlock(
+                                            sourceLabel = "先验证",
+                                            tone = InsightTone.Primary,
                                         ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                            ) {
-                                                Text(
-                                                    text = "先验证",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = AccentBlue,
-                                                )
-                                                Text(
-                                                    text = "${cluster.label}：${cluster.validationStep}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                )
-                                                cluster.executionPrompt
-                                                    .takeIf { it.isNotBlank() }
-                                                    ?.let { execution ->
-                                                        Text(
-                                                            text = "如果成立：$execution",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = TextSoft,
-                                                        )
-                                                    }
-                                                GhostActionButton(
-                                                    text = "记下验证",
-                                                    onClick = onCaptureTopValidationLoopNote,
-                                                )
-                                            }
+                                            Text(
+                                                text = "${cluster.label}：${cluster.validationStep}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            cluster.executionPrompt
+                                                .takeIf { it.isNotBlank() }
+                                                ?.let { execution ->
+                                                    InsightLine(label = "如果成立", text = execution)
+                                                }
+                                            GhostActionButton(
+                                                text = "记下验证",
+                                                onClick = onCaptureTopValidationLoopNote,
+                                            )
                                         }
                                     }
                                 GhostActionButton(
@@ -963,32 +949,19 @@ private fun ThreadScreen(
                                 )
                             }
                             if (uiState.postValidationAction.isNotBlank()) {
-                                Surface(
-                                    shape = com.mindflow.app.ui.components.CardShape,
-                                    color = AccentBlue.copy(alpha = 0.08f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                                InsightBlock(
+                                    sourceLabel = "如果成立",
+                                    tone = InsightTone.Primary,
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Text(
-                                            text = "如果成立",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AccentBlue,
-                                        )
-                                        Text(
-                                            text = uiState.postValidationAction,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                        GhostActionButton(
-                                            text = "记下执行动作",
-                                            onClick = onCaptureResearchActionNote,
-                                        )
-                                    }
+                                    Text(
+                                        text = uiState.postValidationAction,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    GhostActionButton(
+                                        text = "记下执行动作",
+                                        onClick = onCaptureResearchActionNote,
+                                    )
                                 }
                             }
                             Row(
@@ -1032,11 +1005,7 @@ private fun ThreadScreen(
                                             .padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
-                                        Text(
-                                            text = asset.type.label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AccentBlue,
-                                        )
+                                        InsightChip(text = asset.type.label)
                                         Text(
                                             text = asset.summary,
                                             style = MaterialTheme.typography.bodyMedium,
@@ -1099,25 +1068,6 @@ private fun ThreadScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
-        )
-    }
-}
-
-@Composable
-private fun ResearchInsightLine(
-    label: String,
-    text: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = TextSoft,
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

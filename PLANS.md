@@ -45,6 +45,7 @@ Already implemented:
 - horizon-aware reminder cadence
 - direction assets from verified and grounded research
 - AI information architecture cleanup across Flow / thread / editor
+- unified AI result card language across Flow / thread / reminders
 
 ## P0: Make It Daily
 
@@ -232,6 +233,7 @@ Current progress:
 - 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
+- AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces
 
 ## Success Criteria
 

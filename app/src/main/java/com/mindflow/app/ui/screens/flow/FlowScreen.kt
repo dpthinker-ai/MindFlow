@@ -43,6 +43,10 @@ import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.GhostActionButton
+import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightChip
+import com.mindflow.app.ui.components.InsightLine
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -401,69 +405,36 @@ private fun FollowedDirectionRow(
                     )
                 }
             if (summary.summary.isNotBlank() || summary.nextStep.isNotBlank() || summary.validationStep.isNotBlank()) {
-                Surface(
-                    color = AccentBlue.copy(alpha = 0.08f),
-                    shape = CardShape,
-                    border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+                InsightBlock(
+                    sourceLabel = if (summary.source == DailyBriefSource.AI) "AI 洞察" else "当前判断",
+                    tone = InsightTone.Primary,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Text(
-                            text = if (summary.source == DailyBriefSource.AI) "AI 洞察" else "当前判断",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AccentBlue,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        summary.summary
-                            .takeIf { it.isNotBlank() }
-                            ?.let { text ->
-                                Text(
-                                    text = text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextMain,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        summary.whyNow
-                            .takeIf { it.isNotBlank() }
-                            ?.let { reason ->
-                                Text(
-                                    text = "为什么现在：$reason",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        summary.nextStep
-                            .takeIf { it.isNotBlank() }
-                            ?.let { action ->
-                                Text(
-                                    text = "先做：$action",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextMain,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        summary.validationStep
-                            .takeIf { it.isNotBlank() }
-                            ?.let { validation ->
-                                Text(
-                                    text = "先验证：$validation",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextMain,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                    }
+                    summary.summary
+                        .takeIf { it.isNotBlank() }
+                        ?.let { text ->
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMain,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    summary.whyNow
+                        .takeIf { it.isNotBlank() }
+                        ?.let { reason ->
+                            InsightLine(label = "为什么现在", text = reason, maxLines = 2)
+                        }
+                    summary.nextStep
+                        .takeIf { it.isNotBlank() }
+                        ?.let { action ->
+                            InsightLine(label = "先做", text = action, emphasize = true, maxLines = 2)
+                        }
+                    summary.validationStep
+                        .takeIf { it.isNotBlank() }
+                        ?.let { validation ->
+                            InsightLine(label = "先验证", text = validation, emphasize = true, maxLines = 2)
+                        }
                 }
             }
             if (
@@ -472,34 +443,27 @@ private fun FollowedDirectionRow(
                 summary.contrarianQuestion.isNotBlank() ||
                 summary.externalHypothesis.isNotBlank()
             ) {
-                Surface(
-                    color = WhiteGlass.copy(alpha = 0.78f),
-                    shape = CardShape,
-                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+                InsightBlock(
+                    sourceLabel = if (summary.source == DailyBriefSource.AI) "AI 外部视角" else "外部视角",
+                    tone = InsightTone.Neutral,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
+                    summary.outsideAngle.takeIf { it.isNotBlank() }?.let {
                         Text(
-                            text = if (summary.source == DailyBriefSource.AI) "AI 外部视角" else "外部视角",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMain,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        summary.outsideAngle.takeIf { it.isNotBlank() }?.let {
-                            Text(text = it, style = MaterialTheme.typography.bodySmall, color = TextMain, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
-                            Text(text = "机会缺口：$it", style = MaterialTheme.typography.bodySmall, color = TextSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        (summary.externalHypothesis.takeIf { it.isNotBlank() }
-                            ?: summary.contrarianQuestion.takeIf { it.isNotBlank() })
-                            ?.let {
-                            Text(text = "外部假设：$it", style = MaterialTheme.typography.bodySmall, color = TextMain, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
                     }
+                    summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
+                        InsightLine(label = "机会缺口", text = it, maxLines = 2)
+                    }
+                    (summary.externalHypothesis.takeIf { it.isNotBlank() }
+                        ?: summary.contrarianQuestion.takeIf { it.isNotBlank() })
+                        ?.let {
+                            InsightLine(label = "外部假设", text = it, maxLines = 2)
+                        }
                 }
             }
             Row(
@@ -663,12 +627,7 @@ private fun WeeklyReviewCard(
                 )
             }
             if (source == DailyBriefSource.AI) {
-                Text(
-                    text = "AI 洞察",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                )
+                InsightChip(text = "AI 洞察")
             }
             if (items.isEmpty()) {
                 Text(
@@ -750,31 +709,17 @@ private fun TodayNoteCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (nextActionText.isNotBlank()) {
-                    Surface(
-                        color = accent.copy(alpha = 0.08f),
-                        shape = CardShape,
-                        border = BorderStroke(1.dp, accent.copy(alpha = 0.14f)),
+                    InsightBlock(
+                        sourceLabel = if (nextActionSource == DailyBriefSource.AI) "下一步 · AI 洞察" else "下一步",
+                        tone = InsightTone.Primary,
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = if (nextActionSource == DailyBriefSource.AI) "下一步 · AI 洞察" else "下一步",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = accent,
-                                maxLines = 1,
-                            )
-                            Text(
-                                text = nextActionText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextMain,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                        Text(
+                            text = nextActionText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextMain,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 Text(
@@ -818,12 +763,7 @@ private fun ExplorationPromptCard(
                 maxLines = 1,
             )
             if (source == DailyBriefSource.AI) {
-                Text(
-                    text = "AI 洞察",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                )
+                InsightChip(text = "AI 洞察")
             }
             if (prompts.isEmpty()) {
                 Text(
@@ -875,11 +815,7 @@ private fun GentleReconnectCard(
                 color = TextSoft,
             )
             if (source == DailyBriefSource.AI) {
-                Text(
-                    text = "AI 提醒",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                InsightChip(text = "AI 提醒")
             }
             Text(
                 text = note.topic.ifBlank { "未命名记录" },
@@ -908,28 +844,15 @@ private fun GentleReconnectCard(
                 )
             }
             if (nextStep.isNotBlank()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                    shape = CardShape,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                InsightBlock(
+                    sourceLabel = "先做这一步",
+                    tone = InsightTone.Primary,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Text(
-                            text = "先做这一步",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            text = nextStep,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMain,
-                        )
-                    }
+                    Text(
+                        text = nextStep,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMain,
+                    )
                 }
             }
             Text(

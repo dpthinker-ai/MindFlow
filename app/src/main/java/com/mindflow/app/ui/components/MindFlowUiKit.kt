@@ -50,6 +50,11 @@ internal val CardShape = RoundedCornerShape(13.dp)
 internal val BottomBarClearance = 108.dp
 internal val ScreenHorizontalPadding = 18.dp
 
+enum class InsightTone {
+    Primary,
+    Neutral,
+}
+
 @Composable
 fun ScreenBackground(
     modifier: Modifier = Modifier,
@@ -87,6 +92,110 @@ fun PanelCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             content = content,
+        )
+    }
+}
+
+@Composable
+fun InsightChip(
+    text: String,
+    modifier: Modifier = Modifier,
+    tone: InsightTone = InsightTone.Primary,
+) {
+    val containerColor = when (tone) {
+        InsightTone.Primary -> AccentBlue.copy(alpha = 0.1f)
+        InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.86f)
+    }
+    val borderColor = when (tone) {
+        InsightTone.Primary -> AccentBlue.copy(alpha = 0.18f)
+        InsightTone.Neutral -> BorderSoft.copy(alpha = 0.8f)
+    }
+    val contentColor = when (tone) {
+        InsightTone.Primary -> AccentBlue
+        InsightTone.Neutral -> TextSoft
+    }
+    Surface(
+        modifier = modifier,
+        color = containerColor,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, borderColor),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+fun InsightBlock(
+    modifier: Modifier = Modifier,
+    sourceLabel: String? = null,
+    tone: InsightTone = InsightTone.Neutral,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val containerColor = when (tone) {
+        InsightTone.Primary -> AccentBlue.copy(alpha = 0.08f)
+        InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.8f)
+    }
+    val borderColor = when (tone) {
+        InsightTone.Primary -> AccentBlue.copy(alpha = 0.16f)
+        InsightTone.Neutral -> BorderSoft.copy(alpha = 0.84f)
+    }
+    Surface(
+        color = containerColor,
+        shape = CardShape,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            sourceLabel
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    InsightChip(
+                        text = it,
+                        tone = if (tone == InsightTone.Primary) InsightTone.Primary else InsightTone.Neutral,
+                    )
+                }
+            content()
+        }
+    }
+}
+
+@Composable
+fun InsightLine(
+    label: String,
+    text: String,
+    modifier: Modifier = Modifier,
+    emphasize: Boolean = false,
+    maxLines: Int = 3,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSoft,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = text,
+            style = if (emphasize) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+            color = TextMain,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -100,6 +100,7 @@ Notes:
 - Share visuals should stay elegant and minimal.
 - Secondary planning widgets such as time-bank data should stay supportive, never outrank capture.
 - AI naming should stay consistent and low-noise across Flow, thread, editor, and reminders.
+- AI results should reuse the same visual language across Flow, thread, and reminder copy: one source cue, one primary judgement, and a small set of supportive lines.
 
 ## Engineering Rules
 
