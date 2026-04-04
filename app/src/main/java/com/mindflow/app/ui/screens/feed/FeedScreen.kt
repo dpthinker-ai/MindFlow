@@ -57,7 +57,9 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
-import com.mindflow.app.ui.theme.AccentDanger
+import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.BorderSoft
+import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.AccentSuccess
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -320,27 +322,18 @@ private fun TimeBankBadge(
     remainingActiveDays: Int,
 ) {
     Surface(
-        color = AccentDanger,
+        color = PanelBlue.copy(alpha = 0.88f),
         shape = MaterialTheme.shapes.large,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "时间银行",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.82f),
-            )
-            Text(
-                text = "可用 ${formatDays(remainingActiveDays)} 天",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            text = "${formatDays(remainingActiveDays)} 天",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.titleSmall,
+            color = AccentBlue,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
