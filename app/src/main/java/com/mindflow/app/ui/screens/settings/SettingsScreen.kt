@@ -384,13 +384,13 @@ private fun SettingsHomeScreen(
 
             item {
                 SettingsEntryCard(
-                    title = "AI 主题提取",
+                    title = "AI 能力",
                     summary = if (uiState.isConfigured) {
                         uiState.model.ifBlank { "已配置" }
                     } else {
                         "未配置"
                     },
-                    headline = if (uiState.isConfigured) "AI 优先" else "本地规则",
+                    headline = if (uiState.isConfigured) "AI 整理 + 判断" else "本地规则",
                     accent = Accent,
                     onClick = onOpenAi,
                 )
@@ -530,15 +530,15 @@ private fun ReminderSettingsScreen(
     onRequestNotificationPermission: ((() -> Unit) -> Unit),
 ) {
     DetailScreenFrame(
-        title = "每日提醒",
-        subtitle = "晨间 brief / 晚间 review",
+        title = "AI 提醒",
+        subtitle = "今日聚焦 / 晚间回看",
         onBack = onBack,
     ) {
         item {
             PanelCard {
                 SectionHeader(title = "提醒节奏", headline = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else "未开启")
                 Text(
-                    text = "晨间在 08:30 给你一条推进方向，晚间在 21:30 帮你收拢当天记录。先用固定时间，后面再开放自定义。",
+                    text = "晨间在 08:30 帮你进入今日聚焦，晚间在 21:30 帮你做一次轻量回看。先用固定时间，后面再开放自定义。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -548,11 +548,11 @@ private fun ReminderSettingsScreen(
         item {
             SettingsSection(
                 title = "提醒开关",
-                description = "频率保持很低，只做真正有价值的提示。",
+                description = "提醒频率保持很低，只在真正值得推进、重连或回看时唤起你。",
             ) {
                 ReminderSwitchRow(
-                    title = "晨间 brief",
-                    description = "08:30 推送一条积极推进和探索方向",
+                    title = "晨间聚焦",
+                    description = "08:30 推送一条今日聚焦、下一步和方向提醒",
                     checked = uiState.morningBriefEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled) {
@@ -563,8 +563,8 @@ private fun ReminderSettingsScreen(
                     },
                 )
                 ReminderSwitchRow(
-                    title = "晚间 review",
-                    description = "21:30 提醒你回收今天的记录节奏",
+                    title = "晚间回看",
+                    description = "21:30 提醒你收拢当天记录并留下一条回看",
                     checked = uiState.eveningReviewEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled) {
@@ -793,8 +793,8 @@ private fun AiSettingsScreen(
     }
 
     DetailScreenFrame(
-        title = "AI 主题提取",
-        subtitle = if (uiState.aiEnabled) "当前优先使用模型" else "当前只用本地规则",
+        title = "AI 能力",
+        subtitle = if (uiState.aiEnabled) "AI 整理 / 今日聚焦 / 方向判断" else "当前只用本地规则",
         onBack = onBack,
     ) {
         item {
@@ -821,7 +821,7 @@ private fun AiSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "支持智谱、OpenAI 和自定义兼容接口；默认使用智谱兼容接口。",
+                description = "编辑页的 AI 整理、Flow 的今日聚焦、线程页的方向判断都会优先使用这里的模型。",
             ) {
                 ProviderPresetSelector(
                     selectedPreset = uiState.aiProviderPreset,
@@ -839,9 +839,9 @@ private fun AiSettingsScreen(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("AI 主题提取", style = MaterialTheme.typography.titleSmall)
+                            Text("启用 AI", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = if (uiState.aiEnabled) "创建记录时优先生成主题" else "关闭后只用本地规则",
+                                text = if (uiState.aiEnabled) "会优先用于整理记录、今日聚焦和方向判断" else "关闭后只用本地规则",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -881,20 +881,20 @@ private fun AiSettingsScreen(
                 SettingsField(value = uiState.model, onValueChange = onModelChange, label = "Model", secret = false)
                 SettingsField(value = uiState.apiKey, onValueChange = onApiKeyChange, label = "API Key", secret = true)
                 GhostActionButton(
-                    text = if (uiState.isTestingAi) "测试中..." else "测试连接",
+                    text = if (uiState.isTestingAi) "测试中..." else "测试 AI 连接",
                     onClick = onTestAi,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isTestingAi && uiState.aiEnabled,
                 )
                 ActionButton(
-                    text = if (uiState.isSavingAi) "保存配置中..." else "保存配置",
+                    text = if (uiState.isSavingAi) "保存中..." else "保存 AI 设置",
                     onClick = onSaveAi,
                     enabled = !uiState.isSavingAi,
                     modifier = Modifier.fillMaxWidth(),
                     icon = Icons.Outlined.Save,
                 )
                 GhostActionButton(
-                    text = "清空配置",
+                    text = "清空 AI 设置",
                     onClick = onClearAi,
                     modifier = Modifier.fillMaxWidth(),
                 )

@@ -242,7 +242,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isSavingAi = false) }
             _events.emit(
                 SettingsEvent.Message(
-                    if (_uiState.value.isConfigured) "AI 配置已保存" else "已保存，当前仍会回退本地规则"
+                    if (_uiState.value.isConfigured) "AI 设置已保存" else "已保存，当前仍会回退本地规则"
                 )
             )
         }
@@ -272,7 +272,7 @@ class SettingsViewModel(
     fun clear() {
         viewModelScope.launch {
             aiSettingsRepository.clear()
-            _events.emit(SettingsEvent.Message("AI 配置已清空"))
+            _events.emit(SettingsEvent.Message("AI 设置已清空"))
         }
     }
 
@@ -323,7 +323,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isSavingReminder = false) }
             _events.emit(
                 SettingsEvent.Message(
-                    if (settings.hasAnyEnabled) "提醒已保存，晨间和晚间会按时提示你" else "已关闭每日提醒"
+                    if (settings.hasAnyEnabled) "AI 提醒已保存，晨间聚焦和晚间回看会按时提示你" else "已关闭 AI 提醒"
                 )
             )
         }

@@ -106,26 +106,26 @@ class ReminderWorker(
             ""
         }
 
-        val title = continueNote?.topic?.takeIf { it.isNotBlank() }?.let { "今天先推进：$it" }
-            ?: "今天先记下一条真正重要的想法"
+        val title = continueNote?.topic?.takeIf { it.isNotBlank() }?.let { "今日聚焦：$it" }
+            ?: "今日聚焦：先抓住最重要的一步"
 
         val body = buildList {
-            if (nextActionText.isNotBlank()) {
-                add("下一步：$nextActionText")
-            }
             researchContext?.followUpReason
                 ?.takeIf { it.isNotBlank() }
-                ?.let { add("现在值得验证：$it") }
+                ?.let { add("为什么现在：$it") }
+            if (nextActionText.isNotBlank()) {
+                add("先推进：$nextActionText")
+            }
             researchContext?.rhythmLine
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add(it) }
             researchContext?.validationStep
                 ?.takeIf { it.isNotBlank() }
-                ?.let { add("研究验证：$it") }
+                ?.let { add("先验证：$it") }
             researchContext?.executionPrompt
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("如果成立：$it") }
-            brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("探索：$it") }
+            brief.lines.firstOrNull()?.takeIf { it.isNotBlank() }?.let { add("今天值得想：$it") }
             if (continueNote == null) {
                 staleNote?.topic?.takeIf { it.isNotBlank() }?.let { add("重新接上：$it") }
                 staleNote?.let { note ->
@@ -162,11 +162,11 @@ class ReminderWorker(
 
         return when {
             todayNotes.isEmpty() -> NotificationPayload(
-                title = "今晚留下一条记录",
+                title = "晚间回看：留下一条记录",
                 body = "哪怕只写一句，也能给明天的自己留下一个起点。",
             )
             latestToday != null -> NotificationPayload(
-                title = "今天记了 ${todayNotes.size} 条",
+                title = "晚间回看：今天记了 ${todayNotes.size} 条",
                 body = buildString {
                     append("最值得接着看的：${latestToday.topic.ifBlank { "未命名记录" }}")
                     if (inProgressCount > 0) {
@@ -176,7 +176,7 @@ class ReminderWorker(
                 openNoteId = latestToday.id,
             )
             else -> NotificationPayload(
-                title = "今天记了 ${todayNotes.size} 条",
+                title = "晚间回看：今天记了 ${todayNotes.size} 条",
                 body = "睡前挑一条最值得继续推进的记录，明天会更容易接上。",
                 flowFocus = FlowFocus.REVIEW,
             )
@@ -228,10 +228,10 @@ class ReminderWorker(
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "MindFlow Daily Brief",
+            "MindFlow AI 提醒",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "晨间 brief 与晚间 review 提醒"
+            description = "今日聚焦与晚间回看提醒"
         }
         manager.createNotificationChannel(channel)
     }
@@ -301,7 +301,7 @@ class ReminderWorker(
                 notes = activeNotes,
             )
         }
-        val openLabel = if (continueNote != null) "继续推进" else if (staleNote != null) "重新接上" else "打开 Flow"
+        val openLabel = if (continueNote != null) "继续推进" else if (staleNote != null) "重新接上" else "打开今日聚焦"
         val seedContent = when {
             researchContext != null -> buildResearchValidationSeed(researchContext)
             continueNote != null -> buildProgressSeed(continueNote)
@@ -367,7 +367,7 @@ class ReminderWorker(
         return buildList {
             add(
                 ReminderAction(
-                    label = if (latestToday != null) "打开记录" else "打开 Flow",
+                    label = if (latestToday != null) "打开记录" else "打开回看",
                     pendingIntent = quickActionPendingIntent(
                         kind = ReminderKind.EVENING,
                         action = MindFlowEntryIntents.ACTION_OPEN_FLOW,
