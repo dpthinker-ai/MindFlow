@@ -539,13 +539,105 @@ private fun ThreadScreen(
                     }
                 }
 
-                if (uiState.weeklyStatsLine.isNotBlank() || uiState.weeklyLines.isNotEmpty()) {
-                    item {
-                        PanelCard {
-                            SectionHeader(
-                                title = "本周在线程里",
-                                headline = uiState.weeklyStatsLine.ifBlank { null },
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "当前判断",
+                            headline = uiState.stage.label,
+                        )
+                        Text(
+                            text = "${uiState.stage.label} · ${uiState.dominantHorizon.label}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AccentBlue,
+                        )
+                        uiState.insightSourceLabel
+                            .takeIf { it.isNotBlank() }
+                            ?.let { sourceLabel ->
+                                Text(
+                                    text = threadInsightSourceText(sourceLabel),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (sourceLabel == "AI") AccentBlue else TextSoft,
+                                )
+                            }
+                        if (uiState.stageHistory.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                uiState.stageHistory.forEach { entry ->
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                        shape = MaterialTheme.shapes.small,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.7f)),
+                                    ) {
+                                        Text(
+                                            text = "${entry.label} · ${entry.stage.label}",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSoft,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (uiState.rhythmLine.isNotBlank()) {
+                            Text(
+                                text = uiState.rhythmLine,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
                             )
+                        }
+                        Text(
+                            text = uiState.threadSummary.ifBlank { "这条方向正在形成，还需要更多真实记录来稳定主线。" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (uiState.stageReason.isNotBlank()) {
+                            Text(
+                                text = uiState.stageReason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+                        }
+                        if (uiState.threadBlocker.isNotBlank()) {
+                            Text(
+                                text = "卡点",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = uiState.threadBlocker,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (uiState.threadNextStep.isNotBlank()) {
+                            Text(
+                                text = "下一步",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = uiState.threadNextStep,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (uiState.weeklyStatsLine.isNotBlank() || uiState.weeklyLines.isNotEmpty()) {
+                            Text(
+                                text = "本周回看",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            uiState.weeklyStatsLine
+                                .takeIf { it.isNotBlank() }
+                                ?.let {
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSoft,
+                                    )
+                                }
                             uiState.weeklyLines.forEach { line ->
                                 Text(
                                     text = "• $line",
@@ -558,6 +650,10 @@ private fun ThreadScreen(
                                 onClick = onCaptureWeeklyReviewNote,
                             )
                         }
+                        GhostActionButton(
+                            text = "沉淀当前判断",
+                            onClick = onCaptureInsightNote,
+                        )
                     }
                 }
 
@@ -572,7 +668,7 @@ private fun ThreadScreen(
                         PanelCard {
                             SectionHeader(
                                 title = "研究",
-                                headline = if (uiState.researchSource == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理",
+                                headline = researchSourceText(uiState.researchSource),
                             )
                             uiState.researchEvidence.summaryLine
                                 .takeIf { it.isNotBlank() }
@@ -585,7 +681,7 @@ private fun ThreadScreen(
                                 }
                             if (uiState.researchOutsideAngle.isNotBlank()) {
                                 ResearchInsightLine(
-                                    label = "外部线索",
+                                    label = "外部视角",
                                     text = uiState.researchOutsideAngle,
                                 )
                             }
@@ -597,7 +693,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.researchContrarianQuestion.isNotBlank()) {
                                 ResearchInsightLine(
-                                    label = "反常识问题",
+                                    label = "值得追问",
                                     text = uiState.researchContrarianQuestion,
                                 )
                             }
@@ -609,7 +705,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.researchQueries.isNotEmpty()) {
                                 Text(
-                                    text = "可直接去查",
+                                    text = "继续查",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -646,7 +742,7 @@ private fun ThreadScreen(
                                 }
                             }
                             GhostActionButton(
-                                text = "记下研究收获",
+                                text = "沉淀研究",
                                 onClick = onCaptureResearchNote,
                             )
                         }
@@ -658,7 +754,7 @@ private fun ThreadScreen(
                         PanelCard {
                             if (uiState.researchClusters.isNotEmpty()) {
                                 SectionHeader(
-                                    title = "研究脉络",
+                                    title = "研究整理",
                                     headline = "${uiState.researchClusters.size} 组",
                                 )
                                 uiState.researchClusters.forEach { cluster ->
@@ -721,7 +817,7 @@ private fun ThreadScreen(
                                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                                             ) {
                                                 Text(
-                                                    text = "最值得先验证",
+                                                    text = "先验证",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = AccentBlue,
                                                 )
@@ -740,14 +836,14 @@ private fun ThreadScreen(
                                                         )
                                                     }
                                                 GhostActionButton(
-                                                    text = "记下验证循环",
+                                                    text = "记下验证",
                                                     onClick = onCaptureTopValidationLoopNote,
                                                 )
                                             }
                                         }
                                     }
                                 GhostActionButton(
-                                    text = "沉淀研究脉络",
+                                    text = "沉淀脉络",
                                     onClick = onCaptureResearchClusterNote,
                                 )
                             }
@@ -820,7 +916,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.executionWhyNow.isNotBlank()) {
                                 Text(
-                                    text = "为什么现在",
+                                    text = "现在推进的原因",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -832,7 +928,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.threadNextStep.isNotBlank()) {
                                 Text(
-                                    text = "当前最小动作",
+                                    text = "先做这一步",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -844,7 +940,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.validationStep.isNotBlank()) {
                                 Text(
-                                    text = "当前验证动作",
+                                    text = "先验证",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -856,7 +952,7 @@ private fun ThreadScreen(
                             }
                             if (uiState.validationReason.isNotBlank()) {
                                 Text(
-                                    text = "为什么现在做",
+                                    text = "现在验证的原因",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextSoft,
                                 )
@@ -879,7 +975,7 @@ private fun ThreadScreen(
                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
                                         Text(
-                                            text = "验证成立后",
+                                            text = "如果成立",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = AccentBlue,
                                         )
@@ -889,7 +985,7 @@ private fun ThreadScreen(
                                             color = MaterialTheme.colorScheme.onSurface,
                                         )
                                         GhostActionButton(
-                                            text = "记下验证动作",
+                                            text = "记下执行动作",
                                             onClick = onCaptureResearchActionNote,
                                         )
                                     }
@@ -913,88 +1009,6 @@ private fun ThreadScreen(
                                 }
                             }
                         }
-                    }
-                }
-
-                item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "当前判断",
-                            headline = if (uiState.insightSourceLabel.isNotBlank()) uiState.insightSourceLabel else null,
-                        )
-                        Text(
-                            text = "${uiState.stage.label} · ${uiState.dominantHorizon.label}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AccentBlue,
-                        )
-                        if (uiState.stageHistory.isNotEmpty()) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                uiState.stageHistory.forEach { entry ->
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-                                        shape = MaterialTheme.shapes.small,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.7f)),
-                                    ) {
-                                        Text(
-                                            text = "${entry.label} · ${entry.stage.label}",
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSoft,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (uiState.rhythmLine.isNotBlank()) {
-                            Text(
-                                text = uiState.rhythmLine,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                            )
-                        }
-                        Text(
-                            text = uiState.threadSummary.ifBlank { "这条方向正在形成，还需要更多真实记录来稳定主线。" },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (uiState.stageReason.isNotBlank()) {
-                            Text(
-                                text = uiState.stageReason,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                            )
-                        }
-                        if (uiState.threadBlocker.isNotBlank()) {
-                            Text(
-                                text = "卡点",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = uiState.threadBlocker,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        if (uiState.threadNextStep.isNotBlank()) {
-                            Text(
-                                text = "下一步",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = uiState.threadNextStep,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        GhostActionButton(
-                            text = "沉淀当前判断",
-                            onClick = onCaptureInsightNote,
-                        )
                     }
                 }
 
@@ -1107,3 +1121,12 @@ private fun ResearchInsightLine(
         )
     }
 }
+
+private fun threadInsightSourceText(label: String): String = when (label) {
+    "AI" -> "AI 洞察"
+    "规则" -> "规则整理"
+    else -> label
+}
+
+private fun researchSourceText(source: com.mindflow.app.data.brief.DailyBriefSource): String =
+    if (source == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理"

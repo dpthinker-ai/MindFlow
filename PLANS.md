@@ -44,6 +44,7 @@ Already implemented:
 - research evidence stratification in thread workspace
 - horizon-aware reminder cadence
 - direction assets from verified and grounded research
+- AI information architecture cleanup across Flow / thread / editor
 
 ## P0: Make It Daily
 
@@ -230,6 +231,7 @@ Current progress:
 - 2: first version implemented with short / medium / long horizons and direction-stage rhythm
 - 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
+- AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 
 ## Success Criteria
 

@@ -111,11 +111,11 @@ private fun FlowScreen(
     val highlightDirection = focus == FlowFocus.DIRECTION
     val subtitle = remember(focus) {
         when (focus) {
-            FlowFocus.TODAY -> "从提醒回来，先把今天最值得做的一步接上。"
+            FlowFocus.TODAY -> "从提醒回来，先把今天最值得推进的一步接上。"
             FlowFocus.RECONNECT -> "从提醒回来，先把那条该重新接上的想法接回来。"
             FlowFocus.REVIEW -> "从提醒回来，先看这周最值得留下来的判断。"
             FlowFocus.DIRECTION -> "从提醒回来，先看这条更长的方向。"
-            null -> "先推进一件最值得做的事，再看一个更长的方向。"
+            null -> "先推进今天最重要的一步，再看正在形成的方向。"
         }
     }
 
@@ -164,11 +164,11 @@ private fun FlowScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "今天",
-                            headline = if (uiState.todayCount > 0) "今天已记 ${uiState.todayCount} 条" else "今天还没落笔",
+                            title = "今日聚焦",
+                            headline = if (uiState.todayCount > 0) "今天已记 ${uiState.todayCount} 条" else "今天最值得先看这三件事",
                         )
                         TodayNoteCard(
-                            title = "积极推进",
+                            title = "先推进",
                             note = uiState.continueNote,
                             emptyText = "先从一条真正想做成的事开始，不必面面俱到。",
                             accent = noteStatusAccent(uiState.continueNote?.status ?: NoteStatus.IN_PROGRESS),
@@ -234,19 +234,13 @@ private fun DirectionCard(
 ) {
     PanelCard {
         SectionHeader(
-            title = "方向",
+            title = "方向判断",
             headline = when {
-                followedDirections.isNotEmpty() -> "已关注 ${followedDirections.size} 条"
+                followedDirections.isNotEmpty() -> "持续经营 ${followedDirections.size} 条方向"
                 threads.isNotEmpty() -> "${threads.size} 条主题"
                 suggestions.isNotEmpty() -> "有新的建议"
                 else -> null
             },
-        )
-        WeeklyReviewCard(
-            items = weeklyItems,
-            source = weeklySource,
-            statsLine = weeklyStatsLine,
-            highlighted = highlightReview,
         )
         ConnectionCard(
             followedDirections = followedDirections,
@@ -257,6 +251,12 @@ private fun DirectionCard(
             onOpenThread = onOpenThread,
             onOpenNote = onOpenNote,
             onCreateCapture = onCreateCapture,
+        )
+        WeeklyReviewCard(
+            items = weeklyItems,
+            source = weeklySource,
+            statsLine = weeklyStatsLine,
+            highlighted = highlightReview,
         )
     }
 }
@@ -286,14 +286,9 @@ private fun ConnectionCard(
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = "连接",
-                style = MaterialTheme.typography.labelLarge,
-                color = TextSoft,
-            )
             if (followedDirections.isNotEmpty()) {
                 Text(
-                    text = "关注方向",
+                    text = "正在经营的方向",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSoft,
                 )
@@ -308,7 +303,7 @@ private fun ConnectionCard(
             }
             if (threads.isNotEmpty()) {
                 Text(
-                    text = if (followedDirections.isNotEmpty()) "更多线索" else "主题线程",
+                    text = if (followedDirections.isNotEmpty()) "值得串起来的线索" else "主题线程",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSoft,
                 )
@@ -322,7 +317,7 @@ private fun ConnectionCard(
             }
             if (suggestions.isNotEmpty()) {
                 Text(
-                    text = if (source == DailyBriefSource.AI) "融合建议 · AI" else "融合建议",
+                    text = if (source == DailyBriefSource.AI) "AI 融合建议" else "融合建议",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
                 )
@@ -365,12 +360,12 @@ private fun FollowedDirectionRow(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "${summary.thread.title} · ${summary.thread.noteCount} 条",
+                text = summary.thread.title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = TextMain,
             )
             Text(
-                text = "${summary.stage.label} · ${summary.dominantHorizon.label}",
+                text = "${summary.stage.label} · ${summary.dominantHorizon.label} · ${summary.thread.noteCount} 条",
                 style = MaterialTheme.typography.labelSmall,
                 color = AccentBlue,
                 maxLines = 1,
@@ -398,14 +393,14 @@ private fun FollowedDirectionRow(
                 .takeIf { it.isNotBlank() }
                 ?.let { asset ->
                     Text(
-                        text = "${summary.assetLabel}：$asset",
+                        text = "已沉淀：$asset",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            if (summary.summary.isNotBlank() || summary.blocker.isNotBlank() || summary.nextStep.isNotBlank()) {
+            if (summary.summary.isNotBlank() || summary.nextStep.isNotBlank() || summary.validationStep.isNotBlank()) {
                 Surface(
                     color = AccentBlue.copy(alpha = 0.08f),
                     shape = CardShape,
@@ -418,7 +413,7 @@ private fun FollowedDirectionRow(
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         Text(
-                            text = if (summary.source == DailyBriefSource.AI) "当前执行 · AI" else "当前执行",
+                            text = if (summary.source == DailyBriefSource.AI) "AI 洞察" else "当前判断",
                             style = MaterialTheme.typography.labelSmall,
                             color = AccentBlue,
                             maxLines = 1,
@@ -431,17 +426,6 @@ private fun FollowedDirectionRow(
                                     text = text,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextMain,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        summary.blocker
-                            .takeIf { it.isNotBlank() }
-                            ?.let { blocker ->
-                                Text(
-                                    text = "卡点：$blocker",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -479,28 +463,6 @@ private fun FollowedDirectionRow(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                        summary.validationReason
-                            .takeIf { it.isNotBlank() }
-                            ?.let { reason ->
-                                Text(
-                                    text = "为什么现在做：$reason",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        summary.postValidationAction
-                            .takeIf { it.isNotBlank() }
-                            ?.let { execution ->
-                                Text(
-                                    text = "如果成立：$execution",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextMain,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
                     }
                 }
             }
@@ -532,10 +494,9 @@ private fun FollowedDirectionRow(
                         summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
                             Text(text = "机会缺口：$it", style = MaterialTheme.typography.bodySmall, color = TextSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        summary.contrarianQuestion.takeIf { it.isNotBlank() }?.let {
-                            Text(text = "反问：$it", style = MaterialTheme.typography.bodySmall, color = TextSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        summary.externalHypothesis.takeIf { it.isNotBlank() }?.let {
+                        (summary.externalHypothesis.takeIf { it.isNotBlank() }
+                            ?: summary.contrarianQuestion.takeIf { it.isNotBlank() })
+                            ?.let {
                             Text(text = "外部假设：$it", style = MaterialTheme.typography.bodySmall, color = TextMain, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -688,7 +649,7 @@ private fun WeeklyReviewCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "本周回看",
+                text = "本周判断",
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSoft,
                 maxLines = 1,
@@ -703,7 +664,7 @@ private fun WeeklyReviewCard(
             }
             if (source == DailyBriefSource.AI) {
                 Text(
-                    text = "AI Review",
+                    text = "AI 洞察",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -801,7 +762,7 @@ private fun TodayNoteCard(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = if (nextActionSource == DailyBriefSource.AI) "下一步动作 · AI" else "下一步动作",
+                                text = if (nextActionSource == DailyBriefSource.AI) "下一步 · AI 洞察" else "下一步",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accent,
                                 maxLines = 1,
@@ -851,7 +812,7 @@ private fun ExplorationPromptCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "探索方向",
+                text = "今天值得想",
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSoft,
                 maxLines = 1,
@@ -909,10 +870,17 @@ private fun GentleReconnectCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = if (source == DailyBriefSource.AI) "重新接上 · AI" else "重新接上",
+                text = "重新接上",
                 style = MaterialTheme.typography.labelLarge,
-                color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
+                color = TextSoft,
             )
+            if (source == DailyBriefSource.AI) {
+                Text(
+                    text = "AI 提醒",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             Text(
                 text = note.topic.ifBlank { "未命名记录" },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),

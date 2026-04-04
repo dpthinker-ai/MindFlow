@@ -425,7 +425,7 @@ private fun EditorScreen(
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
-                        text = if (uiState.isNew) "先接住，再慢慢整理。" else "调整正文、主题和标签。",
+                        text = if (uiState.isNew) "先写下来，再决定要不要整理。" else "先改正文，再决定要不要交给 AI 整理。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -534,12 +534,12 @@ private fun EditorScreen(
                         }
                     }
                     GhostActionButton(
-                        text = if (aiToolsExpanded) "收起 AI 助手" else "AI 助手",
+                        text = if (aiToolsExpanded) "收起 AI 整理" else "AI 整理",
                         onClick = { aiToolsExpanded = !aiToolsExpanded },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        text = "需要时再展开，避免打断写作。",
+                        text = "主题、标签和分类会自动补上，需要时再让 AI 帮你整理。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -556,20 +556,20 @@ private fun EditorScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 Text(
-                                    text = "AI 工具",
+                                    text = "整理这条记录",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 GridTwo {
                                     GhostActionButton(
-                                        text = if (uiState.isPolishingContent) "正在润色" else "润色正文",
+                                        text = if (uiState.isPolishingContent) "整理正文中" else "整理正文",
                                         onClick = onPolishContent,
                                         enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
                                         modifier = Modifier.weight(1f),
                                     )
                                     if (!uiState.isNew) {
                                         GhostActionButton(
-                                            text = if (uiState.isRefreshingTopic) "正在提炼" else "提炼主题",
+                                            text = if (uiState.isRefreshingTopic) "整理主题中" else "整理主题",
                                             onClick = onRetriggerTopic,
                                             enabled = !uiState.isRefreshingTopic,
                                             modifier = Modifier.weight(1f),
@@ -581,13 +581,13 @@ private fun EditorScreen(
                                 if (!uiState.isNew) {
                                     GridTwo {
                                         GhostActionButton(
-                                            text = if (uiState.isRefreshingTags) "正在提取" else "提取标签",
+                                            text = if (uiState.isRefreshingTags) "整理标签中" else "整理标签",
                                             onClick = onRetriggerTag,
                                             enabled = !uiState.isRefreshingTags,
                                             modifier = Modifier.weight(1f),
                                         )
                                         GhostActionButton(
-                                            text = if (uiState.isRefreshingFolder) "正在归类" else "归类内容",
+                                            text = if (uiState.isRefreshingFolder) "整理分类中" else "整理分类",
                                             onClick = onRetriggerFolder,
                                             enabled = !uiState.isRefreshingFolder,
                                             modifier = Modifier.weight(1f),
@@ -625,7 +625,7 @@ private fun EditorScreen(
                 )
 
                 PanelCard {
-                    SectionHeader(title = "整理")
+                    SectionHeader(title = "补充信息")
 
                     Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(
@@ -1090,9 +1090,9 @@ private fun PolishPreviewCard(
 }
 
 private fun topicSourceLabel(source: TopicSource): String = when (source) {
-    TopicSource.AI -> "当前主题来自 AI"
-    TopicSource.RULE -> "当前主题来自本地规则"
-    TopicSource.MANUAL -> "当前主题由你手动确认"
+    TopicSource.AI -> "AI 生成"
+    TopicSource.RULE -> "本地规则"
+    TopicSource.MANUAL -> "已手动确认"
 }
 
 private fun tagSourceLabel(
@@ -1100,17 +1100,17 @@ private fun tagSourceLabel(
     count: Int,
 ): String {
     val prefix = when (source) {
-        TagSource.AI -> "当前标签来自 AI"
-        TagSource.RULE -> "当前标签来自本地规则"
-        TagSource.MANUAL -> "当前标签已手动调整"
+        TagSource.AI -> "AI 提取"
+        TagSource.RULE -> "本地规则"
+        TagSource.MANUAL -> "已手动调整"
     }
     return "$prefix · $count/3"
 }
 
 private fun folderSourceLabel(source: com.mindflow.app.data.model.FolderSource): String = when (source) {
-    com.mindflow.app.data.model.FolderSource.AI -> "当前文件夹来自 AI 分类"
-    com.mindflow.app.data.model.FolderSource.RULE -> "当前文件夹来自本地规则"
-    com.mindflow.app.data.model.FolderSource.MANUAL -> "当前文件夹由你手动确认"
+    com.mindflow.app.data.model.FolderSource.AI -> "AI 分类"
+    com.mindflow.app.data.model.FolderSource.RULE -> "本地规则"
+    com.mindflow.app.data.model.FolderSource.MANUAL -> "已手动确认"
 }
 
 private fun folderColor(folderKey: String): Color =

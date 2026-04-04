@@ -22,6 +22,12 @@ MindFlow is not just a note app. It is a personal AI action system for:
 - AI should assist with topic extraction, tags, folder classification, polishing, and insight generation.
 - AI should not silently override user edits.
 - User intent always wins over automation.
+- AI surfaces should feel like one product role, not many disconnected tools.
+- Preferred AI layering:
+  - record layer: AI 整理
+  - today layer: 今日聚焦
+  - direction layer: 当前判断 / 研究 / 执行
+  - rhythm layer: reminder cadence and follow-up
 
 4. Daily usefulness
 - Every major feature should improve one of these loops:
@@ -93,6 +99,7 @@ Notes:
 - Swipe actions should reveal buttons first, never perform destructive actions immediately.
 - Share visuals should stay elegant and minimal.
 - Secondary planning widgets such as time-bank data should stay supportive, never outrank capture.
+- AI naming should stay consistent and low-noise across Flow, thread, editor, and reminders.
 
 ## Engineering Rules
 
