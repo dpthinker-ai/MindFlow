@@ -346,6 +346,8 @@ private fun EditorScreen(
     ) { mutableStateOf(false) }
     var isEditingContent by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(uiState.isNew) }
     var aiToolsExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
+    var extraInfoExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
+    var recordInfoExpanded by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     val editorScrollState = rememberScrollState()
     val contentBringIntoViewRequester = remember { BringIntoViewRequester() }
     var isContentFieldFocused by rememberSaveable { mutableStateOf(false) }
@@ -625,7 +627,28 @@ private fun EditorScreen(
                 )
 
                 PanelCard {
-                    SectionHeader(title = "补充信息")
+                    SectionHeader(
+                        title = "补充信息",
+                        headline = "${uiState.status.label} · ${uiState.horizon.label}",
+                    )
+
+                    Text("进展状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        NoteStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = uiState.status == status,
+                                onClick = { onStatusChange(status) },
+                                label = { Text(status.label) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
+                                    selectedLabelColor = noteStatusAccent(status),
+                                ),
+                            )
+                        }
+                    }
 
                     Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(
@@ -645,225 +668,294 @@ private fun EditorScreen(
                             )
                         }
                     }
-                    Text(
-                        text = "先判断这条记录是短期推进、中期验证，还是长期经营，后面的提醒会更有节奏。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
 
-                    if (suggestedThread != null) {
-                        Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Surface(
-                            color = WhiteGlass.copy(alpha = 0.9f),
-                            shape = MaterialTheme.shapes.medium,
-                            border = BorderStroke(1.dp, BorderSoft),
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { extraInfoExpanded = !extraInfoExpanded },
+                        color = WhiteGlass.copy(alpha = 0.9f),
+                        shape = MaterialTheme.shapes.medium,
+                        border = BorderStroke(1.dp, BorderSoft),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
-                                    text = "这条记录更像是在「${suggestedThread.title}」这条主线里。",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text = "分类与标签",
+                                    style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
-                                if (suggestedThread.focusLine.isNotBlank()) {
-                                    Text(
-                                        text = suggestedThread.focusLine,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = AccentBlue,
-                                    )
-                                }
-                                if (uiState.hasUnsavedChanges) {
-                                    Text(
-                                        text = "保存后可直接打开这条方向。",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSoft,
-                                    )
-                                } else {
-                                    GhostActionButton(
-                                        text = "打开方向",
-                                        onClick = { onOpenSuggestedThread(suggestedThread.key) },
-                                    )
-                                }
+                                Text(
+                                    text = buildSupplementSummary(
+                                        folderKey = uiState.folderKey,
+                                        tagCount = uiState.tags.size,
+                                        isNew = uiState.isNew,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
-                        }
-                    }
-
-                    Text("文件夹", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(
-                            selected = uiState.folderKey == null,
-                            onClick = { onFolderChange(null) },
-                            label = { Text("未分类") },
-                        )
-                        MindFolderCatalog.all.forEach { folder ->
-                            val accent = folderColor(folder.key)
-                            FilterChip(
-                                selected = uiState.folderKey == folder.key,
-                                onClick = { onFolderChange(folder.key) },
-                                label = { Text(folder.name) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = accent.copy(alpha = 0.14f),
-                                    selectedLabelColor = accent,
-                                ),
+                            Text(
+                                text = if (extraInfoExpanded) "收起" else "展开",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AccentBlue,
                             )
                         }
                     }
-                    Text(
-                        text = folderSourceLabel(uiState.folderSource),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
 
-                    if (!uiState.isNew) {
-                        Text("标签", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (extraInfoExpanded) {
                         Text(
-                            text = tagSourceLabel(uiState.tagSource, uiState.tags.size),
+                            text = "先判断这条记录是短期推进、中期验证，还是长期经营；分类和标签按需要再补，不必一开始就填满。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (uiState.tags.isNotEmpty()) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+
+                        if (suggestedThread != null) {
+                            Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Surface(
+                                color = WhiteGlass.copy(alpha = 0.9f),
+                                shape = MaterialTheme.shapes.medium,
+                                border = BorderStroke(1.dp, BorderSoft),
                             ) {
-                                uiState.tags.forEach { tag ->
-                                    EditableTagChip(
-                                        tag = tag,
-                                        onRemove = { onRemoveTag(tag) },
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = "这条记录更像是在「${suggestedThread.title}」这条主线里。",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                     )
+                                    if (suggestedThread.focusLine.isNotBlank()) {
+                                        Text(
+                                            text = suggestedThread.focusLine,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AccentBlue,
+                                        )
+                                    }
+                                    if (uiState.hasUnsavedChanges) {
+                                        Text(
+                                            text = "保存后可直接打开这条方向。",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSoft,
+                                        )
+                                    } else {
+                                        GhostActionButton(
+                                            text = "打开方向",
+                                            onClick = { onOpenSuggestedThread(suggestedThread.key) },
+                                        )
+                                    }
                                 }
                             }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            PaperField(
-                                value = pendingTag,
-                                onValueChange = { pendingTag = it },
-                                placeholder = if (uiState.tags.size >= 3) "最多 3 个标签" else "添加一个标签",
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyLarge,
-                            )
-                            GhostActionButton(
-                                text = "添加",
-                                onClick = {
-                                    onAddTag(pendingTag)
-                                    pendingTag = ""
-                                },
-                                enabled = pendingTag.isNotBlank() && uiState.tags.size < 3,
-                                modifier = Modifier.weight(0.42f),
-                            )
-                        }
 
-                        Text("进展状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("文件夹", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            NoteStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = uiState.folderKey == null,
+                                onClick = { onFolderChange(null) },
+                                label = { Text("未分类") },
+                            )
+                            MindFolderCatalog.all.forEach { folder ->
+                                val accent = folderColor(folder.key)
                                 FilterChip(
-                                    selected = uiState.status == status,
-                                    onClick = { onStatusChange(status) },
-                                    label = { Text(status.label) },
+                                    selected = uiState.folderKey == folder.key,
+                                    onClick = { onFolderChange(folder.key) },
+                                    label = { Text(folder.name) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
-                                        selectedLabelColor = noteStatusAccent(status),
+                                        selectedContainerColor = accent.copy(alpha = 0.14f),
+                                        selectedLabelColor = accent,
                                     ),
                                 )
                             }
                         }
-                    } else {
                         Text(
-                            text = "保存后会自动补主题和标签。",
+                            text = folderSourceLabel(uiState.folderSource),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+
+                        if (!uiState.isNew) {
+                            Text("标签", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = tagSourceLabel(uiState.tagSource, uiState.tags.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (uiState.tags.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    uiState.tags.forEach { tag ->
+                                        EditableTagChip(
+                                            tag = tag,
+                                            onRemove = { onRemoveTag(tag) },
+                                        )
+                                    }
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                PaperField(
+                                    value = pendingTag,
+                                    onValueChange = { pendingTag = it },
+                                    placeholder = if (uiState.tags.size >= 3) "最多 3 个标签" else "添加一个标签",
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyLarge,
+                                )
+                                GhostActionButton(
+                                    text = "添加",
+                                    onClick = {
+                                        onAddTag(pendingTag)
+                                        pendingTag = ""
+                                    },
+                                    enabled = pendingTag.isNotBlank() && uiState.tags.size < 3,
+                                    modifier = Modifier.weight(0.42f),
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "保存后会自动补主题和标签。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
 
                 if (!uiState.isNew) {
                     PanelCard {
-                        SectionHeader(title = "信息", headline = uiState.status.label)
+                        SectionHeader(
+                            title = "记录信息",
+                            headline = uiState.updatedAt?.let(TimeFormatter::compact).orEmpty(),
+                        )
                         Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { recordInfoExpanded = !recordInfoExpanded },
                             color = WhiteGlass.copy(alpha = 0.9f),
                             shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, BorderSoft),
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column {
-                                    Text("归档", style = MaterialTheme.typography.titleSmall)
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text("归档与时间", style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        text = if (uiState.isArchived) "已从首页隐藏" else "仍显示在首页",
+                                        text = if (uiState.isArchived) {
+                                            "已从首页隐藏 · ${uiState.statusHistory.size} 条状态变化"
+                                        } else {
+                                            "仍显示在首页 · ${uiState.statusHistory.size} 条状态变化"
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Switch(
-                                    checked = uiState.isArchived,
-                                    onCheckedChange = onArchiveChange,
+                                Text(
+                                    text = if (recordInfoExpanded) "收起" else "展开",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AccentBlue,
                                 )
                             }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            MetaRow("创建于", uiState.createdAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
-                            MetaRow("更新于", uiState.updatedAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
-                        }
-                        uiState.latestDoneAt?.let { MetaRow("完成于", TimeFormatter.compact(it)) }
-                        if (uiState.statusHistory.isNotEmpty()) {
-                            Text(
-                                text = "最近变化",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            uiState.statusHistory.take(3).forEach { entry ->
-                                Surface(
-                                    color = WhiteGlass.copy(alpha = 0.92f),
-                                    shape = MaterialTheme.shapes.medium,
+                        if (recordInfoExpanded) {
+                            Surface(
+                                color = WhiteGlass.copy(alpha = 0.9f),
+                                shape = MaterialTheme.shapes.medium,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
+                                    Column {
+                                        Text("归档", style = MaterialTheme.typography.titleSmall)
                                         Text(
-                                            text = TimeFormatter.full(entry.changedAt),
+                                            text = if (uiState.isArchived) "已从首页隐藏" else "仍显示在首页",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
-                                        Text(
-                                            text = "${entry.fromStatus?.label ?: "初始"} -> ${entry.toStatus.label}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
                                     }
+                                    Switch(
+                                        checked = uiState.isArchived,
+                                        onCheckedChange = onArchiveChange,
+                                    )
                                 }
                             }
-                        } else {
-                            Text(
-                                text = "还没有状态变化。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                MetaRow("创建于", uiState.createdAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
+                                MetaRow("更新于", uiState.updatedAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
+                            }
+                            uiState.latestDoneAt?.let { MetaRow("完成于", TimeFormatter.compact(it)) }
+                            if (uiState.statusHistory.isNotEmpty()) {
+                                Text(
+                                    text = "最近变化",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                uiState.statusHistory.take(3).forEach { entry ->
+                                    Surface(
+                                        color = WhiteGlass.copy(alpha = 0.92f),
+                                        shape = MaterialTheme.shapes.medium,
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                text = TimeFormatter.full(entry.changedAt),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Text(
+                                                text = "${entry.fromStatus?.label ?: "初始"} -> ${entry.toStatus.label}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "还没有状态变化。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
 
@@ -970,6 +1062,21 @@ private fun MetaRow(
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+private fun buildSupplementSummary(
+    folderKey: String?,
+    tagCount: Int,
+    isNew: Boolean,
+): String {
+    val folderName = folderKey
+        ?.let { key -> MindFolderCatalog.all.firstOrNull { it.key == key }?.name }
+        ?: "未分类"
+    return when {
+        isNew -> "文件夹：$folderName · 标签保存后再补"
+        tagCount > 0 -> "文件夹：$folderName · $tagCount 个标签"
+        else -> "文件夹：$folderName · 还没有标签"
     }
 }
 
