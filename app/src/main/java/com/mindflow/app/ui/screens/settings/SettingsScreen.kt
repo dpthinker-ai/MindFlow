@@ -821,7 +821,7 @@ private fun AiSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "支持 OpenAI、智谱和自定义兼容接口；默认使用 OpenAI 官方接口。",
+                description = "支持智谱、OpenAI 和自定义兼容接口；默认使用智谱兼容接口。",
             ) {
                 ProviderPresetSelector(
                     selectedPreset = uiState.aiProviderPreset,

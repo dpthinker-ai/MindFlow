@@ -63,17 +63,17 @@ android {
         buildConfigField(
             "String",
             "AI_API_KEY",
-            "\"${escaped(localOrEnvAny("mindflow.ai.apiKey", "MINDFLOW_AI_API_KEY", "OPENAI_API_KEY"))}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.apiKey", "MINDFLOW_AI_API_KEY", "ZHIPU_API_KEY", "OPENAI_API_KEY"))}\""
         )
         buildConfigField(
             "String",
             "AI_BASE_URL",
-            "\"${escaped(localOrEnvAny("mindflow.ai.baseUrl", "MINDFLOW_AI_BASE_URL", "OPENAI_BASE_URL").ifBlank { "https://api.openai.com/v1" })}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.baseUrl", "MINDFLOW_AI_BASE_URL", "ZHIPU_BASE_URL", "OPENAI_BASE_URL").ifBlank { "https://open.bigmodel.cn/api/paas/v4" })}\""
         )
         buildConfigField(
             "String",
             "AI_MODEL",
-            "\"${escaped(localOrEnvAny("mindflow.ai.model", "MINDFLOW_AI_MODEL", "OPENAI_MODEL").ifBlank { "gpt-5.4" })}\""
+            "\"${escaped(localOrEnvAny("mindflow.ai.model", "MINDFLOW_AI_MODEL", "ZHIPU_MODEL", "OPENAI_MODEL").ifBlank { "glm-4.7" })}\""
         )
     }
 

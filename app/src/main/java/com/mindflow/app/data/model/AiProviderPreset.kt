@@ -5,15 +5,15 @@ enum class AiProviderPreset(
     val baseUrl: String,
     val defaultModel: String,
 ) {
-    OPENAI(
-        label = "OpenAI",
-        baseUrl = "https://api.openai.com/v1",
-        defaultModel = "gpt-5.4",
-    ),
     ZHIPU(
         label = "智谱",
         baseUrl = "https://open.bigmodel.cn/api/paas/v4",
         defaultModel = "glm-4.7",
+    ),
+    OPENAI(
+        label = "OpenAI",
+        baseUrl = "https://api.openai.com/v1",
+        defaultModel = "gpt-5.4",
     ),
     CUSTOM(
         label = "自定义",

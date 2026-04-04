@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val aiProviderPreset: AiProviderPreset = AiProviderPreset.OPENAI,
+    val aiProviderPreset: AiProviderPreset = AiProviderPreset.ZHIPU,
     val apiKey: String = "",
     val baseUrl: String = AiSettings.DEFAULT_BASE_URL,
     val model: String = AiSettings.DEFAULT_MODEL,

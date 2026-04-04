@@ -30,8 +30,8 @@ data class AiSettings(
         get() = verifiedFingerprint.isNotBlank() && verifiedFingerprint == configFingerprint
 
     companion object {
-        val DEFAULT_BASE_URL = AiProviderPreset.OPENAI.baseUrl
-        val DEFAULT_MODEL = AiProviderPreset.OPENAI.defaultModel
+        val DEFAULT_BASE_URL = AiProviderPreset.ZHIPU.baseUrl
+        val DEFAULT_MODEL = AiProviderPreset.ZHIPU.defaultModel
 
         fun fingerprint(
             apiKey: String,
