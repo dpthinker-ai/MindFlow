@@ -264,9 +264,10 @@ Next best order:
 Current progress:
 
 - direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, and concept pages
-- 1: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer Direction Wiki grounding
-- 2: first version implemented with short / medium / long horizons, direction-stage rhythm, and longer-lived continuity / trajectory summaries
-- 3: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, and continuity-aware reminder context; still not fully continuous yet
+- 1: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
+- 2: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer Direction Wiki grounding
+- 3: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, and continuity-aware reminder context
+- direction rhythm and trajectory: first version implemented with short / medium / long horizons, direction-stage rhythm, and longer-lived continuity / trajectory summaries
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces

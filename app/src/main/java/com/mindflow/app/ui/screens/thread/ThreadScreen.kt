@@ -988,6 +988,18 @@ private fun ThreadScreen(
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
+                            if (uiState.executionLastProgressLine.isNotBlank()) {
+                                Text(
+                                    text = "最近推进",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.executionLastProgressLine,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
                             if (uiState.threadNextStep.isNotBlank()) {
                                 Text(
                                     text = "先做这一步",
@@ -1010,6 +1022,18 @@ private fun ThreadScreen(
                                     text = uiState.validationStep,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            if (uiState.executionNextCheckInLine.isNotBlank()) {
+                                Text(
+                                    text = "下次检查",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSoft,
+                                )
+                                Text(
+                                    text = uiState.executionNextCheckInLine,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
                                 )
                             }
                             if (uiState.validationReason.isNotBlank()) {

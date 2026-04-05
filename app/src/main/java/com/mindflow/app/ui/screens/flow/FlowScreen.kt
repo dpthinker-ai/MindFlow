@@ -516,6 +516,11 @@ private fun FollowedDirectionRow(
                         ?.let { reason ->
                             InsightLine(label = "为什么现在", text = reason, maxLines = 2)
                         }
+                    summary.lastProgressLine
+                        .takeIf { it.isNotBlank() }
+                        ?.let { progress ->
+                            InsightLine(label = "最近推进", text = progress, maxLines = 2)
+                        }
                     summary.nextStep
                         .takeIf { it.isNotBlank() }
                         ?.let { action ->
@@ -525,6 +530,11 @@ private fun FollowedDirectionRow(
                         .takeIf { it.isNotBlank() }
                         ?.let { validation ->
                             InsightLine(label = "先验证", text = validation, emphasize = true, maxLines = 2)
+                        }
+                    summary.nextCheckInLine
+                        .takeIf { it.isNotBlank() }
+                        ?.let { checkIn ->
+                            InsightLine(label = "下次检查", text = checkIn, maxLines = 2)
                         }
                 }
             }
@@ -612,8 +622,14 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
             appendLine("围绕「$cleanTitle」补一条验证记录：")
             appendLine("- 当前阶段：${stage.label} · ${dominantHorizon.label}")
             appendLine("- 为什么现在接：$whyNow")
+            lastProgressLine.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 最近推进：$it")
+            }
             nextStep.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 当前最小动作：$it")
+            }
+            nextCheckInLine.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 下次检查：$it")
             }
             outsideAngle.takeIf { it.isNotBlank() }?.let {
                 appendLine("- AI 外部视角：$it")

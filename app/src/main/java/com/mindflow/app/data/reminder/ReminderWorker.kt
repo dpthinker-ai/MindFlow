@@ -117,6 +117,9 @@ class ReminderWorker(
             researchContext?.continuityLine
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("当前节奏：$it") }
+            researchContext?.lastProgressLine
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(it) }
             if (nextActionText.isNotBlank()) {
                 add("先推进：$nextActionText")
             }
@@ -126,6 +129,9 @@ class ReminderWorker(
             researchContext?.validationStep
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("先验证：$it") }
+            researchContext?.nextCheckInLine
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(it) }
             researchContext?.executionPrompt
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("如果成立：$it") }
@@ -426,7 +432,9 @@ private data class ResearchReminderContext(
     val stageLabel: String,
     val rhythmLine: String,
     val continuityLine: String,
+    val lastProgressLine: String,
     val validationStep: String,
+    val nextCheckInLine: String,
     val followUpReason: String,
     val executionPrompt: String,
 ) {
@@ -469,10 +477,16 @@ private fun buildResearchValidationSeed(context: ResearchReminderContext): Strin
         context.continuityLine
             .takeIf { it.isNotBlank() }
             ?.let { appendLine("- 当前节奏：$it") }
+        context.lastProgressLine
+            .takeIf { it.isNotBlank() }
+            ?.let { appendLine("- $it") }
         context.followUpReason
             .takeIf { it.isNotBlank() }
             ?.let { appendLine("- 为什么现在做：$it") }
         appendLine("- 先验证：${context.validationStep}")
+        context.nextCheckInLine
+            .takeIf { it.isNotBlank() }
+            ?.let { appendLine("- $it") }
         context.executionPrompt
             .takeIf { it.isNotBlank() }
             ?.let { appendLine("- 如果成立，下一步：$it") }
@@ -587,7 +601,9 @@ private suspend fun buildResearchReminderContext(
                 stageLabel = execution.stage.label,
                 rhythmLine = execution.rhythmLine,
                 continuityLine = wikiDirection?.continuityLine.orEmpty(),
+                lastProgressLine = execution.lastProgressLine,
                 validationStep = validationStep,
+                nextCheckInLine = execution.nextCheckInLine,
                 followUpReason = execution.validationReason.ifBlank { execution.whyNow },
                 executionPrompt = execution.postValidationAction,
             )

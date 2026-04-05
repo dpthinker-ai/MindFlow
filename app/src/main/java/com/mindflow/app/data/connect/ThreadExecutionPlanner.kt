@@ -82,6 +82,12 @@ class ThreadExecutionPlanner(
             focusNote = focusNote,
             hasResearch = notes.any(ThreadResearchAnalyzer::isResearchMemoryNote),
         )
+        val loop = DirectionExecutionLoopAnalyzer.summarize(
+            notes = notes,
+            focusNote = focusNote,
+            stage = rhythm.stage,
+            dominantHorizon = rhythm.dominantHorizon,
+        )
         val researchLead = ThreadResearchAnalyzer.buildResearchClusters(
             notes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3),
             threadTitle = threadTitle,
@@ -162,7 +168,9 @@ class ThreadExecutionPlanner(
             rhythmLine = rhythm.rhythmLine,
             dominantHorizon = rhythm.dominantHorizon,
             whyNow = whyNow,
+            lastProgressLine = loop.lastProgressLine,
             nextStep = nextStep,
+            nextCheckInLine = loop.nextCheckInLine,
             validationStep = validationStep,
             validationReason = validationReason,
             postValidationAction = postValidationAction,
@@ -201,7 +209,9 @@ class ThreadExecutionPlanner(
             appendLine("总结：${fallback.summary}")
             appendLine("卡点：${fallback.blocker}")
             appendLine("为什么现在：${fallback.whyNow}")
+            appendLine("最近推进：${fallback.lastProgressLine}")
             appendLine("最小动作：${fallback.nextStep}")
+            appendLine("下次检查：${fallback.nextCheckInLine}")
             appendLine("验证动作：${fallback.validationStep}")
             appendLine("验证原因：${fallback.validationReason}")
             appendLine("验证成立后：${fallback.postValidationAction}")
