@@ -260,7 +260,14 @@ class DirectionWikiCoordinator(
                 ),
             )
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
-            File(conclusionsDir, "${summary.slug}.md").writeText(buildConclusionMarkdown(summary, weeklyReview))
+            File(conclusionsDir, "${summary.slug}.md").writeText(
+                buildConclusionMarkdown(
+                    summary = summary,
+                    weeklyReview = weeklyReview,
+                    relatedConcepts = relatedConcepts,
+                    relatedObjects = directionObjectCandidates,
+                ),
+            )
             File(evidenceDir, "${summary.slug}.md").writeText(
                 buildEvidenceMarkdown(
                     summary = summary,
@@ -899,12 +906,22 @@ class DirectionWikiCoordinator(
     private fun buildConclusionMarkdown(
         summary: DirectionWikiDirectionSummary,
         weeklyReview: com.mindflow.app.data.connect.ThreadWeeklyReviewSummary,
+        relatedConcepts: List<String>,
+        relatedObjects: List<KnowledgeObjectCandidate>,
     ): String = buildString {
         appendLine("# ${summary.title} conclusions")
         appendLine()
         appendLine("- 当前阶段：${summary.stage.label}")
         appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
         appendLine()
+        if (relatedConcepts.isNotEmpty()) {
+            appendLine("## 相关概念")
+            relatedConcepts.forEach { concept ->
+                val conceptSlug = slugFor(concept, concept)
+                appendLine("- [$concept](../concepts/$conceptSlug.md)")
+            }
+            appendLine()
+        }
         appendLine("## 当前结论")
         appendLine(summary.conclusionLine.ifBlank { summary.assetSummary.ifBlank { "这条方向还在继续形成更稳定的判断。" } })
         appendLine()
@@ -934,6 +951,24 @@ class DirectionWikiCoordinator(
                 appendLine("- $it")
                 appendLine()
             }
+        if (relatedObjects.isNotEmpty()) {
+            appendLine("## 相关知识对象")
+            KnowledgeObjectType.entries.forEach { type ->
+                val items = relatedObjects
+                    .filter { it.type == type }
+                    .distinctBy { it.title }
+                    .sortedByDescending { it.updatedAt }
+                    .take(3)
+                if (items.isNotEmpty()) {
+                    appendLine("### ${type.displayName}")
+                    items.forEach { item ->
+                        val objectSlug = slugFor(item.title, "${item.type.folderName}-${item.noteId}")
+                        appendLine("- [${item.title}](../${type.folderName}/$objectSlug.md) · ${item.sourceLabel} · ${item.summary}")
+                    }
+                    appendLine()
+                }
+            }
+        }
         weeklyReview.mainLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 本周判断")
             appendLine(it)

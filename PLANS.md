@@ -247,6 +247,7 @@ Planned items:
   - research syntheses such as contrarian questions and external hypotheses now also file back into durable question / experiment pages
   - concept pages and knowledge-object pages now maintain lightweight cross-links instead of staying isolated
   - evidence pages now start linking back into concepts and related knowledge objects instead of staying as flat bullet dumps
+  - conclusion pages now also link back into concepts and reusable question / method / experiment objects
   - first lint pass exported into markdown and lightweight app-facing health summaries
   - lint now also exports one actionable `建议先补` maintenance line back into Flow / thread
   - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
