@@ -17,6 +17,8 @@ object KnowledgeLayerLintAnalyzer {
         notes: List<NoteEntity>,
         grounding: ResearchGroundingSnapshot,
         execution: ThreadExecutionSummary,
+        conclusionLine: String,
+        nextShiftLine: String,
         questionCount: Int,
         methodCount: Int,
         experimentCount: Int,
@@ -30,9 +32,19 @@ object KnowledgeLayerLintAnalyzer {
 
         val latestUpdatedAt = notes.maxOfOrNull { it.updatedAt } ?: 0L
         val daysSinceUpdate = TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - latestUpdatedAt).coerceAtLeast(0)
+        val hasConflict = hasPolarityConflict(grounding)
         val issues = buildList {
+            if (hasConflict) {
+                add("已查证或已验证里出现相反信号，当前结论需要重新压实。")
+            }
+            if (conclusionLine.isNotBlank() && grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty()) {
+                add("已经形成结论，但缺少查证或验证支撑。")
+            }
             if (grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty()) {
                 add("证据还偏薄，先补一条查证或验证记录。")
+            }
+            if (conclusionLine.isNotBlank() && nextShiftLine.isBlank()) {
+                add("结论已经形成，但还没有明确承接动作。")
             }
             if (execution.nextStep.isBlank()) {
                 add("还没有清晰的下一步，先把当前最小动作写出来。")
@@ -43,12 +55,17 @@ object KnowledgeLayerLintAnalyzer {
             if (stage == DirectionStage.FORMING && questionCount == 0) {
                 add("形成期还缺一个明确问题，容易一直发散。")
             }
+            if (conclusionLine.isNotBlank() && daysSinceUpdate >= 35L) {
+                add("当前结论已经有一段时间没被新材料刷新，可能开始变旧。")
+            }
             if (daysSinceUpdate >= 21L) {
                 add("这条方向已经放缓一段时间，适合重新接上一小步。")
             }
         }.distinct().take(3)
 
         val healthLine = when {
+            hasConflict ->
+                "当前先别继续扩写结论，先处理相互打架的查证或验证信号。"
             issues.isEmpty() ->
                 "知识层状态稳定，当前已有可复用沉淀，可继续把判断压成更稳的结论。"
             issues.size == 1 ->
@@ -62,4 +79,47 @@ object KnowledgeLayerLintAnalyzer {
             lintIssues = issues,
         )
     }
+
+    private fun hasPolarityConflict(
+        grounding: ResearchGroundingSnapshot,
+    ): Boolean {
+        val evidenceTexts = (grounding.verifiedItems + grounding.validatedItems)
+            .map { it.summary }
+            .filter { it.isNotBlank() }
+        if (evidenceTexts.isEmpty()) return false
+        val hasPositive = evidenceTexts.any(::looksPositive)
+        val hasNegative = evidenceTexts.any(::looksNegative)
+        return hasPositive && hasNegative
+    }
+
+    private fun looksPositive(text: String): Boolean =
+        positiveMarkers.any { marker -> text.contains(marker, ignoreCase = true) }
+
+    private fun looksNegative(text: String): Boolean =
+        negativeMarkers.any { marker -> text.contains(marker, ignoreCase = true) }
+
+    private val positiveMarkers = listOf(
+        "成立",
+        "有效",
+        "可行",
+        "适合",
+        "验证通过",
+        "证明",
+        "跑通",
+        "有帮助",
+        "更好",
+    )
+
+    private val negativeMarkers = listOf(
+        "不成立",
+        "无效",
+        "失败",
+        "不适合",
+        "问题",
+        "卡住",
+        "风险",
+        "不建议",
+        "并没有",
+        "没效果",
+    )
 }

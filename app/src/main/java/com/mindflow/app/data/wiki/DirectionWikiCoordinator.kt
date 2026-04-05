@@ -147,6 +147,8 @@ class DirectionWikiCoordinator(
             notes = notes,
             grounding = grounding,
             execution = execution,
+            conclusionLine = conclusionLine,
+            nextShiftLine = nextShiftLine,
             questionCount = questionCount,
             methodCount = methodCount,
             experimentCount = experimentCount,
@@ -192,6 +194,7 @@ class DirectionWikiCoordinator(
         val rawResearchDir = File(rootDir, "raw/research")
         val rawValidationDir = File(rootDir, "raw/validations")
         val rawReflectionDir = File(rootDir, "raw/reflections")
+        val rawReviewsDir = File(rootDir, "raw/reviews")
         val directionsDir = File(rootDir, "wiki/directions")
         val conclusionsDir = File(rootDir, "wiki/conclusions")
         val evidenceDir = File(rootDir, "wiki/evidence")
@@ -234,6 +237,13 @@ class DirectionWikiCoordinator(
             if (reflectionNotes.isNotEmpty()) {
                 File(rawReflectionDir, "${summary.slug}-$timestamp.md").writeText(buildRawReflectionMarkdown(summary, reflectionNotes))
             }
+            File(rawReviewsDir, "${summary.slug}-$timestamp.md").writeText(
+                buildRawReviewMarkdown(
+                    summary = summary,
+                    execution = execution,
+                    weeklyReview = weeklyReview,
+                ),
+            )
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
             File(conclusionsDir, "${summary.slug}.md").writeText(buildConclusionMarkdown(summary, weeklyReview))
             File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
@@ -253,6 +263,7 @@ class DirectionWikiCoordinator(
                 if (researchNotes.isNotEmpty()) add("- [${summary.title} raw research](research/${summary.slug}-$timestamp.md)")
                 if (validationNotes.isNotEmpty()) add("- [${summary.title} validations](validations/${summary.slug}-$timestamp.md)")
                 if (reflectionNotes.isNotEmpty()) add("- [${summary.title} reflections](reflections/${summary.slug}-$timestamp.md)")
+                add("- [${summary.title} reviews](reviews/${summary.slug}-$timestamp.md)")
             }
             notes.forEach { note ->
                 objectCandidates += KnowledgeObjectClassifier.classify(note, summary.title)
@@ -530,6 +541,51 @@ class DirectionWikiCoordinator(
             appendLine("- status: ${note.status.label}")
             appendLine()
             appendLine(note.content.trim())
+            appendLine()
+        }
+    }
+
+    private fun buildRawReviewMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
+        weeklyReview: com.mindflow.app.data.connect.ThreadWeeklyReviewSummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} reviews")
+        appendLine()
+        appendLine("- updated: ${displayTime(summary.updatedAt)}")
+        appendLine("- stage: ${summary.stage.label}")
+        appendLine()
+        summary.conclusionLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前结论")
+            appendLine(it)
+            appendLine()
+        }
+        summary.nextShiftLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 下一步承接")
+            appendLine(it)
+            appendLine()
+        }
+        execution.whyNow.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 为什么现在")
+            appendLine(it)
+            appendLine()
+        }
+        execution.nextStep.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前最小动作")
+            appendLine(it)
+            appendLine()
+        }
+        execution.validationStep.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前验证动作")
+            appendLine(it)
+            appendLine()
+        }
+        weeklyReview.statsLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 本周回看")
+            appendLine(it)
+            weeklyReview.lines.forEach { line ->
+                appendLine("- $line")
+            }
             appendLine()
         }
     }
@@ -950,6 +1006,7 @@ class DirectionWikiCoordinator(
             File(rootDir, "raw/research"),
             File(rootDir, "raw/validations"),
             File(rootDir, "raw/reflections"),
+            File(rootDir, "raw/reviews"),
             File(rootDir, "wiki/directions"),
             File(rootDir, "wiki/concepts"),
             File(rootDir, "wiki/conclusions"),

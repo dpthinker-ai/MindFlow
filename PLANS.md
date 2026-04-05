@@ -236,7 +236,7 @@ Planned items:
   - local `knowledge-layer/` generated under app files
   - low-frequency background refresh on app stop
   - manual refresh from settings
-  - raw source ingestion for notes, research, validations, reflections, and raw index
+  - raw source ingestion for notes, research, validations, reflections, review syntheses, and raw index
   - direction assets reflowed back into Flow and thread surfaces
   - conclusion pages generated under `wiki/conclusions/`
   - conclusion file-back reflowed into `Flow / 线程` as `当前结论 / 下一步承接`
@@ -244,6 +244,7 @@ Planned items:
   - concept pages generated from repeated followed-direction tags
   - question / method / experiment pages generated from classified note content
   - first lint pass exported into markdown and lightweight app-facing health summaries
+  - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces
 - why this matters:
@@ -270,12 +271,12 @@ Planned items:
 Next best order:
 
 1. stronger external research grounding beyond the current local knowledge-layer exports
-2. broader knowledge maintenance passes that keep filing conclusions and synthesis back into the knowledge layer
+2. broader knowledge maintenance passes that keep filing conclusions, weekly reviews, and synthesis back into the knowledge layer
 3. more durable stage persistence and knowledge maintenance beyond the current local snapshot cadence
 
 Current progress:
 
-- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, first lint pass, conclusion pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
+- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, review syntheses, knowledge-object pages, first lint pass, conclusion pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
 - execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
 - external grounding: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer direction-focused grounding
 - stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines

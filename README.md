@@ -207,6 +207,7 @@ knowledge-layer/
 当前第一版包含：
 - 本地 `knowledge-layer/` 目录生成
 - `raw/notes/`、`raw/research/`、`raw/validations/`、`raw/reflections/`、`raw/index.md`
+- `raw/reviews/`，把周回看、当前判断、下一步承接等综合结果也作为 source 留存
 - `wiki/directions/`、`wiki/evidence/`、`wiki/snapshots/`、`wiki/lint/`、`wiki/index.md`、`wiki/log.md`
 - `wiki/concepts/` 概念页，由重复出现的方向标签自动聚合生成
 - `wiki/questions/`、`wiki/methods/`、`wiki/experiments/`，由记录内容自动归纳生成
@@ -223,6 +224,7 @@ knowledge-layer/
 - query 和综合结论要继续 file back 回知识层，而不只是停在 UI 卡片里
 - 知识层要开始维护更稳定的跨对象关系，而不只是按方向导出一轮页面
 - 把 lint 从当前的一轮健康检查推进成更强的冲突、陈旧、孤立和弱证据维护系统
+- 让综合判断、周回看和研究结论更稳定地 file back 回知识层，而不是只停在 App UI
 
 ## AI 主题提取配置
 
