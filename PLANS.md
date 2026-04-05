@@ -204,14 +204,15 @@ Planned items:
 3. Structured collections
 - curated sets for work, product, health, education, and life
 
-4. Direction Wiki integration
-- status: first version implemented locally
+4. Knowledge Layer integration
+- status: first direction-focused slice implemented locally
 - target shape:
   - keep MindFlow database as runtime truth
-  - add a separate markdown `Direction Wiki` for followed directions
-  - store raw direction inputs, wiki pages, evidence pages, and stage snapshots
-  - maintain the wiki through background agent workflows instead of foreground mobile requests
-  - export lightweight direction assets back into the app for Flow / thread / reminder surfaces
+  - add a separate markdown `MindFlow Knowledge Layer`
+  - treat directions as one view inside a larger knowledge system
+  - store raw sources, direction pages, concept pages, evidence pages, question pages, method / experiment pages, and stage snapshots
+  - maintain the knowledge layer through background agent workflows instead of foreground mobile requests
+  - export lightweight knowledge assets back into the app for Flow / thread / reminder surfaces
 - intended directory shape:
   - `direction-wiki/raw/`
   - `direction-wiki/wiki/index.md`
@@ -219,13 +220,17 @@ Planned items:
   - `direction-wiki/wiki/directions/`
   - `direction-wiki/wiki/concepts/`
   - `direction-wiki/wiki/evidence/`
+  - `direction-wiki/wiki/questions/`
+  - `direction-wiki/wiki/methods/`
+  - `direction-wiki/wiki/experiments/`
   - `direction-wiki/wiki/snapshots/`
   - `direction-wiki/AGENTS.md`
 - intended workflow:
-  - ingest followed-direction notes and research into raw markdown
-  - update wiki pages and index/log
-  - lint the wiki for contradictions, stale claims, and missing links
-  - export app-friendly direction summaries back into MindFlow
+  - ingest notes, research records, validation records, and important reflections into raw markdown
+  - update knowledge objects and index/log
+  - lint the knowledge layer for contradictions, stale claims, missing concepts, and weak evidence
+  - file useful query results and AI synthesis back into the knowledge layer
+  - export app-friendly summaries back into MindFlow
 - current shape:
   - local `direction-wiki/` generated under app files
   - low-frequency background refresh on app stop
@@ -234,10 +239,11 @@ Planned items:
   - evidence stratification reflowed back into Flow and thread surfaces
   - concept pages generated from repeated followed-direction tags
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
+  - durable snapshot-backed stage history reflowed back into Flow and thread surfaces
 - why this matters:
   - stronger external research grounding beyond one-shot model output
-  - longer-lived direction-stage persistence
-  - durable direction assets, not only transient AI hints
+  - longer-lived knowledge persistence, not only thread-local reasoning
+  - durable assets that support query, reuse, and innovation
 
 ## P4: MindFlow x FitEver
 
@@ -257,18 +263,17 @@ Planned items:
 
 Next best order:
 
-1. direction-level execution summaries that feel continuous, not episodic
-2. stronger external research grounding beyond the current local Direction Wiki and concept exports
-3. more durable stage persistence beyond the current local snapshot cadence
+1. stronger external research grounding beyond the current local knowledge-layer exports
+2. broaden the knowledge layer beyond direction-only slices into concepts / questions / methods / experiments
+3. more durable stage persistence and knowledge maintenance beyond the current local snapshot cadence
 
 Current progress:
 
-- direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, and concept pages
-- 1: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
-- 2: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer Direction Wiki grounding
-- 3: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, and continuity-aware reminder context
+- knowledge layer integration: first direction-focused slice implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
+- execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
+- external grounding: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer direction-focused grounding
+- stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines
 - direction rhythm and trajectory: first version implemented with short / medium / long horizons, direction-stage rhythm, and longer-lived continuity / trajectory summaries
-- durable snapshot-backed stage history: first version implemented with Direction Wiki timeline files, persistent stage lines, and snapshot cadence summaries reflowed into Flow / thread
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces

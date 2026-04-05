@@ -106,14 +106,14 @@ Notes:
 
 - Keep local database as the runtime source of truth.
 - Markdown remains the readable interchange format for export, import, and cloud backup.
-- A future `Direction Wiki` should become the long-term knowledge asset layer:
+- A future `MindFlow Knowledge Layer` should become the long-term knowledge asset layer:
   - the app database stays the runtime source of truth for mobile interactions
-  - the wiki stores persistent direction pages, research evidence, verified conclusions, and stage snapshots
-  - the wiki should be maintained by background agent workflows, not by foreground mobile UI logic
+  - the knowledge layer stores persistent direction pages, concepts, evidence, verified conclusions, open questions, methods, experiments, and stage snapshots
+  - it should be maintained by background agent workflows, not by foreground mobile UI logic
 - New automation should be low-frequency and battery-aware.
 - Release builds matter more than debug-only polish.
 
-## Direction Wiki Layer
+## Knowledge Layer
 
 MindFlow should not become a heavy Obsidian clone.
 
@@ -124,20 +124,22 @@ The intended long-term split is:
   - daily focus
   - direction follow-up
   - reminders and lightweight execution
-- Direction Wiki
-  - long-lived markdown knowledge base for followed directions
-  - external research accumulation
-  - evidence stratification
-  - verified conclusions
-  - stage snapshots and durable direction assets
+- MindFlow Knowledge Layer
+  - long-lived markdown knowledge base for your evolving knowledge system
+  - direction pages as one view, not the whole model
+  - concept pages
+  - evidence pages
+  - question pages
+  - method / experiment pages
+  - verified conclusions and stage snapshots
 
-Direction Wiki principles:
+Knowledge Layer principles:
 
 - raw sources are append-only and never silently rewritten
-- the wiki is a compounding artifact maintained by agents
+- the knowledge layer is a compounding artifact maintained by agents
 - app-facing summaries must be exported back into MindFlow in a lightweight structured form
-- the wiki is for followed directions, not for every casual note
-- if the wiki is unavailable, the app must continue working with local summaries and planners
+- current implementation starts with followed directions, but the long-term layer must extend to concepts, evidence, questions, methods, and experiments
+- if the knowledge layer is unavailable, the app must continue working with local summaries and planners
 
 ## Near-Term Direction
 
@@ -202,13 +204,13 @@ Current status:
 - research evidence stratification inside thread workspace: first version implemented
 - horizon-aware reminder cadence: first version implemented
 - direction assets surfaced from verified and grounded research: first version implemented
-- local Direction Wiki generation and app-facing asset reflow: first version implemented
-- richer Direction Wiki grounding with evidence stratification and concept pages: first version implemented
+- local Knowledge Layer generation and app-facing asset reflow: first version implemented as a direction-focused first slice
+- richer knowledge grounding with evidence stratification and concept pages: first version implemented in the direction-focused first slice
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
-- durable Direction Wiki snapshot history exported back into Flow / thread: first version implemented
+- durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
 
 Next strongest direction:
 
-- stronger external research grounding beyond the current local wiki exports
-- more durable stage persistence beyond the current local snapshot cadence and local markdown snapshots
+- stronger external research grounding beyond the current local knowledge-layer exports
+- broaden the knowledge layer beyond direction-only slices into concepts / questions / methods / experiments
