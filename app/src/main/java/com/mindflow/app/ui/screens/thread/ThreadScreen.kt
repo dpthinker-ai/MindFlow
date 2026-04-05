@@ -675,7 +675,7 @@ private fun ThreadScreen(
                             uiState.wikiOpenQuestions.isNotEmpty()
                         ) {
                             InsightBlock(
-                                sourceLabel = "Direction Wiki",
+                                sourceLabel = "知识层",
                                 tone = InsightTone.Neutral,
                             ) {
                                 uiState.wikiAssetSummary
@@ -1099,7 +1099,7 @@ private fun ThreadScreen(
                     item {
                         PanelCard {
                             SectionHeader(
-                                title = "方向资产",
+                                title = "知识资产",
                                 headline = "${uiState.directionAssets.size} 条",
                             )
                             uiState.directionAssets.forEach { asset ->

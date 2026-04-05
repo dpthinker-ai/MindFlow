@@ -249,7 +249,7 @@ class FlowViewModel(
                                     contrarianQuestion = research.contrarianQuestion,
                                     externalHypothesis = research.externalHypothesis,
                                     researchQueries = research.queries,
-                                    assetLabel = if (wikiAsset?.assetSummary?.isNotBlank() == true) "Direction Wiki" else asset?.type?.label.orEmpty(),
+                                    assetLabel = if (wikiAsset?.assetSummary?.isNotBlank() == true) "知识层" else asset?.type?.label.orEmpty(),
                                     assetSummary = wikiAsset?.assetSummary?.takeIf { it.isNotBlank() } ?: asset?.summary.orEmpty(),
                                     assetNoteId = asset?.noteId,
                                     wikiGroundingLine = wikiAsset?.groundingLine.orEmpty(),

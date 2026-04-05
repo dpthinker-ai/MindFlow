@@ -249,10 +249,10 @@ class SettingsViewModel(
             _uiState.update { it.copy(isRefreshingDirectionWiki = true) }
             runCatching { directionWikiCoordinator.refreshNow() }
                 .onSuccess { result ->
-                    _events.emit(SettingsEvent.Message("已更新 ${result.generatedDirectionCount} 条方向知识"))
+                    _events.emit(SettingsEvent.Message("已更新 ${result.generatedDirectionCount} 条方向资产"))
                 }
                 .onFailure {
-                    _events.emit(SettingsEvent.Message("更新方向知识库失败"))
+                    _events.emit(SettingsEvent.Message("更新知识层失败"))
                 }
             _uiState.update { it.copy(isRefreshingDirectionWiki = false) }
         }

@@ -204,8 +204,8 @@ Current status:
 - research evidence stratification inside thread workspace: first version implemented
 - horizon-aware reminder cadence: first version implemented
 - direction assets surfaced from verified and grounded research: first version implemented
-- local Knowledge Layer generation and app-facing asset reflow: first version implemented as a direction-focused first slice
-- richer knowledge grounding with evidence stratification and concept pages: first version implemented in the direction-focused first slice
+- local Knowledge Layer generation, raw-source ingest, and app-facing asset reflow: first version implemented as a direction-focused first slice
+- richer knowledge grounding with evidence stratification, concept pages, and question / method / experiment pages: first version implemented in the direction-focused first slice
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice

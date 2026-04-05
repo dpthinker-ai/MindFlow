@@ -235,9 +235,11 @@ Planned items:
   - local `direction-wiki/` generated under app files
   - low-frequency background refresh on app stop
   - manual refresh from settings
+  - raw source ingestion for notes, research, validations, reflections, and raw index
   - direction assets reflowed back into Flow and thread surfaces
   - evidence stratification reflowed back into Flow and thread surfaces
   - concept pages generated from repeated followed-direction tags
+  - question / method / experiment pages generated from classified note content
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces
 - why this matters:
@@ -269,7 +271,7 @@ Next best order:
 
 Current progress:
 
-- knowledge layer integration: first direction-focused slice implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
+- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
 - execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
 - external grounding: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer direction-focused grounding
 - stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines

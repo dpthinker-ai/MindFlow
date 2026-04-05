@@ -10,6 +10,7 @@ import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.NoteInsightSummaryExtractor
 import com.mindflow.app.data.connect.ResearchGroundingSnapshot
 import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
+import com.mindflow.app.data.connect.ResearchEvidenceType
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
@@ -151,15 +152,33 @@ class DirectionWikiCoordinator(
     ) {
         val rawNotesDir = File(rootDir, "raw/notes")
         val rawResearchDir = File(rootDir, "raw/research")
+        val rawValidationDir = File(rootDir, "raw/validations")
+        val rawReflectionDir = File(rootDir, "raw/reflections")
         val directionsDir = File(rootDir, "wiki/directions")
         val evidenceDir = File(rootDir, "wiki/evidence")
         val snapshotsDir = File(rootDir, "wiki/snapshots")
         val conceptsDir = File(rootDir, "wiki/concepts")
+        val questionsDir = File(rootDir, "wiki/questions")
+        val methodsDir = File(rootDir, "wiki/methods")
+        val experimentsDir = File(rootDir, "wiki/experiments")
         val timestamp = fileTimestamp(generatedAt)
+        val rawIndexLines = mutableListOf<String>()
+        val objectCandidates = mutableListOf<KnowledgeObjectCandidate>()
 
         summaries.forEach { summary ->
             val notes = NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
             val researchNotes = notes.filter { ResearchEvidenceAnalyzer.classify(it).label in setOf("外部视角", "待验证", "已查证", "已验证") }
+            val validationNotes = notes.filter {
+                val type = ResearchEvidenceAnalyzer.classify(it)
+                type == ResearchEvidenceType.HYPOTHESIS || type == ResearchEvidenceType.VALIDATED
+            }
+            val reflectionNotes = notes.filter { note ->
+                note.status == com.mindflow.app.data.model.NoteStatus.DONE ||
+                    note.content.contains("回看") ||
+                    note.content.contains("复盘") ||
+                    note.content.contains("经验") ||
+                    note.content.contains("教训")
+            }
             val execution = threadExecutionPlanner.summarize(summary.threadKey, notes)
             val research = externalResearchPlanner.summarize(summary.threadKey, notes)
             val grounding = ResearchEvidenceAnalyzer.buildGrounding(researchNotes)
@@ -167,6 +186,12 @@ class DirectionWikiCoordinator(
             File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
             if (researchNotes.isNotEmpty()) {
                 File(rawResearchDir, "${summary.slug}-$timestamp.md").writeText(buildRawResearchMarkdown(summary, researchNotes))
+            }
+            if (validationNotes.isNotEmpty()) {
+                File(rawValidationDir, "${summary.slug}-$timestamp.md").writeText(buildRawValidationMarkdown(summary, validationNotes))
+            }
+            if (reflectionNotes.isNotEmpty()) {
+                File(rawReflectionDir, "${summary.slug}-$timestamp.md").writeText(buildRawReflectionMarkdown(summary, reflectionNotes))
             }
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
             File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
@@ -180,7 +205,30 @@ class DirectionWikiCoordinator(
             File(snapshotsDir, "${summary.slug}-timeline.md").writeText(
                 buildSnapshotTimelineMarkdown(summary, snapshotHistory),
             )
+            rawIndexLines += buildList {
+                add("- [${summary.title} raw notes](notes/${summary.slug}-$timestamp.md)")
+                if (researchNotes.isNotEmpty()) add("- [${summary.title} raw research](research/${summary.slug}-$timestamp.md)")
+                if (validationNotes.isNotEmpty()) add("- [${summary.title} validations](validations/${summary.slug}-$timestamp.md)")
+                if (reflectionNotes.isNotEmpty()) add("- [${summary.title} reflections](reflections/${summary.slug}-$timestamp.md)")
+            }
+            notes.forEach { note ->
+                objectCandidates += KnowledgeObjectClassifier.classify(note, summary.title)
+            }
         }
+
+        File(rootDir, "raw/index.md").writeText(
+            buildString {
+                appendLine("# Knowledge Layer Raw Sources")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                if (rawIndexLines.isEmpty()) {
+                    appendLine("还没有导出的 source。")
+                } else {
+                    rawIndexLines.forEach(::appendLine)
+                }
+            },
+        )
 
         writeConceptFiles(
             generatedAt = generatedAt,
@@ -188,10 +236,19 @@ class DirectionWikiCoordinator(
             allNotes = allNotes,
             conceptsDir = conceptsDir,
         )
+        writeKnowledgeObjectFiles(
+            generatedAt = generatedAt,
+            candidates = objectCandidates,
+            directories = mapOf(
+                KnowledgeObjectType.QUESTION to questionsDir,
+                KnowledgeObjectType.METHOD to methodsDir,
+                KnowledgeObjectType.EXPERIMENT to experimentsDir,
+            ),
+        )
 
         File(rootDir, "wiki/index.md").writeText(
             buildString {
-                appendLine("# Direction Wiki")
+                appendLine("# MindFlow Knowledge Layer")
                 appendLine()
                 appendLine("更新时间：${displayTime(generatedAt)}")
                 appendLine()
@@ -200,6 +257,9 @@ class DirectionWikiCoordinator(
                 }
                 appendLine()
                 appendLine("- [概念索引](concepts/index.md)")
+                appendLine("- [问题索引](questions/index.md)")
+                appendLine("- [方法索引](methods/index.md)")
+                appendLine("- [实验索引](experiments/index.md)")
             },
         )
 
@@ -290,6 +350,63 @@ class DirectionWikiCoordinator(
         }
     }
 
+    private fun writeKnowledgeObjectFiles(
+        generatedAt: Long,
+        candidates: List<KnowledgeObjectCandidate>,
+        directories: Map<KnowledgeObjectType, File>,
+    ) {
+        val grouped = candidates
+            .groupBy { it.type }
+            .mapValues { (_, items) ->
+                items
+                    .groupBy { slugFor(it.title, "${it.type.folderName}-${it.noteId}") }
+                    .mapNotNull { (slug, bucket) ->
+                        val first = bucket.maxByOrNull { it.updatedAt } ?: return@mapNotNull null
+                        Triple(slug, first, bucket.sortedByDescending { it.updatedAt })
+                    }
+                    .sortedByDescending { (_, first, _) -> first.updatedAt }
+            }
+
+        KnowledgeObjectType.entries.forEach { type ->
+            val directory = directories.getValue(type)
+            val items = grouped[type].orEmpty()
+            File(directory, "index.md").writeText(
+                buildString {
+                    appendLine("# ${type.displayName}")
+                    appendLine()
+                    appendLine("更新时间：${displayTime(generatedAt)}")
+                    appendLine()
+                    if (items.isEmpty()) {
+                        appendLine("还没有形成可复用的${type.displayName}对象。")
+                    } else {
+                        items.forEach { (slug, first, bucket) ->
+                            appendLine("- [${first.title}]($slug.md) · ${bucket.size} 条来源 · ${bucket.map { it.threadTitle }.distinct().size} 条方向")
+                        }
+                    }
+                },
+            )
+            items.forEach { (slug, first, bucket) ->
+                File(directory, "$slug.md").writeText(
+                    buildString {
+                        appendLine("# ${first.title}")
+                        appendLine()
+                        appendLine("- 类型：${type.displayName}")
+                        appendLine("- 最近更新：${displayTime(first.updatedAt)}")
+                        appendLine("- 相关方向：${bucket.map { it.threadTitle }.distinct().joinToString("、")}")
+                        appendLine()
+                        appendLine("## 当前提炼")
+                        appendLine(first.summary)
+                        appendLine()
+                        appendLine("## 来源记录")
+                        bucket.take(8).forEach { item ->
+                            appendLine("- [${item.threadTitle}](../directions/${slugFor(item.threadTitle, item.threadTitle)}.md) · ${item.summary}")
+                        }
+                    },
+                )
+            }
+        }
+    }
+
     private fun buildRawNotesMarkdown(
         summary: DirectionWikiDirectionSummary,
         notes: List<NoteEntity>,
@@ -302,6 +419,38 @@ class DirectionWikiCoordinator(
             appendLine("- status: ${note.status.label}")
             appendLine("- horizon: ${note.horizon.label}")
             appendLine("- updated: ${displayTime(note.updatedAt)}")
+            appendLine()
+            appendLine(note.content.trim())
+            appendLine()
+        }
+    }
+
+    private fun buildRawValidationMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        notes: List<NoteEntity>,
+    ): String = buildString {
+        appendLine("# ${summary.title} raw validations")
+        appendLine()
+        notes.sortedByDescending { it.updatedAt }.forEach { note ->
+            appendLine("## ${note.topic.ifBlank { "未命名验证记录" }}")
+            appendLine("- updated: ${displayTime(note.updatedAt)}")
+            appendLine("- status: ${note.status.label}")
+            appendLine()
+            appendLine(note.content.trim())
+            appendLine()
+        }
+    }
+
+    private fun buildRawReflectionMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        notes: List<NoteEntity>,
+    ): String = buildString {
+        appendLine("# ${summary.title} raw reflections")
+        appendLine()
+        notes.sortedByDescending { it.updatedAt }.forEach { note ->
+            appendLine("## ${note.topic.ifBlank { "未命名反思记录" }}")
+            appendLine("- updated: ${displayTime(note.updatedAt)}")
+            appendLine("- status: ${note.status.label}")
             appendLine()
             appendLine(note.content.trim())
             appendLine()
@@ -584,23 +733,29 @@ class DirectionWikiCoordinator(
         listOf(
             File(rootDir, "raw/notes"),
             File(rootDir, "raw/research"),
+            File(rootDir, "raw/validations"),
+            File(rootDir, "raw/reflections"),
             File(rootDir, "wiki/directions"),
             File(rootDir, "wiki/concepts"),
             File(rootDir, "wiki/evidence"),
+            File(rootDir, "wiki/questions"),
+            File(rootDir, "wiki/methods"),
+            File(rootDir, "wiki/experiments"),
             File(rootDir, "wiki/snapshots"),
             File(rootDir, "wiki/export"),
         ).forEach { it.mkdirs() }
         File(rootDir, "AGENTS.md").takeIf { !it.exists() }?.writeText(
             """
-            # Direction Wiki Agent Rules
+            # MindFlow Knowledge Layer Agent Rules
 
             - Treat `raw/` as append-only sources.
-            - Update `wiki/directions/`, `wiki/evidence/`, `wiki/snapshots/`, `wiki/index.md`, and `wiki/log.md`.
+            - Update `wiki/directions/`, `wiki/concepts/`, `wiki/evidence/`, `wiki/questions/`, `wiki/methods/`, `wiki/experiments/`, `wiki/snapshots/`, `wiki/index.md`, and `wiki/log.md`.
             - Distinguish clearly between:
               - AI external perspective
               - pending validation
               - verified findings
               - validated outcomes
+            - Treat directions as one view of the knowledge layer, not the whole knowledge layer.
             - Prefer concise markdown pages over verbose chat transcripts.
             """.trimIndent(),
         )

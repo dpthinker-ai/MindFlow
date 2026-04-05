@@ -437,14 +437,14 @@ private fun SettingsHomeScreen(
 
             item {
                 SettingsEntryCard(
-                    title = "方向知识库",
+                    title = "知识层",
                     summary = if (uiState.directionWikiLastRefreshedAt > 0L) {
                         "最近更新 ${TimeFormatter.compact(uiState.directionWikiLastRefreshedAt)}"
                     } else {
                         "尚未生成"
                     },
                     headline = if (uiState.directionWikiDirectionCount > 0) {
-                        "${uiState.directionWikiDirectionCount} 条方向"
+                        "${uiState.directionWikiDirectionCount} 条方向资产"
                     } else {
                         "未生成"
                     },
@@ -495,18 +495,18 @@ private fun DirectionWikiSettingsScreen(
     onRefreshDirectionWiki: () -> Unit,
 ) {
     DetailScreenFrame(
-        title = "方向知识库",
-        subtitle = "长期 markdown 资产层",
+        title = "知识层",
+        subtitle = "长期知识资产层",
         onBack = onBack,
     ) {
         item {
             PanelCard {
                 SectionHeader(
                     title = "当前状态",
-                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 条方向" else "尚未生成",
+                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 条方向资产" else "尚未生成",
                 )
                 Text(
-                    text = "把关注方向沉淀成长期资产，再回流给 Flow、线程和提醒。",
+                    text = "先把关注方向沉淀成知识层切片，再逐步扩展到概念、问题、方法和实验。",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
@@ -531,7 +531,7 @@ private fun DirectionWikiSettingsScreen(
                         )
                     }
                 ActionButton(
-                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新方向知识库",
+                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新知识层",
                     onClick = onRefreshDirectionWiki,
                     enabled = !uiState.isRefreshingDirectionWiki,
                     modifier = Modifier.fillMaxWidth(),
