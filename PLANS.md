@@ -292,6 +292,7 @@ Current progress:
 - knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, review syntheses, knowledge-object pages, cross-linked concept/object maintenance, first lint pass, conclusion pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
 - execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
 - external grounding: first version implemented with shared external research snapshots, AI 外部线索 surfaces, explicit trust-state handling, and richer direction-focused grounding
+- knowledge query trust loop: first version implemented with trust-aware knowledge search ranking and explicit trust-boundary display inside search results
 - stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines
 - direction rhythm and trajectory: first version implemented with short / medium / long horizons, direction-stage rhythm, and longer-lived continuity / trajectory summaries
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries

@@ -76,6 +76,7 @@ import androidx.compose.material.icons.outlined.UnfoldLess
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
+import com.mindflow.app.data.connect.ResearchEvidenceType
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.util.TimeFormatter
@@ -195,18 +196,37 @@ private fun KnowledgeSearchRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = item.type.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = knowledgeTypeColor(item.type),
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = item.type.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = knowledgeTypeColor(item.type),
+                        )
+                        item.trustLabel
+                            .takeIf { it.isNotBlank() }
+                            ?.let {
+                                Text(
+                                    text = "可信边界 · $it",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = knowledgeTrustColor(it),
+                                )
+                            }
+                    }
+                }
             }
             item.summary
                 .takeIf { it.isNotBlank() }
@@ -243,6 +263,15 @@ private fun knowledgeTypeColor(type: KnowledgeLayerSearchType): Color = when (ty
     KnowledgeLayerSearchType.EXPERIMENT -> MaterialTheme.colorScheme.tertiary
     KnowledgeLayerSearchType.CONCLUSION -> AccentBlue
     KnowledgeLayerSearchType.EVIDENCE -> TextSoft
+}
+
+@Composable
+private fun knowledgeTrustColor(label: String): Color = when (label) {
+    ResearchEvidenceType.VALIDATED.label -> Accent
+    ResearchEvidenceType.VERIFIED.label -> AccentBlue
+    ResearchEvidenceType.HYPOTHESIS.label -> MaterialTheme.colorScheme.primary
+    ResearchEvidenceType.SIGNAL.label -> TextSoft
+    else -> TextSoft
 }
 
 @OptIn(ExperimentalLayoutApi::class)

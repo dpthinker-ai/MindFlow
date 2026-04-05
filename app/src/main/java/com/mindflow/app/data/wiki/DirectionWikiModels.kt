@@ -51,6 +51,7 @@ data class KnowledgeLayerSearchItem(
     val title: String,
     val summary: String = "",
     val supportLine: String = "",
+    val trustLabel: String = "",
     val threadKey: String = "",
     val noteId: Long? = null,
     val updatedAt: Long = 0L,

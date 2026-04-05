@@ -1201,6 +1201,7 @@ class DirectionWikiCoordinator(
                                 .put("title", item.title)
                                 .put("summary", item.summary)
                                 .put("supportLine", item.supportLine)
+                                .put("trustLabel", item.trustLabel)
                                 .put("threadKey", item.threadKey)
                                 .put("noteId", item.noteId ?: JSONObject.NULL)
                                 .put("updatedAt", item.updatedAt),
@@ -1273,6 +1274,7 @@ class DirectionWikiCoordinator(
                             title = title,
                             summary = item.optString("summary"),
                             supportLine = item.optString("supportLine"),
+                            trustLabel = item.optString("trustLabel"),
                             threadKey = item.optString("threadKey"),
                             noteId = item.takeIf { !it.isNull("noteId") }?.optLong("noteId"),
                             updatedAt = item.optLong("updatedAt"),
@@ -1338,6 +1340,7 @@ class DirectionWikiCoordinator(
                 title = summary.title,
                 summary = summary.conclusionLine.ifBlank { summary.assetSummary.ifBlank { summary.healthLine } },
                 supportLine = summary.stage.label,
+                trustLabel = summary.toTrustLabel(),
                 threadKey = summary.threadKey,
                 updatedAt = summary.updatedAt,
             )
@@ -1353,6 +1356,7 @@ class DirectionWikiCoordinator(
                     latestPair.second.content.trim().take(90)
                 },
                 supportLine = "${pairs.size} 条记录 · ${directionCount} 条方向",
+                trustLabel = ResearchEvidenceAnalyzer.classify(latestPair.second).label,
                 threadKey = latestPair.first.threadKey,
                 noteId = latestPair.second.id,
                 updatedAt = latestPair.second.updatedAt,
@@ -1373,6 +1377,7 @@ class DirectionWikiCoordinator(
                     title = first.title,
                     summary = first.summary,
                     supportLine = "${bucket.size} 条来源 · ${bucket.map { it.threadTitle }.distinct().size} 条方向",
+                    trustLabel = first.evidenceType.label,
                     noteId = first.noteId,
                     updatedAt = first.updatedAt,
                 )
@@ -1386,6 +1391,7 @@ class DirectionWikiCoordinator(
                     title = "${summary.title} 结论",
                     summary = summary.conclusionLine.ifBlank { summary.assetSummary },
                     supportLine = summary.nextShiftLine.ifBlank { summary.groundingLine },
+                    trustLabel = summary.toTrustLabel(),
                     threadKey = summary.threadKey,
                     updatedAt = summary.updatedAt,
                 )
@@ -1415,6 +1421,7 @@ class DirectionWikiCoordinator(
                             ?: ""
                     },
                     supportLine = supportLine,
+                    trustLabel = summary.toTrustLabel(),
                     threadKey = summary.threadKey,
                     updatedAt = summary.updatedAt,
                 )
@@ -1455,6 +1462,15 @@ class DirectionWikiCoordinator(
 
     private fun String.toDirectionStage(): DirectionStage =
         runCatching { DirectionStage.valueOf(this) }.getOrDefault(DirectionStage.FORMING)
+
+    private fun DirectionWikiDirectionSummary.toTrustLabel(): String =
+        when {
+            validatedPoints.isNotEmpty() -> ResearchEvidenceType.VALIDATED.label
+            verifiedPoints.isNotEmpty() -> ResearchEvidenceType.VERIFIED.label
+            hypothesisPoints.isNotEmpty() -> ResearchEvidenceType.HYPOTHESIS.label
+            signalPoints.isNotEmpty() -> ResearchEvidenceType.SIGNAL.label
+            else -> ""
+        }
 
     private fun buildKnowledgeObjectLine(
         questionCount: Int,

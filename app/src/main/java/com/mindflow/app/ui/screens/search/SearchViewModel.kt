@@ -14,6 +14,7 @@ import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.SearchFilters
 import com.mindflow.app.data.model.TimeRange
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.connect.ResearchEvidenceType
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -108,12 +109,16 @@ class SearchViewModel(
         } else {
             val queryText = state.filters.query.trim().lowercase()
             wikiSnapshot.knowledgeItems
-                .filter { item ->
-                    item.title.lowercase().contains(queryText) ||
-                        item.summary.lowercase().contains(queryText) ||
-                        item.supportLine.lowercase().contains(queryText) ||
-                        item.type.label.contains(state.filters.query.trim())
+                .mapNotNull { item ->
+                    val score = knowledgeSearchScore(item, queryText, state.filters.query.trim())
+                    if (score <= 0) null else item to score
                 }
+                .sortedWith(
+                    compareByDescending<Pair<KnowledgeLayerSearchItem, Int>> { it.second }
+                        .thenByDescending { trustWeight(it.first.trustLabel) }
+                        .thenByDescending { it.first.updatedAt },
+                )
+                .map { it.first }
                 .take(8)
         }
         state.copy(
@@ -133,8 +138,30 @@ class SearchViewModel(
             lastAutoOrganizedAt = organizerStatus.lastOrganizedAt,
             lastAutoOrganizedCount = organizerStatus.lastOrganizedCount,
         )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchUiState())
+
+    private fun knowledgeSearchScore(
+        item: KnowledgeLayerSearchItem,
+        queryText: String,
+        rawQuery: String,
+    ): Int {
+        var score = 0
+        if (item.title.lowercase().contains(queryText)) score += 60
+        if (item.summary.lowercase().contains(queryText)) score += 28
+        if (item.supportLine.lowercase().contains(queryText)) score += 18
+        if (item.trustLabel.lowercase().contains(queryText)) score += 24
+        if (item.type.label.contains(rawQuery)) score += 16
+        score += trustWeight(item.trustLabel) * 2
+        return score
     }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchUiState())
+
+    private fun trustWeight(label: String): Int = when (label) {
+        ResearchEvidenceType.VALIDATED.label -> 4
+        ResearchEvidenceType.VERIFIED.label -> 3
+        ResearchEvidenceType.HYPOTHESIS.label -> 2
+        ResearchEvidenceType.SIGNAL.label -> 1
+        else -> 0
+    }
 
     fun updateQuery(value: String) {
         query.value = value
