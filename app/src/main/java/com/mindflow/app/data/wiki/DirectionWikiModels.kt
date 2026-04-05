@@ -17,6 +17,8 @@ data class DirectionWikiDirectionSummary(
     val continuityLine: String = "",
     val trajectoryLine: String = "",
     val stageHistorySummary: String = "",
+    val snapshotStageLine: String = "",
+    val snapshotCadenceLine: String = "",
     val updatedAt: Long = 0L,
 )
 

@@ -93,6 +93,13 @@ class DirectionWikiCoordinator(
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
         val continuity = DirectionContinuityAnalyzer.summarize(notes)
         val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
+        val slug = slugFor(thread.title, threadKey)
+        val snapshotHistory = DirectionSnapshotHistoryAnalyzer.summarize(
+            snapshotsDir = File(rootDir, "wiki/snapshots"),
+            slug = slug,
+            currentStage = execution.stage,
+            currentTimestamp = System.currentTimeMillis(),
+        )
 
         val verifiedPoints = grounding.verifiedItems.map { it.summary }
         val validatedPoints = grounding.validatedItems.map { it.summary }
@@ -118,7 +125,7 @@ class DirectionWikiCoordinator(
 
         return DirectionWikiDirectionSummary(
             threadKey = threadKey,
-            slug = slugFor(thread.title, threadKey),
+            slug = slug,
             title = thread.title,
             stage = execution.stage,
             assetSummary = assetSummary,
@@ -131,6 +138,8 @@ class DirectionWikiCoordinator(
             continuityLine = continuity.continuityLine,
             trajectoryLine = continuity.trajectoryLine,
             stageHistorySummary = stageHistorySummary,
+            snapshotStageLine = snapshotHistory.snapshotStageLine,
+            snapshotCadenceLine = snapshotHistory.snapshotCadenceLine,
             updatedAt = notes.maxOfOrNull { it.updatedAt } ?: 0L,
         )
     }
@@ -162,6 +171,15 @@ class DirectionWikiCoordinator(
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
             File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
             File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
+            val snapshotHistory = DirectionSnapshotHistoryAnalyzer.summarize(
+                snapshotsDir = snapshotsDir,
+                slug = summary.slug,
+                currentStage = summary.stage,
+                currentTimestamp = generatedAt,
+            )
+            File(snapshotsDir, "${summary.slug}-timeline.md").writeText(
+                buildSnapshotTimelineMarkdown(summary, snapshotHistory),
+            )
         }
 
         writeConceptFiles(
@@ -329,6 +347,16 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.snapshotStageLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 长期阶段")
+            appendLine(it)
+            appendLine()
+        }
+        summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 快照节奏")
+            appendLine(it)
+            appendLine()
+        }
         execution.blocker.takeIf { it.isNotBlank() }?.let {
             appendLine("## 当前卡点")
             appendLine(it)
@@ -416,6 +444,16 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.snapshotStageLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 长期阶段")
+            appendLine(it)
+            appendLine()
+        }
+        summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 快照节奏")
+            appendLine(it)
+            appendLine()
+        }
     }
 
     private fun buildSnapshotMarkdown(
@@ -433,6 +471,29 @@ class DirectionWikiCoordinator(
         execution.validationStep.takeIf { it.isNotBlank() }?.let { appendLine("- 先验证：$it") }
         summary.trajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("- 长期走势：$it") }
         summary.stageHistorySummary.takeIf { it.isNotBlank() }?.let { appendLine("- 历史：$it") }
+        summary.snapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("- 长期阶段：$it") }
+        summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let { appendLine("- 快照节奏：$it") }
+    }
+
+    private fun buildSnapshotTimelineMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        history: DirectionSnapshotHistorySummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} stage timeline")
+        appendLine()
+        summary.snapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("- $it") }
+        summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let { appendLine("- $it") }
+        appendLine()
+        appendLine("## Recent snapshots")
+        if (history.snapshotEntries.isEmpty()) {
+            appendLine("还没有可追踪的阶段快照。")
+        } else {
+            history.snapshotEntries
+                .sortedByDescending { it.timestamp }
+                .forEach { entry ->
+                    appendLine("- ${displayTime(entry.timestamp)} · ${entry.stage.label}")
+                }
+        }
     }
 
     private fun writeExport(
@@ -457,6 +518,8 @@ class DirectionWikiCoordinator(
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
+                                .put("snapshotStageLine", summary.snapshotStageLine)
+                                .put("snapshotCadenceLine", summary.snapshotCadenceLine)
                                 .put("updatedAt", summary.updatedAt)
                                 .put("signalPoints", JSONArray(summary.signalPoints))
                                 .put("hypothesisPoints", JSONArray(summary.hypothesisPoints))
@@ -494,6 +557,8 @@ class DirectionWikiCoordinator(
                             groundingLine = item.optString("groundingLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
+                            snapshotStageLine = item.optString("snapshotStageLine"),
+                            snapshotCadenceLine = item.optString("snapshotCadenceLine"),
                             signalPoints = item.optJSONArray("signalPoints").toStringList(),
                             hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
                             verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),

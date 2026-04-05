@@ -206,8 +206,9 @@ Current status:
 - richer Direction Wiki grounding with evidence stratification and concept pages: first version implemented
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
+- durable Direction Wiki snapshot history exported back into Flow / thread: first version implemented
 
 Next strongest direction:
 
 - stronger external research grounding beyond the current local wiki exports
-- more durable stage persistence beyond the current local snapshot cadence
+- more durable stage persistence beyond the current local snapshot cadence and local markdown snapshots

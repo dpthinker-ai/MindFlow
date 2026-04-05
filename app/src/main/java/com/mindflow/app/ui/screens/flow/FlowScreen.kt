@@ -484,6 +484,28 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiSnapshotStageLine
+                .takeIf { it.isNotBlank() }
+                ?.let { snapshotStage ->
+                    Text(
+                        text = snapshotStage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiSnapshotCadenceLine
+                .takeIf { it.isNotBlank() }
+                ?.let { snapshotCadence ->
+                    Text(
+                        text = snapshotCadence,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiTrajectoryLine
                 .takeIf { it.isNotBlank() && it != summary.wikiStageHistorySummary }
                 ?.let { trajectory ->

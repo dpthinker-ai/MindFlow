@@ -722,6 +722,16 @@ private fun ThreadScreen(
                                     ?.let { stageHistory ->
                                         InsightLine(label = "阶段历史", text = stageHistory)
                                     }
+                                uiState.wikiSnapshotStageLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { snapshotStage ->
+                                        InsightLine(label = "长期阶段", text = snapshotStage)
+                                    }
+                                uiState.wikiSnapshotCadenceLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { snapshotCadence ->
+                                        InsightLine(label = "快照节奏", text = snapshotCadence)
+                                    }
                                 uiState.wikiTrajectoryLine
                                     .takeIf { it.isNotBlank() && it != uiState.wikiStageHistorySummary }
                                     ?.let { trajectory ->
