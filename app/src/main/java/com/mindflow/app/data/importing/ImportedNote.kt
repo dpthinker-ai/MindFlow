@@ -1,5 +1,6 @@
 package com.mindflow.app.data.importing
 
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 
@@ -10,6 +11,7 @@ data class ImportedNote(
     val content: String,
     val status: NoteStatus,
     val horizon: NoteHorizon,
+    val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     val isArchived: Boolean,
     val createdAt: Long,
     val updatedAt: Long,

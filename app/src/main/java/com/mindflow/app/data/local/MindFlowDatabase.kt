@@ -12,7 +12,7 @@ import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 
 @Database(
     entities = [NoteEntity::class, NoteStatusHistoryEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(MindFlowConverters::class)
@@ -54,6 +54,12 @@ abstract class MindFlowDatabase : RoomDatabase() {
                     END
                     """.trimIndent(),
                 )
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN knowledgeTrust TEXT NOT NULL DEFAULT 'NONE'")
             }
         }
     }

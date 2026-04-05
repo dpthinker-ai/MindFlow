@@ -136,6 +136,12 @@ class DirectionWikiCoordinator(
         val nextShiftLine = execution.postValidationAction
             .ifBlank { execution.nextStep }
             .ifBlank { weeklyReview.lines.getOrNull(1).orEmpty() }
+        val trustLine = buildTrustLine(
+            signalPoints = signalPoints,
+            hypothesisPoints = hypothesisPoints,
+            verifiedPoints = verifiedPoints,
+            validatedPoints = validatedPoints,
+        )
         val lintSummary = KnowledgeLayerLintAnalyzer.summarize(
             stage = execution.stage,
             notes = notes,
@@ -177,6 +183,7 @@ class DirectionWikiCoordinator(
             conclusionLine = conclusionLine,
             nextShiftLine = nextShiftLine,
             groundingLine = grounding.summary.summaryLine,
+            trustLine = trustLine,
             knowledgeObjectLine = knowledgeObjectLine,
             healthLine = lintSummary.healthLine,
             maintenanceLine = lintSummary.maintenanceLine,
@@ -228,7 +235,14 @@ class DirectionWikiCoordinator(
 
         summaries.forEach { summary ->
             val notes = NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
-            val researchNotes = notes.filter { ResearchEvidenceAnalyzer.classify(it).label in setOf("外部视角", "待验证", "已查证", "已验证") }
+            val researchNotes = notes.filter {
+                ResearchEvidenceAnalyzer.classify(it) in setOf(
+                    ResearchEvidenceType.SIGNAL,
+                    ResearchEvidenceType.HYPOTHESIS,
+                    ResearchEvidenceType.VERIFIED,
+                    ResearchEvidenceType.VALIDATED,
+                )
+            }
             val validationNotes = notes.filter {
                 val type = ResearchEvidenceAnalyzer.classify(it)
                 type == ResearchEvidenceType.HYPOTHESIS || type == ResearchEvidenceType.VALIDATED
@@ -814,13 +828,13 @@ class DirectionWikiCoordinator(
         execution.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("- 如果成立，下一步：$it") }
         appendLine()
         appendLine("## 研究")
-        research.outsideAngle.takeIf { it.isNotBlank() }?.let { appendLine("- 外部视角：$it") }
+        research.outsideAngle.takeIf { it.isNotBlank() }?.let { appendLine("- 外部线索：$it") }
         research.opportunityGap.takeIf { it.isNotBlank() }?.let { appendLine("- 机会缺口：$it") }
         research.contrarianQuestion.takeIf { it.isNotBlank() }?.let { appendLine("- 值得追问：$it") }
         research.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("- 外部假设：$it") }
         appendLine()
         if (summary.signalPoints.isNotEmpty()) {
-            appendLine("## 外部视角沉淀")
+            appendLine("## 外部线索沉淀")
             summary.signalPoints.forEach { appendLine("- $it") }
             appendLine()
         }
@@ -875,7 +889,7 @@ class DirectionWikiCoordinator(
             appendLine()
         }
         if (summary.signalPoints.isNotEmpty()) {
-            appendLine("## 外部视角")
+            appendLine("## 外部线索")
             summary.signalPoints.forEach { appendLine("- $it") }
             appendLine()
         }
@@ -1152,6 +1166,7 @@ class DirectionWikiCoordinator(
                                 .put("conclusionLine", summary.conclusionLine)
                                 .put("nextShiftLine", summary.nextShiftLine)
                                 .put("groundingLine", summary.groundingLine)
+                                .put("trustLine", summary.trustLine)
                                 .put("knowledgeObjectLine", summary.knowledgeObjectLine)
                                 .put("healthLine", summary.healthLine)
                                 .put("maintenanceLine", summary.maintenanceLine)
@@ -1220,6 +1235,7 @@ class DirectionWikiCoordinator(
                             conclusionLine = item.optString("conclusionLine"),
                             nextShiftLine = item.optString("nextShiftLine"),
                             groundingLine = item.optString("groundingLine"),
+                            trustLine = item.optString("trustLine"),
                             knowledgeObjectLine = item.optString("knowledgeObjectLine"),
                             healthLine = item.optString("healthLine"),
                             maintenanceLine = item.optString("maintenanceLine"),
@@ -1486,7 +1502,7 @@ class DirectionWikiCoordinator(
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.SIGNAL,
-                sourceLabel = "AI 外部视角",
+                sourceLabel = "AI 外部线索",
             )
         }
         execution.validationStep.takeIf { it.isNotBlank() }?.let { validation ->
@@ -1512,7 +1528,7 @@ class DirectionWikiCoordinator(
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.HYPOTHESIS,
-                sourceLabel = "AI 外部视角",
+                sourceLabel = "AI 外部线索",
             )
         }
         summary.nextShiftLine.takeIf { it.isNotBlank() }?.let { nextShift ->
@@ -1596,6 +1612,24 @@ class DirectionWikiCoordinator(
             .ifBlank { verifiedPoint }
             .ifBlank { assetSummary }
             .ifBlank { weeklyMainLine }
+
+    private fun buildTrustLine(
+        signalPoints: List<String>,
+        hypothesisPoints: List<String>,
+        verifiedPoints: List<String>,
+        validatedPoints: List<String>,
+    ): String =
+        when {
+            validatedPoints.isNotEmpty() ->
+                "当前已经有已验证结果，可以把这条方向当作更稳定的结论继续推进。"
+            verifiedPoints.isNotEmpty() ->
+                "当前已经出现已查证信息，但还需要继续验证，别过早把它当成最终结论。"
+            hypothesisPoints.isNotEmpty() ->
+                "当前主要停在待验证层，先做最小验证，比继续堆更多判断更有效。"
+            signalPoints.isNotEmpty() ->
+                "当前主要还是外部线索，只适合用来启发方向，还不能当成可靠结论。"
+            else -> ""
+        }
 
     private fun syntheticObjectId(
         key: String,

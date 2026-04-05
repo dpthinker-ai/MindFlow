@@ -5,6 +5,7 @@ import androidx.room.PrimaryKey
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 
@@ -20,6 +21,7 @@ data class NoteEntity(
     val tagSource: TagSource = TagSource.RULE,
     val status: NoteStatus,
     val horizon: NoteHorizon = NoteHorizon.MEDIUM,
+    val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     val isArchived: Boolean,
     val createdAt: Long,
     val updatedAt: Long,

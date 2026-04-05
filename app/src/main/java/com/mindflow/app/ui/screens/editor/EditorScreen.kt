@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.MindFolderCatalog
@@ -104,6 +105,7 @@ fun EditorRoute(
     initialTopic: String = "",
     initialFolderKey: String? = null,
     initialTags: List<String> = emptyList(),
+    initialKnowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     autoStartVoiceInput: Boolean = false,
     onOpenNote: (Long) -> Unit,
     onOpenThread: (String) -> Unit,
@@ -125,6 +127,7 @@ fun EditorRoute(
             initialTopic = initialTopic,
             initialFolderKey = initialFolderKey,
             initialTags = initialTags,
+            initialKnowledgeTrust = initialKnowledgeTrust,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -244,6 +247,7 @@ fun EditorRoute(
         onRemoveTag = viewModel::removeTag,
         onStatusChange = viewModel::onStatusChange,
         onHorizonChange = viewModel::onHorizonChange,
+        onKnowledgeTrustChange = viewModel::onKnowledgeTrustChange,
         onArchiveChange = viewModel::onArchivedChange,
         onSave = { viewModel.save(exitAfterSave = false) },
         onSaveAndExit = { viewModel.save(exitAfterSave = true) },
@@ -277,6 +281,7 @@ private fun EditorScreen(
     onRemoveTag: (String) -> Unit,
     onStatusChange: (NoteStatus) -> Unit,
     onHorizonChange: (NoteHorizon) -> Unit,
+    onKnowledgeTrustChange: (KnowledgeTrust) -> Unit,
     onArchiveChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
@@ -649,6 +654,30 @@ private fun EditorScreen(
                             )
                         }
                     }
+
+                    Text("研究状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        KnowledgeTrust.entries.forEach { knowledgeTrust ->
+                            val accent = knowledgeTrustColor(knowledgeTrust)
+                            FilterChip(
+                                selected = uiState.knowledgeTrust == knowledgeTrust,
+                                onClick = { onKnowledgeTrustChange(knowledgeTrust) },
+                                label = { Text(knowledgeTrust.label) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.14f),
+                                    selectedLabelColor = accent,
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "只有这条记录承载研究判断时再标记，系统会优先采用你的判断，而不是只靠内容猜测。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(
@@ -1228,4 +1257,13 @@ private fun horizonColor(horizon: NoteHorizon): Color =
         NoteHorizon.SHORT -> Color(0xFF0EA5E9)
         NoteHorizon.MEDIUM -> Color(0xFF7C3AED)
         NoteHorizon.LONG -> Color(0xFF0F766E)
+    }
+
+private fun knowledgeTrustColor(trust: KnowledgeTrust): Color =
+    when (trust) {
+        KnowledgeTrust.NONE -> Color(0xFF64748B)
+        KnowledgeTrust.SIGNAL -> Color(0xFF0EA5E9)
+        KnowledgeTrust.HYPOTHESIS -> Color(0xFFF59E0B)
+        KnowledgeTrust.VERIFIED -> Color(0xFF7C3AED)
+        KnowledgeTrust.VALIDATED -> Color(0xFF16A34A)
     }

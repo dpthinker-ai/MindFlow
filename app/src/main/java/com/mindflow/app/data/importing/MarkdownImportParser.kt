@@ -1,6 +1,7 @@
 package com.mindflow.app.data.importing
 
 import com.mindflow.app.data.model.NoteTagCodec
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
@@ -31,6 +32,13 @@ class MarkdownImportParser {
             ?.trim()
             ?.let(::parseHorizon)
             ?: NoteHorizon.MEDIUM
+        val knowledgeTrust = Regex("(?m)^- 研究状态: (.+)$")
+            .find(section)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.let(::parseKnowledgeTrust)
+            ?: KnowledgeTrust.NONE
         val folderKey = Regex("(?m)^- 文件夹: (.+)$")
             .find(section)
             ?.groupValues
@@ -80,6 +88,7 @@ class MarkdownImportParser {
             content = content,
             status = status,
             horizon = horizon,
+            knowledgeTrust = knowledgeTrust,
             isArchived = isArchived,
             createdAt = createdAt,
             updatedAt = updatedAt,
@@ -114,6 +123,15 @@ class MarkdownImportParser {
             NoteHorizon.LONG.label -> NoteHorizon.LONG
             else -> NoteHorizon.MEDIUM
         }
+    }
+
+    private fun parseKnowledgeTrust(label: String): KnowledgeTrust = when (label.trim()) {
+        KnowledgeTrust.NONE.label -> KnowledgeTrust.NONE
+        KnowledgeTrust.SIGNAL.label -> KnowledgeTrust.SIGNAL
+        KnowledgeTrust.HYPOTHESIS.label -> KnowledgeTrust.HYPOTHESIS
+        KnowledgeTrust.VERIFIED.label -> KnowledgeTrust.VERIFIED
+        KnowledgeTrust.VALIDATED.label -> KnowledgeTrust.VALIDATED
+        else -> KnowledgeTrust.NONE
     }
 
     private fun parseTime(raw: String): Long =

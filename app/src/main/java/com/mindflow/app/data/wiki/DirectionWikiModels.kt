@@ -11,6 +11,7 @@ data class DirectionWikiDirectionSummary(
     val conclusionLine: String = "",
     val nextShiftLine: String = "",
     val groundingLine: String = "",
+    val trustLine: String = "",
     val knowledgeObjectLine: String = "",
     val healthLine: String = "",
     val maintenanceLine: String = "",

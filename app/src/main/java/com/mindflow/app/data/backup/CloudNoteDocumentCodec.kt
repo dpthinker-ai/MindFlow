@@ -4,6 +4,7 @@ import com.mindflow.app.data.importing.ImportedNote
 import com.mindflow.app.data.importing.ImportedStatusHistory
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteTagCodec
@@ -28,6 +29,7 @@ class CloudNoteDocumentCodec {
         append("- 标签: ${note.tags.joinToString("、").ifBlank { "无" }}\n")
         append("- 状态: ${note.status.label}\n")
         append("- 周期: ${note.horizon.label}（${note.horizon.windowLabel}）\n")
+        append("- 研究状态: ${note.knowledgeTrust.label}\n")
         append("- 创建时间: ${TimeFormatter.full(note.createdAt)}\n")
         append("- 更新时间: ${TimeFormatter.full(note.updatedAt)}\n")
         append("- 已归档: ${if (note.isArchived) "是" else "否"}\n\n")
@@ -77,6 +79,13 @@ class CloudNoteDocumentCodec {
             ?.trim()
             ?.let(::parseHorizon)
             ?: NoteHorizon.MEDIUM
+        val knowledgeTrust = Regex("(?m)^- 研究状态: (.+)$")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.let(::parseKnowledgeTrust)
+            ?: KnowledgeTrust.NONE
         val createdAt = parseTime(requireMatch(normalized, "(?m)^- 创建时间: (.+)$"))
         val updatedAt = parseTime(requireMatch(normalized, "(?m)^- 更新时间: (.+)$"))
         val isArchived = requireMatch(normalized, "(?m)^- 已归档: (.+)$") == "是"
@@ -98,6 +107,7 @@ class CloudNoteDocumentCodec {
                 content = content,
                 status = status,
                 horizon = horizon,
+                knowledgeTrust = knowledgeTrust,
                 isArchived = isArchived,
                 createdAt = createdAt,
                 updatedAt = updatedAt,
@@ -133,6 +143,15 @@ class CloudNoteDocumentCodec {
             NoteHorizon.LONG.label -> NoteHorizon.LONG
             else -> NoteHorizon.MEDIUM
         }
+    }
+
+    private fun parseKnowledgeTrust(label: String): KnowledgeTrust = when (label.trim()) {
+        KnowledgeTrust.NONE.label -> KnowledgeTrust.NONE
+        KnowledgeTrust.SIGNAL.label -> KnowledgeTrust.SIGNAL
+        KnowledgeTrust.HYPOTHESIS.label -> KnowledgeTrust.HYPOTHESIS
+        KnowledgeTrust.VERIFIED.label -> KnowledgeTrust.VERIFIED
+        KnowledgeTrust.VALIDATED.label -> KnowledgeTrust.VALIDATED
+        else -> KnowledgeTrust.NONE
     }
 
     private fun parseTime(raw: String): Long =

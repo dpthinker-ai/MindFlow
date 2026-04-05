@@ -49,6 +49,7 @@ Core record fields:
 - tags
 - status
 - horizon
+- knowledgeTrust
 - folder
 - createdAt
 - updatedAt
@@ -91,6 +92,7 @@ Notes:
 
 - fitness is merged into health
 - uncategorized notes remain valid and should be recoverable
+- research trust should stay explicit when the user marks a note as external clue, to-be-validated, verified, or validated; knowledge-layer analysis should prefer this explicit state over pure heuristic guessing
 
 ## Design Rules
 

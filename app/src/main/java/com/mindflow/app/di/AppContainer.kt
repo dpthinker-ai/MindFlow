@@ -57,6 +57,7 @@ class AppContainer(context: Context) {
         MindFlowDatabase.MIGRATION_2_3,
         MindFlowDatabase.MIGRATION_3_4,
         MindFlowDatabase.MIGRATION_4_5,
+        MindFlowDatabase.MIGRATION_5_6,
     )
         .build()
 

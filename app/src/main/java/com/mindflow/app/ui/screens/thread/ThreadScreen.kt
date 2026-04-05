@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.connect.ExternalResearchPlanner
@@ -178,6 +179,7 @@ fun ThreadRoute(
                         ?.takeIf { it.isNotBlank() }
                         ?.let(::listOf)
                         .orEmpty(),
+                    initialKnowledgeTrust = KnowledgeTrust.SIGNAL,
                 ),
             )
         },
@@ -217,6 +219,7 @@ fun ThreadRoute(
                         ?.takeIf { it.isNotBlank() }
                         ?.let(::listOf)
                         .orEmpty(),
+                    initialKnowledgeTrust = KnowledgeTrust.VERIFIED,
                 ),
             )
         },
@@ -252,6 +255,7 @@ fun ThreadRoute(
                         ?.takeIf { it.isNotBlank() }
                         ?.let(::listOf)
                         .orEmpty(),
+                    initialKnowledgeTrust = KnowledgeTrust.HYPOTHESIS,
                 ),
             )
         },
@@ -291,6 +295,7 @@ fun ThreadRoute(
                             ?.takeIf { it.isNotBlank() }
                             ?.let(::listOf)
                             .orEmpty(),
+                        initialKnowledgeTrust = KnowledgeTrust.HYPOTHESIS,
                     ),
                 )
             }
@@ -340,6 +345,7 @@ fun ThreadRoute(
                         ?.takeIf { it.isNotBlank() }
                         ?.let(::listOf)
                         .orEmpty(),
+                    initialKnowledgeTrust = KnowledgeTrust.SIGNAL,
                 ),
             )
         },
@@ -713,6 +719,11 @@ private fun ThreadScreen(
                                     ?.let { grounding ->
                                         InsightLine(label = "证据基础", text = grounding)
                                     }
+                                uiState.wikiTrustLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { trust ->
+                                        InsightLine(label = "可信边界", text = trust)
+                                    }
                                 uiState.wikiKnowledgeObjectLine
                                     .takeIf { it.isNotBlank() }
                                     ?.let { objectLine ->
@@ -832,7 +843,7 @@ private fun ThreadScreen(
                                 }
                             if (uiState.researchOutsideAngle.isNotBlank()) {
                                 InsightLine(
-                                    label = "外部视角",
+                                    label = "外部线索",
                                     text = uiState.researchOutsideAngle,
                                 )
                             }
@@ -1251,7 +1262,7 @@ private fun threadInsightSourceText(label: String): String = when (label) {
 }
 
 private fun researchSourceText(source: com.mindflow.app.data.brief.DailyBriefSource): String =
-    if (source == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理"
+    if (source == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部线索" else "规则整理"
 
 private fun ThreadUiState.toMaintenanceCaptureSeed(): CaptureSeed =
     buildKnowledgeMaintenanceCaptureSeed(

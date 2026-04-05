@@ -34,6 +34,7 @@ import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
@@ -443,6 +444,17 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiTrustLine
+                .takeIf { it.isNotBlank() }
+                ?.let { trust ->
+                    Text(
+                        text = trust,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiKnowledgeObjectLine
                 .takeIf { it.isNotBlank() }
                 ?.let { objectLine ->
@@ -669,7 +681,7 @@ private fun FollowedDirectionRow(
                 summary.externalHypothesis.isNotBlank()
             ) {
                 InsightBlock(
-                    sourceLabel = if (summary.source == DailyBriefSource.AI) "AI 外部视角" else "外部视角",
+                    sourceLabel = if (summary.source == DailyBriefSource.AI) "AI 外部线索" else "外部线索",
                     tone = InsightTone.Neutral,
                 ) {
                     summary.outsideAngle.takeIf { it.isNotBlank() }?.let {
@@ -762,7 +774,7 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
                 appendLine("- 下次检查：$it")
             }
             outsideAngle.takeIf { it.isNotBlank() }?.let {
-                appendLine("- AI 外部视角：$it")
+                appendLine("- AI 外部线索：$it")
             }
             opportunityGap.takeIf { it.isNotBlank() }?.let {
                 appendLine("- 机会缺口：$it")
@@ -782,6 +794,7 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
         },
         initialFolderKey = initialFolderKey,
         initialTags = initialTags,
+        initialKnowledgeTrust = KnowledgeTrust.HYPOTHESIS,
     )
 }
 

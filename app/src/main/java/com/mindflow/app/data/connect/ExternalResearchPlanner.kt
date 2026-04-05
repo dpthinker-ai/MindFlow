@@ -104,7 +104,7 @@ class ExternalResearchPlanner(
     ): String {
         val latestNotes = notes.sortedByDescending { it.updatedAt }.take(8)
         return buildString {
-            appendLine("你正在为一个长期方向生成外部视角。")
+            appendLine("你正在为一个长期方向生成外部线索。")
             appendLine("请恰好输出 6 行中文，顺序固定为：")
             appendLine("1. 一个值得看的外部角度")
             appendLine("2. 一个机会缺口")

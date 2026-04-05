@@ -1,12 +1,13 @@
 package com.mindflow.app.data.connect
 
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteStatus
 
 enum class ResearchEvidenceType(
     val label: String,
 ) {
-    SIGNAL("外部视角"),
+    SIGNAL("外部线索"),
     HYPOTHESIS("待验证"),
     VERIFIED("已查证"),
     VALIDATED("已验证"),
@@ -20,10 +21,10 @@ data class ResearchEvidenceSummary(
 ) {
     val summaryLine: String
         get() = buildList {
-            if (signalCount > 0) add("外部视角 $signalCount")
-            if (hypothesisCount > 0) add("待验证 $hypothesisCount")
-            if (verifiedCount > 0) add("已查证 $verifiedCount")
             if (validatedCount > 0) add("已验证 $validatedCount")
+            if (verifiedCount > 0) add("已查证 $verifiedCount")
+            if (hypothesisCount > 0) add("待验证 $hypothesisCount")
+            if (signalCount > 0) add("外部线索 $signalCount")
         }.joinToString(" · ")
 }
 
@@ -58,6 +59,13 @@ object ResearchEvidenceAnalyzer {
     }
 
     fun classify(note: NoteEntity): ResearchEvidenceType {
+        when (note.knowledgeTrust) {
+            KnowledgeTrust.SIGNAL -> return ResearchEvidenceType.SIGNAL
+            KnowledgeTrust.HYPOTHESIS -> return ResearchEvidenceType.HYPOTHESIS
+            KnowledgeTrust.VERIFIED -> return ResearchEvidenceType.VERIFIED
+            KnowledgeTrust.VALIDATED -> return ResearchEvidenceType.VALIDATED
+            KnowledgeTrust.NONE -> Unit
+        }
         val content = note.content
         return when {
             note.status == NoteStatus.DONE ||

@@ -6,6 +6,7 @@ import com.mindflow.app.data.model.CloudBackupSnapshot
 import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.model.FolderRefreshResult
 import com.mindflow.app.data.model.ImportResult
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.NoteStats
@@ -31,6 +32,7 @@ interface NoteRepository {
         tags: List<String> = emptyList(),
         status: NoteStatus = NoteStatus.IDEA,
         horizon: NoteHorizon = NoteHorizon.MEDIUM,
+        knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
         isArchived: Boolean = false,
         folderManuallyEdited: Boolean = false,
         topicManuallyEdited: Boolean = false,
@@ -44,6 +46,7 @@ interface NoteRepository {
         tags: List<String>,
         status: NoteStatus,
         horizon: NoteHorizon,
+        knowledgeTrust: KnowledgeTrust,
         isArchived: Boolean,
         folderManuallyEdited: Boolean,
         topicManuallyEdited: Boolean,

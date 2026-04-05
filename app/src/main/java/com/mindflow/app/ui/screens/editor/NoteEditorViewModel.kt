@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.NoteStatus
@@ -43,6 +44,7 @@ data class NoteEditorUiState(
     val tagSource: TagSource = TagSource.RULE,
     val status: NoteStatus = NoteStatus.IDEA,
     val horizon: NoteHorizon = NoteHorizon.MEDIUM,
+    val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     val isArchived: Boolean = false,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,
@@ -71,6 +73,7 @@ class NoteEditorViewModel(
     private val initialTopic: String,
     private val initialFolderKey: String?,
     private val initialTags: List<String>,
+    private val initialKnowledgeTrust: KnowledgeTrust,
 ) : ViewModel() {
     private data class PersistedSnapshot(
         val content: String = "",
@@ -79,6 +82,7 @@ class NoteEditorViewModel(
         val tags: List<String> = emptyList(),
         val status: NoteStatus = NoteStatus.IDEA,
         val horizon: NoteHorizon = NoteHorizon.MEDIUM,
+        val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
         val isArchived: Boolean = false,
     )
 
@@ -92,6 +96,7 @@ class NoteEditorViewModel(
             content = if (noteId == null) initialContent else "",
             topic = if (noteId == null) initialTopic else "",
             horizon = if (noteId == null) NoteHorizon.inferFrom(initialContent, initialTopic) else NoteHorizon.MEDIUM,
+            knowledgeTrust = if (noteId == null) initialKnowledgeTrust else KnowledgeTrust.NONE,
             folderKey = if (noteId == null) initialFolderKey else null,
             folderSource = if (noteId == null && initialFolderKey != null) FolderSource.MANUAL else FolderSource.RULE,
             tags = if (noteId == null) initialTags else emptyList(),
@@ -178,6 +183,10 @@ class NoteEditorViewModel(
 
     fun onArchivedChange(archived: Boolean) {
         updateDirtyState { it.copy(isArchived = archived) }
+    }
+
+    fun onKnowledgeTrustChange(knowledgeTrust: KnowledgeTrust) {
+        updateDirtyState { it.copy(knowledgeTrust = knowledgeTrust) }
     }
 
     fun polishContent() {
@@ -281,6 +290,7 @@ class NoteEditorViewModel(
                     tags = state.tags,
                     status = state.status,
                     horizon = state.horizon,
+                    knowledgeTrust = state.knowledgeTrust,
                     isArchived = state.isArchived,
                     folderManuallyEdited = state.folderEdited,
                     topicManuallyEdited = state.topicEdited,
@@ -299,6 +309,7 @@ class NoteEditorViewModel(
                     tags = state.tags,
                     status = state.status,
                     horizon = state.horizon,
+                    knowledgeTrust = state.knowledgeTrust,
                     isArchived = state.isArchived,
                     folderManuallyEdited = state.folderEdited,
                     topicManuallyEdited = state.topicEdited,
@@ -418,6 +429,7 @@ class NoteEditorViewModel(
                 tags = note.tags,
                 status = note.status,
                 horizon = note.horizon,
+                knowledgeTrust = note.knowledgeTrust,
                 isArchived = note.isArchived,
             )
             _uiState.update {
@@ -434,6 +446,7 @@ class NoteEditorViewModel(
                     tagSource = note.tagSource,
                     status = note.status,
                     horizon = note.horizon,
+                    knowledgeTrust = note.knowledgeTrust,
                     isArchived = note.isArchived,
                     createdAt = note.createdAt,
                     updatedAt = note.updatedAt,
@@ -456,6 +469,7 @@ class NoteEditorViewModel(
             state.tags != persistedSnapshot.tags ||
             state.status != persistedSnapshot.status ||
             state.horizon != persistedSnapshot.horizon ||
+            state.knowledgeTrust != persistedSnapshot.knowledgeTrust ||
             state.isArchived != persistedSnapshot.isArchived ||
             state.folderEdited ||
             state.topicEdited ||
@@ -474,6 +488,7 @@ class NoteEditorViewModel(
                     next.tags != persistedSnapshot.tags ||
                     next.status != persistedSnapshot.status ||
                     next.horizon != persistedSnapshot.horizon ||
+                    next.knowledgeTrust != persistedSnapshot.knowledgeTrust ||
                     next.isArchived != persistedSnapshot.isArchived ||
                     next.folderEdited ||
                     next.topicEdited ||
@@ -501,6 +516,7 @@ class NoteEditorViewModel(
             initialTopic: String,
             initialFolderKey: String?,
             initialTags: List<String>,
+            initialKnowledgeTrust: KnowledgeTrust,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 NoteEditorViewModel(
@@ -512,6 +528,7 @@ class NoteEditorViewModel(
                     initialTopic = initialTopic,
                     initialFolderKey = initialFolderKey,
                     initialTags = initialTags,
+                    initialKnowledgeTrust = initialKnowledgeTrust,
                 )
             }
         }

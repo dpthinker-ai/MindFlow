@@ -1,6 +1,7 @@
 package com.mindflow.app.ui.navigation
 
 import android.content.Intent
+import com.mindflow.app.data.model.KnowledgeTrust
 
 enum class FlowFocus {
     TODAY,
@@ -15,6 +16,7 @@ data class CaptureSeed(
     val initialTopic: String = "",
     val initialFolderKey: String? = null,
     val initialTags: List<String> = emptyList(),
+    val initialKnowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     val autoStartVoiceInput: Boolean = false,
 )
 
