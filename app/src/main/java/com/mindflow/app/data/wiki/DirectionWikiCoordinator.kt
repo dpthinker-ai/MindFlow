@@ -228,6 +228,19 @@ class DirectionWikiCoordinator(
             val grounding = ResearchEvidenceAnalyzer.buildGrounding(researchNotes)
             val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
             val relatedConcepts = buildDirectionRelatedConcepts(notes)
+            val directionObjectCandidates = buildList {
+                notes.forEach { note ->
+                    addAll(KnowledgeObjectClassifier.classify(note, summary.title))
+                }
+                addAll(
+                    buildSynthesizedKnowledgeObjects(
+                        summary = summary,
+                        execution = execution,
+                        research = research,
+                        relatedConcepts = relatedConcepts,
+                    ),
+                )
+            }
 
             File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
             if (researchNotes.isNotEmpty()) {
@@ -248,7 +261,14 @@ class DirectionWikiCoordinator(
             )
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
             File(conclusionsDir, "${summary.slug}.md").writeText(buildConclusionMarkdown(summary, weeklyReview))
-            File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
+            File(evidenceDir, "${summary.slug}.md").writeText(
+                buildEvidenceMarkdown(
+                    summary = summary,
+                    grounding = grounding,
+                    relatedConcepts = relatedConcepts,
+                    relatedObjects = directionObjectCandidates,
+                ),
+            )
             File(lintDir, "${summary.slug}.md").writeText(buildLintMarkdown(summary))
             File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
             val snapshotHistory = DirectionSnapshotHistoryAnalyzer.summarize(
@@ -267,15 +287,7 @@ class DirectionWikiCoordinator(
                 if (reflectionNotes.isNotEmpty()) add("- [${summary.title} reflections](reflections/${summary.slug}-$timestamp.md)")
                 add("- [${summary.title} reviews](reviews/${summary.slug}-$timestamp.md)")
             }
-            notes.forEach { note ->
-                objectCandidates += KnowledgeObjectClassifier.classify(note, summary.title)
-            }
-            objectCandidates += buildSynthesizedKnowledgeObjects(
-                summary = summary,
-                execution = execution,
-                research = research,
-                relatedConcepts = relatedConcepts,
-            )
+            objectCandidates += directionObjectCandidates
         }
 
         File(rootDir, "raw/index.md").writeText(
@@ -421,7 +433,7 @@ class DirectionWikiCoordinator(
                     appendLine()
                     appendLine("## 关联方向")
                     uniqueDirections.forEach { direction ->
-                        appendLine("- [${direction.title}](../directions/${direction.slug}.md) · ${direction.stage.label}")
+                        appendLine("- [${direction.title}](../directions/${direction.slug}.md) · ${direction.stage.label} · [证据](../evidence/${direction.slug}.md)")
                     }
                     appendLine()
                     appendLine("## 最近记录")
@@ -787,11 +799,21 @@ class DirectionWikiCoordinator(
     private fun buildEvidenceMarkdown(
         summary: DirectionWikiDirectionSummary,
         grounding: ResearchGroundingSnapshot,
+        relatedConcepts: List<String>,
+        relatedObjects: List<KnowledgeObjectCandidate>,
     ): String = buildString {
         appendLine("# ${summary.title} evidence")
         appendLine()
         appendLine("- ${grounding.summary.summaryLine.ifBlank { "暂无结构化研究证据" }}")
         appendLine()
+        if (relatedConcepts.isNotEmpty()) {
+            appendLine("## 相关概念")
+            relatedConcepts.forEach { concept ->
+                val conceptSlug = slugFor(concept, concept)
+                appendLine("- [$concept](../concepts/$conceptSlug.md)")
+            }
+            appendLine()
+        }
         if (summary.signalPoints.isNotEmpty()) {
             appendLine("## 外部视角")
             summary.signalPoints.forEach { appendLine("- $it") }
@@ -812,6 +834,24 @@ class DirectionWikiCoordinator(
             summary.validatedPoints.forEach { appendLine("- $it") }
             appendLine()
         }
+        if (relatedObjects.isNotEmpty()) {
+            appendLine("## 相关知识对象")
+            KnowledgeObjectType.entries.forEach { type ->
+                val items = relatedObjects
+                    .filter { it.type == type }
+                    .distinctBy { it.title }
+                    .sortedByDescending { it.updatedAt }
+                    .take(4)
+                if (items.isNotEmpty()) {
+                    appendLine("### ${type.displayName}")
+                    items.forEach { item ->
+                        val objectSlug = slugFor(item.title, "${item.type.folderName}-${item.noteId}")
+                        appendLine("- [${item.title}](../${type.folderName}/$objectSlug.md) · ${item.sourceLabel} · ${item.summary}")
+                    }
+                    appendLine()
+                }
+            }
+        }
         summary.continuityLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 节奏")
             appendLine(it)
@@ -824,6 +864,11 @@ class DirectionWikiCoordinator(
         }
         summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 快照节奏")
+            appendLine(it)
+            appendLine()
+        }
+        summary.maintenanceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 建议先补")
             appendLine(it)
             appendLine()
         }
