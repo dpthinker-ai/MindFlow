@@ -252,6 +252,7 @@ Planned items:
   - lint now also exports one actionable `建议先补` maintenance line back into Flow / thread
   - lint wording is moving from abstract “补什么” advice toward concrete maintenance targets such as evidence pages, conclusion pages, and reusable objects
   - lint now begins exporting both the maintenance target and the next source type to add, so Flow / thread can reflow more actionable maintenance guidance
+  - lint now also exports the weakest maintenance dimension, so Flow / thread can show whether the current gap is evidence, question definition, method accumulation, conclusion freshness, recent progress, or object coverage
   - reusable question / method / experiment pages now also link back into their related direction, conclusion, and evidence pages
   - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders

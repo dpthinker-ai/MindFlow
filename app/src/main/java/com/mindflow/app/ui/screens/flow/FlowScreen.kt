@@ -496,6 +496,17 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiMaintenanceDimensionLine
+                .takeIf { it.isNotBlank() }
+                ?.let { dimension ->
+                    Text(
+                        text = "最薄弱：$dimension",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiValidatedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { validated ->

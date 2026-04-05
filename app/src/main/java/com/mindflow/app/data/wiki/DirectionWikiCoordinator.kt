@@ -173,6 +173,7 @@ class DirectionWikiCoordinator(
             maintenanceLine = lintSummary.maintenanceLine,
             maintenanceTargetLine = lintSummary.maintenanceTargetLine,
             maintenanceSourceLine = lintSummary.maintenanceSourceLine,
+            maintenanceDimensionLine = lintSummary.maintenanceDimensionLine,
             signalPoints = signalPoints,
             hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
@@ -588,6 +589,9 @@ class DirectionWikiCoordinator(
                         }
                         summary.maintenanceSourceLine.takeIf { it.isNotBlank() }?.let { source ->
                             appendLine("  - 先补来源：$source")
+                        }
+                        summary.maintenanceDimensionLine.takeIf { it.isNotBlank() }?.let { dimension ->
+                            appendLine("  - 最薄弱：$dimension")
                         }
                     }
                 }
@@ -1034,6 +1038,11 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.maintenanceDimensionLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 最薄弱维度")
+            appendLine(it)
+            appendLine()
+        }
         summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 知识对象覆盖")
             appendLine(it)
@@ -1113,6 +1122,7 @@ class DirectionWikiCoordinator(
                                 .put("maintenanceLine", summary.maintenanceLine)
                                 .put("maintenanceTargetLine", summary.maintenanceTargetLine)
                                 .put("maintenanceSourceLine", summary.maintenanceSourceLine)
+                                .put("maintenanceDimensionLine", summary.maintenanceDimensionLine)
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
@@ -1161,6 +1171,7 @@ class DirectionWikiCoordinator(
                             maintenanceLine = item.optString("maintenanceLine"),
                             maintenanceTargetLine = item.optString("maintenanceTargetLine"),
                             maintenanceSourceLine = item.optString("maintenanceSourceLine"),
+                            maintenanceDimensionLine = item.optString("maintenanceDimensionLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
                             snapshotStageLine = item.optString("snapshotStageLine"),

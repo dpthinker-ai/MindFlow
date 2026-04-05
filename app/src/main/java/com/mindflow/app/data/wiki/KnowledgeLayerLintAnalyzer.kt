@@ -11,6 +11,7 @@ data class KnowledgeLayerLintSummary(
     val maintenanceLine: String,
     val maintenanceTargetLine: String,
     val maintenanceSourceLine: String,
+    val maintenanceDimensionLine: String,
     val lintIssues: List<String>,
 )
 
@@ -32,6 +33,7 @@ object KnowledgeLayerLintAnalyzer {
                 maintenanceLine = "先补一条更具体的记录，再开始沉淀问题、方法或实验。",
                 maintenanceTargetLine = "原始记录",
                 maintenanceSourceLine = "补一条更具体的记录",
+                maintenanceDimensionLine = "原始材料",
                 lintIssues = listOf("先补一条更具体的记录，再开始沉淀知识对象。"),
             )
         }
@@ -124,12 +126,21 @@ object KnowledgeLayerLintAnalyzer {
             else ->
                 "一条新的查证、验证或方法记录"
         }
+        val maintenanceDimensionLine = when {
+            hasConflict || grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty() -> "证据基础最薄"
+            stage == DirectionStage.FORMING && questionCount == 0 -> "问题定义最薄"
+            methodCount == 0 && experimentCount == 0 -> "方法沉淀最薄"
+            conclusionLine.isNotBlank() && (nextShiftLine.isBlank() || daysSinceUpdate >= 35L) -> "结论维护最薄"
+            daysSinceUpdate >= 21L -> "最近进展最薄"
+            else -> "对象沉淀最薄"
+        }
 
         return KnowledgeLayerLintSummary(
             healthLine = healthLine,
             maintenanceLine = maintenanceLine,
             maintenanceTargetLine = maintenanceTargetLine,
             maintenanceSourceLine = maintenanceSourceLine,
+            maintenanceDimensionLine = maintenanceDimensionLine,
             lintIssues = issues,
         )
     }

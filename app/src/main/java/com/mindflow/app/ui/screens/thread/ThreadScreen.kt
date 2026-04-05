@@ -732,6 +732,11 @@ private fun ThreadScreen(
                                     ?.let { source ->
                                         InsightLine(label = "先补来源", text = source)
                                     }
+                                uiState.wikiMaintenanceDimensionLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { dimension ->
+                                        InsightLine(label = "最薄弱", text = dimension)
+                                    }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
                                     ?.let { validated ->
