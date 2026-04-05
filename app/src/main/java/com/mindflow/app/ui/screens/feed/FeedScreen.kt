@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,10 +55,14 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
+import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.AccentSuccess
+import com.mindflow.app.ui.theme.PanelBlue
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun FeedRoute(
@@ -169,11 +176,20 @@ private fun FeedScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    Text(
-                        text = "灵感易逝，及时行动",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "灵感易逝，及时行动",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        TimeBankBadge(
+                            remainingActiveDays = uiState.timeBank.remainingActiveDays,
+                        )
+                    }
                 }
 
                 item {
@@ -279,3 +295,25 @@ private fun FeedScreen(
         )
     }
 }
+
+@Composable
+private fun TimeBankBadge(
+    remainingActiveDays: Int,
+) {
+    Surface(
+        color = PanelBlue.copy(alpha = 0.6f),
+        shape = MaterialTheme.shapes.large,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+    ) {
+        Text(
+            text = "${formatDays(remainingActiveDays)} 天",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.titleSmall,
+            color = AccentBlue,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun formatDays(days: Int): String = NumberFormat.getIntegerInstance(Locale.CHINA).format(days)

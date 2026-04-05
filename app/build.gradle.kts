@@ -59,6 +59,9 @@ android {
         versionCode = 7
         versionName = "2.0.5"
         resourceConfigurations += listOf("zh", "zh-rCN", "en")
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -111,6 +114,12 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        dex {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
