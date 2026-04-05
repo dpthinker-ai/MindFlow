@@ -215,6 +215,7 @@ Current status:
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
 - synthesized reviews, open questions, validation loops, and next-step handoffs now also file back into question / experiment / method objects, not only into direction conclusion pages
+- research syntheses such as contrarian questions and external hypotheses should also be promoted into durable question / experiment objects instead of staying as one-shot thread hints
 
 Next strongest direction:
 

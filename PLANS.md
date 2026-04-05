@@ -244,6 +244,7 @@ Planned items:
   - concept pages generated from repeated followed-direction tags
   - question / method / experiment pages generated from classified note content
   - synthesized open questions, validation loops, and next-shift handoffs now also file back into question / experiment / method pages
+  - research syntheses such as contrarian questions and external hypotheses now also file back into durable question / experiment pages
   - concept pages and knowledge-object pages now maintain lightweight cross-links instead of staying isolated
   - first lint pass exported into markdown and lightweight app-facing health summaries
   - lint now also exports one actionable `建议先补` maintenance line back into Flow / thread

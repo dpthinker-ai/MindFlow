@@ -227,6 +227,7 @@ class DirectionWikiCoordinator(
             val research = externalResearchPlanner.summarize(summary.threadKey, notes)
             val grounding = ResearchEvidenceAnalyzer.buildGrounding(researchNotes)
             val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
+            val relatedConcepts = buildDirectionRelatedConcepts(notes)
 
             File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
             if (researchNotes.isNotEmpty()) {
@@ -272,6 +273,8 @@ class DirectionWikiCoordinator(
             objectCandidates += buildSynthesizedKnowledgeObjects(
                 summary = summary,
                 execution = execution,
+                research = research,
+                relatedConcepts = relatedConcepts,
             )
         }
 
@@ -310,6 +313,11 @@ class DirectionWikiCoordinator(
             summaries = summaries,
             lintDir = lintDir,
         )
+        writeEvidenceIndex(
+            generatedAt = generatedAt,
+            summaries = summaries,
+            evidenceDir = evidenceDir,
+        )
         writeConclusionIndex(
             generatedAt = generatedAt,
             summaries = summaries,
@@ -328,6 +336,7 @@ class DirectionWikiCoordinator(
                 appendLine()
                 appendLine("- [结论索引](conclusions/index.md)")
                 appendLine("- [概念索引](concepts/index.md)")
+                appendLine("- [证据索引](evidence/index.md)")
                 appendLine("- [问题索引](questions/index.md)")
                 appendLine("- [方法索引](methods/index.md)")
                 appendLine("- [实验索引](experiments/index.md)")
@@ -1144,6 +1153,8 @@ class DirectionWikiCoordinator(
     private fun buildSynthesizedKnowledgeObjects(
         summary: DirectionWikiDirectionSummary,
         execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
+        research: com.mindflow.app.data.connect.ExternalResearchSnapshot,
+        relatedConcepts: List<String>,
     ): List<KnowledgeObjectCandidate> {
         val candidates = mutableListOf<KnowledgeObjectCandidate>()
         val baseId = syntheticObjectId(summary.threadKey, "knowledge")
@@ -1157,11 +1168,24 @@ class DirectionWikiCoordinator(
                     noteId = baseId,
                     updatedAt = summary.updatedAt,
                     threadTitle = summary.title,
-                    relatedConcepts = emptyList(),
+                    relatedConcepts = relatedConcepts,
                     evidenceType = ResearchEvidenceType.HYPOTHESIS,
                     sourceLabel = "知识层综合判断",
                 )
             }
+        research.contrarianQuestion.takeIf { it.isNotBlank() }?.let { question ->
+            candidates += KnowledgeObjectCandidate(
+                type = KnowledgeObjectType.QUESTION,
+                title = "${summary.title} · 研究追问",
+                summary = question,
+                noteId = baseId - 10,
+                updatedAt = summary.updatedAt,
+                threadTitle = summary.title,
+                relatedConcepts = relatedConcepts,
+                evidenceType = ResearchEvidenceType.SIGNAL,
+                sourceLabel = "AI 外部视角",
+            )
+        }
         execution.validationStep.takeIf { it.isNotBlank() }?.let { validation ->
             candidates += KnowledgeObjectCandidate(
                 type = KnowledgeObjectType.EXPERIMENT,
@@ -1170,9 +1194,22 @@ class DirectionWikiCoordinator(
                 noteId = baseId - 1,
                 updatedAt = summary.updatedAt,
                 threadTitle = summary.title,
-                relatedConcepts = emptyList(),
+                relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.HYPOTHESIS,
                 sourceLabel = "知识层验证动作",
+            )
+        }
+        research.externalHypothesis.takeIf { it.isNotBlank() }?.let { hypothesis ->
+            candidates += KnowledgeObjectCandidate(
+                type = KnowledgeObjectType.EXPERIMENT,
+                title = "${summary.title} · 外部假设",
+                summary = hypothesis,
+                noteId = baseId - 11,
+                updatedAt = summary.updatedAt,
+                threadTitle = summary.title,
+                relatedConcepts = relatedConcepts,
+                evidenceType = ResearchEvidenceType.HYPOTHESIS,
+                sourceLabel = "AI 外部视角",
             )
         }
         summary.nextShiftLine.takeIf { it.isNotBlank() }?.let { nextShift ->
@@ -1183,13 +1220,26 @@ class DirectionWikiCoordinator(
                 noteId = baseId - 2,
                 updatedAt = summary.updatedAt,
                 threadTitle = summary.title,
-                relatedConcepts = emptyList(),
+                relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.VERIFIED,
                 sourceLabel = "知识层承接动作",
             )
         }
         return candidates
     }
+
+    private fun buildDirectionRelatedConcepts(
+        notes: List<NoteEntity>,
+    ): List<String> = notes
+        .flatMap { note -> note.tags }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
+        .map { it.key }
+        .take(3)
 
     private fun buildConclusionLine(
         assetSummary: String,
@@ -1208,6 +1258,28 @@ class DirectionWikiCoordinator(
     ): Long {
         val raw = "$key:$suffix".hashCode().toLong()
         return if (raw >= 0) -(raw + 1L) else raw
+    }
+
+    private fun writeEvidenceIndex(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+        evidenceDir: File,
+    ) {
+        File(evidenceDir, "index.md").writeText(
+            buildString {
+                appendLine("# 证据索引")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                if (summaries.isEmpty()) {
+                    appendLine("还没有可追踪的证据页。")
+                } else {
+                    summaries.sortedBy { it.title }.forEach { summary ->
+                        appendLine("- [${summary.title}](${summary.slug}.md) · ${summary.groundingLine.ifBlank { summary.healthLine.ifBlank { summary.stage.label } }}")
+                    }
+                }
+            },
+        )
     }
 
     private fun JSONArray?.toStringList(): List<String> {
