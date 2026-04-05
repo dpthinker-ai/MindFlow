@@ -77,21 +77,21 @@ object KnowledgeLayerLintAnalyzer {
         }
         val maintenanceLine = when {
             hasConflict ->
-                "先补一条新的查证或验证记录，把相反信号拆开，再重写当前结论。"
+                "先维护证据页：补一条新的查证或验证记录，把相反信号拆开，再重写当前结论。"
             grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty() ->
-                "先补证据：新增一条查证或验证记录，把判断压实。"
+                "先维护证据页：新增一条查证或验证记录，把判断压实。"
             stage == DirectionStage.FORMING && questionCount == 0 ->
-                "先补问题：把这条方向当前最核心的问题单独写出来。"
+                "先维护问题对象：把这条方向当前最核心的问题单独写出来。"
             methodCount == 0 && experimentCount == 0 ->
-                "先补方法或实验：让这条方向开始沉淀可复用做法。"
+                "先维护方法或实验对象：让这条方向开始沉淀可复用做法。"
             conclusionLine.isNotBlank() && nextShiftLine.isBlank() ->
-                "先补承接动作：给当前结论写一句下一步怎么接。"
+                "先维护结论页：给当前结论补一句下一步怎么接。"
             conclusionLine.isNotBlank() && daysSinceUpdate >= 35L ->
-                "先补新材料：用一条新的查证、验证或反思刷新旧结论。"
+                "先刷新结论页：用一条新的查证、验证或反思刷新旧结论。"
             daysSinceUpdate >= 21L ->
-                "先补一条最近进展，让这条方向重新开始流动。"
+                "先补最近进展：新增一条最近进展，让这条方向重新开始流动。"
             else ->
-                "继续把当前判断沉淀成更稳的结论，并补一条可复用对象。"
+                "继续维护结论与对象：把当前判断压成更稳的结论，并补一条可复用对象。"
         }
 
         return KnowledgeLayerLintSummary(

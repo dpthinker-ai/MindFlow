@@ -250,6 +250,7 @@ Planned items:
   - conclusion pages now also link back into concepts and reusable question / method / experiment objects
   - first lint pass exported into markdown and lightweight app-facing health summaries
   - lint now also exports one actionable `建议先补` maintenance line back into Flow / thread
+  - lint wording is moving from abstract “补什么” advice toward concrete maintenance targets such as evidence pages, conclusion pages, and reusable objects
   - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces

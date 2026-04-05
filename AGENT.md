@@ -218,6 +218,7 @@ Current status:
 - research syntheses such as contrarian questions and external hypotheses should also be promoted into durable question / experiment objects instead of staying as one-shot thread hints
 - evidence pages should behave like first-class knowledge objects: linked to concepts, linked to related questions / methods / experiments, and able to carry maintenance guidance
 - conclusion pages should also be treated as maintained knowledge objects, with links back into concepts and reusable question / method / experiment objects
+- lint should increasingly speak in terms of concrete maintenance targets such as evidence pages, conclusion pages, and reusable knowledge objects, not only abstract missing-material advice
 
 Next strongest direction:
 
