@@ -14,6 +14,8 @@ import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.SearchFilters
 import com.mindflow.app.data.model.TimeRange
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 data class SearchUiState(
     val filters: SearchFilters = SearchFilters(),
     val results: List<NoteEntity> = emptyList(),
+    val knowledgeResults: List<KnowledgeLayerSearchItem> = emptyList(),
     val availableFolders: List<MindFolder> = MindFolderCatalog.all,
     val availableTags: List<String> = emptyList(),
     val folderCounts: Map<String, Int> = emptyMap(),
@@ -47,6 +50,7 @@ sealed interface SearchEvent {
 class SearchViewModel(
     private val noteRepository: NoteRepository,
     private val backgroundFolderOrganizer: BackgroundFolderOrganizer,
+    private val directionWikiCoordinator: DirectionWikiCoordinator,
     initialStatus: NoteStatus? = null,
     initialArchivedOnly: Boolean = false,
 ) : ViewModel() {
@@ -90,15 +94,30 @@ class SearchViewModel(
             }
         },
         noteRepository.observeAllNotes(),
-    ) { state, allNotes ->
-        state to allNotes
-    }.combine(backgroundFolderOrganizer.status) { (state, allNotes), organizerStatus ->
+        directionWikiCoordinator.snapshot,
+    ) { state, allNotes, wikiSnapshot ->
+        Triple(state, allNotes, wikiSnapshot)
+    }.combine(backgroundFolderOrganizer.status) { (state, allNotes, wikiSnapshot), organizerStatus ->
         val activeNotes = allNotes.filter { !it.isArchived }
         val tags = allNotes
             .sortedByDescending { it.updatedAt }
             .flatMap { it.tags }
             .distinct()
+        val knowledgeResults = if (state.filters.query.isBlank()) {
+            emptyList()
+        } else {
+            val queryText = state.filters.query.trim().lowercase()
+            wikiSnapshot.knowledgeItems
+                .filter { item ->
+                    item.title.lowercase().contains(queryText) ||
+                        item.summary.lowercase().contains(queryText) ||
+                        item.supportLine.lowercase().contains(queryText) ||
+                        item.type.label.contains(state.filters.query.trim())
+                }
+                .take(8)
+        }
         state.copy(
+            knowledgeResults = knowledgeResults,
             availableTags = tags,
             folderCounts = MindFolderCatalog.all.associate { folder ->
                 folder.key to activeNotes.count { note ->
@@ -169,6 +188,7 @@ class SearchViewModel(
         fun factory(
             noteRepository: NoteRepository,
             backgroundFolderOrganizer: BackgroundFolderOrganizer,
+            directionWikiCoordinator: DirectionWikiCoordinator,
             initialStatus: NoteStatus? = null,
             initialArchivedOnly: Boolean = false,
         ): ViewModelProvider.Factory = viewModelFactory {
@@ -176,6 +196,7 @@ class SearchViewModel(
                 SearchViewModel(
                     noteRepository = noteRepository,
                     backgroundFolderOrganizer = backgroundFolderOrganizer,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     initialStatus = initialStatus,
                     initialArchivedOnly = initialArchivedOnly,
                 )

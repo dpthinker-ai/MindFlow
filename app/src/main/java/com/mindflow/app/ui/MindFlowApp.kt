@@ -296,9 +296,11 @@ fun MindFlowApp(
                 SearchRoute(
                     noteRepository = noteRepository,
                     backgroundFolderOrganizer = backgroundFolderOrganizer,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     initialStatus = initialStatus,
                     initialArchivedOnly = archivedOnly,
                     onOpenNote = openNoteSafely,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                 )
             }
 

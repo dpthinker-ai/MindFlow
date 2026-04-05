@@ -72,13 +72,7 @@ class DirectionWikiCoordinator(
         }
 
         writeDirectionFiles(generatedAt, summaries, activeNotes)
-        writeExport(generatedAt, summaries)
-
-        val snapshot = DirectionWikiSnapshot(
-            rootPath = rootDir.absolutePath,
-            lastGeneratedAt = generatedAt,
-            directions = summaries.associateBy { it.threadKey },
-        )
+        val snapshot = loadSnapshotFromDisk()
         _snapshot.value = snapshot
         DirectionWikiRefreshResult(
             generatedDirectionCount = summaries.size,
@@ -227,6 +221,10 @@ class DirectionWikiCoordinator(
         val timestamp = fileTimestamp(generatedAt)
         val rawIndexLines = mutableListOf<String>()
         val objectCandidates = mutableListOf<KnowledgeObjectCandidate>()
+        val conceptBuckets = buildConceptBuckets(
+            summaries = summaries,
+            allNotes = allNotes,
+        )
 
         summaries.forEach { summary ->
             val notes = NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
@@ -332,8 +330,7 @@ class DirectionWikiCoordinator(
 
         writeConceptFiles(
             generatedAt = generatedAt,
-            summaries = summaries,
-            allNotes = allNotes,
+            conceptBuckets = conceptBuckets,
             conceptsDir = conceptsDir,
             candidates = objectCandidates,
         )
@@ -391,33 +388,24 @@ class DirectionWikiCoordinator(
                 appendLine()
             },
         )
+
+        writeExport(
+            generatedAt = generatedAt,
+            summaries = summaries,
+            knowledgeItems = buildKnowledgeSearchItems(
+                summaries = summaries,
+                conceptBuckets = conceptBuckets,
+                candidates = objectCandidates,
+            ),
+        )
     }
 
     private fun writeConceptFiles(
         generatedAt: Long,
-        summaries: List<DirectionWikiDirectionSummary>,
-        allNotes: List<NoteEntity>,
+        conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
         conceptsDir: File,
         candidates: List<KnowledgeObjectCandidate>,
     ) {
-        val conceptBuckets = buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
-            summaries.forEach { summary ->
-                NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
-                    .forEach { note ->
-                        note.tags
-                            .asSequence()
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .forEach { tag ->
-                                getOrPut(tag) { mutableListOf() }.add(summary to note)
-                            }
-                    }
-            }
-        }
-            .filterValues { pairs -> pairs.size >= 2 }
-            .toSortedMap()
-
         File(conceptsDir, "index.md").writeText(
             buildString {
                 appendLine("# Concepts")
@@ -580,6 +568,28 @@ class DirectionWikiCoordinator(
             }
         }
     }
+
+    private fun buildConceptBuckets(
+        summaries: List<DirectionWikiDirectionSummary>,
+        allNotes: List<NoteEntity>,
+    ): Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>> =
+        buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
+            summaries.forEach { summary ->
+                NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
+                    .forEach { note ->
+                        note.tags
+                            .asSequence()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .forEach { tag ->
+                                getOrPut(tag) { mutableListOf() }.add(summary to note)
+                            }
+                    }
+            }
+        }
+            .filterValues { pairs -> pairs.size >= 2 }
+            .toSortedMap()
 
     private fun writeLintFiles(
         generatedAt: Long,
@@ -1123,6 +1133,7 @@ class DirectionWikiCoordinator(
     private fun writeExport(
         generatedAt: Long,
         summaries: List<DirectionWikiDirectionSummary>,
+        knowledgeItems: List<KnowledgeLayerSearchItem>,
     ) {
         val root = JSONObject()
             .put("generatedAt", generatedAt)
@@ -1160,6 +1171,24 @@ class DirectionWikiCoordinator(
                                 .put("validatedPoints", JSONArray(summary.validatedPoints))
                                 .put("lintIssues", JSONArray(summary.lintIssues))
                                 .put("openQuestions", JSONArray(summary.openQuestions)),
+                        )
+                    }
+                },
+            )
+            .put(
+                "knowledgeItems",
+                JSONArray().apply {
+                    knowledgeItems.forEach { item ->
+                        put(
+                            JSONObject()
+                                .put("id", item.id)
+                                .put("type", item.type.name)
+                                .put("title", item.title)
+                                .put("summary", item.summary)
+                                .put("supportLine", item.supportLine)
+                                .put("threadKey", item.threadKey)
+                                .put("noteId", item.noteId ?: JSONObject.NULL)
+                                .put("updatedAt", item.updatedAt),
                         )
                     }
                 },
@@ -1214,10 +1243,32 @@ class DirectionWikiCoordinator(
                     )
                 }
             }
+            val knowledgeItemsArray = json.optJSONArray("knowledgeItems") ?: JSONArray()
+            val knowledgeItems = buildList {
+                for (index in 0 until knowledgeItemsArray.length()) {
+                    val item = knowledgeItemsArray.optJSONObject(index) ?: continue
+                    val id = item.optString("id")
+                    val title = item.optString("title")
+                    if (id.isBlank() || title.isBlank()) continue
+                    add(
+                        KnowledgeLayerSearchItem(
+                            id = id,
+                            type = item.optString("type").toKnowledgeSearchType(),
+                            title = title,
+                            summary = item.optString("summary"),
+                            supportLine = item.optString("supportLine"),
+                            threadKey = item.optString("threadKey"),
+                            noteId = item.takeIf { !it.isNull("noteId") }?.optLong("noteId"),
+                            updatedAt = item.optLong("updatedAt"),
+                        ),
+                    )
+                }
+            }
             DirectionWikiSnapshot(
                 rootPath = json.optString("rootPath", rootDir.absolutePath),
                 lastGeneratedAt = json.optLong("generatedAt"),
                 directions = directions,
+                knowledgeItems = knowledgeItems,
             )
         }.getOrElse {
             DirectionWikiSnapshot(rootPath = rootDir.absolutePath)
@@ -1259,6 +1310,104 @@ class DirectionWikiCoordinator(
         )
     }
 
+    private fun buildKnowledgeSearchItems(
+        summaries: List<DirectionWikiDirectionSummary>,
+        conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+        candidates: List<KnowledgeObjectCandidate>,
+    ): List<KnowledgeLayerSearchItem> {
+        val directionItems = summaries.map { summary ->
+            KnowledgeLayerSearchItem(
+                id = "direction:${summary.threadKey}",
+                type = KnowledgeLayerSearchType.DIRECTION,
+                title = summary.title,
+                summary = summary.conclusionLine.ifBlank { summary.assetSummary.ifBlank { summary.healthLine } },
+                supportLine = summary.stage.label,
+                threadKey = summary.threadKey,
+                updatedAt = summary.updatedAt,
+            )
+        }
+        val conceptItems = conceptBuckets.mapNotNull { (tag, pairs) ->
+            val latestPair = pairs.maxByOrNull { it.second.updatedAt } ?: return@mapNotNull null
+            val directionCount = pairs.map { it.first.threadKey }.distinct().size
+            KnowledgeLayerSearchItem(
+                id = "concept:$tag",
+                type = KnowledgeLayerSearchType.CONCEPT,
+                title = tag,
+                summary = NoteInsightSummaryExtractor.extract(latestPair.second).ifBlank {
+                    latestPair.second.content.trim().take(90)
+                },
+                supportLine = "${pairs.size} 条记录 · ${directionCount} 条方向",
+                threadKey = latestPair.first.threadKey,
+                noteId = latestPair.second.id,
+                updatedAt = latestPair.second.updatedAt,
+            )
+        }
+        val objectItems = candidates
+            .groupBy { "${it.type}:${slugFor(it.title, "${it.type.folderName}-${it.noteId}")}" }
+            .mapNotNull { (_, bucket) ->
+                val first = bucket.maxByOrNull { it.updatedAt } ?: return@mapNotNull null
+                val objectType = when (first.type) {
+                    KnowledgeObjectType.QUESTION -> KnowledgeLayerSearchType.QUESTION
+                    KnowledgeObjectType.METHOD -> KnowledgeLayerSearchType.METHOD
+                    KnowledgeObjectType.EXPERIMENT -> KnowledgeLayerSearchType.EXPERIMENT
+                }
+                KnowledgeLayerSearchItem(
+                    id = "${first.type.folderName}:${slugFor(first.title, "${first.type.folderName}-${first.noteId}")}",
+                    type = objectType,
+                    title = first.title,
+                    summary = first.summary,
+                    supportLine = "${bucket.size} 条来源 · ${bucket.map { it.threadTitle }.distinct().size} 条方向",
+                    noteId = first.noteId,
+                    updatedAt = first.updatedAt,
+                )
+            }
+        val conclusionItems = summaries
+            .filter { it.conclusionLine.isNotBlank() || it.assetSummary.isNotBlank() }
+            .map { summary ->
+                KnowledgeLayerSearchItem(
+                    id = "conclusion:${summary.threadKey}",
+                    type = KnowledgeLayerSearchType.CONCLUSION,
+                    title = "${summary.title} 结论",
+                    summary = summary.conclusionLine.ifBlank { summary.assetSummary },
+                    supportLine = summary.nextShiftLine.ifBlank { summary.groundingLine },
+                    threadKey = summary.threadKey,
+                    updatedAt = summary.updatedAt,
+                )
+            }
+        val evidenceItems = summaries
+            .filter {
+                it.groundingLine.isNotBlank() ||
+                    it.verifiedPoints.isNotEmpty() ||
+                    it.validatedPoints.isNotEmpty() ||
+                    it.hypothesisPoints.isNotEmpty()
+            }
+            .map { summary ->
+                val supportLine = when {
+                    summary.validatedPoints.isNotEmpty() -> "已验证 ${summary.validatedPoints.size}"
+                    summary.verifiedPoints.isNotEmpty() -> "已查证 ${summary.verifiedPoints.size}"
+                    summary.hypothesisPoints.isNotEmpty() -> "待验证 ${summary.hypothesisPoints.size}"
+                    else -> summary.groundingLine
+                }
+                KnowledgeLayerSearchItem(
+                    id = "evidence:${summary.threadKey}",
+                    type = KnowledgeLayerSearchType.EVIDENCE,
+                    title = "${summary.title} 证据",
+                    summary = summary.groundingLine.ifBlank {
+                        summary.validatedPoints.firstOrNull()
+                            ?: summary.verifiedPoints.firstOrNull()
+                            ?: summary.hypothesisPoints.firstOrNull()
+                            ?: ""
+                    },
+                    supportLine = supportLine,
+                    threadKey = summary.threadKey,
+                    updatedAt = summary.updatedAt,
+                )
+            }
+        return (directionItems + conceptItems + objectItems + conclusionItems + evidenceItems)
+            .distinctBy { it.id }
+            .sortedByDescending { it.updatedAt }
+    }
+
     private fun migrateLegacyRootIfNeeded() {
         if (rootDir.exists() || !legacyRootDir.exists()) return
         legacyRootDir.renameTo(rootDir)
@@ -1280,6 +1429,9 @@ class DirectionWikiCoordinator(
     private fun displayTime(time: Long): String =
         Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+
+    private fun String.toKnowledgeSearchType(): KnowledgeLayerSearchType =
+        runCatching { KnowledgeLayerSearchType.valueOf(this) }.getOrDefault(KnowledgeLayerSearchType.DIRECTION)
 
     private fun displayDate(time: Long): String =
         Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())

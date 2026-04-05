@@ -225,6 +225,7 @@ Current status:
 - app-facing lint should also clarify which dimension is weakest right now, such as evidence, question definition, method accumulation, conclusion freshness, recent progress, or object coverage
 - reusable knowledge objects should keep linking back to the direction, conclusion, and evidence pages they belong to; otherwise the knowledge layer drifts back into isolated markdown slices
 - knowledge-layer maintenance guidance should no longer stop at diagnosis: Flow / thread can now turn that guidance into seeded `补材料` captures with the right page/object/source context prefilled
+- search should increasingly become a knowledge query surface, not only a note retriever; the first implemented slice now surfaces matching directions, concepts, questions, methods, experiments, conclusions, and evidence before raw note hits
 
 Next strongest direction:
 

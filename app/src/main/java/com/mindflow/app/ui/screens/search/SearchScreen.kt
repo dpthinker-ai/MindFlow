@@ -48,6 +48,9 @@ import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TimeRange
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
@@ -81,14 +84,17 @@ import com.mindflow.app.util.TimeFormatter
 fun SearchRoute(
     noteRepository: NoteRepository,
     backgroundFolderOrganizer: BackgroundFolderOrganizer,
+    directionWikiCoordinator: DirectionWikiCoordinator,
     initialStatus: NoteStatus?,
     initialArchivedOnly: Boolean,
     onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
 ) {
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(
             noteRepository = noteRepository,
             backgroundFolderOrganizer = backgroundFolderOrganizer,
+            directionWikiCoordinator = directionWikiCoordinator,
             initialStatus = initialStatus,
             initialArchivedOnly = initialArchivedOnly,
         ),
@@ -140,6 +146,7 @@ fun SearchRoute(
         onTimeRangeChange = viewModel::updateTimeRange,
         onToggleArchived = viewModel::toggleArchived,
         onOpenNote = onOpenNote,
+        onOpenThread = onOpenThread,
         onClassifyPendingFolders = viewModel::classifyPendingFolders,
         onDeleteNote = { note ->
             scope.launch {
@@ -160,6 +167,84 @@ fun SearchRoute(
     )
 }
 
+@Composable
+private fun KnowledgeSearchRow(
+    item: KnowledgeLayerSearchItem,
+    onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                when {
+                    item.noteId != null -> onOpenNote(item.noteId)
+                    item.threadKey.isNotBlank() -> onOpenThread(item.threadKey)
+                }
+            },
+        color = WhiteGlass.copy(alpha = 0.84f),
+        shape = MaterialTheme.shapes.medium,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AccentBlue.copy(alpha = 0.12f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = item.type.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = knowledgeTypeColor(item.type),
+                )
+            }
+            item.summary
+                .takeIf { it.isNotBlank() }
+                ?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            item.supportLine
+                .takeIf { it.isNotBlank() }
+                ?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+        }
+    }
+}
+
+@Composable
+private fun knowledgeTypeColor(type: KnowledgeLayerSearchType): Color = when (type) {
+    KnowledgeLayerSearchType.DIRECTION -> AccentBlue
+    KnowledgeLayerSearchType.CONCEPT -> Accent
+    KnowledgeLayerSearchType.QUESTION -> MaterialTheme.colorScheme.primary
+    KnowledgeLayerSearchType.METHOD -> MaterialTheme.colorScheme.secondary
+    KnowledgeLayerSearchType.EXPERIMENT -> MaterialTheme.colorScheme.tertiary
+    KnowledgeLayerSearchType.CONCLUSION -> AccentBlue
+    KnowledgeLayerSearchType.EVIDENCE -> TextSoft
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchScreen(
@@ -173,6 +258,7 @@ private fun SearchScreen(
     onTimeRangeChange: (TimeRange) -> Unit,
     onToggleArchived: () -> Unit,
     onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
     onClassifyPendingFolders: () -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
@@ -385,6 +471,46 @@ private fun SearchScreen(
                                             onCheckedChange = { onToggleArchived() },
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (uiState.knowledgeResults.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "知识结果",
+                                headline = "${uiState.knowledgeResults.size} 条",
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                uiState.knowledgeResults.forEach { item ->
+                                    KnowledgeSearchRow(
+                                        item = item,
+                                        onOpenNote = onOpenNote,
+                                        onOpenThread = onOpenThread,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (uiState.knowledgeResults.isNotEmpty()) {
+                    item {
+                        PanelCard {
+                            SectionHeader(
+                                title = "知识结果",
+                                headline = "${uiState.knowledgeResults.size} 条",
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                uiState.knowledgeResults.forEach { item ->
+                                    KnowledgeSearchRow(
+                                        item = item,
+                                        onOpenNote = onOpenNote,
+                                        onOpenThread = onOpenThread,
+                                    )
                                 }
                             }
                         }

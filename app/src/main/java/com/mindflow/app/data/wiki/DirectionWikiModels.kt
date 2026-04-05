@@ -32,10 +32,34 @@ data class DirectionWikiDirectionSummary(
     val updatedAt: Long = 0L,
 )
 
+enum class KnowledgeLayerSearchType(
+    val label: String,
+) {
+    DIRECTION("方向"),
+    CONCEPT("概念"),
+    QUESTION("问题"),
+    METHOD("方法"),
+    EXPERIMENT("实验"),
+    CONCLUSION("结论"),
+    EVIDENCE("证据"),
+}
+
+data class KnowledgeLayerSearchItem(
+    val id: String,
+    val type: KnowledgeLayerSearchType,
+    val title: String,
+    val summary: String = "",
+    val supportLine: String = "",
+    val threadKey: String = "",
+    val noteId: Long? = null,
+    val updatedAt: Long = 0L,
+)
+
 data class DirectionWikiSnapshot(
     val rootPath: String = "",
     val lastGeneratedAt: Long = 0L,
     val directions: Map<String, DirectionWikiDirectionSummary> = emptyMap(),
+    val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
 )
 
 data class DirectionWikiRefreshResult(
