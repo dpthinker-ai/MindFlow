@@ -214,6 +214,7 @@ Current status:
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
+- synthesized reviews, open questions, validation loops, and next-step handoffs now also file back into question / experiment / method objects, not only into direction conclusion pages
 
 Next strongest direction:
 

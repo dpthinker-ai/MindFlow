@@ -24,6 +24,7 @@ data class KnowledgeObjectCandidate(
     val threadTitle: String,
     val relatedConcepts: List<String> = emptyList(),
     val evidenceType: ResearchEvidenceType,
+    val sourceLabel: String = "记录",
 )
 
 object KnowledgeObjectClassifier {
@@ -89,6 +90,7 @@ object KnowledgeObjectClassifier {
             .filter { it.isNotBlank() }
             .distinct(),
         evidenceType = ResearchEvidenceAnalyzer.classify(note),
+        sourceLabel = "记录",
     )
 
     private fun isQuestion(content: String): Boolean =

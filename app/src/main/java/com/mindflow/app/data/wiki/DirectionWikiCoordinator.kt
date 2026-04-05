@@ -269,6 +269,10 @@ class DirectionWikiCoordinator(
             notes.forEach { note ->
                 objectCandidates += KnowledgeObjectClassifier.classify(note, summary.title)
             }
+            objectCandidates += buildSynthesizedKnowledgeObjects(
+                summary = summary,
+                execution = execution,
+            )
         }
 
         File(rootDir, "raw/index.md").writeText(
@@ -510,7 +514,7 @@ class DirectionWikiCoordinator(
                         }
                         appendLine("## 来源记录")
                         bucket.take(8).forEach { item ->
-                            appendLine("- [${item.threadTitle}](../directions/${slugFor(item.threadTitle, item.threadTitle)}.md) · ${item.summary}")
+                            appendLine("- [${item.threadTitle}](../directions/${slugFor(item.threadTitle, item.threadTitle)}.md) · ${item.sourceLabel} · ${item.summary}")
                         }
                     },
                 )
@@ -1137,6 +1141,56 @@ class DirectionWikiCoordinator(
         return if (parts.isEmpty()) "" else "当前已形成 ${parts.joinToString(" · ")}。"
     }
 
+    private fun buildSynthesizedKnowledgeObjects(
+        summary: DirectionWikiDirectionSummary,
+        execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
+    ): List<KnowledgeObjectCandidate> {
+        val candidates = mutableListOf<KnowledgeObjectCandidate>()
+        val baseId = syntheticObjectId(summary.threadKey, "knowledge")
+        summary.openQuestions.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { question ->
+                candidates += KnowledgeObjectCandidate(
+                    type = KnowledgeObjectType.QUESTION,
+                    title = "${summary.title} · 开放问题",
+                    summary = question,
+                    noteId = baseId,
+                    updatedAt = summary.updatedAt,
+                    threadTitle = summary.title,
+                    relatedConcepts = emptyList(),
+                    evidenceType = ResearchEvidenceType.HYPOTHESIS,
+                    sourceLabel = "知识层综合判断",
+                )
+            }
+        execution.validationStep.takeIf { it.isNotBlank() }?.let { validation ->
+            candidates += KnowledgeObjectCandidate(
+                type = KnowledgeObjectType.EXPERIMENT,
+                title = "${summary.title} · 当前验证",
+                summary = validation,
+                noteId = baseId - 1,
+                updatedAt = summary.updatedAt,
+                threadTitle = summary.title,
+                relatedConcepts = emptyList(),
+                evidenceType = ResearchEvidenceType.HYPOTHESIS,
+                sourceLabel = "知识层验证动作",
+            )
+        }
+        summary.nextShiftLine.takeIf { it.isNotBlank() }?.let { nextShift ->
+            candidates += KnowledgeObjectCandidate(
+                type = KnowledgeObjectType.METHOD,
+                title = "${summary.title} · 下一步承接",
+                summary = nextShift,
+                noteId = baseId - 2,
+                updatedAt = summary.updatedAt,
+                threadTitle = summary.title,
+                relatedConcepts = emptyList(),
+                evidenceType = ResearchEvidenceType.VERIFIED,
+                sourceLabel = "知识层承接动作",
+            )
+        }
+        return candidates
+    }
+
     private fun buildConclusionLine(
         assetSummary: String,
         weeklyMainLine: String,
@@ -1147,6 +1201,14 @@ class DirectionWikiCoordinator(
             .ifBlank { verifiedPoint }
             .ifBlank { assetSummary }
             .ifBlank { weeklyMainLine }
+
+    private fun syntheticObjectId(
+        key: String,
+        suffix: String,
+    ): Long {
+        val raw = "$key:$suffix".hashCode().toLong()
+        return if (raw >= 0) -(raw + 1L) else raw
+    }
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()
