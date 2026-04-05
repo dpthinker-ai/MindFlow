@@ -11,6 +11,7 @@ import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
         val staleReconnectPlanner: StaleReconnectPlanner = appContainer.staleReconnectPlanner
         val threadExecutionPlanner: ThreadExecutionPlanner = appContainer.threadExecutionPlanner
         val externalResearchPlanner: ExternalResearchPlanner = appContainer.externalResearchPlanner
+        val directionWikiCoordinator: DirectionWikiCoordinator = appContainer.directionWikiCoordinator
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
         setContent {
             MindFlowTheme {
@@ -82,6 +84,7 @@ class MainActivity : ComponentActivity() {
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
                     launchRequest = launchRequestState.value,
                     onLaunchRequestConsumed = { requestId ->
@@ -106,6 +109,7 @@ class MainActivity : ComponentActivity() {
             val appContainer = (application as MindFlowApplication).appContainer
             appContainer.backgroundFolderOrganizer.organizeInBackgroundIfNeeded()
             appContainer.cloudBackupCoordinator.syncInBackgroundIfNeeded()
+            appContainer.directionWikiCoordinator.refreshInBackgroundIfNeeded()
         }
     }
 }

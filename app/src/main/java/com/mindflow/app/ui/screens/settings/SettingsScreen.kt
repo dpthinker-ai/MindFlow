@@ -66,6 +66,7 @@ import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.GhostActionButton
@@ -79,6 +80,7 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.WhiteGlass
+import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 
@@ -88,6 +90,7 @@ private enum class SettingsDestination {
     AI,
     REMINDER,
     TIME_BANK,
+    DIRECTION_WIKI,
 }
 
 @Composable
@@ -99,6 +102,7 @@ fun SettingsRoute(
     timeBankSettingsRepository: TimeBankSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     reminderScheduler: ReminderScheduler,
+    directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
 ) {
     val viewModel: SettingsViewModel = viewModel(
@@ -110,6 +114,7 @@ fun SettingsRoute(
             timeBankSettingsRepository = timeBankSettingsRepository,
             cloudBackupCoordinator = cloudBackupCoordinator,
             reminderScheduler = reminderScheduler,
+            directionWikiCoordinator = directionWikiCoordinator,
             aiServiceClient = aiServiceClient,
         ),
     )
@@ -198,6 +203,7 @@ fun SettingsRoute(
         onSaveCloud = viewModel::saveCloud,
         onSaveReminder = viewModel::saveReminder,
         onSaveTimeBank = viewModel::saveTimeBank,
+        onRefreshDirectionWiki = viewModel::refreshDirectionWiki,
         onClearCloud = viewModel::clearCloud,
         onBackupToCloud = viewModel::backupToCloud,
         onRestoreRequest = { showRestoreDialog = true },
@@ -249,6 +255,7 @@ private fun SettingsScreen(
     onSaveCloud: () -> Unit,
     onSaveReminder: () -> Unit,
     onSaveTimeBank: () -> Unit,
+    onRefreshDirectionWiki: () -> Unit,
     onClearCloud: () -> Unit,
     onBackupToCloud: () -> Unit,
     onRestoreRequest: () -> Unit,
@@ -291,6 +298,7 @@ private fun SettingsScreen(
                 onOpenAi = { destination = SettingsDestination.AI },
                 onOpenReminder = { destination = SettingsDestination.REMINDER },
                 onOpenTimeBank = { destination = SettingsDestination.TIME_BANK },
+                onOpenDirectionWiki = { destination = SettingsDestination.DIRECTION_WIKI },
                 onExport = onExport,
                 onImport = onImport,
             )
@@ -335,6 +343,11 @@ private fun SettingsScreen(
                 onTimeBankActiveDaysPerWeekChange = onTimeBankActiveDaysPerWeekChange,
                 onSaveTimeBank = onSaveTimeBank,
             )
+            SettingsDestination.DIRECTION_WIKI -> DirectionWikiSettingsScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onRefreshDirectionWiki = onRefreshDirectionWiki,
+            )
         }
     }
 }
@@ -346,6 +359,7 @@ private fun SettingsHomeScreen(
     onOpenAi: () -> Unit,
     onOpenReminder: () -> Unit,
     onOpenTimeBank: () -> Unit,
+    onOpenDirectionWiki: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
@@ -422,6 +436,24 @@ private fun SettingsHomeScreen(
             }
 
             item {
+                SettingsEntryCard(
+                    title = "方向知识库",
+                    summary = if (uiState.directionWikiLastRefreshedAt > 0L) {
+                        "最近更新 ${TimeFormatter.compact(uiState.directionWikiLastRefreshedAt)}"
+                    } else {
+                        "尚未生成"
+                    },
+                    headline = if (uiState.directionWikiDirectionCount > 0) {
+                        "${uiState.directionWikiDirectionCount} 条方向"
+                    } else {
+                        "未生成"
+                    },
+                    accent = AccentBlue,
+                    onClick = onOpenDirectionWiki,
+                )
+            }
+
+            item {
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.95f),
                     shape = MaterialTheme.shapes.large,
@@ -451,6 +483,59 @@ private fun SettingsHomeScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectionWikiSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onRefreshDirectionWiki: () -> Unit,
+) {
+    DetailScreenFrame(
+        title = "方向知识库",
+        subtitle = "长期 markdown 资产层",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(
+                    title = "当前状态",
+                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 条方向" else "尚未生成",
+                )
+                Text(
+                    text = "把关注方向沉淀成长期资产，再回流给 Flow、线程和提醒。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+                uiState.directionWikiLastRefreshedAt
+                    .takeIf { it > 0L }
+                    ?.let { updatedAt ->
+                        Text(
+                            text = "最近更新 ${TimeFormatter.compact(updatedAt)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                    }
+                uiState.directionWikiRootPath
+                    .takeIf { it.isNotBlank() }
+                    ?.let { path ->
+                        Text(
+                            text = path,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                ActionButton(
+                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新方向知识库",
+                    onClick = onRefreshDirectionWiki,
+                    enabled = !uiState.isRefreshingDirectionWiki,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

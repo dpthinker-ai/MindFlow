@@ -205,7 +205,7 @@ Planned items:
 - curated sets for work, product, health, education, and life
 
 4. Direction Wiki integration
-- status: planned
+- status: first version implemented locally
 - target shape:
   - keep MindFlow database as runtime truth
   - add a separate markdown `Direction Wiki` for followed directions
@@ -226,6 +226,11 @@ Planned items:
   - update wiki pages and index/log
   - lint the wiki for contradictions, stale claims, and missing links
   - export app-friendly direction summaries back into MindFlow
+- current shape:
+  - local `direction-wiki/` generated under app files
+  - low-frequency background refresh on app stop
+  - manual refresh from settings
+  - direction assets reflowed back into Flow and thread surfaces
 - why this matters:
   - stronger external research grounding beyond one-shot model output
   - longer-lived direction-stage persistence
@@ -249,17 +254,16 @@ Planned items:
 
 Next best order:
 
-1. `Direction Wiki` integration for followed directions
-2. stronger external research grounding beyond model-only perspective
-3. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
-4. direction-level execution summaries that feel continuous, not episodic
+1. stronger external research grounding beyond local first-version Direction Wiki exports
+2. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
+3. direction-level execution summaries that feel continuous, not episodic
 
 Current progress:
 
-- direction wiki integration: not implemented yet; architecture and boundaries defined
-- 2: first version implemented with shared external research snapshots and AI 外部视角 surfaces
-- 3: first version implemented with short / medium / long horizons and direction-stage rhythm
-- 4: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
+- direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, and app-facing asset reflow
+- 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
+- 2: first version implemented with short / medium / long horizons and direction-stage rhythm
+- 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces

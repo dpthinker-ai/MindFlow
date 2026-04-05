@@ -30,6 +30,7 @@ import com.mindflow.app.data.review.WeeklyReviewState
 import com.mindflow.app.data.review.items
 import com.mindflow.app.data.review.statsLine
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -85,6 +86,9 @@ data class FollowedDirectionSummary(
     val assetLabel: String = "",
     val assetSummary: String = "",
     val assetNoteId: Long? = null,
+    val wikiVerifiedPoint: String = "",
+    val wikiOpenQuestion: String = "",
+    val wikiStageHistorySummary: String = "",
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
@@ -98,6 +102,7 @@ class FlowViewModel(
     private val staleReconnectPlanner: StaleReconnectPlanner,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
+    private val directionWikiCoordinator: DirectionWikiCoordinator,
 ) : ViewModel() {
     private data class DirectionState(
         val followedDirections: List<FollowedDirectionSummary> = emptyList(),
@@ -198,8 +203,9 @@ class FlowViewModel(
             combine(
                 noteRepository.observeAllNotes(),
                 threadPreferencesRepository.settings,
-            ) { notes, prefs -> notes to prefs }
-                .collectLatest { (allNotes, threadPreferences) ->
+                directionWikiCoordinator.snapshot,
+            ) { notes, prefs, wikiSnapshot -> Triple(notes, prefs, wikiSnapshot) }
+                .collectLatest { (allNotes, threadPreferences, wikiSnapshot) ->
                     val activeNotes = allNotes.filter { !it.isArchived }
                     val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
                     val followedDirections = threadPreferences.followedThreadKeys
@@ -212,6 +218,7 @@ class FlowViewModel(
                                 val execution = threadExecutionPlanner.summarize(threadKey, threadNotes)
                                 val research = externalResearchPlanner.summarize(threadKey, threadNotes)
                                 val asset = DirectionAssetAnalyzer.build(threadNotes).firstOrNull()
+                                val wikiAsset = wikiSnapshot.directions[threadKey]
                                 FollowedDirectionSummary(
                                     thread = thread,
                                     focusNoteId = execution.focusNoteId,
@@ -231,9 +238,12 @@ class FlowViewModel(
                                     contrarianQuestion = research.contrarianQuestion,
                                     externalHypothesis = research.externalHypothesis,
                                     researchQueries = research.queries,
-                                    assetLabel = asset?.type?.label.orEmpty(),
-                                    assetSummary = asset?.summary.orEmpty(),
+                                    assetLabel = if (wikiAsset?.assetSummary?.isNotBlank() == true) "Direction Wiki" else asset?.type?.label.orEmpty(),
+                                    assetSummary = wikiAsset?.assetSummary?.takeIf { it.isNotBlank() } ?: asset?.summary.orEmpty(),
                                     assetNoteId = asset?.noteId,
+                                    wikiVerifiedPoint = wikiAsset?.verifiedPoints?.firstOrNull().orEmpty(),
+                                    wikiOpenQuestion = wikiAsset?.openQuestions?.firstOrNull().orEmpty(),
+                                    wikiStageHistorySummary = wikiAsset?.stageHistorySummary.orEmpty(),
                                     source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
                                         DailyBriefSource.AI
                                     } else {
@@ -282,6 +292,7 @@ class FlowViewModel(
             staleReconnectPlanner: StaleReconnectPlanner,
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,
+            directionWikiCoordinator: DirectionWikiCoordinator,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FlowViewModel(
@@ -294,6 +305,7 @@ class FlowViewModel(
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
+                    directionWikiCoordinator = directionWikiCoordinator,
                 )
             }
         }

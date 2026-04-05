@@ -45,6 +45,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
@@ -83,6 +84,7 @@ fun ThreadRoute(
     threadPreferencesRepository: ThreadPreferencesRepository,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
+    directionWikiCoordinator: DirectionWikiCoordinator,
     threadKey: String,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -95,6 +97,7 @@ fun ThreadRoute(
             threadPreferencesRepository = threadPreferencesRepository,
             threadExecutionPlanner = threadExecutionPlanner,
             externalResearchPlanner = externalResearchPlanner,
+            directionWikiCoordinator = directionWikiCoordinator,
             threadKey = threadKey,
         ),
     )
@@ -652,6 +655,41 @@ private fun ThreadScreen(
                                 text = "记下本周推进",
                                 onClick = onCaptureWeeklyReviewNote,
                             )
+                        }
+                        if (
+                            uiState.wikiAssetSummary.isNotBlank() ||
+                            uiState.wikiVerifiedPoints.isNotEmpty() ||
+                            uiState.wikiOpenQuestions.isNotEmpty()
+                        ) {
+                            InsightBlock(
+                                sourceLabel = "Direction Wiki",
+                                tone = InsightTone.Neutral,
+                            ) {
+                                uiState.wikiAssetSummary
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { asset ->
+                                        Text(
+                                            text = asset,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                uiState.wikiVerifiedPoints.firstOrNull()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { verified ->
+                                        InsightLine(label = "已查证", text = verified)
+                                    }
+                                uiState.wikiOpenQuestions.firstOrNull()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { question ->
+                                        InsightLine(label = "开放问题", text = question)
+                                    }
+                                uiState.wikiStageHistorySummary
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { stageHistory ->
+                                        InsightLine(label = "阶段历史", text = stageHistory)
+                                    }
+                            }
                         }
                         GhostActionButton(
                             text = "沉淀当前判断",

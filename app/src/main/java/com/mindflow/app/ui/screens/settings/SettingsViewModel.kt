@@ -19,6 +19,7 @@ import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -53,6 +54,9 @@ data class SettingsUiState(
     val timeBankCurrentAge: String = TimeBankSettings().currentAge.toString(),
     val timeBankExpectedLifespan: String = TimeBankSettings().expectedLifespan.toString(),
     val timeBankActiveDaysPerWeek: String = TimeBankSettings().activeDaysPerWeek.toString(),
+    val directionWikiDirectionCount: Int = 0,
+    val directionWikiLastRefreshedAt: Long = 0L,
+    val directionWikiRootPath: String = "",
     val isSavingAi: Boolean = false,
     val isSavingCloud: Boolean = false,
     val isSavingReminder: Boolean = false,
@@ -62,6 +66,7 @@ data class SettingsUiState(
     val isTestingAi: Boolean = false,
     val isBackingUpCloud: Boolean = false,
     val isRestoringCloud: Boolean = false,
+    val isRefreshingDirectionWiki: Boolean = false,
 ) {
     val timeBankPreview: TimeBankSettings
         get() = TimeBankSettings(
@@ -85,6 +90,7 @@ class SettingsViewModel(
     private val cloudBackupCoordinator: CloudBackupCoordinator,
     private val reminderScheduler: ReminderScheduler,
     private val aiServiceClient: AiServiceClient,
+    private val directionWikiCoordinator: DirectionWikiCoordinator,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState
@@ -147,6 +153,17 @@ class SettingsViewModel(
                         timeBankCurrentAge = settings.currentAge.toString(),
                         timeBankExpectedLifespan = settings.expectedLifespan.toString(),
                         timeBankActiveDaysPerWeek = settings.activeDaysPerWeek.toString(),
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            directionWikiCoordinator.snapshot.collectLatest { snapshot ->
+                _uiState.update {
+                    it.copy(
+                        directionWikiDirectionCount = snapshot.directions.size,
+                        directionWikiLastRefreshedAt = snapshot.lastGeneratedAt,
+                        directionWikiRootPath = snapshot.rootPath,
                     )
                 }
             }
@@ -225,6 +242,20 @@ class SettingsViewModel(
 
     fun onTimeBankActiveDaysPerWeekChange(value: String) {
         _uiState.update { it.copy(timeBankActiveDaysPerWeek = value.filter(Char::isDigit).take(1)) }
+    }
+
+    fun refreshDirectionWiki() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingDirectionWiki = true) }
+            runCatching { directionWikiCoordinator.refreshNow() }
+                .onSuccess { result ->
+                    _events.emit(SettingsEvent.Message("已更新 ${result.generatedDirectionCount} 条方向知识"))
+                }
+                .onFailure {
+                    _events.emit(SettingsEvent.Message("更新方向知识库失败"))
+                }
+            _uiState.update { it.copy(isRefreshingDirectionWiki = false) }
+        }
     }
 
     fun saveAi() {
@@ -395,6 +426,7 @@ class SettingsViewModel(
             cloudBackupCoordinator: CloudBackupCoordinator,
             reminderScheduler: ReminderScheduler,
             aiServiceClient: AiServiceClient,
+            directionWikiCoordinator: DirectionWikiCoordinator,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SettingsViewModel(
@@ -406,6 +438,7 @@ class SettingsViewModel(
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,
+                    directionWikiCoordinator = directionWikiCoordinator,
                 )
             }
         }

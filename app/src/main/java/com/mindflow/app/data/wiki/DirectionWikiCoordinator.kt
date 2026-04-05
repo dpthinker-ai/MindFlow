@@ -1,0 +1,411 @@
+package com.mindflow.app.data.wiki
+
+import android.content.Context
+import com.mindflow.app.data.connect.DirectionAssetAnalyzer
+import com.mindflow.app.data.connect.DirectionStage
+import com.mindflow.app.data.connect.DirectionStageHistoryAnalyzer
+import com.mindflow.app.data.connect.ExternalResearchPlanner
+import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
+import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+
+class DirectionWikiCoordinator(
+    context: Context,
+    private val noteRepository: NoteRepository,
+    private val threadPreferencesRepository: ThreadPreferencesRepository,
+    private val threadExecutionPlanner: ThreadExecutionPlanner,
+    private val externalResearchPlanner: ExternalResearchPlanner,
+    private val applicationScope: CoroutineScope,
+) {
+    private val rootDir = File(context.filesDir, "direction-wiki")
+    private val refreshIntervalMs = 18L * 60L * 60L * 1000L
+    private val _snapshot = MutableStateFlow(loadSnapshotFromDisk())
+    val snapshot: StateFlow<DirectionWikiSnapshot> = _snapshot
+
+    fun refreshInBackgroundIfNeeded() {
+        val now = System.currentTimeMillis()
+        val current = _snapshot.value
+        if (current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs) return
+        applicationScope.launch {
+            runCatching { refreshNow() }
+        }
+    }
+
+    suspend fun refreshNow(): DirectionWikiRefreshResult = withContext(Dispatchers.IO) {
+        val allNotes = noteRepository.observeAllNotes().first()
+        val activeNotes = allNotes.filter { !it.isArchived }
+        val followed = threadPreferencesRepository.getCurrent().followedThreadKeys.sorted()
+        ensureDirectories()
+
+        val generatedAt = System.currentTimeMillis()
+        val summaries = followed.mapNotNull { threadKey ->
+            buildDirectionSummary(
+                threadKey = threadKey,
+                notes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes),
+            )
+        }
+
+        writeDirectionFiles(generatedAt, summaries, activeNotes)
+        writeExport(generatedAt, summaries)
+
+        val snapshot = DirectionWikiSnapshot(
+            rootPath = rootDir.absolutePath,
+            lastGeneratedAt = generatedAt,
+            directions = summaries.associateBy { it.threadKey },
+        )
+        _snapshot.value = snapshot
+        DirectionWikiRefreshResult(
+            generatedDirectionCount = summaries.size,
+            generatedAt = generatedAt,
+        )
+    }
+
+    private suspend fun buildDirectionSummary(
+        threadKey: String,
+        notes: List<NoteEntity>,
+    ): DirectionWikiDirectionSummary? {
+        if (notes.isEmpty()) return null
+
+        val thread = NoteConnectionAnalyzer.threadFromKey(threadKey, notes)
+        val execution = threadExecutionPlanner.summarize(threadKey, notes)
+        val research = externalResearchPlanner.summarize(threadKey, notes)
+        val directionAssets = DirectionAssetAnalyzer.build(notes)
+        val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
+
+        val verifiedPoints = directionAssets
+            .filter { it.type.label == "已查证" || it.type.label == "已验证" }
+            .map { it.summary }
+            .distinct()
+            .take(3)
+
+        val openQuestions = buildList {
+            research.contrarianQuestion.takeIf { it.isNotBlank() }?.let(::add)
+            execution.blocker.takeIf { it.isNotBlank() }?.let(::add)
+            if (verifiedPoints.isEmpty()) {
+                add("还需要一条更硬的查证或验证结果，才能把这个方向真正压实。")
+            }
+        }.distinct().take(3)
+
+        val stageHistorySummary = stageHistory
+            .joinToString(" -> ") { "${it.label}${it.stage.label}" }
+
+        val assetSummary = directionAssets.firstOrNull()?.summary
+            ?: execution.summary.ifBlank { research.outsideAngle }
+
+        return DirectionWikiDirectionSummary(
+            threadKey = threadKey,
+            slug = slugFor(thread.title, threadKey),
+            title = thread.title,
+            stage = execution.stage,
+            assetSummary = assetSummary,
+            verifiedPoints = verifiedPoints,
+            openQuestions = openQuestions,
+            stageHistorySummary = stageHistorySummary,
+            updatedAt = notes.maxOfOrNull { it.updatedAt } ?: 0L,
+        )
+    }
+
+    private suspend fun writeDirectionFiles(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+        allNotes: List<NoteEntity>,
+    ) {
+        val rawNotesDir = File(rootDir, "raw/notes")
+        val rawResearchDir = File(rootDir, "raw/research")
+        val directionsDir = File(rootDir, "wiki/directions")
+        val evidenceDir = File(rootDir, "wiki/evidence")
+        val snapshotsDir = File(rootDir, "wiki/snapshots")
+        val timestamp = fileTimestamp(generatedAt)
+
+        summaries.forEach { summary ->
+            val notes = NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
+            val researchNotes = notes.filter { ResearchEvidenceAnalyzer.classify(it).label in setOf("外部视角", "待验证", "已查证", "已验证") }
+            val execution = threadExecutionPlanner.summarize(summary.threadKey, notes)
+            val research = externalResearchPlanner.summarize(summary.threadKey, notes)
+            val evidence = ResearchEvidenceAnalyzer.summarize(researchNotes)
+
+            File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
+            if (researchNotes.isNotEmpty()) {
+                File(rawResearchDir, "${summary.slug}-$timestamp.md").writeText(buildRawResearchMarkdown(summary, researchNotes))
+            }
+            File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
+            File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, evidence))
+            File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
+        }
+
+        File(rootDir, "wiki/index.md").writeText(
+            buildString {
+                appendLine("# Direction Wiki")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                summaries.sortedBy { it.title }.forEach { summary ->
+                    appendLine("- [${summary.title}](directions/${summary.slug}.md) · ${summary.stage.label}")
+                }
+            },
+        )
+
+        File(rootDir, "wiki/log.md").appendText(
+            buildString {
+                appendLine("## [${displayDate(generatedAt)}] update | ${summaries.size} directions")
+                summaries.forEach { summary ->
+                    appendLine("- ${summary.title} · ${summary.stage.label}")
+                }
+                appendLine()
+            },
+        )
+    }
+
+    private fun buildRawNotesMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        notes: List<NoteEntity>,
+    ): String = buildString {
+        appendLine("# ${summary.title} raw notes")
+        appendLine()
+        notes.sortedByDescending { it.updatedAt }.forEach { note ->
+            appendLine("## ${note.topic.ifBlank { "未命名记录" }}")
+            appendLine("- id: ${note.id}")
+            appendLine("- status: ${note.status.label}")
+            appendLine("- horizon: ${note.horizon.label}")
+            appendLine("- updated: ${displayTime(note.updatedAt)}")
+            appendLine()
+            appendLine(note.content.trim())
+            appendLine()
+        }
+    }
+
+    private fun buildRawResearchMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        notes: List<NoteEntity>,
+    ): String = buildString {
+        appendLine("# ${summary.title} raw research")
+        appendLine()
+        notes.sortedByDescending { it.updatedAt }.forEach { note ->
+            appendLine("## ${note.topic.ifBlank { "未命名研究记录" }}")
+            appendLine("- evidence: ${ResearchEvidenceAnalyzer.classify(note).label}")
+            appendLine("- updated: ${displayTime(note.updatedAt)}")
+            appendLine()
+            appendLine(note.content.trim())
+            appendLine()
+        }
+    }
+
+    private fun buildDirectionMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
+        research: com.mindflow.app.data.connect.ExternalResearchSnapshot,
+    ): String = buildString {
+        appendLine("# ${summary.title}")
+        appendLine()
+        appendLine("- 当前阶段：${summary.stage.label}")
+        appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        appendLine()
+        appendLine("## 当前判断")
+        appendLine(summary.assetSummary.ifBlank { execution.summary.ifBlank { "这条方向还在继续形成。" } })
+        appendLine()
+        execution.blocker.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前卡点")
+            appendLine(it)
+            appendLine()
+        }
+        appendLine("## 执行")
+        execution.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("- 为什么现在：$it") }
+        execution.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("- 当前最小动作：$it") }
+        execution.validationStep.takeIf { it.isNotBlank() }?.let { appendLine("- 当前验证动作：$it") }
+        execution.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("- 如果成立，下一步：$it") }
+        appendLine()
+        appendLine("## 研究")
+        research.outsideAngle.takeIf { it.isNotBlank() }?.let { appendLine("- 外部视角：$it") }
+        research.opportunityGap.takeIf { it.isNotBlank() }?.let { appendLine("- 机会缺口：$it") }
+        research.contrarianQuestion.takeIf { it.isNotBlank() }?.let { appendLine("- 值得追问：$it") }
+        research.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("- 外部假设：$it") }
+        appendLine()
+        if (summary.verifiedPoints.isNotEmpty()) {
+            appendLine("## 已查证 / 已验证")
+            summary.verifiedPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        if (summary.openQuestions.isNotEmpty()) {
+            appendLine("## 开放问题")
+            summary.openQuestions.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        summary.stageHistorySummary.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 阶段历史")
+            appendLine(it)
+            appendLine()
+        }
+    }
+
+    private fun buildEvidenceMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        evidence: com.mindflow.app.data.connect.ResearchEvidenceSummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} evidence")
+        appendLine()
+        appendLine("- ${evidence.summaryLine.ifBlank { "暂无结构化研究证据" }}")
+        appendLine()
+        if (summary.verifiedPoints.isNotEmpty()) {
+            appendLine("## 可复用结论")
+            summary.verifiedPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+    }
+
+    private fun buildSnapshotMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} snapshot")
+        appendLine()
+        appendLine("- 阶段：${summary.stage.label}")
+        appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        execution.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("- 为什么现在：$it") }
+        execution.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("- 下一步：$it") }
+        execution.validationStep.takeIf { it.isNotBlank() }?.let { appendLine("- 先验证：$it") }
+        summary.stageHistorySummary.takeIf { it.isNotBlank() }?.let { appendLine("- 历史：$it") }
+    }
+
+    private fun writeExport(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+    ) {
+        val root = JSONObject()
+            .put("generatedAt", generatedAt)
+            .put("rootPath", rootDir.absolutePath)
+            .put(
+                "directions",
+                JSONArray().apply {
+                    summaries.forEach { summary ->
+                        put(
+                            JSONObject()
+                                .put("threadKey", summary.threadKey)
+                                .put("slug", summary.slug)
+                                .put("title", summary.title)
+                                .put("stage", summary.stage.name)
+                                .put("assetSummary", summary.assetSummary)
+                                .put("stageHistorySummary", summary.stageHistorySummary)
+                                .put("updatedAt", summary.updatedAt)
+                                .put("verifiedPoints", JSONArray(summary.verifiedPoints))
+                                .put("openQuestions", JSONArray(summary.openQuestions)),
+                        )
+                    }
+                },
+            )
+        File(rootDir, "wiki/export/direction-assets.json").writeText(root.toString(2))
+    }
+
+    private fun loadSnapshotFromDisk(): DirectionWikiSnapshot {
+        val exportFile = File(rootDir, "wiki/export/direction-assets.json")
+        if (!exportFile.exists()) {
+            return DirectionWikiSnapshot(rootPath = rootDir.absolutePath)
+        }
+        return runCatching {
+            val json = JSONObject(exportFile.readText())
+            val directionsArray = json.optJSONArray("directions") ?: JSONArray()
+            val directions = buildMap {
+                for (index in 0 until directionsArray.length()) {
+                    val item = directionsArray.optJSONObject(index) ?: continue
+                    val threadKey = item.optString("threadKey")
+                    if (threadKey.isBlank()) continue
+                    put(
+                        threadKey,
+                        DirectionWikiDirectionSummary(
+                            threadKey = threadKey,
+                            slug = item.optString("slug"),
+                            title = item.optString("title"),
+                            stage = item.optString("stage").toDirectionStage(),
+                            assetSummary = item.optString("assetSummary"),
+                            verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),
+                            openQuestions = item.optJSONArray("openQuestions").toStringList(),
+                            stageHistorySummary = item.optString("stageHistorySummary"),
+                            updatedAt = item.optLong("updatedAt"),
+                        ),
+                    )
+                }
+            }
+            DirectionWikiSnapshot(
+                rootPath = json.optString("rootPath", rootDir.absolutePath),
+                lastGeneratedAt = json.optLong("generatedAt"),
+                directions = directions,
+            )
+        }.getOrElse {
+            DirectionWikiSnapshot(rootPath = rootDir.absolutePath)
+        }
+    }
+
+    private fun ensureDirectories() {
+        listOf(
+            File(rootDir, "raw/notes"),
+            File(rootDir, "raw/research"),
+            File(rootDir, "wiki/directions"),
+            File(rootDir, "wiki/concepts"),
+            File(rootDir, "wiki/evidence"),
+            File(rootDir, "wiki/snapshots"),
+            File(rootDir, "wiki/export"),
+        ).forEach { it.mkdirs() }
+        File(rootDir, "AGENTS.md").takeIf { !it.exists() }?.writeText(
+            """
+            # Direction Wiki Agent Rules
+
+            - Treat `raw/` as append-only sources.
+            - Update `wiki/directions/`, `wiki/evidence/`, `wiki/snapshots/`, `wiki/index.md`, and `wiki/log.md`.
+            - Distinguish clearly between:
+              - AI external perspective
+              - pending validation
+              - verified findings
+              - validated outcomes
+            - Prefer concise markdown pages over verbose chat transcripts.
+            """.trimIndent(),
+        )
+    }
+    private fun slugFor(title: String, fallback: String): String {
+        val base = title
+            .lowercase()
+            .replace("#", "")
+            .replace(Regex("[^a-z0-9\\u4e00-\\u9fa5]+"), "-")
+            .trim('-')
+        return if (base.isNotBlank()) base else fallback.replace(':', '-').replace('/', '-')
+    }
+
+    private fun fileTimestamp(time: Long): String =
+        Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
+
+    private fun displayTime(time: Long): String =
+        Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+
+    private fun displayDate(time: Long): String =
+        Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+
+    private fun String.toDirectionStage(): DirectionStage =
+        runCatching { DirectionStage.valueOf(this) }.getOrDefault(DirectionStage.FORMING)
+
+    private fun JSONArray?.toStringList(): List<String> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (index in 0 until length()) {
+                optString(index).takeIf { it.isNotBlank() }?.let(::add)
+            }
+        }
+    }
+}

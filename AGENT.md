@@ -202,8 +202,9 @@ Current status:
 - research evidence stratification inside thread workspace: first version implemented
 - horizon-aware reminder cadence: first version implemented
 - direction assets surfaced from verified and grounded research: first version implemented
+- local Direction Wiki generation and app-facing asset reflow: first version implemented
 
 Next strongest direction:
 
 - stronger external research grounding and direction-stage persistence beyond immediate next steps
-- `Direction Wiki` integration as the long-term markdown asset layer for followed directions
+- richer Direction Wiki grounding beyond local first-version exports

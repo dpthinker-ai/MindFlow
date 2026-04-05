@@ -39,6 +39,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
@@ -72,6 +73,7 @@ fun FlowRoute(
     staleReconnectPlanner: StaleReconnectPlanner,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
+    directionWikiCoordinator: DirectionWikiCoordinator,
     initialFocus: FlowFocus? = null,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -88,6 +90,7 @@ fun FlowRoute(
             staleReconnectPlanner = staleReconnectPlanner,
             threadExecutionPlanner = threadExecutionPlanner,
             externalResearchPlanner = externalResearchPlanner,
+            directionWikiCoordinator = directionWikiCoordinator,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -401,6 +404,39 @@ private fun FollowedDirectionRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiVerifiedPoint
+                .takeIf { it.isNotBlank() }
+                ?.let { verified ->
+                    Text(
+                        text = "已查证：$verified",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AccentBlue,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiOpenQuestion
+                .takeIf { it.isNotBlank() }
+                ?.let { question ->
+                    Text(
+                        text = "待继续：$question",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiStageHistorySummary
+                .takeIf { it.isNotBlank() }
+                ?.let { stageHistory ->
+                    Text(
+                        text = stageHistory,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }

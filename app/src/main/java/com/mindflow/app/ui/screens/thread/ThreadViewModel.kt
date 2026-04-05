@@ -26,6 +26,7 @@ import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -59,6 +60,11 @@ data class ThreadUiState(
     val dominantHorizon: NoteHorizon = NoteHorizon.MEDIUM,
     val stageHistory: List<DirectionStageHistoryEntry> = emptyList(),
     val directionAssets: List<DirectionAsset> = emptyList(),
+    val wikiAssetSummary: String = "",
+    val wikiVerifiedPoints: List<String> = emptyList(),
+    val wikiOpenQuestions: List<String> = emptyList(),
+    val wikiStageHistorySummary: String = "",
+    val wikiUpdatedAt: Long = 0L,
     val weeklyStatsLine: String = "",
     val weeklyLines: List<String> = emptyList(),
     val researchOutsideAngle: String = "",
@@ -96,6 +102,7 @@ class ThreadViewModel(
     private val threadPreferencesRepository: ThreadPreferencesRepository,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
+    private val directionWikiCoordinator: DirectionWikiCoordinator,
     private val threadKey: String,
 ) : ViewModel() {
     private data class ThreadInsightState(
@@ -129,7 +136,8 @@ class ThreadViewModel(
         noteRepository.observeAllNotes(),
         threadPreferencesRepository.settings.map { it.isFollowed(threadKey) },
         _insightState,
-    ) { allNotes, isFollowed, insight ->
+        directionWikiCoordinator.snapshot,
+    ) { allNotes, isFollowed, insight, wikiSnapshot ->
         val notes = NoteConnectionAnalyzer.notesForThread(threadKey, allNotes)
         val researchNotes = notes.filter(ThreadResearchAnalyzer::isResearchMemoryNote).take(3)
         val researchClusters = ThreadResearchAnalyzer.buildResearchClusters(
@@ -140,6 +148,7 @@ class ThreadViewModel(
         val directionAssets = DirectionAssetAnalyzer.build(notes)
         val focusNote = pickFocusNote(notes)
         val weeklyReview = buildThreadWeeklyReview(notes)
+        val wikiDirection = wikiSnapshot.directions[threadKey]
         ThreadUiState(
             threadKey = threadKey,
             title = NoteConnectionAnalyzer.titleForThread(threadKey),
@@ -159,6 +168,11 @@ class ThreadViewModel(
             dominantHorizon = insight.dominantHorizon,
             stageHistory = stageHistory,
             directionAssets = directionAssets,
+            wikiAssetSummary = wikiDirection?.assetSummary.orEmpty(),
+            wikiVerifiedPoints = wikiDirection?.verifiedPoints.orEmpty(),
+            wikiOpenQuestions = wikiDirection?.openQuestions.orEmpty(),
+            wikiStageHistorySummary = wikiDirection?.stageHistorySummary.orEmpty(),
+            wikiUpdatedAt = wikiDirection?.updatedAt ?: 0L,
             weeklyStatsLine = weeklyReview.statsLine,
             weeklyLines = weeklyReview.lines,
             researchOutsideAngle = insight.researchOutsideAngle,
@@ -352,6 +366,7 @@ class ThreadViewModel(
             threadPreferencesRepository: ThreadPreferencesRepository,
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,
+            directionWikiCoordinator: DirectionWikiCoordinator,
             threadKey: String,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -360,6 +375,7 @@ class ThreadViewModel(
                     threadPreferencesRepository = threadPreferencesRepository,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     threadKey = threadKey,
                 )
             }

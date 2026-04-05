@@ -62,6 +62,7 @@ import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
@@ -104,6 +105,7 @@ fun MindFlowApp(
     staleReconnectPlanner: StaleReconnectPlanner,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
+    directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
@@ -234,6 +236,7 @@ fun MindFlowApp(
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     initialFocus = focus,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
@@ -252,6 +255,7 @@ fun MindFlowApp(
                     threadPreferencesRepository = threadPreferencesRepository,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },
                     onOpenNote = openNoteSafely,
@@ -314,6 +318,7 @@ fun MindFlowApp(
                     timeBankSettingsRepository = timeBankSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     reminderScheduler = reminderScheduler,
+                    directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
                 )
             }

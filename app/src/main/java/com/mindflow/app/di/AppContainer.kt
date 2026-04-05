@@ -42,6 +42,7 @@ import com.mindflow.app.data.topic.RuleBasedTagExtractor
 import com.mindflow.app.data.topic.CombinedTopicExtractor
 import com.mindflow.app.data.topic.RuleBasedFolderClassifier
 import com.mindflow.app.data.topic.RuleBasedTopicExtractor
+import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -190,6 +191,15 @@ class AppContainer(context: Context) {
     val externalResearchPlanner = ExternalResearchPlanner(
         aiSettingsRepository = aiSettingsRepository,
         aiServiceClient = aiServiceClient,
+    )
+
+    val directionWikiCoordinator = DirectionWikiCoordinator(
+        context = context.applicationContext,
+        noteRepository = noteRepository,
+        threadPreferencesRepository = threadPreferencesRepository,
+        threadExecutionPlanner = threadExecutionPlanner,
+        externalResearchPlanner = externalResearchPlanner,
+        applicationScope = applicationScope,
     )
 
     val reminderScheduler = ReminderScheduler(
