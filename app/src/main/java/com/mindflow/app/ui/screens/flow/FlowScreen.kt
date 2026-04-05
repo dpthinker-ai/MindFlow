@@ -244,13 +244,18 @@ private fun DirectionCard(
 ) {
     PanelCard {
         SectionHeader(
-            title = "方向判断",
+            title = "知识沉淀",
             headline = when {
-                followedDirections.isNotEmpty() -> "持续经营 ${followedDirections.size} 条方向"
-                threads.isNotEmpty() -> "${threads.size} 条主题"
-                suggestions.isNotEmpty() -> "有新的建议"
+                followedDirections.isNotEmpty() -> "先看最近长出来的判断，再决定往哪推"
+                suggestions.isNotEmpty() -> "先看最值得继续追的一个点"
+                threads.isNotEmpty() -> "先把分散的线索收成一条可经营的主线"
                 else -> null
             },
+        )
+        KnowledgePayoffCard(
+            followedDirections = followedDirections,
+            suggestions = suggestions,
+            source = fusionSource,
         )
         ConnectionCard(
             followedDirections = followedDirections,
@@ -268,6 +273,54 @@ private fun DirectionCard(
             statsLine = weeklyStatsLine,
             highlighted = highlightReview,
         )
+    }
+}
+
+@Composable
+private fun KnowledgePayoffCard(
+    followedDirections: List<FollowedDirectionSummary>,
+    suggestions: List<String>,
+    source: DailyBriefSource,
+) {
+    val recentLine = followedDirections.firstNonBlankValue {
+        it.wikiConclusionLine.ifBlank { it.assetSummary }
+    }
+    val trustedLine = followedDirections.firstNonBlankValue {
+        it.wikiValidatedPoint.ifBlank { it.wikiVerifiedPoint }
+    }
+    val gapLine = followedDirections.firstNonBlankValue {
+        it.wikiOpenQuestion
+            .ifBlank { it.wikiMaintenanceLine }
+            .ifBlank { it.blocker }
+    }
+    val ideaLine = suggestions.firstOrNull().orEmpty()
+
+    if (
+        recentLine.isBlank() &&
+        trustedLine.isBlank() &&
+        gapLine.isBlank() &&
+        ideaLine.isBlank()
+    ) {
+        return
+    }
+
+    InsightBlock(
+        sourceLabel = if (source == DailyBriefSource.AI) "AI 沉淀" else "最近沉淀",
+        tone = InsightTone.Primary,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        recentLine.takeIf { it.isNotBlank() }?.let {
+            InsightLine(label = "已经沉淀", text = it, emphasize = true, maxLines = 2)
+        }
+        trustedLine.takeIf { it.isNotBlank() }?.let {
+            InsightLine(label = "最可靠的一点", text = it, maxLines = 2)
+        }
+        gapLine.takeIf { it.isNotBlank() }?.let {
+            InsightLine(label = "还待补", text = it, maxLines = 2)
+        }
+        ideaLine.takeIf { it.isNotBlank() }?.let {
+            InsightLine(label = "值得延展", text = it, maxLines = 2)
+        }
     }
 }
 
@@ -311,31 +364,38 @@ private fun ConnectionCard(
                     )
                 }
             }
-            if (threads.isNotEmpty()) {
-                Text(
-                    text = if (followedDirections.isNotEmpty()) "值得串起来的线索" else "主题线程",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
-                )
-                threads.forEach { thread ->
-                    ThreadRow(
-                        thread = thread,
-                        showFocus = false,
-                        onOpenThread = onOpenThread,
-                    )
+            if (threads.isNotEmpty() || suggestions.isNotEmpty()) {
+                InsightBlock(
+                    sourceLabel = if (source == DailyBriefSource.AI) "AI 串联" else "串联线索",
+                    tone = InsightTone.Neutral,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    threads.firstOrNull()?.let { thread ->
+                        InsightLine(
+                            label = "值得串起来",
+                            text = "${thread.title} · ${thread.summary}",
+                            maxLines = 2,
+                        )
+                    }
+                    suggestions.firstOrNull()?.let { suggestion ->
+                        InsightLine(
+                            label = "值得延展",
+                            text = suggestion,
+                            maxLines = 2,
+                        )
+                    }
                 }
-            }
-            if (suggestions.isNotEmpty()) {
-                Text(
-                    text = if (source == DailyBriefSource.AI) "AI 融合建议" else "融合建议",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
-                )
-                suggestions.forEach { suggestion ->
+                if (threads.size > 1) {
                     Text(
-                        text = "• $suggestion",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextMain,
+                        text = "还有 ${threads.size - 1} 条线索可以继续串起来",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                    )
+                } else if (suggestions.size > 1) {
+                    Text(
+                        text = "还有 ${suggestions.size - 1} 条延展想法",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
                     )
                 }
             }
@@ -369,274 +429,49 @@ private fun FollowedDirectionRow(
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val trustChip = when {
+                summary.wikiValidatedPoint.isNotBlank() -> "已验证"
+                summary.wikiVerifiedPoint.isNotBlank() -> "已查证"
+                summary.wikiHypothesisPoint.isNotBlank() -> "待验证"
+                else -> "方向中"
+            }
+            val recentKnowledge = summary.wikiConclusionLine
+                .ifBlank { summary.assetSummary }
+                .ifBlank { summary.summary }
+            val trustedResult = summary.wikiValidatedPoint
+                .ifBlank { summary.wikiVerifiedPoint }
+                .ifBlank { summary.wikiTrustLine }
+            val gapLine = summary.wikiOpenQuestion
+                .ifBlank { summary.wikiMaintenanceLine }
+                .ifBlank { summary.blocker }
+            val nextLine = summary.validationStep
+                .ifBlank { summary.nextStep }
+                .ifBlank { summary.wikiNextShiftLine }
             Text(
                 text = summary.thread.title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = TextMain,
             )
-            Text(
-                text = "${summary.stage.label} · ${summary.dominantHorizon.label} · ${summary.thread.noteCount} 条",
-                style = MaterialTheme.typography.labelSmall,
-                color = AccentBlue,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (summary.rhythmLine.isNotBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                InsightChip(text = summary.stage.label, tone = InsightTone.Primary)
+                InsightChip(text = trustChip, tone = InsightTone.Neutral)
+                InsightChip(text = summary.dominantHorizon.label, tone = InsightTone.Neutral)
+            }
+            summary.rhythmLine.takeIf { it.isNotBlank() }?.let {
                 Text(
-                    text = summary.rhythmLine,
+                    text = it,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (summary.thread.focusLine.isNotBlank()) {
-                Text(
-                    text = summary.thread.focusLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            summary.wikiConclusionLine
-                .takeIf { it.isNotBlank() }
-                ?.let { conclusion ->
-                    Text(
-                        text = "已沉淀结论：$conclusion",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiNextShiftLine
-                .takeIf { it.isNotBlank() }
-                ?.let { nextShift ->
-                    Text(
-                        text = "下一步承接：$nextShift",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.assetSummary
-                .takeIf { it.isNotBlank() }
-                ?.takeUnless { it == summary.wikiConclusionLine }
-                ?.let { asset ->
-                    Text(
-                        text = "已沉淀：$asset",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiGroundingLine
-                .takeIf { it.isNotBlank() }
-                ?.let { grounding ->
-                    Text(
-                        text = grounding,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiTrustLine
-                .takeIf { it.isNotBlank() }
-                ?.let { trust ->
-                    Text(
-                        text = trust,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiKnowledgeObjectLine
-                .takeIf { it.isNotBlank() }
-                ?.let { objectLine ->
-                    Text(
-                        text = objectLine,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiHealthLine
-                .takeIf { it.isNotBlank() }
-                ?.let { health ->
-                    Text(
-                        text = health,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiMaintenanceLine
-                .takeIf { it.isNotBlank() }
-                ?.let { maintenance ->
-                    Text(
-                        text = "建议先补：$maintenance",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiMaintenanceTargetLine
-                .takeIf { it.isNotBlank() }
-                ?.let { target ->
-                    Text(
-                        text = "先维护：$target",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiMaintenanceSourceLine
-                .takeIf { it.isNotBlank() }
-                ?.let { source ->
-                    Text(
-                        text = "先补来源：$source",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiMaintenanceDimensionLine
-                .takeIf { it.isNotBlank() }
-                ?.let { dimension ->
-                    Text(
-                        text = "最薄弱：$dimension",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiMaintenanceFocusLine
-                .takeIf { it.isNotBlank() }
-                ?.let { focus ->
-                    Text(
-                        text = "优先对象：$focus",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiValidatedPoint
-                .takeIf { it.isNotBlank() }
-                ?.let { validated ->
-                    Text(
-                        text = "已验证：$validated",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AccentBlue,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiVerifiedPoint
-                .takeIf { it.isNotBlank() }
-                ?.let { verified ->
-                    Text(
-                        text = "已查证：$verified",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AccentBlue,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiHypothesisPoint
-                .takeIf { it.isNotBlank() }
-                ?.let { hypothesis ->
-                    Text(
-                        text = "待验证：$hypothesis",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiOpenQuestion
-                .takeIf { it.isNotBlank() }
-                ?.let { question ->
-                    Text(
-                        text = "待继续：$question",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiContinuityLine
-                .takeIf { it.isNotBlank() }
-                ?.let { continuity ->
-                    Text(
-                        text = continuity,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiStageHistorySummary
-                .takeIf { it.isNotBlank() }
-                ?.let { stageHistory ->
-                    Text(
-                        text = stageHistory,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiSnapshotStageLine
-                .takeIf { it.isNotBlank() }
-                ?.let { snapshotStage ->
-                    Text(
-                        text = snapshotStage,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiSnapshotCadenceLine
-                .takeIf { it.isNotBlank() }
-                ?.let { snapshotCadence ->
-                    Text(
-                        text = snapshotCadence,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            summary.wikiTrajectoryLine
-                .takeIf { it.isNotBlank() && it != summary.wikiStageHistorySummary }
-                ?.let { trajectory ->
-                    Text(
-                        text = trajectory,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             if (summary.summary.isNotBlank() || summary.nextStep.isNotBlank() || summary.validationStep.isNotBlank()) {
                 InsightBlock(
                     sourceLabel = if (summary.source == DailyBriefSource.AI) "AI 洞察" else "当前判断",
                     tone = InsightTone.Primary,
                 ) {
-                    summary.summary
+                    recentKnowledge
                         .takeIf { it.isNotBlank() }
                         ?.let { text ->
                             Text(
@@ -652,25 +487,37 @@ private fun FollowedDirectionRow(
                         ?.let { reason ->
                             InsightLine(label = "为什么现在", text = reason, maxLines = 2)
                         }
+                    nextLine
+                        .takeIf { it.isNotBlank() }
+                        ?.let { action ->
+                            InsightLine(label = "下一步", text = action, emphasize = true, maxLines = 2)
+                        }
+                }
+            }
+            if (trustedResult.isNotBlank() || gapLine.isNotBlank()) {
+                InsightBlock(
+                    sourceLabel = "知识层",
+                    tone = InsightTone.Neutral,
+                ) {
+                    trustedResult
+                        .takeIf { it.isNotBlank() }
+                        ?.let { trust ->
+                            InsightLine(label = trustChip, text = trust, maxLines = 2)
+                        }
+                    gapLine
+                        .takeIf { it.isNotBlank() }
+                        ?.let { gap ->
+                            InsightLine(label = "当前缺口", text = gap, maxLines = 2)
+                        }
+                    summary.whyNow
+                        .takeIf { it.isNotBlank() }
+                        ?.let { reason ->
+                            InsightLine(label = "为什么现在", text = reason, maxLines = 2)
+                        }
                     summary.lastProgressLine
                         .takeIf { it.isNotBlank() }
                         ?.let { progress ->
                             InsightLine(label = "最近推进", text = progress, maxLines = 2)
-                        }
-                    summary.nextStep
-                        .takeIf { it.isNotBlank() }
-                        ?.let { action ->
-                            InsightLine(label = "先做", text = action, emphasize = true, maxLines = 2)
-                        }
-                    summary.validationStep
-                        .takeIf { it.isNotBlank() }
-                        ?.let { validation ->
-                            InsightLine(label = "先验证", text = validation, emphasize = true, maxLines = 2)
-                        }
-                    summary.nextCheckInLine
-                        .takeIf { it.isNotBlank() }
-                        ?.let { checkIn ->
-                            InsightLine(label = "下次检查", text = checkIn, maxLines = 2)
                         }
                 }
             }
@@ -693,14 +540,14 @@ private fun FollowedDirectionRow(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
-                        InsightLine(label = "机会缺口", text = it, maxLines = 2)
-                    }
                     (summary.externalHypothesis.takeIf { it.isNotBlank() }
                         ?: summary.contrarianQuestion.takeIf { it.isNotBlank() })
                         ?.let {
                             InsightLine(label = "外部假设", text = it, maxLines = 2)
                         }
+                    summary.opportunityGap.takeIf { it.isNotBlank() }?.let {
+                        InsightLine(label = "机会缺口", text = it, maxLines = 2)
+                    }
                 }
             }
             Row(
@@ -818,6 +665,13 @@ private fun FollowedDirectionSummary.toMaintenanceCaptureSeed(): CaptureSeed =
             maintenanceFocusLine = wikiMaintenanceFocusLine,
         ),
     )
+
+private fun <T> Iterable<T>.firstNonBlankValue(
+    selector: (T) -> String,
+): String = asSequence()
+    .map(selector)
+    .firstOrNull { it.isNotBlank() }
+    .orEmpty()
 
 @Composable
 private fun ThreadRow(

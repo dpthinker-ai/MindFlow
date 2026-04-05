@@ -58,6 +58,7 @@ android {
         targetSdk = 35
         versionCode = 6
         versionName = "2.0.4"
+        resourceConfigurations += listOf("zh", "zh-rCN", "en")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -79,7 +80,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (releaseSigningReady) {
                 signingConfig = signingConfigs.getByName("release")
             }

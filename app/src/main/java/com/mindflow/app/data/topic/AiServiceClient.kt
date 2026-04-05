@@ -125,9 +125,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(5_000),
-            systemPrompt = "You are a strategic thinking assistant for a personal idea system. Based on the note summary, produce exactly 2 short Chinese lines with high-value exploration directions. Do not repeat note titles or obvious facts. Focus on new angles, useful synthesis, technology innovation, product thinking, work improvement, health, or life progress. Each line should be actionable or thought-provoking. Return only the 2 lines, with no intro and no explanation.",
-            maxTokens = 220,
-            temperature = 0.6,
+            systemPrompt = "You are the strategist for a personal knowledge system. Based on the material, produce exactly 2 concise Chinese lines that are worth thinking about today. Do not summarize existing notes. Do not repeat obvious facts. Each line must surface one non-obvious angle, synthesis, or leverage point that can improve work, product thinking, technology innovation, health, or life progress. Make the lines sharp, concrete, and slightly surprising. Return only the 2 lines, with no intro and no explanation.",
+            maxTokens = 320,
+            temperature = 0.7,
             thinkingEnabled = false,
         )
     }
@@ -167,9 +167,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(5_000),
-            systemPrompt = "You are generating fusion suggestions for a personal idea system. Return exactly 2 concise Chinese lines. Each line must combine multiple themes, folders, or recurring ideas into one stronger exploration direction. Avoid restating existing notes. Make it forward-looking and useful.",
-            maxTokens = 220,
-            temperature = 0.65,
+            systemPrompt = "You are synthesizing ideas for a personal knowledge system. Return exactly 2 concise Chinese lines. Each line must combine multiple themes, folders, recurring problems, or lived experience into one stronger exploration direction. Do not restate existing notes. Prefer leverage, cross-domain transfer, and surprising-but-useful combinations. Return only the 2 lines.",
+            maxTokens = 320,
+            temperature = 0.72,
             thinkingEnabled = false,
         )
     }
@@ -223,9 +223,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(6_000),
-            systemPrompt = "You are generating an execution summary for one long-term direction in a personal idea system. Return exactly 7 concise Chinese lines in this order: 1) current direction summary, 2) main blocker, 3) why it matters now, 4) the smallest next step, 5) the current validation step, 6) why this validation matters now, 7) if validation succeeds, what to push next. Do not number the lines. Be concrete and execution-oriented.",
-            maxTokens = 420,
-            temperature = 0.45,
+            systemPrompt = "You are maintaining one long-term direction inside a personal knowledge system. Return exactly 7 concise Chinese lines in this order: 1) the strongest current judgment, 2) the main blocker, 3) why this direction matters now, 4) the single smallest next step, 5) the current validation step, 6) why validating now is important, 7) what to push next if validation succeeds. Do not number the lines. Do not summarize process. Avoid generic encouragement. Focus on high-signal judgment and concrete execution.",
+            maxTokens = 520,
+            temperature = 0.5,
             thinkingEnabled = false,
         )
     }
@@ -237,9 +237,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(6_000),
-            systemPrompt = "You are generating an external perspective snapshot for one long-term direction in a personal idea system. Return exactly 6 concise Chinese lines in this order: 1) one outside-world angle worth checking, 2) one opportunity gap, 3) one contrarian question or competitive judgment, 4) one testable external hypothesis, 5) one concise Chinese search query, 6) one concise technical or English search query. Do not number the lines. No citations. Make it exploratory but useful.",
-            maxTokens = 360,
-            temperature = 0.55,
+            systemPrompt = "You are generating an external research snapshot for one long-term direction in a personal knowledge system. Return exactly 6 concise Chinese lines in this order: 1) one outside-world pattern or movement worth checking, 2) one meaningful opportunity gap, 3) one contrarian question or competitive judgment, 4) one testable external hypothesis, 5) one concise Chinese search query, 6) one concise technical or English search query. Do not number the lines. No citations. Avoid generic trends. Prefer angles that could materially change the direction if true.",
+            maxTokens = 420,
+            temperature = 0.62,
             thinkingEnabled = false,
         )
     }

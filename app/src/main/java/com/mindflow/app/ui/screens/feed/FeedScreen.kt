@@ -3,10 +3,8 @@ package com.mindflow.app.ui.screens.feed
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,7 +18,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,9 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -57,14 +52,10 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
-import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.AccentSuccess
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
-import java.util.Locale
 
 @Composable
 fun FeedRoute(
@@ -178,20 +169,11 @@ private fun FeedScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "灵感易逝，及时行动",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        TimeBankBadge(
-                            remainingActiveDays = uiState.timeBank.remainingActiveDays,
-                        )
-                    }
+                    Text(
+                        text = "灵感易逝，及时行动",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
 
                 item {
@@ -262,25 +244,6 @@ private fun FeedScreen(
                 }
 
                 item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "时间银行",
-                            headline = "可主动投入 ${formatDays(uiState.timeBank.remainingActiveDays)} 天",
-                        )
-                        Text(
-                            text = "按预期 ${uiState.timeBank.expectedLifespan} 岁、当前 ${uiState.timeBank.currentAge} 岁估算。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "如果按每周 ${uiState.timeBank.activeDaysPerWeek} 天主动投入来算，还能认真用上的时间大约还有 ${formatDays(uiState.timeBank.remainingActiveDays)} 天。",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-
-                item {
                     SectionHeader(
                         title = "记录",
                         headline = "${visibleNotes.size} 条",
@@ -316,25 +279,3 @@ private fun FeedScreen(
         )
     }
 }
-
-@Composable
-private fun TimeBankBadge(
-    remainingActiveDays: Int,
-) {
-    Surface(
-        color = PanelBlue.copy(alpha = 0.88f),
-        shape = MaterialTheme.shapes.large,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
-    ) {
-        Text(
-            text = "${formatDays(remainingActiveDays)} 天",
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.titleSmall,
-            color = AccentBlue,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-private fun formatDays(days: Int): String = NumberFormat.getIntegerInstance(Locale.CHINA).format(days)
