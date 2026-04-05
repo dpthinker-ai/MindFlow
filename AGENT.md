@@ -203,8 +203,9 @@ Current status:
 - horizon-aware reminder cadence: first version implemented
 - direction assets surfaced from verified and grounded research: first version implemented
 - local Direction Wiki generation and app-facing asset reflow: first version implemented
+- richer Direction Wiki grounding with evidence stratification and concept pages: first version implemented
 
 Next strongest direction:
 
-- stronger external research grounding and direction-stage persistence beyond immediate next steps
-- richer Direction Wiki grounding beyond local first-version exports
+- stronger direction-stage persistence beyond immediate next steps
+- direction-level execution summaries that feel continuous, not episodic

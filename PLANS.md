@@ -231,6 +231,8 @@ Planned items:
   - low-frequency background refresh on app stop
   - manual refresh from settings
   - direction assets reflowed back into Flow and thread surfaces
+  - evidence stratification reflowed back into Flow and thread surfaces
+  - concept pages generated from repeated followed-direction tags
 - why this matters:
   - stronger external research grounding beyond one-shot model output
   - longer-lived direction-stage persistence
@@ -254,14 +256,14 @@ Planned items:
 
 Next best order:
 
-1. stronger external research grounding beyond local first-version Direction Wiki exports
-2. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
-3. direction-level execution summaries that feel continuous, not episodic
+1. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
+2. direction-level execution summaries that feel continuous, not episodic
+3. stronger external research grounding beyond the current local Direction Wiki and concept exports
 
 Current progress:
 
-- direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, and app-facing asset reflow
-- 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
+- direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, and concept pages
+- 1: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer Direction Wiki grounding
 - 2: first version implemented with short / medium / long horizons and direction-stage rhythm
 - 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries

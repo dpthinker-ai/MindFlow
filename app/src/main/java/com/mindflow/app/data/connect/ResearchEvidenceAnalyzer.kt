@@ -27,6 +27,21 @@ data class ResearchEvidenceSummary(
         }.joinToString(" · ")
 }
 
+data class ResearchEvidenceItem(
+    val type: ResearchEvidenceType,
+    val summary: String,
+    val noteId: Long,
+    val updatedAt: Long,
+)
+
+data class ResearchGroundingSnapshot(
+    val summary: ResearchEvidenceSummary = ResearchEvidenceSummary(),
+    val signalItems: List<ResearchEvidenceItem> = emptyList(),
+    val hypothesisItems: List<ResearchEvidenceItem> = emptyList(),
+    val verifiedItems: List<ResearchEvidenceItem> = emptyList(),
+    val validatedItems: List<ResearchEvidenceItem> = emptyList(),
+)
+
 object ResearchEvidenceAnalyzer {
     fun summarize(notes: List<NoteEntity>): ResearchEvidenceSummary {
         val counts = notes
@@ -66,5 +81,32 @@ object ResearchEvidenceAnalyzer {
 
             else -> ResearchEvidenceType.SIGNAL
         }
+    }
+
+    fun buildGrounding(notes: List<NoteEntity>): ResearchGroundingSnapshot {
+        val items = notes
+            .asSequence()
+            .mapNotNull(::toEvidenceItem)
+            .distinctBy { "${it.type}:${it.summary}" }
+            .sortedByDescending { it.updatedAt }
+            .toList()
+
+        return ResearchGroundingSnapshot(
+            summary = summarize(notes),
+            signalItems = items.filter { it.type == ResearchEvidenceType.SIGNAL }.take(3),
+            hypothesisItems = items.filter { it.type == ResearchEvidenceType.HYPOTHESIS }.take(3),
+            verifiedItems = items.filter { it.type == ResearchEvidenceType.VERIFIED }.take(3),
+            validatedItems = items.filter { it.type == ResearchEvidenceType.VALIDATED }.take(3),
+        )
+    }
+
+    private fun toEvidenceItem(note: NoteEntity): ResearchEvidenceItem? {
+        val summary = NoteInsightSummaryExtractor.extract(note).takeIf { it.isNotBlank() } ?: return null
+        return ResearchEvidenceItem(
+            type = classify(note),
+            summary = summary,
+            noteId = note.id,
+            updatedAt = note.updatedAt,
+        )
     }
 }

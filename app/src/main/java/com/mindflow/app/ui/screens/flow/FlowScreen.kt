@@ -407,6 +407,28 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiGroundingLine
+                .takeIf { it.isNotBlank() }
+                ?.let { grounding ->
+                    Text(
+                        text = grounding,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiValidatedPoint
+                .takeIf { it.isNotBlank() }
+                ?.let { validated ->
+                    Text(
+                        text = "已验证：$validated",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AccentBlue,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiVerifiedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { verified ->
@@ -414,6 +436,17 @@ private fun FollowedDirectionRow(
                         text = "已查证：$verified",
                         style = MaterialTheme.typography.bodySmall,
                         color = AccentBlue,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiHypothesisPoint
+                .takeIf { it.isNotBlank() }
+                ?.let { hypothesis ->
+                    Text(
+                        text = "待验证：$hypothesis",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )

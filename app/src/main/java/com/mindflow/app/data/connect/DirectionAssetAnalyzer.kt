@@ -1,7 +1,6 @@
 package com.mindflow.app.data.connect
 
 import com.mindflow.app.data.local.entity.NoteEntity
-import com.mindflow.app.markdown.SimpleMarkdown
 
 enum class DirectionAssetType(
     val label: String,
@@ -42,46 +41,13 @@ object DirectionAssetAnalyzer {
             }
         } ?: return null
 
-        val summary = extractSummary(note).takeIf { it.isNotBlank() } ?: return null
+        val summary = NoteInsightSummaryExtractor.extract(note).takeIf { it.isNotBlank() } ?: return null
         return DirectionAsset(
             type = type,
             summary = summary,
             noteId = note.id,
             updatedAt = note.updatedAt,
         )
-    }
-
-    private fun extractSummary(note: NoteEntity): String {
-        val lines = note.content
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .toList()
-
-        val preferred = listOf(
-            "当前判断",
-            "这次新的判断",
-            "我现在更明确的判断",
-            "查证结果",
-            "结果表明",
-            "已验证",
-        )
-            .asSequence()
-            .mapNotNull { key ->
-                lines.firstOrNull { line ->
-                    line.contains(key) && line.contains("：")
-                }?.substringAfter("：")?.trim()
-            }
-            .firstOrNull { it.isNotBlank() }
-
-        if (!preferred.isNullOrBlank()) return preferred.take(72)
-
-        return SimpleMarkdown.toPlainText(note.content)
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?.take(72)
-            .orEmpty()
     }
 
     private fun DirectionAssetType.priority(): Int =

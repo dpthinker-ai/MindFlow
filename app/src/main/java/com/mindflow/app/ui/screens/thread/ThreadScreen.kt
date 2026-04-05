@@ -658,7 +658,11 @@ private fun ThreadScreen(
                         }
                         if (
                             uiState.wikiAssetSummary.isNotBlank() ||
+                            uiState.wikiGroundingLine.isNotBlank() ||
+                            uiState.wikiSignalPoints.isNotEmpty() ||
+                            uiState.wikiHypothesisPoints.isNotEmpty() ||
                             uiState.wikiVerifiedPoints.isNotEmpty() ||
+                            uiState.wikiValidatedPoints.isNotEmpty() ||
                             uiState.wikiOpenQuestions.isNotEmpty()
                         ) {
                             InsightBlock(
@@ -674,10 +678,25 @@ private fun ThreadScreen(
                                             color = MaterialTheme.colorScheme.onSurface,
                                         )
                                     }
+                                uiState.wikiGroundingLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { grounding ->
+                                        InsightLine(label = "证据基础", text = grounding)
+                                    }
+                                uiState.wikiValidatedPoints.firstOrNull()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { validated ->
+                                        InsightLine(label = "已验证", text = validated)
+                                    }
                                 uiState.wikiVerifiedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
                                     ?.let { verified ->
                                         InsightLine(label = "已查证", text = verified)
+                                    }
+                                uiState.wikiHypothesisPoints.firstOrNull()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { hypothesis ->
+                                        InsightLine(label = "待验证", text = hypothesis)
                                     }
                                 uiState.wikiOpenQuestions.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }

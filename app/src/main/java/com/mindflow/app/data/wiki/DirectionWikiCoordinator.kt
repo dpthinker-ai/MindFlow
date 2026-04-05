@@ -6,6 +6,8 @@ import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.connect.DirectionStageHistoryAnalyzer
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.NoteInsightSummaryExtractor
+import com.mindflow.app.data.connect.ResearchGroundingSnapshot
 import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
@@ -88,17 +90,18 @@ class DirectionWikiCoordinator(
         val research = externalResearchPlanner.summarize(threadKey, notes)
         val directionAssets = DirectionAssetAnalyzer.build(notes)
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
+        val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
 
-        val verifiedPoints = directionAssets
-            .filter { it.type.label == "已查证" || it.type.label == "已验证" }
-            .map { it.summary }
-            .distinct()
-            .take(3)
+        val verifiedPoints = grounding.verifiedItems.map { it.summary }
+        val validatedPoints = grounding.validatedItems.map { it.summary }
+        val signalPoints = grounding.signalItems.map { it.summary }
+        val hypothesisPoints = grounding.hypothesisItems.map { it.summary }
 
         val openQuestions = buildList {
             research.contrarianQuestion.takeIf { it.isNotBlank() }?.let(::add)
+            hypothesisPoints.forEach(::add)
             execution.blocker.takeIf { it.isNotBlank() }?.let(::add)
-            if (verifiedPoints.isEmpty()) {
+            if (verifiedPoints.isEmpty() && validatedPoints.isEmpty()) {
                 add("还需要一条更硬的查证或验证结果，才能把这个方向真正压实。")
             }
         }.distinct().take(3)
@@ -106,7 +109,9 @@ class DirectionWikiCoordinator(
         val stageHistorySummary = stageHistory
             .joinToString(" -> ") { "${it.label}${it.stage.label}" }
 
-        val assetSummary = directionAssets.firstOrNull()?.summary
+        val assetSummary = validatedPoints.firstOrNull()
+            ?: verifiedPoints.firstOrNull()
+            ?: directionAssets.firstOrNull()?.summary
             ?: execution.summary.ifBlank { research.outsideAngle }
 
         return DirectionWikiDirectionSummary(
@@ -115,7 +120,11 @@ class DirectionWikiCoordinator(
             title = thread.title,
             stage = execution.stage,
             assetSummary = assetSummary,
+            groundingLine = grounding.summary.summaryLine,
+            signalPoints = signalPoints,
+            hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
+            validatedPoints = validatedPoints,
             openQuestions = openQuestions,
             stageHistorySummary = stageHistorySummary,
             updatedAt = notes.maxOfOrNull { it.updatedAt } ?: 0L,
@@ -132,6 +141,7 @@ class DirectionWikiCoordinator(
         val directionsDir = File(rootDir, "wiki/directions")
         val evidenceDir = File(rootDir, "wiki/evidence")
         val snapshotsDir = File(rootDir, "wiki/snapshots")
+        val conceptsDir = File(rootDir, "wiki/concepts")
         val timestamp = fileTimestamp(generatedAt)
 
         summaries.forEach { summary ->
@@ -139,16 +149,23 @@ class DirectionWikiCoordinator(
             val researchNotes = notes.filter { ResearchEvidenceAnalyzer.classify(it).label in setOf("外部视角", "待验证", "已查证", "已验证") }
             val execution = threadExecutionPlanner.summarize(summary.threadKey, notes)
             val research = externalResearchPlanner.summarize(summary.threadKey, notes)
-            val evidence = ResearchEvidenceAnalyzer.summarize(researchNotes)
+            val grounding = ResearchEvidenceAnalyzer.buildGrounding(researchNotes)
 
             File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
             if (researchNotes.isNotEmpty()) {
                 File(rawResearchDir, "${summary.slug}-$timestamp.md").writeText(buildRawResearchMarkdown(summary, researchNotes))
             }
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
-            File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, evidence))
+            File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
             File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
         }
+
+        writeConceptFiles(
+            generatedAt = generatedAt,
+            summaries = summaries,
+            allNotes = allNotes,
+            conceptsDir = conceptsDir,
+        )
 
         File(rootDir, "wiki/index.md").writeText(
             buildString {
@@ -159,6 +176,8 @@ class DirectionWikiCoordinator(
                 summaries.sortedBy { it.title }.forEach { summary ->
                     appendLine("- [${summary.title}](directions/${summary.slug}.md) · ${summary.stage.label}")
                 }
+                appendLine()
+                appendLine("- [概念索引](concepts/index.md)")
             },
         )
 
@@ -171,6 +190,82 @@ class DirectionWikiCoordinator(
                 appendLine()
             },
         )
+    }
+
+    private fun writeConceptFiles(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+        allNotes: List<NoteEntity>,
+        conceptsDir: File,
+    ) {
+        val conceptBuckets = buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
+            summaries.forEach { summary ->
+                NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
+                    .forEach { note ->
+                        note.tags
+                            .asSequence()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .forEach { tag ->
+                                getOrPut(tag) { mutableListOf() }.add(summary to note)
+                            }
+                    }
+            }
+        }
+            .filterValues { pairs -> pairs.size >= 2 }
+            .toSortedMap()
+
+        File(conceptsDir, "index.md").writeText(
+            buildString {
+                appendLine("# Concepts")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                if (conceptBuckets.isEmpty()) {
+                    appendLine("还没有形成跨方向复用的概念。")
+                } else {
+                    conceptBuckets.forEach { (tag, pairs) ->
+                        val slug = slugFor(tag, tag)
+                        val directionCount = pairs.map { it.first.threadKey }.distinct().size
+                        appendLine("- [$tag]($slug.md) · ${pairs.size} 条记录 · ${directionCount} 条方向")
+                    }
+                }
+            },
+        )
+
+        conceptBuckets.forEach { (tag, pairs) ->
+            val slug = slugFor(tag, tag)
+            val uniqueDirections = pairs
+                .map { it.first }
+                .distinctBy { it.threadKey }
+                .sortedBy { it.title }
+            val uniqueNotes = pairs
+                .distinctBy { it.second.id }
+                .sortedByDescending { it.second.updatedAt }
+                .take(6)
+            File(conceptsDir, "$slug.md").writeText(
+                buildString {
+                    appendLine("# $tag")
+                    appendLine()
+                    appendLine("- 最近更新：${displayTime(generatedAt)}")
+                    appendLine("- 相关方向：${uniqueDirections.size} 条")
+                    appendLine("- 相关记录：${uniqueNotes.size} 条")
+                    appendLine()
+                    appendLine("## 关联方向")
+                    uniqueDirections.forEach { direction ->
+                        appendLine("- [${direction.title}](../directions/${direction.slug}.md) · ${direction.stage.label}")
+                    }
+                    appendLine()
+                    appendLine("## 最近记录")
+                    uniqueNotes.forEach { (_, note) ->
+                        val summary = NoteInsightSummaryExtractor.extract(note)
+                        appendLine("- ${note.topic.ifBlank { "未命名记录" }}")
+                        appendLine("  - ${summary.ifBlank { note.content.trim().take(72) }}")
+                    }
+                },
+            )
+        }
     }
 
     private fun buildRawNotesMarkdown(
@@ -220,6 +315,11 @@ class DirectionWikiCoordinator(
         appendLine("## 当前判断")
         appendLine(summary.assetSummary.ifBlank { execution.summary.ifBlank { "这条方向还在继续形成。" } })
         appendLine()
+        summary.groundingLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 证据基础")
+            appendLine(it)
+            appendLine()
+        }
         execution.blocker.takeIf { it.isNotBlank() }?.let {
             appendLine("## 当前卡点")
             appendLine(it)
@@ -237,9 +337,24 @@ class DirectionWikiCoordinator(
         research.contrarianQuestion.takeIf { it.isNotBlank() }?.let { appendLine("- 值得追问：$it") }
         research.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("- 外部假设：$it") }
         appendLine()
+        if (summary.signalPoints.isNotEmpty()) {
+            appendLine("## 外部视角沉淀")
+            summary.signalPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        if (summary.hypothesisPoints.isNotEmpty()) {
+            appendLine("## 待验证")
+            summary.hypothesisPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
         if (summary.verifiedPoints.isNotEmpty()) {
-            appendLine("## 已查证 / 已验证")
+            appendLine("## 已查证")
             summary.verifiedPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        if (summary.validatedPoints.isNotEmpty()) {
+            appendLine("## 已验证")
+            summary.validatedPoints.forEach { appendLine("- $it") }
             appendLine()
         }
         if (summary.openQuestions.isNotEmpty()) {
@@ -256,15 +371,30 @@ class DirectionWikiCoordinator(
 
     private fun buildEvidenceMarkdown(
         summary: DirectionWikiDirectionSummary,
-        evidence: com.mindflow.app.data.connect.ResearchEvidenceSummary,
+        grounding: ResearchGroundingSnapshot,
     ): String = buildString {
         appendLine("# ${summary.title} evidence")
         appendLine()
-        appendLine("- ${evidence.summaryLine.ifBlank { "暂无结构化研究证据" }}")
+        appendLine("- ${grounding.summary.summaryLine.ifBlank { "暂无结构化研究证据" }}")
         appendLine()
+        if (summary.signalPoints.isNotEmpty()) {
+            appendLine("## 外部视角")
+            summary.signalPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        if (summary.hypothesisPoints.isNotEmpty()) {
+            appendLine("## 待验证")
+            summary.hypothesisPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
         if (summary.verifiedPoints.isNotEmpty()) {
-            appendLine("## 可复用结论")
+            appendLine("## 已查证")
             summary.verifiedPoints.forEach { appendLine("- $it") }
+            appendLine()
+        }
+        if (summary.validatedPoints.isNotEmpty()) {
+            appendLine("## 已验证")
+            summary.validatedPoints.forEach { appendLine("- $it") }
             appendLine()
         }
     }
@@ -277,6 +407,7 @@ class DirectionWikiCoordinator(
         appendLine()
         appendLine("- 阶段：${summary.stage.label}")
         appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        summary.groundingLine.takeIf { it.isNotBlank() }?.let { appendLine("- 证据基础：$it") }
         execution.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("- 为什么现在：$it") }
         execution.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("- 下一步：$it") }
         execution.validationStep.takeIf { it.isNotBlank() }?.let { appendLine("- 先验证：$it") }
@@ -301,9 +432,13 @@ class DirectionWikiCoordinator(
                                 .put("title", summary.title)
                                 .put("stage", summary.stage.name)
                                 .put("assetSummary", summary.assetSummary)
+                                .put("groundingLine", summary.groundingLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
                                 .put("updatedAt", summary.updatedAt)
+                                .put("signalPoints", JSONArray(summary.signalPoints))
+                                .put("hypothesisPoints", JSONArray(summary.hypothesisPoints))
                                 .put("verifiedPoints", JSONArray(summary.verifiedPoints))
+                                .put("validatedPoints", JSONArray(summary.validatedPoints))
                                 .put("openQuestions", JSONArray(summary.openQuestions)),
                         )
                     }
@@ -333,7 +468,11 @@ class DirectionWikiCoordinator(
                             title = item.optString("title"),
                             stage = item.optString("stage").toDirectionStage(),
                             assetSummary = item.optString("assetSummary"),
+                            groundingLine = item.optString("groundingLine"),
+                            signalPoints = item.optJSONArray("signalPoints").toStringList(),
+                            hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
                             verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),
+                            validatedPoints = item.optJSONArray("validatedPoints").toStringList(),
                             openQuestions = item.optJSONArray("openQuestions").toStringList(),
                             stageHistorySummary = item.optString("stageHistorySummary"),
                             updatedAt = item.optLong("updatedAt"),
