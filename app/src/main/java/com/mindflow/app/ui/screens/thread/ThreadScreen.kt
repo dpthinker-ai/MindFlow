@@ -722,6 +722,16 @@ private fun ThreadScreen(
                                     ?.let { maintenance ->
                                         InsightLine(label = "建议先补", text = maintenance)
                                     }
+                                uiState.wikiMaintenanceTargetLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { target ->
+                                        InsightLine(label = "先维护", text = target)
+                                    }
+                                uiState.wikiMaintenanceSourceLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { source ->
+                                        InsightLine(label = "先补来源", text = source)
+                                    }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
                                     ?.let { validated ->

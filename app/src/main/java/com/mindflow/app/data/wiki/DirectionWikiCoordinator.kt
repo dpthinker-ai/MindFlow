@@ -171,6 +171,8 @@ class DirectionWikiCoordinator(
             knowledgeObjectLine = knowledgeObjectLine,
             healthLine = lintSummary.healthLine,
             maintenanceLine = lintSummary.maintenanceLine,
+            maintenanceTargetLine = lintSummary.maintenanceTargetLine,
+            maintenanceSourceLine = lintSummary.maintenanceSourceLine,
             signalPoints = signalPoints,
             hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
@@ -568,6 +570,12 @@ class DirectionWikiCoordinator(
                         appendLine("- [${summary.title}](${summary.slug}.md) · ${summary.healthLine}")
                         summary.maintenanceLine.takeIf { it.isNotBlank() }?.let { maintenance ->
                             appendLine("  - 建议先补：$maintenance")
+                        }
+                        summary.maintenanceTargetLine.takeIf { it.isNotBlank() }?.let { target ->
+                            appendLine("  - 先维护：$target")
+                        }
+                        summary.maintenanceSourceLine.takeIf { it.isNotBlank() }?.let { source ->
+                            appendLine("  - 先补来源：$source")
                         }
                     }
                 }
@@ -1004,6 +1012,16 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.maintenanceTargetLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 先维护")
+            appendLine(it)
+            appendLine()
+        }
+        summary.maintenanceSourceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 先补来源")
+            appendLine(it)
+            appendLine()
+        }
         summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 知识对象覆盖")
             appendLine(it)
@@ -1081,6 +1099,8 @@ class DirectionWikiCoordinator(
                                 .put("knowledgeObjectLine", summary.knowledgeObjectLine)
                                 .put("healthLine", summary.healthLine)
                                 .put("maintenanceLine", summary.maintenanceLine)
+                                .put("maintenanceTargetLine", summary.maintenanceTargetLine)
+                                .put("maintenanceSourceLine", summary.maintenanceSourceLine)
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
@@ -1127,6 +1147,8 @@ class DirectionWikiCoordinator(
                             knowledgeObjectLine = item.optString("knowledgeObjectLine"),
                             healthLine = item.optString("healthLine"),
                             maintenanceLine = item.optString("maintenanceLine"),
+                            maintenanceTargetLine = item.optString("maintenanceTargetLine"),
+                            maintenanceSourceLine = item.optString("maintenanceSourceLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
                             snapshotStageLine = item.optString("snapshotStageLine"),

@@ -474,6 +474,28 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiMaintenanceTargetLine
+                .takeIf { it.isNotBlank() }
+                ?.let { target ->
+                    Text(
+                        text = "先维护：$target",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiMaintenanceSourceLine
+                .takeIf { it.isNotBlank() }
+                ?.let { source ->
+                    Text(
+                        text = "先补来源：$source",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiValidatedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { validated ->

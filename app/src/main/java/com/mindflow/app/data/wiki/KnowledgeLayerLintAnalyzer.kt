@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 data class KnowledgeLayerLintSummary(
     val healthLine: String,
     val maintenanceLine: String,
+    val maintenanceTargetLine: String,
+    val maintenanceSourceLine: String,
     val lintIssues: List<String>,
 )
 
@@ -28,6 +30,8 @@ object KnowledgeLayerLintAnalyzer {
             return KnowledgeLayerLintSummary(
                 healthLine = "这条方向还没有形成可维护的知识材料。",
                 maintenanceLine = "先补一条更具体的记录，再开始沉淀问题、方法或实验。",
+                maintenanceTargetLine = "原始记录",
+                maintenanceSourceLine = "补一条更具体的记录",
                 lintIssues = listOf("先补一条更具体的记录，再开始沉淀知识对象。"),
             )
         }
@@ -94,9 +98,38 @@ object KnowledgeLayerLintAnalyzer {
                 "继续维护结论与对象：把当前判断压成更稳的结论，并补一条可复用对象。"
         }
 
+        val maintenanceTargetLine = when {
+            hasConflict || grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty() -> "证据页"
+            stage == DirectionStage.FORMING && questionCount == 0 -> "问题对象"
+            methodCount == 0 && experimentCount == 0 -> "方法 / 实验对象"
+            conclusionLine.isNotBlank() && (nextShiftLine.isBlank() || daysSinceUpdate >= 35L) -> "结论页"
+            daysSinceUpdate >= 21L -> "方向页"
+            else -> "结论与知识对象"
+        }
+        val maintenanceSourceLine = when {
+            hasConflict ->
+                "一条新的查证或验证记录"
+            grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty() ->
+                "一条查证或验证记录"
+            stage == DirectionStage.FORMING && questionCount == 0 ->
+                "一条明确问题记录"
+            methodCount == 0 && experimentCount == 0 ->
+                "一条方法、实验或复盘记录"
+            conclusionLine.isNotBlank() && nextShiftLine.isBlank() ->
+                "一条承接动作记录"
+            conclusionLine.isNotBlank() && daysSinceUpdate >= 35L ->
+                "一条新的查证、验证或反思记录"
+            daysSinceUpdate >= 21L ->
+                "一条最近进展记录"
+            else ->
+                "一条新的查证、验证或方法记录"
+        }
+
         return KnowledgeLayerLintSummary(
             healthLine = healthLine,
             maintenanceLine = maintenanceLine,
+            maintenanceTargetLine = maintenanceTargetLine,
+            maintenanceSourceLine = maintenanceSourceLine,
             lintIssues = issues,
         )
     }
