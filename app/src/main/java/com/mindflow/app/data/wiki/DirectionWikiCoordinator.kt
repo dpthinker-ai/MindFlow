@@ -38,9 +38,13 @@ class DirectionWikiCoordinator(
     private val externalResearchPlanner: ExternalResearchPlanner,
     private val applicationScope: CoroutineScope,
 ) {
-    private val rootDir = File(context.filesDir, "direction-wiki")
+    private val legacyRootDir = File(context.filesDir, "direction-wiki")
+    private val rootDir = File(context.filesDir, "knowledge-layer")
     private val refreshIntervalMs = 18L * 60L * 60L * 1000L
-    private val _snapshot = MutableStateFlow(loadSnapshotFromDisk())
+    private val _snapshot = MutableStateFlow(run {
+        migrateLegacyRootIfNeeded()
+        loadSnapshotFromDisk()
+    })
     val snapshot: StateFlow<DirectionWikiSnapshot> = _snapshot
 
     fun refreshInBackgroundIfNeeded() {
@@ -94,6 +98,10 @@ class DirectionWikiCoordinator(
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
         val continuity = DirectionContinuityAnalyzer.summarize(notes)
         val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
+        val knowledgeObjects = notes.flatMap { note -> KnowledgeObjectClassifier.classify(note, thread.title) }
+        val questionCount = knowledgeObjects.count { it.type == KnowledgeObjectType.QUESTION }
+        val methodCount = knowledgeObjects.count { it.type == KnowledgeObjectType.METHOD }
+        val experimentCount = knowledgeObjects.count { it.type == KnowledgeObjectType.EXPERIMENT }
         val slug = slugFor(thread.title, threadKey)
         val snapshotHistory = DirectionSnapshotHistoryAnalyzer.summarize(
             snapshotsDir = File(rootDir, "wiki/snapshots"),
@@ -123,6 +131,20 @@ class DirectionWikiCoordinator(
             ?: verifiedPoints.firstOrNull()
             ?: directionAssets.firstOrNull()?.summary
             ?: execution.summary.ifBlank { research.outsideAngle }
+        val lintSummary = KnowledgeLayerLintAnalyzer.summarize(
+            stage = execution.stage,
+            notes = notes,
+            grounding = grounding,
+            execution = execution,
+            questionCount = questionCount,
+            methodCount = methodCount,
+            experimentCount = experimentCount,
+        )
+        val knowledgeObjectLine = buildKnowledgeObjectLine(
+            questionCount = questionCount,
+            methodCount = methodCount,
+            experimentCount = experimentCount,
+        )
 
         return DirectionWikiDirectionSummary(
             threadKey = threadKey,
@@ -131,11 +153,14 @@ class DirectionWikiCoordinator(
             stage = execution.stage,
             assetSummary = assetSummary,
             groundingLine = grounding.summary.summaryLine,
+            knowledgeObjectLine = knowledgeObjectLine,
+            healthLine = lintSummary.healthLine,
             signalPoints = signalPoints,
             hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
             validatedPoints = validatedPoints,
             openQuestions = openQuestions,
+            lintIssues = lintSummary.lintIssues,
             continuityLine = continuity.continuityLine,
             trajectoryLine = continuity.trajectoryLine,
             stageHistorySummary = stageHistorySummary,
@@ -157,6 +182,7 @@ class DirectionWikiCoordinator(
         val directionsDir = File(rootDir, "wiki/directions")
         val evidenceDir = File(rootDir, "wiki/evidence")
         val snapshotsDir = File(rootDir, "wiki/snapshots")
+        val lintDir = File(rootDir, "wiki/lint")
         val conceptsDir = File(rootDir, "wiki/concepts")
         val questionsDir = File(rootDir, "wiki/questions")
         val methodsDir = File(rootDir, "wiki/methods")
@@ -195,6 +221,7 @@ class DirectionWikiCoordinator(
             }
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
             File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
+            File(lintDir, "${summary.slug}.md").writeText(buildLintMarkdown(summary))
             File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
             val snapshotHistory = DirectionSnapshotHistoryAnalyzer.summarize(
                 snapshotsDir = snapshotsDir,
@@ -245,6 +272,11 @@ class DirectionWikiCoordinator(
                 KnowledgeObjectType.EXPERIMENT to experimentsDir,
             ),
         )
+        writeLintFiles(
+            generatedAt = generatedAt,
+            summaries = summaries,
+            lintDir = lintDir,
+        )
 
         File(rootDir, "wiki/index.md").writeText(
             buildString {
@@ -260,6 +292,7 @@ class DirectionWikiCoordinator(
                 appendLine("- [问题索引](questions/index.md)")
                 appendLine("- [方法索引](methods/index.md)")
                 appendLine("- [实验索引](experiments/index.md)")
+                appendLine("- [知识健康检查](lint/index.md)")
             },
         )
 
@@ -407,6 +440,28 @@ class DirectionWikiCoordinator(
         }
     }
 
+    private fun writeLintFiles(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+        lintDir: File,
+    ) {
+        File(lintDir, "index.md").writeText(
+            buildString {
+                appendLine("# 知识健康检查")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                if (summaries.isEmpty()) {
+                    appendLine("还没有方向可检查。")
+                } else {
+                    summaries.sortedBy { it.title }.forEach { summary ->
+                        appendLine("- [${summary.title}](${summary.slug}.md) · ${summary.healthLine}")
+                    }
+                }
+            },
+        )
+    }
+
     private fun buildRawNotesMarkdown(
         summary: DirectionWikiDirectionSummary,
         notes: List<NoteEntity>,
@@ -489,6 +544,21 @@ class DirectionWikiCoordinator(
         summary.groundingLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 证据基础")
             appendLine(it)
+            appendLine()
+        }
+        summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 知识对象覆盖")
+            appendLine(it)
+            appendLine()
+        }
+        summary.healthLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 知识健康")
+            appendLine(it)
+            appendLine()
+        }
+        if (summary.lintIssues.isNotEmpty()) {
+            appendLine("## 待补问题")
+            summary.lintIssues.forEach { appendLine("- $it") }
             appendLine()
         }
         summary.continuityLine.takeIf { it.isNotBlank() }?.let {
@@ -605,6 +675,32 @@ class DirectionWikiCoordinator(
         }
     }
 
+    private fun buildLintMarkdown(
+        summary: DirectionWikiDirectionSummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} lint")
+        appendLine()
+        appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        appendLine("- 当前阶段：${summary.stage.label}")
+        appendLine()
+        summary.healthLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前判断")
+            appendLine(it)
+            appendLine()
+        }
+        summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 知识对象覆盖")
+            appendLine(it)
+            appendLine()
+        }
+        if (summary.lintIssues.isNotEmpty()) {
+            appendLine("## 待修补")
+            summary.lintIssues.forEach { appendLine("- $it") }
+        } else {
+            appendLine("当前没有明显的知识健康问题。")
+        }
+    }
+
     private fun buildSnapshotMarkdown(
         summary: DirectionWikiDirectionSummary,
         execution: com.mindflow.app.data.connect.ThreadExecutionSummary,
@@ -664,6 +760,8 @@ class DirectionWikiCoordinator(
                                 .put("stage", summary.stage.name)
                                 .put("assetSummary", summary.assetSummary)
                                 .put("groundingLine", summary.groundingLine)
+                                .put("knowledgeObjectLine", summary.knowledgeObjectLine)
+                                .put("healthLine", summary.healthLine)
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
@@ -674,6 +772,7 @@ class DirectionWikiCoordinator(
                                 .put("hypothesisPoints", JSONArray(summary.hypothesisPoints))
                                 .put("verifiedPoints", JSONArray(summary.verifiedPoints))
                                 .put("validatedPoints", JSONArray(summary.validatedPoints))
+                                .put("lintIssues", JSONArray(summary.lintIssues))
                                 .put("openQuestions", JSONArray(summary.openQuestions)),
                         )
                     }
@@ -704,6 +803,8 @@ class DirectionWikiCoordinator(
                             stage = item.optString("stage").toDirectionStage(),
                             assetSummary = item.optString("assetSummary"),
                             groundingLine = item.optString("groundingLine"),
+                            knowledgeObjectLine = item.optString("knowledgeObjectLine"),
+                            healthLine = item.optString("healthLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
                             snapshotStageLine = item.optString("snapshotStageLine"),
@@ -712,6 +813,7 @@ class DirectionWikiCoordinator(
                             hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
                             verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),
                             validatedPoints = item.optJSONArray("validatedPoints").toStringList(),
+                            lintIssues = item.optJSONArray("lintIssues").toStringList(),
                             openQuestions = item.optJSONArray("openQuestions").toStringList(),
                             stageHistorySummary = item.optString("stageHistorySummary"),
                             updatedAt = item.optLong("updatedAt"),
@@ -738,6 +840,7 @@ class DirectionWikiCoordinator(
             File(rootDir, "wiki/directions"),
             File(rootDir, "wiki/concepts"),
             File(rootDir, "wiki/evidence"),
+            File(rootDir, "wiki/lint"),
             File(rootDir, "wiki/questions"),
             File(rootDir, "wiki/methods"),
             File(rootDir, "wiki/experiments"),
@@ -760,6 +863,12 @@ class DirectionWikiCoordinator(
             """.trimIndent(),
         )
     }
+
+    private fun migrateLegacyRootIfNeeded() {
+        if (rootDir.exists() || !legacyRootDir.exists()) return
+        legacyRootDir.renameTo(rootDir)
+    }
+
     private fun slugFor(title: String, fallback: String): String {
         val base = title
             .lowercase()
@@ -783,6 +892,19 @@ class DirectionWikiCoordinator(
 
     private fun String.toDirectionStage(): DirectionStage =
         runCatching { DirectionStage.valueOf(this) }.getOrDefault(DirectionStage.FORMING)
+
+    private fun buildKnowledgeObjectLine(
+        questionCount: Int,
+        methodCount: Int,
+        experimentCount: Int,
+    ): String {
+        val parts = buildList {
+            if (questionCount > 0) add("${questionCount} 个问题")
+            if (methodCount > 0) add("${methodCount} 个方法")
+            if (experimentCount > 0) add("${experimentCount} 个实验")
+        }
+        return if (parts.isEmpty()) "" else "当前已形成 ${parts.joinToString(" · ")}。"
+    }
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()

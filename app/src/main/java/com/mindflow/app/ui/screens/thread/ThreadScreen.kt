@@ -668,6 +668,8 @@ private fun ThreadScreen(
                         if (
                             uiState.wikiAssetSummary.isNotBlank() ||
                             uiState.wikiGroundingLine.isNotBlank() ||
+                            uiState.wikiKnowledgeObjectLine.isNotBlank() ||
+                            uiState.wikiHealthLine.isNotBlank() ||
                             uiState.wikiSignalPoints.isNotEmpty() ||
                             uiState.wikiHypothesisPoints.isNotEmpty() ||
                             uiState.wikiVerifiedPoints.isNotEmpty() ||
@@ -691,6 +693,16 @@ private fun ThreadScreen(
                                     .takeIf { it.isNotBlank() }
                                     ?.let { grounding ->
                                         InsightLine(label = "证据基础", text = grounding)
+                                    }
+                                uiState.wikiKnowledgeObjectLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { objectLine ->
+                                        InsightLine(label = "知识对象", text = objectLine)
+                                    }
+                                uiState.wikiHealthLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { health ->
+                                        InsightLine(label = "知识健康", text = health)
                                     }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }

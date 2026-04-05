@@ -418,6 +418,28 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiKnowledgeObjectLine
+                .takeIf { it.isNotBlank() }
+                ?.let { objectLine ->
+                    Text(
+                        text = objectLine,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiHealthLine
+                .takeIf { it.isNotBlank() }
+                ?.let { health ->
+                    Text(
+                        text = health,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiValidatedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { validated ->

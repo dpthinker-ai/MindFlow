@@ -181,7 +181,7 @@ sdk.dir=/your/android/sdk
 计划中的结构：
 
 ```text
-direction-wiki/
+knowledge-layer/
   raw/
   wiki/
     index.md
@@ -192,6 +192,7 @@ direction-wiki/
     questions/
     methods/
     experiments/
+    lint/
     snapshots/
   AGENTS.md
 ```
@@ -204,14 +205,15 @@ direction-wiki/
 - App 通过轻量导出物读取 `方向资产 / 已验证结论 / 阶段历史摘要 / 开放问题`
 
 当前第一版包含：
-- 本地 `direction-wiki/` 目录生成
+- 本地 `knowledge-layer/` 目录生成
 - `raw/notes/`、`raw/research/`、`raw/validations/`、`raw/reflections/`、`raw/index.md`
-- `wiki/directions/`、`wiki/evidence/`、`wiki/snapshots/`、`wiki/index.md`、`wiki/log.md`
+- `wiki/directions/`、`wiki/evidence/`、`wiki/snapshots/`、`wiki/lint/`、`wiki/index.md`、`wiki/log.md`
 - `wiki/concepts/` 概念页，由重复出现的方向标签自动聚合生成
 - `wiki/questions/`、`wiki/methods/`、`wiki/experiments/`，由记录内容自动归纳生成
 - 设置里的手动 `更新知识层`
 - App 退到后台时的低频自动刷新
 - `Flow` 和线程页对方向资产、证据基础、开放问题、阶段历史摘要的回流展示
+- `Flow` 和线程页还会轻量回流知识对象覆盖与知识健康线
 - `Flow` 和线程页还会回流知识层的长期快照阶段与快照节奏
 - 提醒也会回流这类长期节奏信息，说明为什么这一步现在值得做
 - 提醒会继续带出方向的最近推进与下次检查，让执行摘要不是一次性建议
@@ -219,7 +221,7 @@ direction-wiki/
 当前还没有完整实现，但这是下一阶段要吸收 `llm-wiki` 精髓去补齐的部分：
 - query 和综合结论要继续 file back 回知识层，而不只是停在 UI 卡片里
 - 知识层要开始维护更稳定的跨对象关系，而不只是按方向导出一轮页面
-- 增加 lint，去找冲突、陈旧、孤立和弱证据点
+- 把 lint 从当前的一轮健康检查推进成更强的冲突、陈旧、孤立和弱证据维护系统
 
 ## AI 主题提取配置
 

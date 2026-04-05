@@ -214,17 +214,18 @@ Planned items:
   - maintain the knowledge layer through background agent workflows instead of foreground mobile requests
   - export lightweight knowledge assets back into the app for Flow / thread / reminder surfaces
 - intended directory shape:
-  - `direction-wiki/raw/`
-  - `direction-wiki/wiki/index.md`
-  - `direction-wiki/wiki/log.md`
-  - `direction-wiki/wiki/directions/`
-  - `direction-wiki/wiki/concepts/`
-  - `direction-wiki/wiki/evidence/`
-  - `direction-wiki/wiki/questions/`
-  - `direction-wiki/wiki/methods/`
-  - `direction-wiki/wiki/experiments/`
-  - `direction-wiki/wiki/snapshots/`
-  - `direction-wiki/AGENTS.md`
+  - `knowledge-layer/raw/`
+  - `knowledge-layer/wiki/index.md`
+  - `knowledge-layer/wiki/log.md`
+  - `knowledge-layer/wiki/directions/`
+  - `knowledge-layer/wiki/concepts/`
+  - `knowledge-layer/wiki/evidence/`
+  - `knowledge-layer/wiki/questions/`
+  - `knowledge-layer/wiki/methods/`
+  - `knowledge-layer/wiki/experiments/`
+  - `knowledge-layer/wiki/lint/`
+  - `knowledge-layer/wiki/snapshots/`
+  - `knowledge-layer/AGENTS.md`
 - intended workflow:
   - ingest notes, research records, validation records, and important reflections into raw markdown
   - update knowledge objects and index/log
@@ -232,7 +233,7 @@ Planned items:
   - file useful query results and AI synthesis back into the knowledge layer
   - export app-friendly summaries back into MindFlow
 - current shape:
-  - local `direction-wiki/` generated under app files
+  - local `knowledge-layer/` generated under app files
   - low-frequency background refresh on app stop
   - manual refresh from settings
   - raw source ingestion for notes, research, validations, reflections, and raw index
@@ -240,6 +241,7 @@ Planned items:
   - evidence stratification reflowed back into Flow and thread surfaces
   - concept pages generated from repeated followed-direction tags
   - question / method / experiment pages generated from classified note content
+  - first lint pass exported into markdown and lightweight app-facing health summaries
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces
 - why this matters:
@@ -271,7 +273,7 @@ Next best order:
 
 Current progress:
 
-- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
+- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, first lint pass, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
 - execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
 - external grounding: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer direction-focused grounding
 - stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines
