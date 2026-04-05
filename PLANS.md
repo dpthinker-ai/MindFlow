@@ -245,6 +245,7 @@ Planned items:
   - question / method / experiment pages generated from classified note content
   - concept pages and knowledge-object pages now maintain lightweight cross-links instead of staying isolated
   - first lint pass exported into markdown and lightweight app-facing health summaries
+  - lint now also exports one actionable `建议先补` maintenance line back into Flow / thread
   - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces

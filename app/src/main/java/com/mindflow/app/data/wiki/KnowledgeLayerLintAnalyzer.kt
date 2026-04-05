@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 
 data class KnowledgeLayerLintSummary(
     val healthLine: String,
+    val maintenanceLine: String,
     val lintIssues: List<String>,
 )
 
@@ -26,6 +27,7 @@ object KnowledgeLayerLintAnalyzer {
         if (notes.isEmpty()) {
             return KnowledgeLayerLintSummary(
                 healthLine = "这条方向还没有形成可维护的知识材料。",
+                maintenanceLine = "先补一条更具体的记录，再开始沉淀问题、方法或实验。",
                 lintIssues = listOf("先补一条更具体的记录，再开始沉淀知识对象。"),
             )
         }
@@ -73,9 +75,28 @@ object KnowledgeLayerLintAnalyzer {
             else ->
                 "当前最该先补证据、方法和下一步，避免方向只停在判断层。"
         }
+        val maintenanceLine = when {
+            hasConflict ->
+                "先补一条新的查证或验证记录，把相反信号拆开，再重写当前结论。"
+            grounding.verifiedItems.isEmpty() && grounding.validatedItems.isEmpty() ->
+                "先补证据：新增一条查证或验证记录，把判断压实。"
+            stage == DirectionStage.FORMING && questionCount == 0 ->
+                "先补问题：把这条方向当前最核心的问题单独写出来。"
+            methodCount == 0 && experimentCount == 0 ->
+                "先补方法或实验：让这条方向开始沉淀可复用做法。"
+            conclusionLine.isNotBlank() && nextShiftLine.isBlank() ->
+                "先补承接动作：给当前结论写一句下一步怎么接。"
+            conclusionLine.isNotBlank() && daysSinceUpdate >= 35L ->
+                "先补新材料：用一条新的查证、验证或反思刷新旧结论。"
+            daysSinceUpdate >= 21L ->
+                "先补一条最近进展，让这条方向重新开始流动。"
+            else ->
+                "继续把当前判断沉淀成更稳的结论，并补一条可复用对象。"
+        }
 
         return KnowledgeLayerLintSummary(
             healthLine = healthLine,
+            maintenanceLine = maintenanceLine,
             lintIssues = issues,
         )
     }

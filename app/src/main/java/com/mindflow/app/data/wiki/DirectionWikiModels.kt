@@ -13,6 +13,7 @@ data class DirectionWikiDirectionSummary(
     val groundingLine: String = "",
     val knowledgeObjectLine: String = "",
     val healthLine: String = "",
+    val maintenanceLine: String = "",
     val signalPoints: List<String> = emptyList(),
     val hypothesisPoints: List<String> = emptyList(),
     val verifiedPoints: List<String> = emptyList(),

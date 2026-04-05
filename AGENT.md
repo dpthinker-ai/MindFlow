@@ -210,6 +210,7 @@ Current status:
 - conclusion pages and conclusion file-back into Flow / thread: first version implemented in the direction-focused first slice
 - review syntheses now file back into the knowledge layer as raw sources, and lint begins checking contradiction / stale-conclusion / weak-handoff issues
 - concept / question / method / experiment pages now start maintaining cross-links instead of staying as isolated slices
+- knowledge-layer lint now also exports one actionable maintenance line so Flow / thread can show what to补 next
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice

@@ -102,6 +102,7 @@ data class FollowedDirectionSummary(
     val wikiSnapshotCadenceLine: String = "",
     val wikiKnowledgeObjectLine: String = "",
     val wikiHealthLine: String = "",
+    val wikiMaintenanceLine: String = "",
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
@@ -270,6 +271,7 @@ class FlowViewModel(
                                     wikiSnapshotCadenceLine = wikiAsset?.snapshotCadenceLine.orEmpty(),
                                     wikiKnowledgeObjectLine = wikiAsset?.knowledgeObjectLine.orEmpty(),
                                     wikiHealthLine = wikiAsset?.healthLine.orEmpty(),
+                                    wikiMaintenanceLine = wikiAsset?.maintenanceLine.orEmpty(),
                                     source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
                                         DailyBriefSource.AI
                                     } else {

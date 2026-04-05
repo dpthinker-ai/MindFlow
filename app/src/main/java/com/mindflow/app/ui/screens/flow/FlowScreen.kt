@@ -463,6 +463,17 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiMaintenanceLine
+                .takeIf { it.isNotBlank() }
+                ?.let { maintenance ->
+                    Text(
+                        text = "建议先补：$maintenance",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiValidatedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { validated ->

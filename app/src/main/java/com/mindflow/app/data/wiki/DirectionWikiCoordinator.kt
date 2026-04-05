@@ -170,6 +170,7 @@ class DirectionWikiCoordinator(
             groundingLine = grounding.summary.summaryLine,
             knowledgeObjectLine = knowledgeObjectLine,
             healthLine = lintSummary.healthLine,
+            maintenanceLine = lintSummary.maintenanceLine,
             signalPoints = signalPoints,
             hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
@@ -533,6 +534,9 @@ class DirectionWikiCoordinator(
                 } else {
                     summaries.sortedBy { it.title }.forEach { summary ->
                         appendLine("- [${summary.title}](${summary.slug}.md) · ${summary.healthLine}")
+                        summary.maintenanceLine.takeIf { it.isNotBlank() }?.let { maintenance ->
+                            appendLine("  - 建议先补：$maintenance")
+                        }
                     }
                 }
             },
@@ -902,6 +906,11 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.maintenanceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 建议先补")
+            appendLine(it)
+            appendLine()
+        }
         summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 知识对象覆盖")
             appendLine(it)
@@ -978,6 +987,7 @@ class DirectionWikiCoordinator(
                                 .put("groundingLine", summary.groundingLine)
                                 .put("knowledgeObjectLine", summary.knowledgeObjectLine)
                                 .put("healthLine", summary.healthLine)
+                                .put("maintenanceLine", summary.maintenanceLine)
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
@@ -1023,6 +1033,7 @@ class DirectionWikiCoordinator(
                             groundingLine = item.optString("groundingLine"),
                             knowledgeObjectLine = item.optString("knowledgeObjectLine"),
                             healthLine = item.optString("healthLine"),
+                            maintenanceLine = item.optString("maintenanceLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
                             snapshotStageLine = item.optString("snapshotStageLine"),

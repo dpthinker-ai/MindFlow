@@ -672,6 +672,7 @@ private fun ThreadScreen(
                             uiState.wikiGroundingLine.isNotBlank() ||
                             uiState.wikiKnowledgeObjectLine.isNotBlank() ||
                             uiState.wikiHealthLine.isNotBlank() ||
+                            uiState.wikiMaintenanceLine.isNotBlank() ||
                             uiState.wikiSignalPoints.isNotEmpty() ||
                             uiState.wikiHypothesisPoints.isNotEmpty() ||
                             uiState.wikiVerifiedPoints.isNotEmpty() ||
@@ -715,6 +716,11 @@ private fun ThreadScreen(
                                     .takeIf { it.isNotBlank() }
                                     ?.let { health ->
                                         InsightLine(label = "知识健康", text = health)
+                                    }
+                                uiState.wikiMaintenanceLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { maintenance ->
+                                        InsightLine(label = "建议先补", text = maintenance)
                                     }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
