@@ -211,6 +211,7 @@ knowledge-layer/
 - `wiki/directions/`、`wiki/evidence/`、`wiki/snapshots/`、`wiki/lint/`、`wiki/index.md`、`wiki/log.md`
 - `wiki/concepts/` 概念页，由重复出现的方向标签自动聚合生成
 - `wiki/questions/`、`wiki/methods/`、`wiki/experiments/`，由记录内容自动归纳生成
+- 概念页与问题 / 方法 / 实验页之间会开始互相链接，知识对象不再各自孤立
 - 设置里的手动 `更新知识层`
 - App 退到后台时的低频自动刷新
 - `Flow` 和线程页对方向资产、证据基础、开放问题、阶段历史摘要的回流展示

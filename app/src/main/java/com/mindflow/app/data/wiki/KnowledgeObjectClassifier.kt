@@ -22,6 +22,8 @@ data class KnowledgeObjectCandidate(
     val noteId: Long,
     val updatedAt: Long,
     val threadTitle: String,
+    val relatedConcepts: List<String> = emptyList(),
+    val evidenceType: ResearchEvidenceType,
 )
 
 object KnowledgeObjectClassifier {
@@ -82,6 +84,11 @@ object KnowledgeObjectClassifier {
         noteId = note.id,
         updatedAt = note.updatedAt,
         threadTitle = threadTitle,
+        relatedConcepts = note.tags
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct(),
+        evidenceType = ResearchEvidenceAnalyzer.classify(note),
     )
 
     private fun isQuestion(content: String): Boolean =

@@ -289,6 +289,7 @@ class DirectionWikiCoordinator(
             summaries = summaries,
             allNotes = allNotes,
             conceptsDir = conceptsDir,
+            candidates = objectCandidates,
         )
         writeKnowledgeObjectFiles(
             generatedAt = generatedAt,
@@ -345,6 +346,7 @@ class DirectionWikiCoordinator(
         summaries: List<DirectionWikiDirectionSummary>,
         allNotes: List<NoteEntity>,
         conceptsDir: File,
+        candidates: List<KnowledgeObjectCandidate>,
     ) {
         val conceptBuckets = buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
             summaries.forEach { summary ->
@@ -392,6 +394,9 @@ class DirectionWikiCoordinator(
                 .distinctBy { it.second.id }
                 .sortedByDescending { it.second.updatedAt }
                 .take(6)
+            val relatedObjects = candidates
+                .filter { candidate -> tag in candidate.relatedConcepts }
+                .groupBy { it.type }
             File(conceptsDir, "$slug.md").writeText(
                 buildString {
                     appendLine("# $tag")
@@ -410,6 +415,24 @@ class DirectionWikiCoordinator(
                         val summary = NoteInsightSummaryExtractor.extract(note)
                         appendLine("- ${note.topic.ifBlank { "未命名记录" }}")
                         appendLine("  - ${summary.ifBlank { note.content.trim().take(72) }}")
+                    }
+                    if (relatedObjects.isNotEmpty()) {
+                        appendLine()
+                        appendLine("## 相关知识对象")
+                        KnowledgeObjectType.entries.forEach { type ->
+                            val items = relatedObjects[type].orEmpty()
+                                .distinctBy { it.title }
+                                .sortedByDescending { it.updatedAt }
+                                .take(5)
+                            if (items.isNotEmpty()) {
+                                appendLine("### ${type.displayName}")
+                                items.forEach { item ->
+                                    val objectSlug = slugFor(item.title, "${item.type.folderName}-${item.noteId}")
+                                    appendLine("- [${item.title}](../${type.folderName}/$objectSlug.md) · ${item.summary}")
+                                }
+                                appendLine()
+                            }
+                        }
                     }
                 },
             )
@@ -452,6 +475,16 @@ class DirectionWikiCoordinator(
                 },
             )
             items.forEach { (slug, first, bucket) ->
+                val relatedConcepts = bucket
+                    .flatMap { it.relatedConcepts }
+                    .distinct()
+                    .sorted()
+                val evidenceLine = bucket
+                    .groupingBy { it.evidenceType }
+                    .eachCount()
+                    .entries
+                    .sortedByDescending { it.value }
+                    .joinToString(" · ") { (type, count) -> "${type.label} ${count}" }
                 File(directory, "$slug.md").writeText(
                     buildString {
                         appendLine("# ${first.title}")
@@ -459,10 +492,21 @@ class DirectionWikiCoordinator(
                         appendLine("- 类型：${type.displayName}")
                         appendLine("- 最近更新：${displayTime(first.updatedAt)}")
                         appendLine("- 相关方向：${bucket.map { it.threadTitle }.distinct().joinToString("、")}")
+                        evidenceLine.takeIf { it.isNotBlank() }?.let {
+                            appendLine("- 证据姿态：$it")
+                        }
                         appendLine()
                         appendLine("## 当前提炼")
                         appendLine(first.summary)
                         appendLine()
+                        if (relatedConcepts.isNotEmpty()) {
+                            appendLine("## 相关概念")
+                            relatedConcepts.forEach { concept ->
+                                val conceptSlug = slugFor(concept, concept)
+                                appendLine("- [$concept](../concepts/$conceptSlug.md)")
+                            }
+                            appendLine()
+                        }
                         appendLine("## 来源记录")
                         bucket.take(8).forEach { item ->
                             appendLine("- [${item.threadTitle}](../directions/${slugFor(item.threadTitle, item.threadTitle)}.md) · ${item.summary}")
@@ -615,6 +659,11 @@ class DirectionWikiCoordinator(
         appendLine()
         appendLine("- 当前阶段：${summary.stage.label}")
         appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        appendLine()
+        appendLine("## 知识层页面")
+        appendLine("- [结论](../conclusions/${summary.slug}.md)")
+        appendLine("- [证据](../evidence/${summary.slug}.md)")
+        appendLine("- [健康检查](../lint/${summary.slug}.md)")
         appendLine()
         appendLine("## 当前判断")
         appendLine(summary.assetSummary.ifBlank { execution.summary.ifBlank { "这条方向还在继续形成。" } })

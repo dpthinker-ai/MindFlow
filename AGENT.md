@@ -209,6 +209,7 @@ Current status:
 - first knowledge-health lint summaries and app-facing health lines: implemented in the direction-focused first slice
 - conclusion pages and conclusion file-back into Flow / thread: first version implemented in the direction-focused first slice
 - review syntheses now file back into the knowledge layer as raw sources, and lint begins checking contradiction / stale-conclusion / weak-handoff issues
+- concept / question / method / experiment pages now start maintaining cross-links instead of staying as isolated slices
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
