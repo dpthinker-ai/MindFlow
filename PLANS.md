@@ -258,6 +258,7 @@ Planned items:
   - lint now starts checking contradiction, stale conclusions, weak evidence, and missing handoff
   - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
   - durable snapshot-backed stage history reflowed back into Flow and thread surfaces
+  - Flow / thread knowledge maintenance guidance can now generate seeded `补材料` captures, so users can act on the suggested page/object/source instead of only reading the diagnosis
 - why this matters:
   - stronger external research grounding beyond one-shot model output
   - longer-lived knowledge persistence, not only thread-local reasoning

@@ -50,6 +50,8 @@ import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
 import com.mindflow.app.ui.navigation.CaptureSeed
+import com.mindflow.app.ui.navigation.KnowledgeMaintenanceSeedContext
+import com.mindflow.app.ui.navigation.buildKnowledgeMaintenanceCaptureSeed
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
 import com.mindflow.app.ui.components.GridTwo
@@ -341,6 +343,9 @@ fun ThreadRoute(
                 ),
             )
         },
+        onCaptureMaintenanceNote = {
+            onCreateThreadNote(uiState.toMaintenanceCaptureSeed())
+        },
         onCaptureWeeklyReviewNote = {
             val topic = "${uiState.title.removePrefix("#").trim()} · 本周推进"
             val seedContent = buildString {
@@ -449,6 +454,7 @@ private fun ThreadScreen(
     onCaptureResearchActionNote: () -> Unit,
     onCaptureTopValidationLoopNote: () -> Unit,
     onCaptureResearchClusterNote: () -> Unit,
+    onCaptureMaintenanceNote: () -> Unit,
     onCaptureWeeklyReviewNote: () -> Unit,
     onCaptureInsightNote: () -> Unit,
     onArchiveNote: (Long) -> Unit,
@@ -742,6 +748,12 @@ private fun ThreadScreen(
                                     ?.let { focus ->
                                         InsightLine(label = "优先对象", text = focus)
                                     }
+                                if (uiState.wikiMaintenanceLine.isNotBlank()) {
+                                    GhostActionButton(
+                                        text = "补材料",
+                                        onClick = onCaptureMaintenanceNote,
+                                    )
+                                }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
                                     ?.let { validated ->
@@ -1240,3 +1252,24 @@ private fun threadInsightSourceText(label: String): String = when (label) {
 
 private fun researchSourceText(source: com.mindflow.app.data.brief.DailyBriefSource): String =
     if (source == com.mindflow.app.data.brief.DailyBriefSource.AI) "AI 外部视角" else "规则整理"
+
+private fun ThreadUiState.toMaintenanceCaptureSeed(): CaptureSeed =
+    buildKnowledgeMaintenanceCaptureSeed(
+        KnowledgeMaintenanceSeedContext(
+            title = title,
+            threadKey = threadKey,
+            stageLabel = stage.label,
+            horizonLabel = dominantHorizon.label,
+            whyNow = executionWhyNow,
+            nextStep = threadNextStep,
+            validationStep = validationStep,
+            conclusionLine = wikiConclusionLine,
+            nextShiftLine = wikiNextShiftLine,
+            groundingLine = wikiGroundingLine,
+            maintenanceLine = wikiMaintenanceLine,
+            maintenanceTargetLine = wikiMaintenanceTargetLine,
+            maintenanceSourceLine = wikiMaintenanceSourceLine,
+            maintenanceDimensionLine = wikiMaintenanceDimensionLine,
+            maintenanceFocusLine = wikiMaintenanceFocusLine,
+        ),
+    )

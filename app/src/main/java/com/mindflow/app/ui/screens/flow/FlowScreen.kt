@@ -55,6 +55,8 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
+import com.mindflow.app.ui.navigation.KnowledgeMaintenanceSeedContext
+import com.mindflow.app.ui.navigation.buildKnowledgeMaintenanceCaptureSeed
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
@@ -706,6 +708,12 @@ private fun FollowedDirectionRow(
                         onClick = { onCreateCapture(summary.toResearchCaptureSeed()) },
                         modifier = Modifier.weight(1f),
                     )
+                } else if (summary.wikiMaintenanceLine.isNotBlank()) {
+                    GhostActionButton(
+                        text = "补材料",
+                        onClick = { onCreateCapture(summary.toMaintenanceCaptureSeed()) },
+                        modifier = Modifier.weight(1f),
+                    )
                 } else if (summary.assetNoteId != null) {
                     GhostActionButton(
                         text = "看沉淀",
@@ -776,6 +784,27 @@ private fun FollowedDirectionSummary.toResearchCaptureSeed(): CaptureSeed {
         initialTags = initialTags,
     )
 }
+
+private fun FollowedDirectionSummary.toMaintenanceCaptureSeed(): CaptureSeed =
+    buildKnowledgeMaintenanceCaptureSeed(
+        KnowledgeMaintenanceSeedContext(
+            title = thread.title,
+            threadKey = thread.key,
+            stageLabel = stage.label,
+            horizonLabel = dominantHorizon.label,
+            whyNow = whyNow,
+            nextStep = nextStep,
+            validationStep = validationStep,
+            conclusionLine = wikiConclusionLine,
+            nextShiftLine = wikiNextShiftLine,
+            groundingLine = wikiGroundingLine,
+            maintenanceLine = wikiMaintenanceLine,
+            maintenanceTargetLine = wikiMaintenanceTargetLine,
+            maintenanceSourceLine = wikiMaintenanceSourceLine,
+            maintenanceDimensionLine = wikiMaintenanceDimensionLine,
+            maintenanceFocusLine = wikiMaintenanceFocusLine,
+        ),
+    )
 
 @Composable
 private fun ThreadRow(
