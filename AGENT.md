@@ -106,8 +106,38 @@ Notes:
 
 - Keep local database as the runtime source of truth.
 - Markdown remains the readable interchange format for export, import, and cloud backup.
+- A future `Direction Wiki` should become the long-term knowledge asset layer:
+  - the app database stays the runtime source of truth for mobile interactions
+  - the wiki stores persistent direction pages, research evidence, verified conclusions, and stage snapshots
+  - the wiki should be maintained by background agent workflows, not by foreground mobile UI logic
 - New automation should be low-frequency and battery-aware.
 - Release builds matter more than debug-only polish.
+
+## Direction Wiki Layer
+
+MindFlow should not become a heavy Obsidian clone.
+
+The intended long-term split is:
+
+- MindFlow App
+  - fast capture
+  - daily focus
+  - direction follow-up
+  - reminders and lightweight execution
+- Direction Wiki
+  - long-lived markdown knowledge base for followed directions
+  - external research accumulation
+  - evidence stratification
+  - verified conclusions
+  - stage snapshots and durable direction assets
+
+Direction Wiki principles:
+
+- raw sources are append-only and never silently rewritten
+- the wiki is a compounding artifact maintained by agents
+- app-facing summaries must be exported back into MindFlow in a lightweight structured form
+- the wiki is for followed directions, not for every casual note
+- if the wiki is unavailable, the app must continue working with local summaries and planners
 
 ## Near-Term Direction
 
@@ -176,3 +206,4 @@ Current status:
 Next strongest direction:
 
 - stronger external research grounding and direction-stage persistence beyond immediate next steps
+- `Direction Wiki` integration as the long-term markdown asset layer for followed directions

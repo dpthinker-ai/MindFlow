@@ -204,6 +204,33 @@ Planned items:
 3. Structured collections
 - curated sets for work, product, health, education, and life
 
+4. Direction Wiki integration
+- status: planned
+- target shape:
+  - keep MindFlow database as runtime truth
+  - add a separate markdown `Direction Wiki` for followed directions
+  - store raw direction inputs, wiki pages, evidence pages, and stage snapshots
+  - maintain the wiki through background agent workflows instead of foreground mobile requests
+  - export lightweight direction assets back into the app for Flow / thread / reminder surfaces
+- intended directory shape:
+  - `direction-wiki/raw/`
+  - `direction-wiki/wiki/index.md`
+  - `direction-wiki/wiki/log.md`
+  - `direction-wiki/wiki/directions/`
+  - `direction-wiki/wiki/concepts/`
+  - `direction-wiki/wiki/evidence/`
+  - `direction-wiki/wiki/snapshots/`
+  - `direction-wiki/AGENTS.md`
+- intended workflow:
+  - ingest followed-direction notes and research into raw markdown
+  - update wiki pages and index/log
+  - lint the wiki for contradictions, stale claims, and missing links
+  - export app-friendly direction summaries back into MindFlow
+- why this matters:
+  - stronger external research grounding beyond one-shot model output
+  - longer-lived direction-stage persistence
+  - durable direction assets, not only transient AI hints
+
 ## P4: MindFlow x FitEver
 
 Goal:
@@ -222,15 +249,17 @@ Planned items:
 
 Next best order:
 
-1. stronger external research grounding beyond model-only perspective
-2. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
-3. direction-level execution summaries that feel continuous, not episodic
+1. `Direction Wiki` integration for followed directions
+2. stronger external research grounding beyond model-only perspective
+3. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
+4. direction-level execution summaries that feel continuous, not episodic
 
 Current progress:
 
-- 1: first version implemented with shared external research snapshots and AI 外部视角 surfaces
-- 2: first version implemented with short / medium / long horizons and direction-stage rhythm
-- 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
+- direction wiki integration: not implemented yet; architecture and boundaries defined
+- 2: first version implemented with shared external research snapshots and AI 外部视角 surfaces
+- 3: first version implemented with short / medium / long horizons and direction-stage rhythm
+- 4: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces
