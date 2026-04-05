@@ -8,6 +8,8 @@ data class DirectionWikiDirectionSummary(
     val title: String,
     val stage: DirectionStage = DirectionStage.FORMING,
     val assetSummary: String = "",
+    val conclusionLine: String = "",
+    val nextShiftLine: String = "",
     val groundingLine: String = "",
     val knowledgeObjectLine: String = "",
     val healthLine: String = "",

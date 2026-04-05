@@ -18,6 +18,7 @@ import com.mindflow.app.data.connect.ResearchEvidenceSummary
 import com.mindflow.app.data.connect.ResearchCluster
 import com.mindflow.app.data.connect.ThreadResearchAnalyzer
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.connect.ThreadWeeklyReviewAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.NoteHorizon
@@ -36,10 +37,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.DayOfWeek
 
 data class ThreadUiState(
     val threadKey: String,
@@ -61,6 +58,8 @@ data class ThreadUiState(
     val stageHistory: List<DirectionStageHistoryEntry> = emptyList(),
     val directionAssets: List<DirectionAsset> = emptyList(),
     val wikiAssetSummary: String = "",
+    val wikiConclusionLine: String = "",
+    val wikiNextShiftLine: String = "",
     val wikiGroundingLine: String = "",
     val wikiSignalPoints: List<String> = emptyList(),
     val wikiHypothesisPoints: List<String> = emptyList(),
@@ -161,7 +160,7 @@ class ThreadViewModel(
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
         val directionAssets = DirectionAssetAnalyzer.build(notes)
         val focusNote = pickFocusNote(notes)
-        val weeklyReview = buildThreadWeeklyReview(notes)
+        val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
         val wikiDirection = wikiSnapshot.directions[threadKey]
         ThreadUiState(
             threadKey = threadKey,
@@ -183,6 +182,8 @@ class ThreadViewModel(
             stageHistory = stageHistory,
             directionAssets = directionAssets,
             wikiAssetSummary = wikiDirection?.assetSummary.orEmpty(),
+            wikiConclusionLine = wikiDirection?.conclusionLine.orEmpty(),
+            wikiNextShiftLine = wikiDirection?.nextShiftLine.orEmpty(),
             wikiGroundingLine = wikiDirection?.groundingLine.orEmpty(),
             wikiSignalPoints = wikiDirection?.signalPoints.orEmpty(),
             wikiHypothesisPoints = wikiDirection?.hypothesisPoints.orEmpty(),
@@ -319,43 +320,6 @@ class ThreadViewModel(
         )
     }
 
-    private fun buildThreadWeeklyReview(notes: List<NoteEntity>): ThreadWeeklyReview {
-        val weeklyNotes = notes.currentWeekNotes()
-        if (weeklyNotes.isEmpty()) {
-            return ThreadWeeklyReview(
-                statsLine = "这周还没有新的推进",
-                lines = listOf("先补一条真实记录，让这个方向重新开始流动起来。"),
-            )
-        }
-        val latest = weeklyNotes.maxByOrNull { it.updatedAt }
-        val repeatedTag = weeklyNotes
-            .flatMap { it.tags.distinct() }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
-        val lines = buildList {
-            if (repeatedTag != null) {
-                add("这周主线主要围绕「$repeatedTag」，可以继续把它压成更明确的问题定义。")
-            } else {
-                add("这周这个方向还在继续聚焦，别再往外摊更多分支。")
-            }
-            latest?.let {
-                add("下周先接着推进「${it.topic.ifBlank { "未命名记录" }}」，别让最近这条又沉下去。")
-            }
-        }.take(2)
-        return ThreadWeeklyReview(
-            statsLine = buildList {
-                add("本周 ${weeklyNotes.size} 条")
-                val progressCount = weeklyNotes.count { it.status == NoteStatus.IN_PROGRESS }
-                val doneCount = weeklyNotes.count { it.status == NoteStatus.DONE }
-                if (progressCount > 0) add("推进 ${progressCount} 条")
-                if (doneCount > 0) add("完成 ${doneCount} 条")
-            }.joinToString(" · "),
-            lines = lines,
-        )
-    }
-
     private fun buildSignature(notes: List<NoteEntity>): String =
         "${notes.size}:${notes.maxOfOrNull { it.updatedAt } ?: 0L}"
 
@@ -377,16 +341,6 @@ class ThreadViewModel(
             NoteStatus.DONE -> "这条记录已经做成了，可以把它当作下一轮延展的起点。"
             null -> ""
         }
-
-    private fun List<NoteEntity>.currentWeekNotes(): List<NoteEntity> {
-        val zoneId = ZoneId.systemDefault()
-        val today = LocalDate.now(zoneId)
-        val weekStart = today.with(DayOfWeek.MONDAY)
-        return filter { note ->
-            val noteDate = Instant.ofEpochMilli(note.updatedAt).atZone(zoneId).toLocalDate()
-            !noteDate.isBefore(weekStart)
-        }
-    }
 
     companion object {
         fun factory(
@@ -410,8 +364,4 @@ class ThreadViewModel(
         }
     }
 
-    private data class ThreadWeeklyReview(
-        val statsLine: String,
-        val lines: List<String>,
-    )
 }

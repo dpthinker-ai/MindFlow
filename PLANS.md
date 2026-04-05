@@ -238,6 +238,8 @@ Planned items:
   - manual refresh from settings
   - raw source ingestion for notes, research, validations, reflections, and raw index
   - direction assets reflowed back into Flow and thread surfaces
+  - conclusion pages generated under `wiki/conclusions/`
+  - conclusion file-back reflowed into `Flow / 线程` as `当前结论 / 下一步承接`
   - evidence stratification reflowed back into Flow and thread surfaces
   - concept pages generated from repeated followed-direction tags
   - question / method / experiment pages generated from classified note content
@@ -268,12 +270,12 @@ Planned items:
 Next best order:
 
 1. stronger external research grounding beyond the current local knowledge-layer exports
-2. broaden the knowledge layer beyond direction-only slices into concepts / questions / methods / experiments
+2. broader knowledge maintenance passes that keep filing conclusions and synthesis back into the knowledge layer
 3. more durable stage persistence and knowledge maintenance beyond the current local snapshot cadence
 
 Current progress:
 
-- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, first lint pass, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
+- knowledge layer integration: first direction-focused slice implemented with local wiki generation, raw source ingestion, knowledge-object pages, first lint pass, conclusion pages, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, concept pages, and snapshot-backed stage history
 - execution continuity: first version implemented with continuous execution-loop summaries across Flow / thread / reminders, including recent progress and next check-in
 - external grounding: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer direction-focused grounding
 - stage persistence: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, continuity-aware reminder context, and durable snapshot-backed stage lines

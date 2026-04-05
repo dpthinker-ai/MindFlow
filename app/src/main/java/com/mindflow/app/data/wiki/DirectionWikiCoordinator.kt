@@ -12,6 +12,7 @@ import com.mindflow.app.data.connect.ResearchGroundingSnapshot
 import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
 import com.mindflow.app.data.connect.ResearchEvidenceType
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.connect.ThreadWeeklyReviewAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
@@ -98,6 +99,7 @@ class DirectionWikiCoordinator(
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
         val continuity = DirectionContinuityAnalyzer.summarize(notes)
         val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
+        val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
         val knowledgeObjects = notes.flatMap { note -> KnowledgeObjectClassifier.classify(note, thread.title) }
         val questionCount = knowledgeObjects.count { it.type == KnowledgeObjectType.QUESTION }
         val methodCount = knowledgeObjects.count { it.type == KnowledgeObjectType.METHOD }
@@ -131,6 +133,15 @@ class DirectionWikiCoordinator(
             ?: verifiedPoints.firstOrNull()
             ?: directionAssets.firstOrNull()?.summary
             ?: execution.summary.ifBlank { research.outsideAngle }
+        val conclusionLine = buildConclusionLine(
+            assetSummary = assetSummary,
+            weeklyMainLine = weeklyReview.mainLine,
+            validatedPoint = validatedPoints.firstOrNull().orEmpty(),
+            verifiedPoint = verifiedPoints.firstOrNull().orEmpty(),
+        )
+        val nextShiftLine = execution.postValidationAction
+            .ifBlank { execution.nextStep }
+            .ifBlank { weeklyReview.lines.getOrNull(1).orEmpty() }
         val lintSummary = KnowledgeLayerLintAnalyzer.summarize(
             stage = execution.stage,
             notes = notes,
@@ -152,6 +163,8 @@ class DirectionWikiCoordinator(
             title = thread.title,
             stage = execution.stage,
             assetSummary = assetSummary,
+            conclusionLine = conclusionLine,
+            nextShiftLine = nextShiftLine,
             groundingLine = grounding.summary.summaryLine,
             knowledgeObjectLine = knowledgeObjectLine,
             healthLine = lintSummary.healthLine,
@@ -180,6 +193,7 @@ class DirectionWikiCoordinator(
         val rawValidationDir = File(rootDir, "raw/validations")
         val rawReflectionDir = File(rootDir, "raw/reflections")
         val directionsDir = File(rootDir, "wiki/directions")
+        val conclusionsDir = File(rootDir, "wiki/conclusions")
         val evidenceDir = File(rootDir, "wiki/evidence")
         val snapshotsDir = File(rootDir, "wiki/snapshots")
         val lintDir = File(rootDir, "wiki/lint")
@@ -208,6 +222,7 @@ class DirectionWikiCoordinator(
             val execution = threadExecutionPlanner.summarize(summary.threadKey, notes)
             val research = externalResearchPlanner.summarize(summary.threadKey, notes)
             val grounding = ResearchEvidenceAnalyzer.buildGrounding(researchNotes)
+            val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
 
             File(rawNotesDir, "${summary.slug}-$timestamp.md").writeText(buildRawNotesMarkdown(summary, notes))
             if (researchNotes.isNotEmpty()) {
@@ -220,6 +235,7 @@ class DirectionWikiCoordinator(
                 File(rawReflectionDir, "${summary.slug}-$timestamp.md").writeText(buildRawReflectionMarkdown(summary, reflectionNotes))
             }
             File(directionsDir, "${summary.slug}.md").writeText(buildDirectionMarkdown(summary, execution, research))
+            File(conclusionsDir, "${summary.slug}.md").writeText(buildConclusionMarkdown(summary, weeklyReview))
             File(evidenceDir, "${summary.slug}.md").writeText(buildEvidenceMarkdown(summary, grounding))
             File(lintDir, "${summary.slug}.md").writeText(buildLintMarkdown(summary))
             File(snapshotsDir, "${summary.slug}-$timestamp.md").writeText(buildSnapshotMarkdown(summary, execution))
@@ -277,6 +293,11 @@ class DirectionWikiCoordinator(
             summaries = summaries,
             lintDir = lintDir,
         )
+        writeConclusionIndex(
+            generatedAt = generatedAt,
+            summaries = summaries,
+            conclusionsDir = conclusionsDir,
+        )
 
         File(rootDir, "wiki/index.md").writeText(
             buildString {
@@ -288,6 +309,7 @@ class DirectionWikiCoordinator(
                     appendLine("- [${summary.title}](directions/${summary.slug}.md) · ${summary.stage.label}")
                 }
                 appendLine()
+                appendLine("- [结论索引](conclusions/index.md)")
                 appendLine("- [概念索引](concepts/index.md)")
                 appendLine("- [问题索引](questions/index.md)")
                 appendLine("- [方法索引](methods/index.md)")
@@ -541,6 +563,16 @@ class DirectionWikiCoordinator(
         appendLine("## 当前判断")
         appendLine(summary.assetSummary.ifBlank { execution.summary.ifBlank { "这条方向还在继续形成。" } })
         appendLine()
+        summary.conclusionLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 当前结论")
+            appendLine(it)
+            appendLine()
+        }
+        summary.nextShiftLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 下一步承接")
+            appendLine(it)
+            appendLine()
+        }
         summary.groundingLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 证据基础")
             appendLine(it)
@@ -675,6 +707,83 @@ class DirectionWikiCoordinator(
         }
     }
 
+    private fun writeConclusionIndex(
+        generatedAt: Long,
+        summaries: List<DirectionWikiDirectionSummary>,
+        conclusionsDir: File,
+    ) {
+        File(conclusionsDir, "index.md").writeText(
+            buildString {
+                appendLine("# 方向结论")
+                appendLine()
+                appendLine("更新时间：${displayTime(generatedAt)}")
+                appendLine()
+                if (summaries.isEmpty()) {
+                    appendLine("还没有可复用的方向结论。")
+                } else {
+                    summaries.sortedBy { it.title }.forEach { summary ->
+                        appendLine("- [${summary.title}](${summary.slug}.md) · ${summary.conclusionLine.ifBlank { summary.assetSummary.ifBlank { summary.stage.label } }}")
+                    }
+                }
+            },
+        )
+    }
+
+    private fun buildConclusionMarkdown(
+        summary: DirectionWikiDirectionSummary,
+        weeklyReview: com.mindflow.app.data.connect.ThreadWeeklyReviewSummary,
+    ): String = buildString {
+        appendLine("# ${summary.title} conclusions")
+        appendLine()
+        appendLine("- 当前阶段：${summary.stage.label}")
+        appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
+        appendLine()
+        appendLine("## 当前结论")
+        appendLine(summary.conclusionLine.ifBlank { summary.assetSummary.ifBlank { "这条方向还在继续形成更稳定的判断。" } })
+        appendLine()
+        summary.nextShiftLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 下一步承接")
+            appendLine(it)
+            appendLine()
+        }
+        summary.validatedPoints.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                appendLine("## 已验证结果")
+                appendLine("- $it")
+                appendLine()
+            }
+        summary.verifiedPoints.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                appendLine("## 已查证")
+                appendLine("- $it")
+                appendLine()
+            }
+        summary.openQuestions.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                appendLine("## 开放问题")
+                appendLine("- $it")
+                appendLine()
+            }
+        weeklyReview.mainLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 本周判断")
+            appendLine(it)
+            appendLine()
+        }
+        summary.snapshotStageLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 长期阶段")
+            appendLine(it)
+            appendLine()
+        }
+        summary.snapshotCadenceLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 快照节奏")
+            appendLine(it)
+            appendLine()
+        }
+    }
+
     private fun buildLintMarkdown(
         summary: DirectionWikiDirectionSummary,
     ): String = buildString {
@@ -759,6 +868,8 @@ class DirectionWikiCoordinator(
                                 .put("title", summary.title)
                                 .put("stage", summary.stage.name)
                                 .put("assetSummary", summary.assetSummary)
+                                .put("conclusionLine", summary.conclusionLine)
+                                .put("nextShiftLine", summary.nextShiftLine)
                                 .put("groundingLine", summary.groundingLine)
                                 .put("knowledgeObjectLine", summary.knowledgeObjectLine)
                                 .put("healthLine", summary.healthLine)
@@ -802,6 +913,8 @@ class DirectionWikiCoordinator(
                             title = item.optString("title"),
                             stage = item.optString("stage").toDirectionStage(),
                             assetSummary = item.optString("assetSummary"),
+                            conclusionLine = item.optString("conclusionLine"),
+                            nextShiftLine = item.optString("nextShiftLine"),
                             groundingLine = item.optString("groundingLine"),
                             knowledgeObjectLine = item.optString("knowledgeObjectLine"),
                             healthLine = item.optString("healthLine"),
@@ -839,6 +952,7 @@ class DirectionWikiCoordinator(
             File(rootDir, "raw/reflections"),
             File(rootDir, "wiki/directions"),
             File(rootDir, "wiki/concepts"),
+            File(rootDir, "wiki/conclusions"),
             File(rootDir, "wiki/evidence"),
             File(rootDir, "wiki/lint"),
             File(rootDir, "wiki/questions"),
@@ -905,6 +1019,17 @@ class DirectionWikiCoordinator(
         }
         return if (parts.isEmpty()) "" else "当前已形成 ${parts.joinToString(" · ")}。"
     }
+
+    private fun buildConclusionLine(
+        assetSummary: String,
+        weeklyMainLine: String,
+        validatedPoint: String,
+        verifiedPoint: String,
+    ): String =
+        validatedPoint
+            .ifBlank { verifiedPoint }
+            .ifBlank { assetSummary }
+            .ifBlank { weeklyMainLine }
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()

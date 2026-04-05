@@ -207,6 +207,7 @@ Current status:
 - local Knowledge Layer generation, raw-source ingest, and app-facing asset reflow: first version implemented as a direction-focused first slice
 - richer knowledge grounding with evidence stratification, concept pages, and question / method / experiment pages: first version implemented in the direction-focused first slice
 - first knowledge-health lint summaries and app-facing health lines: implemented in the direction-focused first slice
+- conclusion pages and conclusion file-back into Flow / thread: first version implemented in the direction-focused first slice
 - longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
@@ -214,4 +215,4 @@ Current status:
 Next strongest direction:
 
 - stronger external research grounding beyond the current local knowledge-layer exports
-- broaden the knowledge layer beyond direction-only slices into concepts / questions / methods / experiments
+- broader maintain + file-back passes that keep writing useful syntheses back into the knowledge layer

@@ -396,8 +396,31 @@ private fun FollowedDirectionRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            summary.wikiConclusionLine
+                .takeIf { it.isNotBlank() }
+                ?.let { conclusion ->
+                    Text(
+                        text = "已沉淀结论：$conclusion",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiNextShiftLine
+                .takeIf { it.isNotBlank() }
+                ?.let { nextShift ->
+                    Text(
+                        text = "下一步承接：$nextShift",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.assetSummary
                 .takeIf { it.isNotBlank() }
+                ?.takeUnless { it == summary.wikiConclusionLine }
                 ?.let { asset ->
                     Text(
                         text = "已沉淀：$asset",

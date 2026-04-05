@@ -667,6 +667,8 @@ private fun ThreadScreen(
                         }
                         if (
                             uiState.wikiAssetSummary.isNotBlank() ||
+                            uiState.wikiConclusionLine.isNotBlank() ||
+                            uiState.wikiNextShiftLine.isNotBlank() ||
                             uiState.wikiGroundingLine.isNotBlank() ||
                             uiState.wikiKnowledgeObjectLine.isNotBlank() ||
                             uiState.wikiHealthLine.isNotBlank() ||
@@ -688,6 +690,16 @@ private fun ThreadScreen(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface,
                                         )
+                                    }
+                                uiState.wikiConclusionLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { conclusion ->
+                                        InsightLine(label = "当前结论", text = conclusion)
+                                    }
+                                uiState.wikiNextShiftLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { nextShift ->
+                                        InsightLine(label = "下一步承接", text = nextShift)
                                     }
                                 uiState.wikiGroundingLine
                                     .takeIf { it.isNotBlank() }
