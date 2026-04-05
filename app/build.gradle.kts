@@ -56,8 +56,8 @@ android {
         applicationId = "com.mindflow.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.0.4"
+        versionCode = 7
+        versionName = "2.0.5"
         resourceConfigurations += listOf("zh", "zh-rCN", "en")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
