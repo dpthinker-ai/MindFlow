@@ -220,6 +220,7 @@ Current status:
 - conclusion pages should also be treated as maintained knowledge objects, with links back into concepts and reusable question / method / experiment objects
 - lint should increasingly speak in terms of concrete maintenance targets such as evidence pages, conclusion pages, and reusable knowledge objects, not only abstract missing-material advice
 - app-facing lint reflow should eventually tell the user both what page/object to maintain and what kind of new source to add next
+- reusable knowledge objects should keep linking back to the direction, conclusion, and evidence pages they belong to; otherwise the knowledge layer drifts back into isolated markdown slices
 
 Next strongest direction:
 

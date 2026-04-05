@@ -514,6 +514,10 @@ class DirectionWikiCoordinator(
                     .flatMap { it.relatedConcepts }
                     .distinct()
                     .sorted()
+                val relatedDirections = bucket
+                    .map { it.threadTitle }
+                    .distinct()
+                    .sorted()
                 val evidenceLine = bucket
                     .groupingBy { it.evidenceType }
                     .eachCount()
@@ -539,6 +543,14 @@ class DirectionWikiCoordinator(
                             relatedConcepts.forEach { concept ->
                                 val conceptSlug = slugFor(concept, concept)
                                 appendLine("- [$concept](../concepts/$conceptSlug.md)")
+                            }
+                            appendLine()
+                        }
+                        if (relatedDirections.isNotEmpty()) {
+                            appendLine("## 相关方向页面")
+                            relatedDirections.forEach { directionTitle ->
+                                val directionSlug = slugFor(directionTitle, directionTitle)
+                                appendLine("- [$directionTitle](../directions/$directionSlug.md) · [结论](../conclusions/$directionSlug.md) · [证据](../evidence/$directionSlug.md)")
                             }
                             appendLine()
                         }
