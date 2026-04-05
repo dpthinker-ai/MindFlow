@@ -14,6 +14,8 @@ data class DirectionWikiDirectionSummary(
     val verifiedPoints: List<String> = emptyList(),
     val validatedPoints: List<String> = emptyList(),
     val openQuestions: List<String> = emptyList(),
+    val continuityLine: String = "",
+    val trajectoryLine: String = "",
     val stageHistorySummary: String = "",
     val updatedAt: Long = 0L,
 )

@@ -233,6 +233,7 @@ Planned items:
   - direction assets reflowed back into Flow and thread surfaces
   - evidence stratification reflowed back into Flow and thread surfaces
   - concept pages generated from repeated followed-direction tags
+  - longer-lived continuity and trajectory summaries exported back into Flow, thread, and reminders
 - why this matters:
   - stronger external research grounding beyond one-shot model output
   - longer-lived direction-stage persistence
@@ -256,16 +257,16 @@ Planned items:
 
 Next best order:
 
-1. stage persistence and longer-lived direction rhythm beyond immediate next-step loops
-2. direction-level execution summaries that feel continuous, not episodic
-3. stronger external research grounding beyond the current local Direction Wiki and concept exports
+1. direction-level execution summaries that feel continuous, not episodic
+2. stronger external research grounding beyond the current local Direction Wiki and concept exports
+3. more durable stage persistence beyond the current local snapshot cadence
 
 Current progress:
 
 - direction wiki integration: first version implemented with local wiki generation, manual refresh, low-frequency background refresh, app-facing asset reflow, evidence stratification, and concept pages
 - 1: first version implemented with shared external research snapshots, AI 外部视角 surfaces, and richer Direction Wiki grounding
-- 2: first version implemented with short / medium / long horizons and direction-stage rhythm
-- 3: first version implemented with stage history, research evidence layers, and horizon-aware reminder timing; still not fully continuous yet
+- 2: first version implemented with short / medium / long horizons, direction-stage rhythm, and longer-lived continuity / trajectory summaries
+- 3: first version implemented with stage history, research evidence layers, horizon-aware reminder timing, and continuity-aware reminder context; still not fully continuous yet
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces

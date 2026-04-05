@@ -2,6 +2,7 @@ package com.mindflow.app.data.wiki
 
 import android.content.Context
 import com.mindflow.app.data.connect.DirectionAssetAnalyzer
+import com.mindflow.app.data.connect.DirectionContinuityAnalyzer
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.connect.DirectionStageHistoryAnalyzer
 import com.mindflow.app.data.connect.ExternalResearchPlanner
@@ -90,6 +91,7 @@ class DirectionWikiCoordinator(
         val research = externalResearchPlanner.summarize(threadKey, notes)
         val directionAssets = DirectionAssetAnalyzer.build(notes)
         val stageHistory = DirectionStageHistoryAnalyzer.build(notes)
+        val continuity = DirectionContinuityAnalyzer.summarize(notes)
         val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
 
         val verifiedPoints = grounding.verifiedItems.map { it.summary }
@@ -126,6 +128,8 @@ class DirectionWikiCoordinator(
             verifiedPoints = verifiedPoints,
             validatedPoints = validatedPoints,
             openQuestions = openQuestions,
+            continuityLine = continuity.continuityLine,
+            trajectoryLine = continuity.trajectoryLine,
             stageHistorySummary = stageHistorySummary,
             updatedAt = notes.maxOfOrNull { it.updatedAt } ?: 0L,
         )
@@ -320,6 +324,11 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.continuityLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 节奏")
+            appendLine(it)
+            appendLine()
+        }
         execution.blocker.takeIf { it.isNotBlank() }?.let {
             appendLine("## 当前卡点")
             appendLine(it)
@@ -367,6 +376,11 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.trajectoryLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 长期走势")
+            appendLine(it)
+            appendLine()
+        }
     }
 
     private fun buildEvidenceMarkdown(
@@ -397,6 +411,11 @@ class DirectionWikiCoordinator(
             summary.validatedPoints.forEach { appendLine("- $it") }
             appendLine()
         }
+        summary.continuityLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 节奏")
+            appendLine(it)
+            appendLine()
+        }
     }
 
     private fun buildSnapshotMarkdown(
@@ -408,9 +427,11 @@ class DirectionWikiCoordinator(
         appendLine("- 阶段：${summary.stage.label}")
         appendLine("- 最近更新：${displayTime(summary.updatedAt)}")
         summary.groundingLine.takeIf { it.isNotBlank() }?.let { appendLine("- 证据基础：$it") }
+        summary.continuityLine.takeIf { it.isNotBlank() }?.let { appendLine("- 节奏：$it") }
         execution.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("- 为什么现在：$it") }
         execution.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("- 下一步：$it") }
         execution.validationStep.takeIf { it.isNotBlank() }?.let { appendLine("- 先验证：$it") }
+        summary.trajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("- 长期走势：$it") }
         summary.stageHistorySummary.takeIf { it.isNotBlank() }?.let { appendLine("- 历史：$it") }
     }
 
@@ -433,6 +454,8 @@ class DirectionWikiCoordinator(
                                 .put("stage", summary.stage.name)
                                 .put("assetSummary", summary.assetSummary)
                                 .put("groundingLine", summary.groundingLine)
+                                .put("continuityLine", summary.continuityLine)
+                                .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
                                 .put("updatedAt", summary.updatedAt)
                                 .put("signalPoints", JSONArray(summary.signalPoints))
@@ -469,6 +492,8 @@ class DirectionWikiCoordinator(
                             stage = item.optString("stage").toDirectionStage(),
                             assetSummary = item.optString("assetSummary"),
                             groundingLine = item.optString("groundingLine"),
+                            continuityLine = item.optString("continuityLine"),
+                            trajectoryLine = item.optString("trajectoryLine"),
                             signalPoints = item.optJSONArray("signalPoints").toStringList(),
                             hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
                             verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),

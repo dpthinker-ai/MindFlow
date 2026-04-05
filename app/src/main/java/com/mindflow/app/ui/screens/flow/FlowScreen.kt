@@ -462,11 +462,33 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiContinuityLine
+                .takeIf { it.isNotBlank() }
+                ?.let { continuity ->
+                    Text(
+                        text = continuity,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiStageHistorySummary
                 .takeIf { it.isNotBlank() }
                 ?.let { stageHistory ->
                     Text(
                         text = stageHistory,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            summary.wikiTrajectoryLine
+                .takeIf { it.isNotBlank() && it != summary.wikiStageHistorySummary }
+                ?.let { trajectory ->
+                    Text(
+                        text = trajectory,
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSoft,
                         maxLines = 1,

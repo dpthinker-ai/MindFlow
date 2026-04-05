@@ -204,8 +204,9 @@ Current status:
 - direction assets surfaced from verified and grounded research: first version implemented
 - local Direction Wiki generation and app-facing asset reflow: first version implemented
 - richer Direction Wiki grounding with evidence stratification and concept pages: first version implemented
+- longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
 
 Next strongest direction:
 
-- stronger direction-stage persistence beyond immediate next steps
-- direction-level execution summaries that feel continuous, not episodic
+- direction-level execution summaries that feel even more continuous and durable
+- stronger external research grounding beyond the current local wiki exports

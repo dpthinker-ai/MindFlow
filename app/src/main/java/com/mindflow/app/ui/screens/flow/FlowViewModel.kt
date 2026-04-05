@@ -91,6 +91,8 @@ data class FollowedDirectionSummary(
     val wikiValidatedPoint: String = "",
     val wikiHypothesisPoint: String = "",
     val wikiOpenQuestion: String = "",
+    val wikiContinuityLine: String = "",
+    val wikiTrajectoryLine: String = "",
     val wikiStageHistorySummary: String = "",
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
@@ -249,6 +251,8 @@ class FlowViewModel(
                                     wikiValidatedPoint = wikiAsset?.validatedPoints?.firstOrNull().orEmpty(),
                                     wikiHypothesisPoint = wikiAsset?.hypothesisPoints?.firstOrNull().orEmpty(),
                                     wikiOpenQuestion = wikiAsset?.openQuestions?.firstOrNull().orEmpty(),
+                                    wikiContinuityLine = wikiAsset?.continuityLine.orEmpty(),
+                                    wikiTrajectoryLine = wikiAsset?.trajectoryLine.orEmpty(),
                                     wikiStageHistorySummary = wikiAsset?.stageHistorySummary.orEmpty(),
                                     source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
                                         DailyBriefSource.AI

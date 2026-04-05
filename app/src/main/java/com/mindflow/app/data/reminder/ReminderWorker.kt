@@ -52,6 +52,7 @@ class ReminderWorker(
             activeNotes = activeNotes,
             threadExecutionPlanner = container.threadExecutionPlanner,
             externalResearchPlanner = container.externalResearchPlanner,
+            directionWikiCoordinator = container.directionWikiCoordinator,
         )
 
         createChannel()
@@ -113,6 +114,9 @@ class ReminderWorker(
             researchContext?.followUpReason
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add("为什么现在：$it") }
+            researchContext?.continuityLine
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add("当前节奏：$it") }
             if (nextActionText.isNotBlank()) {
                 add("先推进：$nextActionText")
             }
@@ -421,6 +425,7 @@ private data class ResearchReminderContext(
     val label: String,
     val stageLabel: String,
     val rhythmLine: String,
+    val continuityLine: String,
     val validationStep: String,
     val followUpReason: String,
     val executionPrompt: String,
@@ -461,6 +466,9 @@ private fun buildResearchValidationSeed(context: ResearchReminderContext): Strin
         appendLine("围绕「${context.threadTitle.removePrefix("#").trim()}」记一条验证记录：")
         appendLine("- 当前阶段：${context.stageLabel}")
         appendLine("- 研究线索：${context.label}")
+        context.continuityLine
+            .takeIf { it.isNotBlank() }
+            ?.let { appendLine("- 当前节奏：$it") }
         context.followUpReason
             .takeIf { it.isNotBlank() }
             ?.let { appendLine("- 为什么现在做：$it") }
@@ -559,6 +567,7 @@ private suspend fun buildResearchReminderContext(
     activeNotes: List<NoteEntity>,
     threadExecutionPlanner: com.mindflow.app.data.connect.ThreadExecutionPlanner,
     externalResearchPlanner: com.mindflow.app.data.connect.ExternalResearchPlanner,
+    directionWikiCoordinator: com.mindflow.app.data.wiki.DirectionWikiCoordinator,
 ): ResearchReminderContext? {
     val target = note ?: return null
     val threadKey = NoteConnectionAnalyzer.bestThreadKeyFor(target, activeNotes) ?: return null
@@ -566,6 +575,7 @@ private suspend fun buildResearchReminderContext(
     val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
     val execution = threadExecutionPlanner.summarize(threadKey, threadNotes)
     val research = externalResearchPlanner.summarize(threadKey, threadNotes)
+    val wikiDirection = directionWikiCoordinator.snapshot.value.directions[threadKey]
 
     return execution.validationStep
         .takeIf { it.isNotBlank() }
@@ -576,6 +586,7 @@ private suspend fun buildResearchReminderContext(
                 label = research.outsideAngle.ifBlank { thread.title },
                 stageLabel = execution.stage.label,
                 rhythmLine = execution.rhythmLine,
+                continuityLine = wikiDirection?.continuityLine.orEmpty(),
                 validationStep = validationStep,
                 followUpReason = execution.validationReason.ifBlank { execution.whyNow },
                 executionPrompt = execution.postValidationAction,

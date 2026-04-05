@@ -605,6 +605,15 @@ private fun ThreadScreen(
                                 color = TextSoft,
                             )
                         }
+                        uiState.wikiContinuityLine
+                            .takeIf { it.isNotBlank() }
+                            ?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
                         if (uiState.threadBlocker.isNotBlank()) {
                             Text(
                                 text = "卡点",
@@ -703,10 +712,20 @@ private fun ThreadScreen(
                                     ?.let { question ->
                                         InsightLine(label = "开放问题", text = question)
                                     }
+                                uiState.wikiContinuityLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { continuity ->
+                                        InsightLine(label = "节奏", text = continuity)
+                                    }
                                 uiState.wikiStageHistorySummary
                                     .takeIf { it.isNotBlank() }
                                     ?.let { stageHistory ->
                                         InsightLine(label = "阶段历史", text = stageHistory)
+                                    }
+                                uiState.wikiTrajectoryLine
+                                    .takeIf { it.isNotBlank() && it != uiState.wikiStageHistorySummary }
+                                    ?.let { trajectory ->
+                                        InsightLine(label = "长期走势", text = trajectory)
                                     }
                             }
                         }
