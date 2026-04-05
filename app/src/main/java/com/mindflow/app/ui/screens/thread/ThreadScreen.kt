@@ -737,6 +737,11 @@ private fun ThreadScreen(
                                     ?.let { dimension ->
                                         InsightLine(label = "最薄弱", text = dimension)
                                     }
+                                uiState.wikiMaintenanceFocusLine
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { focus ->
+                                        InsightLine(label = "优先对象", text = focus)
+                                    }
                                 uiState.wikiValidatedPoints.firstOrNull()
                                     ?.takeIf { it.isNotBlank() }
                                     ?.let { validated ->

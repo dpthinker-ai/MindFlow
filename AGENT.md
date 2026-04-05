@@ -215,6 +215,7 @@ Current status:
 - direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
 - durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
 - knowledge-layer lint now also points out the weakest maintenance dimension so Flow / thread can show not only what to补, but which knowledge dimension is currently thinnest
+- knowledge-layer lint should keep getting more concrete: after target, source, and weakest dimension, it should also identify the specific page or knowledge object that deserves attention first
 - synthesized reviews, open questions, validation loops, and next-step handoffs now also file back into question / experiment / method objects, not only into direction conclusion pages
 - research syntheses such as contrarian questions and external hypotheses should also be promoted into durable question / experiment objects instead of staying as one-shot thread hints
 - evidence pages should behave like first-class knowledge objects: linked to concepts, linked to related questions / methods / experiments, and able to carry maintenance guidance

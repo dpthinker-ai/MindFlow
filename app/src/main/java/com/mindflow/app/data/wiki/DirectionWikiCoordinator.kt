@@ -158,6 +158,21 @@ class DirectionWikiCoordinator(
             methodCount = methodCount,
             experimentCount = experimentCount,
         )
+        val maintenanceFocusLine = buildMaintenanceFocusLine(
+            summaryTitle = thread.title,
+            stage = execution.stage,
+            conclusionLine = conclusionLine,
+            nextShiftLine = nextShiftLine,
+            healthLine = lintSummary.healthLine,
+            maintenanceTargetLine = lintSummary.maintenanceTargetLine,
+            questionObjects = knowledgeObjects.filter { it.type == KnowledgeObjectType.QUESTION },
+            methodObjects = knowledgeObjects.filter { it.type == KnowledgeObjectType.METHOD },
+            experimentObjects = knowledgeObjects.filter { it.type == KnowledgeObjectType.EXPERIMENT },
+            openQuestions = openQuestions,
+            daysSinceUpdate = java.util.concurrent.TimeUnit.MILLISECONDS
+                .toDays(System.currentTimeMillis() - (notes.maxOfOrNull { it.updatedAt } ?: 0L))
+                .coerceAtLeast(0),
+        )
 
         return DirectionWikiDirectionSummary(
             threadKey = threadKey,
@@ -174,6 +189,7 @@ class DirectionWikiCoordinator(
             maintenanceTargetLine = lintSummary.maintenanceTargetLine,
             maintenanceSourceLine = lintSummary.maintenanceSourceLine,
             maintenanceDimensionLine = lintSummary.maintenanceDimensionLine,
+            maintenanceFocusLine = maintenanceFocusLine,
             signalPoints = signalPoints,
             hypothesisPoints = hypothesisPoints,
             verifiedPoints = verifiedPoints,
@@ -592,6 +608,9 @@ class DirectionWikiCoordinator(
                         }
                         summary.maintenanceDimensionLine.takeIf { it.isNotBlank() }?.let { dimension ->
                             appendLine("  - 最薄弱：$dimension")
+                        }
+                        summary.maintenanceFocusLine.takeIf { it.isNotBlank() }?.let { focus ->
+                            appendLine("  - 优先对象：$focus")
                         }
                     }
                 }
@@ -1043,6 +1062,11 @@ class DirectionWikiCoordinator(
             appendLine(it)
             appendLine()
         }
+        summary.maintenanceFocusLine.takeIf { it.isNotBlank() }?.let {
+            appendLine("## 优先对象")
+            appendLine(it)
+            appendLine()
+        }
         summary.knowledgeObjectLine.takeIf { it.isNotBlank() }?.let {
             appendLine("## 知识对象覆盖")
             appendLine(it)
@@ -1123,6 +1147,7 @@ class DirectionWikiCoordinator(
                                 .put("maintenanceTargetLine", summary.maintenanceTargetLine)
                                 .put("maintenanceSourceLine", summary.maintenanceSourceLine)
                                 .put("maintenanceDimensionLine", summary.maintenanceDimensionLine)
+                                .put("maintenanceFocusLine", summary.maintenanceFocusLine)
                                 .put("continuityLine", summary.continuityLine)
                                 .put("trajectoryLine", summary.trajectoryLine)
                                 .put("stageHistorySummary", summary.stageHistorySummary)
@@ -1172,6 +1197,7 @@ class DirectionWikiCoordinator(
                             maintenanceTargetLine = item.optString("maintenanceTargetLine"),
                             maintenanceSourceLine = item.optString("maintenanceSourceLine"),
                             maintenanceDimensionLine = item.optString("maintenanceDimensionLine"),
+                            maintenanceFocusLine = item.optString("maintenanceFocusLine"),
                             continuityLine = item.optString("continuityLine"),
                             trajectoryLine = item.optString("trajectoryLine"),
                             snapshotStageLine = item.optString("snapshotStageLine"),
@@ -1365,6 +1391,48 @@ class DirectionWikiCoordinator(
         .sortedByDescending { it.value }
         .map { it.key }
         .take(3)
+
+    private fun buildMaintenanceFocusLine(
+        summaryTitle: String,
+        stage: DirectionStage,
+        conclusionLine: String,
+        nextShiftLine: String,
+        healthLine: String,
+        maintenanceTargetLine: String,
+        questionObjects: List<KnowledgeObjectCandidate>,
+        methodObjects: List<KnowledgeObjectCandidate>,
+        experimentObjects: List<KnowledgeObjectCandidate>,
+        openQuestions: List<String>,
+        daysSinceUpdate: Long,
+    ): String {
+        val firstQuestion = questionObjects.maxByOrNull { it.updatedAt }?.title
+            ?: openQuestions.firstOrNull()?.let { "$summaryTitle · 开放问题" }
+        val firstMethod = methodObjects.maxByOrNull { it.updatedAt }?.title
+        val firstExperiment = experimentObjects.maxByOrNull { it.updatedAt }?.title
+        return when {
+            maintenanceTargetLine == "证据页" ->
+                "证据页「$summaryTitle」"
+            stage == DirectionStage.FORMING && firstQuestion != null ->
+                "问题对象「$firstQuestion」"
+            maintenanceTargetLine == "方法 / 实验对象" && firstExperiment != null ->
+                "实验对象「$firstExperiment」"
+            maintenanceTargetLine == "方法 / 实验对象" && firstMethod != null ->
+                "方法对象「$firstMethod」"
+            maintenanceTargetLine == "结论页" && conclusionLine.isNotBlank() ->
+                "结论页「$summaryTitle」"
+            maintenanceTargetLine == "方向页" && daysSinceUpdate >= 21L ->
+                "方向页「$summaryTitle」"
+            maintenanceTargetLine == "结论与知识对象" && nextShiftLine.isNotBlank() ->
+                "承接对象「$summaryTitle · 下一步承接」"
+            healthLine.isNotBlank() && firstQuestion != null ->
+                "问题对象「$firstQuestion」"
+            healthLine.isNotBlank() && firstExperiment != null ->
+                "实验对象「$firstExperiment」"
+            healthLine.isNotBlank() && firstMethod != null ->
+                "方法对象「$firstMethod」"
+            else -> ""
+        }
+    }
 
     private fun buildConclusionLine(
         assetSummary: String,

@@ -106,6 +106,7 @@ data class FollowedDirectionSummary(
     val wikiMaintenanceTargetLine: String = "",
     val wikiMaintenanceSourceLine: String = "",
     val wikiMaintenanceDimensionLine: String = "",
+    val wikiMaintenanceFocusLine: String = "",
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
@@ -278,6 +279,7 @@ class FlowViewModel(
                                     wikiMaintenanceTargetLine = wikiAsset?.maintenanceTargetLine.orEmpty(),
                                     wikiMaintenanceSourceLine = wikiAsset?.maintenanceSourceLine.orEmpty(),
                                     wikiMaintenanceDimensionLine = wikiAsset?.maintenanceDimensionLine.orEmpty(),
+                                    wikiMaintenanceFocusLine = wikiAsset?.maintenanceFocusLine.orEmpty(),
                                     source = if (execution.source == DailyBriefSource.AI || research.source == DailyBriefSource.AI) {
                                         DailyBriefSource.AI
                                     } else {

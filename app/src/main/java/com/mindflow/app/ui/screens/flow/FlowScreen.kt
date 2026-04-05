@@ -507,6 +507,17 @@ private fun FollowedDirectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            summary.wikiMaintenanceFocusLine
+                .takeIf { it.isNotBlank() }
+                ?.let { focus ->
+                    Text(
+                        text = "优先对象：$focus",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             summary.wikiValidatedPoint
                 .takeIf { it.isNotBlank() }
                 ?.let { validated ->
