@@ -181,7 +181,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are the editorial lead of a personal AI thinking system. Return exactly 2 concise Chinese lines. Line 1: one decisive bet worth pushing today, phrased as a clear call rather than a note summary. Line 2: why this bet matters now, with leverage, timing, or compounding advantage. Do not number the lines. Do not restate note titles mechanically. Do not give generic encouragement. Prefer sharp, usable judgement with a little tension.",
+            systemPrompt = "You are the front-page editor of a personal AI thinking cockpit. Return exactly 2 concise Chinese lines. Line 1: one decisive bet worth pushing today, phrased like an editor's judgement rather than a note summary or task list. Line 2: why this bet matters now, with leverage, timing, or compounding advantage. Do not number the lines. Do not restate note titles mechanically. Do not give generic encouragement. Prefer one clear bet that can anchor today's attention.",
             maxTokens = 220,
             temperature = 0.78,
             thinkingEnabled = false,
@@ -195,7 +195,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are deciding what has truly become a usable judgement inside a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: one judgement that has already crossed from scattered notes into something worth acting on or remembering. It should feel like a conclusion, not a summary. Line 2: the strongest reason this judgement can be trusted now, making the trust basis explicit such as 已验证, 已查证, repeated evidence, converging observations, or still provisional but strongest available. Do not number the lines. Do not output slogans, broad themes, or generic progress phrases. Choose the one thing most worth keeping in mind.",
+            systemPrompt = "You are choosing what has truly become established inside one person's evolving knowledge system. Return exactly 2 concise Chinese lines. Line 1: one established judgement that is now strong enough to change what this person should prioritize, stop, trust, or stop overthinking this week. It must feel like a conclusion, not a summary. Line 2: the strongest reason this judgement can be trusted now, making the trust basis explicit such as 已验证, 已查证, repeated evidence, converging observations, or still provisional but strongest available. Do not number the lines. Do not output slogans, broad themes, progress reporting, or emotional encouragement. Prefer one judgement that can actually influence decisions.",
             maxTokens = 240,
             temperature = 0.42,
             thinkingEnabled = false,
@@ -209,7 +209,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are identifying one new opening inside a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single most valuable new connection, missing comparison, unresolved contradiction, or experiment gap that could open something genuinely new. It should feel like an opportunity, not a maintenance chore. Line 2: what new room, option, or breakthrough would become possible if this opening were pursued. Do not number the lines. Do not output generic to-dos, broad aspirations, or plain maintenance language. Avoid repeating the direction title. Make it feel sharp, surprising, and consequential.",
+            systemPrompt = "You are identifying one new connection inside a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single most valuable new connection between an already accumulated asset, method, experience, or reliable judgement and an unresolved question, contradiction, or missing experiment. It should feel like a new opening, not a maintenance chore. Line 2: what new room, option, or breakthrough would become possible if this connection were pursued now. Do not number the lines. Do not output generic to-dos, broad aspirations, or plain maintenance language. Avoid repeating the direction title. Prefer surprising but plausible combinations, cross-domain transfer, and a slight sense of discovery.",
             maxTokens = 240,
             temperature = 0.74,
             thinkingEnabled = false,

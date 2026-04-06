@@ -24,61 +24,85 @@ class FlowKnowledgeCompressionPlanner(
     private val aiSettingsRepository: AiSettingsRepository,
     private val aiServiceClient: AiServiceClient,
 ) {
-    private val cache = linkedMapOf<String, FlowKnowledgeCompressionState>()
+    private data class CardCompression(
+        val line: String,
+        val support: String,
+        val source: DailyBriefSource,
+    )
+
+    private val mainlineCache = linkedMapOf<String, CardCompression>()
+    private val settledCache = linkedMapOf<String, CardCompression>()
+    private val gapCache = linkedMapOf<String, CardCompression>()
 
     suspend fun summarize(
-        signature: String,
+        mainlineKey: String,
+        settledKey: String,
+        gapKey: String,
         mainlineContextSummary: String,
         settledContextSummary: String,
         gapContextSummary: String,
         fallback: FlowKnowledgeCompressionState,
     ): FlowKnowledgeCompressionState {
-        if (signature.isBlank()) return fallback
-        cache[signature]?.let { return it }
+        if (mainlineKey.isBlank() || settledKey.isBlank() || gapKey.isBlank()) return fallback
 
         val settings = aiSettingsRepository.getCurrent()
         val dayKey = LocalDate.now().toString()
-        val resolved = if (
+        val shouldCallAi = (
             settings.aiEnabled &&
             settings.isConfigured &&
             mainlineContextSummary.isNotBlank() &&
             settledContextSummary.isNotBlank() &&
             gapContextSummary.isNotBlank()
-        ) {
+        )
+        val resolved = if (shouldCallAi) {
+            val needMainline = mainlineCache[mainlineKey] == null
+            val needSettled = settledCache[settledKey] == null
+            val needGap = gapCache[gapKey] == null
+            val requestCount = listOf(needMainline, needSettled, needGap).count { it }
+            if (requestCount > 0) {
             aiSettingsRepository.recordUsage(
-                requestIncrement = 3,
+                    requestIncrement = requestCount,
                 dayKey = dayKey,
             )
+            }
             coroutineScope {
-                val mainlineDeferred = async {
-                    aiServiceClient.generateFlowMainline(
-                        settings = settings,
-                        contextSummary = mainlineContextSummary,
-                    )
+                val mainlineDeferred = if (needMainline) {
+                    async {
+                        aiServiceClient.generateFlowMainline(
+                            settings = settings,
+                            contextSummary = mainlineContextSummary,
+                        )
+                    }
+                } else {
+                    null
                 }
-                val settledDeferred = async {
-                    aiServiceClient.generateFlowSettledKnowledge(
-                        settings = settings,
-                        contextSummary = settledContextSummary,
-                    )
+                val settledDeferred = if (needSettled) {
+                    async {
+                        aiServiceClient.generateFlowSettledKnowledge(
+                            settings = settings,
+                            contextSummary = settledContextSummary,
+                        )
+                    }
+                } else {
+                    null
                 }
-                val gapDeferred = async {
-                    aiServiceClient.generateFlowBreakthroughGap(
-                        settings = settings,
-                        contextSummary = gapContextSummary,
-                    )
+                val gapDeferred = if (needGap) {
+                    async {
+                        aiServiceClient.generateFlowBreakthroughGap(
+                            settings = settings,
+                            contextSummary = gapContextSummary,
+                        )
+                    }
+                } else {
+                    null
                 }
 
-                val mainlineResult = mainlineDeferred.await()
-                val settledResult = settledDeferred.await()
-                val gapResult = gapDeferred.await()
+                val mainlineResult = mainlineDeferred?.await()
+                val settledResult = settledDeferred?.await()
+                val gapResult = gapDeferred?.await()
 
-                val mainlineLines = (mainlineResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
-                val settledLines = (settledResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
-                val gapLines = (gapResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
-
-                val successCount =
-                    listOf(mainlineResult, settledResult, gapResult).count { it is AiChatResult.Success }
+                val successCount = listOf(mainlineResult, settledResult, gapResult)
+                    .count { it is AiChatResult.Success }
                 val tokenCount = listOf(mainlineResult, settledResult, gapResult)
                     .mapNotNull { (it as? AiChatResult.Success)?.totalTokens }
                     .sum()
@@ -91,28 +115,70 @@ class FlowKnowledgeCompressionPlanner(
                     )
                 }
 
+                val mainlineCard = mainlineCache[mainlineKey]
+                    ?: buildCardCompression(
+                        result = mainlineResult,
+                        fallbackLine = fallback.mainline,
+                        fallbackSupport = fallback.whyNow,
+                    ).also {
+                        mainlineCache[mainlineKey] = it
+                        trimCache(mainlineCache)
+                    }
+                val settledCard = settledCache[settledKey]
+                    ?: buildCardCompression(
+                        result = settledResult,
+                        fallbackLine = fallback.settledLine,
+                        fallbackSupport = fallback.settledSupport,
+                    ).also {
+                        settledCache[settledKey] = it
+                        trimCache(settledCache)
+                    }
+                val gapCard = gapCache[gapKey]
+                    ?: buildCardCompression(
+                        result = gapResult,
+                        fallbackLine = fallback.gapLine,
+                        fallbackSupport = fallback.gapSupport,
+                    ).also {
+                        gapCache[gapKey] = it
+                        trimCache(gapCache)
+                    }
+
                 fallback.copy(
-                    mainline = mainlineLines.getOrElse(0) { fallback.mainline }.ifBlank { fallback.mainline },
-                    whyNow = mainlineLines.getOrElse(1) { fallback.whyNow }.ifBlank { fallback.whyNow },
-                    mainlineSource = if (mainlineLines.size >= 2) DailyBriefSource.AI else fallback.mainlineSource,
-                    settledLine = settledLines.getOrElse(0) { fallback.settledLine }.ifBlank { fallback.settledLine },
-                    settledSupport = settledLines.getOrElse(1) { fallback.settledSupport }.ifBlank { fallback.settledSupport },
-                    settledSource = if (settledLines.size >= 2) DailyBriefSource.AI else fallback.settledSource,
-                    gapLine = gapLines.getOrElse(0) { fallback.gapLine }.ifBlank { fallback.gapLine },
-                    gapSupport = gapLines.getOrElse(1) { fallback.gapSupport }.ifBlank { fallback.gapSupport },
-                    gapSource = if (gapLines.size >= 2) DailyBriefSource.AI else fallback.gapSource,
+                    mainline = mainlineCard.line,
+                    whyNow = mainlineCard.support,
+                    mainlineSource = mainlineCard.source,
+                    settledLine = settledCard.line,
+                    settledSupport = settledCard.support,
+                    settledSource = settledCard.source,
+                    gapLine = gapCard.line,
+                    gapSupport = gapCard.support,
+                    gapSource = gapCard.source,
                 )
             }
         } else {
             fallback
         }
+        return resolved
+    }
 
-        cache[signature] = resolved
+    private fun buildCardCompression(
+        result: AiChatResult?,
+        fallbackLine: String,
+        fallbackSupport: String,
+    ): CardCompression {
+        val lines = (result as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
+        return CardCompression(
+            line = lines.getOrElse(0) { fallbackLine }.ifBlank { fallbackLine },
+            support = lines.getOrElse(1) { fallbackSupport }.ifBlank { fallbackSupport },
+            source = if (lines.size >= 2) DailyBriefSource.AI else DailyBriefSource.RULE,
+        )
+    }
+
+    private fun trimCache(cache: LinkedHashMap<String, CardCompression>) {
         if (cache.size > 64) {
-            val oldestKey = cache.entries.firstOrNull()?.key ?: return resolved
+            val oldestKey = cache.entries.firstOrNull()?.key ?: return
             cache.remove(oldestKey)
         }
-        return resolved
     }
 
     private fun parseLines(raw: String): List<String> =

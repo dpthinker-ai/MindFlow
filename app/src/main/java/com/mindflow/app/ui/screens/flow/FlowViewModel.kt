@@ -65,7 +65,14 @@ data class FlowUiState(
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
     val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
+    val settledFeedback: FlowCardFeedback? = null,
+    val gapFeedback: FlowCardFeedback? = null,
 )
+
+enum class FlowCardFeedback {
+    HELPFUL,
+    FLAT,
+}
 
 data class FollowedDirectionSummary(
     val thread: ThemeThread,
@@ -148,6 +155,9 @@ class FlowViewModel(
 
     private data class FlowCompressionInput(
         val signature: String,
+        val mainlineKey: String,
+        val settledKey: String,
+        val gapKey: String,
         val mainlineContextSummary: String,
         val settledContextSummary: String,
         val gapContextSummary: String,
@@ -156,6 +166,10 @@ class FlowViewModel(
 
     private val directionState = MutableStateFlow(DirectionState())
     private val knowledgeCompressionState = MutableStateFlow(FlowKnowledgeCompressionState())
+    private val mainlineRefreshNonce = MutableStateFlow(0)
+    private val gapRefreshNonce = MutableStateFlow(0)
+    private val settledFeedbackState = MutableStateFlow<FlowCardFeedback?>(null)
+    private val gapFeedbackState = MutableStateFlow<FlowCardFeedback?>(null)
 
     private val primaryInputs = combine(
         noteRepository.observeAllNotes(),
@@ -205,11 +219,16 @@ class FlowViewModel(
         fusionSuggestionPlanner.state,
         directionState,
         knowledgeCompressionState,
-    ) { primary,
-        weeklyReviewState: WeeklyReviewState,
-        fusionState: FusionSuggestionState,
-        directions: DirectionState,
-        compression: FlowKnowledgeCompressionState ->
+        settledFeedbackState,
+        gapFeedbackState,
+    ) { values ->
+        val primary = values[0] as FlowPrimaryInputs
+        val weeklyReviewState = values[1] as WeeklyReviewState
+        val fusionState = values[2] as FusionSuggestionState
+        val directions = values[3] as DirectionState
+        val compression = values[4] as FlowKnowledgeCompressionState
+        val settledFeedback = values[5] as FlowCardFeedback?
+        val gapFeedback = values[6] as FlowCardFeedback?
         FlowUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
@@ -230,6 +249,8 @@ class FlowViewModel(
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
             knowledgeCompression = compression,
+            settledFeedback = settledFeedback,
+            gapFeedback = gapFeedback,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
 
@@ -339,21 +360,47 @@ class FlowViewModel(
                 weeklyReviewPlanner.state,
                 fusionSuggestionPlanner.state,
                 directionState,
-            ) { primary, weekly, fusion, directions ->
+                mainlineRefreshNonce,
+                gapRefreshNonce,
+                settledFeedbackState,
+                gapFeedbackState,
+            ) { values ->
+                val primary = values[0] as FlowPrimaryInputs
+                val weekly = values[1] as WeeklyReviewState
+                val fusion = values[2] as FusionSuggestionState
+                val directions = values[3] as DirectionState
+                val mainlineNonce = values[4] as Int
+                val gapNonce = values[5] as Int
+                val settledFeedback = values[6] as FlowCardFeedback?
+                val gapFeedback = values[7] as FlowCardFeedback?
                 buildCompressionInput(
                     primary = primary,
                     weeklyReviewState = weekly,
                     fusionState = fusion,
                     directions = directions,
+                    mainlineNonce = mainlineNonce,
+                    gapNonce = gapNonce,
+                    settledFeedback = settledFeedback,
+                    gapFeedback = gapFeedback,
                 )
             }.collectLatest { input ->
-                knowledgeCompressionState.value = flowKnowledgeCompressionPlanner.summarize(
-                    signature = input.signature,
+                val previous = knowledgeCompressionState.value
+                val next = flowKnowledgeCompressionPlanner.summarize(
+                    mainlineKey = input.mainlineKey,
+                    settledKey = input.settledKey,
+                    gapKey = input.gapKey,
                     mainlineContextSummary = input.mainlineContextSummary,
                     settledContextSummary = input.settledContextSummary,
                     gapContextSummary = input.gapContextSummary,
                     fallback = input.fallback,
                 )
+                knowledgeCompressionState.value = next
+                if (previous.settledLine != next.settledLine) {
+                    settledFeedbackState.value = null
+                }
+                if (previous.gapLine != next.gapLine) {
+                    gapFeedbackState.value = null
+                }
             }
         }
     }
@@ -363,6 +410,10 @@ class FlowViewModel(
         weeklyReviewState: WeeklyReviewState,
         fusionState: FusionSuggestionState,
         directions: DirectionState,
+        mainlineNonce: Int,
+        gapNonce: Int,
+        settledFeedback: FlowCardFeedback?,
+        gapFeedback: FlowCardFeedback?,
     ): FlowCompressionInput {
         val primaryDirection = directions.followedDirections.firstOrNull()
         val settledDirection = directions.followedDirections.firstOrNull {
@@ -446,9 +497,14 @@ class FlowViewModel(
                 ).joinToString("~")
             })
         }
+        val todayKey = LocalDate.now().toString()
+        val mainlineKey = "$todayKey:mainline:$mainlineNonce"
+        val settledKey = "$signature:settled"
+        val gapKey = "$signature:gap:$gapNonce"
 
         val mainlineContextSummary = buildString {
             appendLine("请像主编一样，只选一个今天值得押注的方向。不要列候选，不要泛泛鼓励。")
+            appendLine("这是今天的首页主卡，需要像编辑部给出的今日判断，一天内默认保持稳定。")
             primaryDirection?.let { direction ->
                 appendLine("当前主方向：${direction.thread.title}")
                 appendLine("方向阶段：${direction.stage.label}")
@@ -469,6 +525,11 @@ class FlowViewModel(
 
         val settledContextSummary = buildString {
             appendLine("请像知识编辑一样，只挑一个现在最值得保留下来的判断。不要写计划，不要写鼓励。")
+            when (settledFeedback) {
+                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、带清楚可信基础的判断更有用。")
+                FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛的进步描述和不影响决策的判断。")
+                null -> Unit
+            }
             settledDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
@@ -481,6 +542,7 @@ class FlowViewModel(
                 direction.wikiSnapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("阶段位置：$it") }
                 direction.wikiContinuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
                 direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("走势：$it") }
+                direction.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("它会影响的下一步：$it") }
             }
             val corroboratingDirections = directions.followedDirections
                 .filter { it.thread.key != settledDirection?.thread?.key }
@@ -496,10 +558,26 @@ class FlowViewModel(
                 appendLine("旁证方向：")
                 corroboratingDirections.forEach { appendLine(it) }
             }
+            val repeatedHorizons = directions.followedDirections
+                .groupingBy { it.dominantHorizon.label }
+                .eachCount()
+                .entries
+                .sortedByDescending { it.value }
+                .take(2)
+                .joinToString("，") { "${it.key}${it.value}条" }
+            if (repeatedHorizons.isNotBlank()) {
+                appendLine("你最近长期在推：$repeatedHorizons")
+            }
         }
 
         val gapContextSummary = buildString {
-            appendLine("请像创新编辑一样，只找一个现在最值得试的新连接或新切口。不要平均分配，不要列清单。")
+            appendLine("请像创新编辑一样，只找一个现在最值得试的新连接。不要平均分配，不要列清单。")
+            appendLine("新连接的第一职责是把两个旧点重新接上，而不是给维护建议。")
+            when (gapFeedback) {
+                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种跨方向连接、经验迁移和反常识组合更有用。")
+                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护 chore、不要给显而易见的缺口，要更像两个旧点突然被连成了一个新方向。")
+                null -> Unit
+            }
             breakthroughDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
@@ -532,15 +610,44 @@ class FlowViewModel(
                 appendLine("可复用旧积累：")
                 reusableAssets.forEach { appendLine(it) }
             }
+            val reusableMethods = directions.followedDirections
+                .mapNotNull { summary ->
+                    summary.wikiKnowledgeObjectLine.takeIf { it.contains("方法") || it.contains("实验") }
+                        ?.let { "${summary.thread.title}：$it" }
+                }
+                .take(2)
+            if (reusableMethods.isNotEmpty()) {
+                appendLine("可迁移方法：")
+                reusableMethods.forEach { appendLine(it) }
+            }
         }
 
         return FlowCompressionInput(
             signature = signature,
+            mainlineKey = mainlineKey,
+            settledKey = settledKey,
+            gapKey = gapKey,
             mainlineContextSummary = mainlineContextSummary,
             settledContextSummary = settledContextSummary,
             gapContextSummary = gapContextSummary,
             fallback = fallback,
         )
+    }
+
+    fun refreshMainline() {
+        mainlineRefreshNonce.value = mainlineRefreshNonce.value + 1
+    }
+
+    fun refreshGap() {
+        gapRefreshNonce.value = gapRefreshNonce.value + 1
+    }
+
+    fun markSettledFeedback(helpful: Boolean) {
+        settledFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
+    }
+
+    fun markGapFeedback(helpful: Boolean) {
+        gapFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
     }
 
     companion object {
