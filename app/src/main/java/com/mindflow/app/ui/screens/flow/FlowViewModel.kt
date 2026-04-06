@@ -23,6 +23,7 @@ import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
@@ -73,14 +74,21 @@ data class FlowUiState(
 data class MainlineBetCandidate(
     val key: String,
     val title: String,
+    val anchorLabel: String = title,
     val stageLabel: String = "",
     val horizonLabel: String = "",
     val summary: String = "",
     val whyNow: String = "",
     val nextStep: String = "",
+    val bucketKey: String = key,
     val threadKey: String? = null,
     val focusNoteId: Long? = null,
     val noteId: Long? = null,
+)
+
+private data class MainlineCandidateSeed(
+    val candidate: MainlineBetCandidate,
+    val score: Int,
 )
 
 enum class FlowCardFeedback {
@@ -155,6 +163,7 @@ class FlowViewModel(
 
     private data class FlowPrimaryInputs(
         val todayCount: Int,
+        val activeNotes: List<NoteEntity>,
         val continueNote: NoteEntity?,
         val nextActionText: String,
         val nextActionSource: DailyBriefSource,
@@ -216,6 +225,7 @@ class FlowViewModel(
         }
         FlowPrimaryInputs(
             todayCount = activeNotes.count { it.createdAt.toLocalDate(zoneId) == today },
+            activeNotes = activeNotes,
             continueNote = continueNote,
             nextActionText = nextActionText,
             nextActionSource = nextActionState.source,
@@ -543,17 +553,9 @@ class FlowViewModel(
         val mainlineContextSummary = buildString {
             appendLine("请像主编一样，只选一个今天值得押注的方向。不要列候选，不要泛泛鼓励。")
             appendLine("这是今天的首页主卡，需要像编辑部给出的今日判断，一天内默认保持稳定。")
-            if (mainlineCandidates.isNotEmpty()) {
-                appendLine("可选押注：")
-                mainlineCandidates.forEachIndexed { index, candidate ->
-                    appendLine("${index + 1}. ${candidate.title} · ${candidate.stageLabel.ifBlank { "无阶段" }} · ${candidate.horizonLabel.ifBlank { "无周期" }}")
-                    candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("  当前判断：$it") }
-                    candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("  为什么现在：$it") }
-                    candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("  最小动作：$it") }
-                }
-            }
             selectedMainlineCandidate?.let { candidate ->
                 appendLine("这次要写的押注对象：${candidate.title}")
+                appendLine("来自：${candidate.anchorLabel}")
                 candidate.stageLabel.takeIf { it.isNotBlank() }?.let { appendLine("阶段：$it") }
                 candidate.horizonLabel.takeIf { it.isNotBlank() }?.let { appendLine("时间尺度：$it") }
                 candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("已知判断：$it") }
@@ -561,7 +563,7 @@ class FlowViewModel(
                 candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("已知最小动作：$it") }
             }
             if (mainlineNonce > 0 && mainlineCandidates.size > 1) {
-                appendLine("用户刚点了“换一个”，这次必须换到不同的真实候选方向，而不是改写同一条内容。")
+                appendLine("用户刚点了“换一个”，这次必须切到不同项目、文件夹或方向的真实候选，而不是改写同一主题。")
             } else if (mainlineNonce > 0) {
                 appendLine("用户刚点了“换一个”，候选不多时请至少换一个角度，不要只是同义改写。")
             }
@@ -709,52 +711,100 @@ class FlowViewModel(
         primary: FlowPrimaryInputs,
         directions: List<FollowedDirectionSummary>,
     ): List<MainlineBetCandidate> {
-        val candidates = mutableListOf<MainlineBetCandidate>()
+        val noteById = primary.activeNotes.associateBy { it.id }
+        val candidates = mutableListOf<MainlineCandidateSeed>()
         directions.forEach { direction ->
-            candidates += MainlineBetCandidate(
-                key = "thread:${direction.thread.key}",
-                title = direction.thread.title,
-                stageLabel = direction.stage.label,
-                horizonLabel = direction.dominantHorizon.label,
-                summary = direction.summary,
-                whyNow = direction.whyNow,
-                nextStep = direction.nextStep,
-                threadKey = direction.thread.key,
-                focusNoteId = direction.focusNoteId,
-                noteId = direction.focusNoteId,
+            val threadFocus = direction.focusNoteId?.let(noteById::get)
+            val threadNotes = NoteConnectionAnalyzer.notesForThread(direction.thread.key, primary.activeNotes)
+            val threadFolderKey = dominantFolderKey(threadNotes)
+            val threadFolderName = threadFolderKey?.let { key -> MindFolderCatalog.fromKey(key)?.name }
+            candidates += MainlineCandidateSeed(
+                candidate = MainlineBetCandidate(
+                    key = "thread:${direction.thread.key}",
+                    title = direction.thread.title,
+                    anchorLabel = threadFolderName?.let { "$it · ${direction.thread.title}" } ?: direction.thread.title,
+                    stageLabel = direction.stage.label,
+                    horizonLabel = direction.dominantHorizon.label,
+                    summary = direction.summary,
+                    whyNow = direction.whyNow,
+                    nextStep = direction.nextStep,
+                    bucketKey = threadFolderKey?.let { "folder:$it" } ?: "direction:${direction.thread.key}",
+                    threadKey = direction.thread.key,
+                    focusNoteId = direction.focusNoteId,
+                    noteId = threadFocus?.id ?: direction.focusNoteId,
+                ),
+                score = 100 + direction.thread.noteCount,
             )
         }
+        primary.activeNotes
+            .filter { it.status != NoteStatus.DONE }
+            .groupBy { MindFolderCatalog.normalizedKey(it.folderKey) ?: "uncategorized" }
+            .forEach { (folderKey, notes) ->
+                val note = notes.sortedWith(
+                    compareByDescending<NoteEntity> { it.status == NoteStatus.IN_PROGRESS }
+                        .thenByDescending { it.horizon.priority }
+                        .thenByDescending { it.updatedAt },
+                ).firstOrNull() ?: return@forEach
+                val folderName = MindFolderCatalog.fromKey(folderKey)?.name ?: "其他"
+                val anchorLabel = "$folderName · ${note.topic.ifBlank { "一条记录" }}"
+                val seed = MainlineCandidateSeed(
+                    candidate = MainlineBetCandidate(
+                        key = "folder-note:${folderKey}:${note.id}",
+                        title = note.topic.ifBlank { "$folderName 里最值得推进的一条" },
+                        anchorLabel = anchorLabel,
+                        stageLabel = note.status.label,
+                        horizonLabel = note.horizon.label,
+                        summary = buildNoteCandidateSummary(note),
+                        whyNow = buildNoteCandidateWhyNow(note),
+                        nextStep = buildNoteCandidateNextStep(note),
+                        bucketKey = "folder:$folderKey",
+                        noteId = note.id,
+                    ),
+                    score = if (note.status == NoteStatus.IN_PROGRESS) 90 else 72,
+                )
+                candidates += seed
+            }
         primary.continueNote?.let { note ->
-            val exists = directions.any { summary -> summary.focusNoteId == note.id }
+            val exists = candidates.any { seed -> seed.candidate.noteId == note.id }
             if (!exists) {
-                candidates += MainlineBetCandidate(
-                    key = "note:${note.id}",
-                    title = note.topic.ifBlank { "正在推进的记录" },
-                    stageLabel = note.status.label,
-                    horizonLabel = note.horizon.label,
-                    summary = primary.nextActionText.ifBlank { note.content.take(72).trim() },
-                    whyNow = "",
-                    nextStep = primary.nextActionText,
-                    noteId = note.id,
+                candidates += MainlineCandidateSeed(
+                    candidate = MainlineBetCandidate(
+                        key = "note:${note.id}",
+                        title = note.topic.ifBlank { "正在推进的记录" },
+                        anchorLabel = buildAnchorLabel(note),
+                        stageLabel = note.status.label,
+                        horizonLabel = note.horizon.label,
+                        summary = primary.nextActionText.ifBlank { buildNoteCandidateSummary(note) },
+                        whyNow = buildNoteCandidateWhyNow(note),
+                        nextStep = primary.nextActionText.ifBlank { buildNoteCandidateNextStep(note) },
+                        bucketKey = "folder:${MindFolderCatalog.normalizedKey(note.folderKey) ?: "uncategorized"}",
+                        noteId = note.id,
+                    ),
+                    score = 96,
                 )
             }
         }
         primary.staleNote?.let { note ->
-            val exists = candidates.any { candidate -> candidate.noteId == note.id }
+            val exists = candidates.any { seed -> seed.candidate.noteId == note.id }
             if (!exists) {
-                candidates += MainlineBetCandidate(
-                    key = "stale:${note.id}",
-                    title = note.topic.ifBlank { "值得重新接上的记录" },
-                    stageLabel = note.status.label,
-                    horizonLabel = note.horizon.label,
-                    summary = primary.staleBridge,
-                    whyNow = primary.staleBridge,
-                    nextStep = primary.staleNextStep,
-                    noteId = note.id,
+                candidates += MainlineCandidateSeed(
+                    candidate = MainlineBetCandidate(
+                        key = "stale:${note.id}",
+                        title = note.topic.ifBlank { "值得重新接上的记录" },
+                        anchorLabel = buildAnchorLabel(note),
+                        stageLabel = note.status.label,
+                        horizonLabel = note.horizon.label,
+                        summary = primary.staleBridge.ifBlank { buildNoteCandidateSummary(note) },
+                        whyNow = primary.staleBridge.ifBlank { buildNoteCandidateWhyNow(note) },
+                        nextStep = primary.staleNextStep.ifBlank { buildNoteCandidateNextStep(note) },
+                        bucketKey = "folder:${MindFolderCatalog.normalizedKey(note.folderKey) ?: "uncategorized"}",
+                        noteId = note.id,
+                    ),
+                    score = 84,
                 )
             }
         }
-        return candidates.distinctBy { it.key }
+        return diversifyCandidates(candidates)
     }
 
     companion object {
@@ -792,6 +842,70 @@ class FlowViewModel(
 
 private fun Int.floorMod(size: Int): Int =
     if (size <= 0) 0 else ((this % size) + size) % size
+
+private fun diversifyCandidates(
+    candidates: List<MainlineCandidateSeed>,
+): List<MainlineBetCandidate> {
+    val remaining = candidates
+        .sortedByDescending { it.score }
+        .toMutableList()
+    val ordered = mutableListOf<MainlineBetCandidate>()
+    var lastBucket: String? = null
+    while (remaining.isNotEmpty()) {
+        val nextIndex = remaining.indexOfFirst { it.candidate.bucketKey != lastBucket }
+            .takeIf { it >= 0 } ?: 0
+        val next = remaining.removeAt(nextIndex).candidate
+        ordered += next
+        lastBucket = next.bucketKey
+    }
+    return ordered.distinctBy { it.key }
+}
+
+private fun dominantFolderKey(notes: List<NoteEntity>): String? =
+    notes
+        .mapNotNull { note -> MindFolderCatalog.normalizedKey(note.folderKey) }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+
+private fun buildAnchorLabel(note: NoteEntity): String {
+    val folderName = note.folderName()
+    return if (folderName != null) "$folderName · ${note.topic.ifBlank { "一条记录" }}" else note.topic.ifBlank { "一条记录" }
+}
+
+private fun buildNoteCandidateSummary(note: NoteEntity): String =
+    when (note.status) {
+        NoteStatus.IN_PROGRESS -> "这条线已经在推进里，继续推它最容易长出真实结果。"
+        NoteStatus.IDEA -> when (note.horizon) {
+            NoteHorizon.SHORT -> "这个短期想法如果一周内不压成动作，很容易重新散掉。"
+            NoteHorizon.MEDIUM -> "这条中期想法已经有足够材料，适合现在压成一个明确推进点。"
+            NoteHorizon.LONG -> "这条长期线已经露出轮廓，值得先把它推成一个更稳的阶段目标。"
+        }
+        NoteStatus.DONE -> "这条线已经有结果，可以沿结果继续放大，而不是从头再想。"
+    }
+
+private fun buildNoteCandidateWhyNow(note: NoteEntity): String =
+    when {
+        note.status == NoteStatus.IN_PROGRESS -> "它已经在动，今天接着推最省认知切换成本。"
+        note.horizon == NoteHorizon.SHORT -> "它离落地最近，现在推进最容易在短期内看到反馈。"
+        note.folderName() == "项目" -> "项目类方向最怕拖成空想，现在补一刀更容易形成可验证版本。"
+        note.folderName() == "工作" -> "工作类方向的上下文容易过期，趁还记得关键约束先往前压。"
+        note.folderName() == "健康" -> "健康类方向更依赖连续节奏，现在推进更容易形成正反馈。"
+        else -> "它已经累积到值得推进的程度，再拖下去只会重新散开。"
+    }
+
+private fun buildNoteCandidateNextStep(note: NoteEntity): String =
+    when (note.status) {
+        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再把它往前拱一小步。"
+        NoteStatus.IDEA -> when (note.folderName()) {
+            "项目" -> "先写一个最小可验证版本，而不是继续摊大方案。"
+            "工作" -> "先把它压成一个最值得验证的问题。"
+            "健康" -> "先把它改成今天就能执行的一次小实验。"
+            else -> "先把它压成一个今天能动手的小动作。"
+        }
+        NoteStatus.DONE -> "先补一条结果延展记录，说明这条结果还能往哪继续放大。"
+    }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes
