@@ -70,65 +70,92 @@ class NoteShareCardGenerator(
         payload: NoteSharePayload,
         style: NoteShareStyle,
     ): Bitmap {
+        val renderScale = 2f
         val palette = paletteFor(style)
         val plainContent = SimpleMarkdown.toPlainText(payload.content).trim()
-        val compactMode = plainContent.length in 1..88 && plainContent.lineSequence().count() <= 3
+        val compactMode = plainContent.length in 1..72 && plainContent.lineSequence().count() <= 2
         val outer = if (compactMode) 24f else 28f
         val innerHorizontal = if (compactMode) 30f else 34f
         val innerVertical = if (compactMode) 26f else 30f
         val corner = 30f
-        val maxBodyWidth = if (compactMode) 760 else 860
+        val maxBodyWidth = if (compactMode) 640 else 860
 
         val namePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
             textSize = if (compactMode) 24f else 26f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val handlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.meta
             textSize = if (compactMode) 18f else 20f
+            isSubpixelText = true
+            isLinearText = true
         }
         val topicPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.accent
             textSize = if (compactMode) 20f else 22f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val headingLargePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
             textSize = if (compactMode) 36f else 34f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val headingPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.title
             textSize = if (compactMode) 30f else 29f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val contentPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.body
             textSize = if (compactMode) 28f else 25f
+            isSubpixelText = true
+            isLinearText = true
         }
         val tagPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.accent
             textSize = 18f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val metaPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.meta
             textSize = 19f
+            isSubpixelText = true
+            isLinearText = true
         }
         val sourcePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.metaStrong
             textSize = 18f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
         val statusPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.statusText
             textSize = 18f
             isFakeBoldText = true
+            isSubpixelText = true
+            isLinearText = true
         }
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.card }
-        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.halo }
+        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isDither = true }
+        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.card
+            isDither = true
+        }
+        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.halo
+            isDither = true
+        }
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.divider
             strokeWidth = 2f
@@ -158,7 +185,7 @@ class NoteShareCardGenerator(
         val contentWidth = measuredLayouts.contentWidth
         val width = ceil(contentWidth + outer * 2f + innerHorizontal * 2f)
             .toInt()
-            .coerceIn(if (compactMode) 500 else 660, 1040)
+            .coerceIn(if (compactMode) 430 else 660, 1040)
         val bodyWidth = (width - outer * 2f - innerHorizontal * 2f).toInt()
 
         val topicLayout = if (topic.isBlank()) {
@@ -180,11 +207,7 @@ class NoteShareCardGenerator(
                 width = bodyWidth,
                 maxLines = maxLinesFor(block),
                 lineSpacing = lineSpacingFor(block),
-                alignment = if (compactMode && markdownBlocks.size == 1 && block !is MarkdownHeading) {
-                    Layout.Alignment.ALIGN_CENTER
-                } else {
-                    Layout.Alignment.ALIGN_NORMAL
-                },
+                alignment = Layout.Alignment.ALIGN_NORMAL,
             )
         }
 
@@ -208,8 +231,13 @@ class NoteShareCardGenerator(
                 footerHeight
         ).toInt().coerceIn(if (compactMode) 360 else 500, 1680)
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(
+            (width * renderScale).toInt(),
+            (height * renderScale).toInt(),
+            Bitmap.Config.ARGB_8888,
+        )
         val canvas = Canvas(bitmap)
+        canvas.scale(renderScale, renderScale)
 
         backgroundPaint.shader = LinearGradient(
             0f,
@@ -432,6 +460,10 @@ class NoteShareCardGenerator(
         radius: Float,
     ) {
         val iconBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.mindflow_icon) ?: return
+        val avatarBitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isFilterBitmap = true
+            isDither = true
+        }
         val avatarRect = RectF(
             centerX - radius,
             centerY - radius,
@@ -443,8 +475,9 @@ class NoteShareCardGenerator(
         }
         canvas.save()
         canvas.clipPath(clipPath)
-        canvas.drawBitmap(iconBitmap, null, avatarRect, null)
+        canvas.drawBitmap(iconBitmap, null, avatarRect, avatarBitmapPaint)
         canvas.restore()
+        iconBitmap.recycle()
     }
 
     private fun measureHeaderWidth(
@@ -456,7 +489,7 @@ class NoteShareCardGenerator(
             namePaint.measureText("dpthinker"),
             handlePaint.measureText("公众号"),
         )
-        return authorWidth + sourcePaint.measureText("From MindFlow") + 198f
+        return authorWidth + sourcePaint.measureText("From MindFlow") + 162f
     }
 
     private fun drawTagPills(
