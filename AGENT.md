@@ -103,6 +103,7 @@ Notes:
 - Secondary planning widgets such as time-bank data should stay supportive, never outrank capture.
 - AI naming should stay consistent and low-noise across Flow, thread, editor, and reminders.
 - AI results should reuse the same visual language across Flow, thread, and reminder copy: one source cue, one primary judgement, and a small set of supportive lines.
+- Flow should behave like a knowledge-compression layer, not an insight wall: one clear mainline, one settled judgement, and one meaningful gap to close.
 
 ## Engineering Rules
 

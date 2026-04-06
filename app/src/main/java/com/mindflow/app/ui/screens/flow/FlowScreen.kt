@@ -50,6 +50,7 @@ import com.mindflow.app.ui.components.InsightChip
 import com.mindflow.app.ui.components.InsightLine
 import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
+import com.mindflow.app.ui.components.PanelShape
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
@@ -119,13 +120,32 @@ private fun FlowScreen(
     val highlightReconnect = focus == FlowFocus.RECONNECT
     val highlightReview = focus == FlowFocus.REVIEW
     val highlightDirection = focus == FlowFocus.DIRECTION
+    val primaryDirection = remember(uiState.followedDirections) {
+        uiState.followedDirections.firstOrNull()
+    }
+    val settledDirection = remember(uiState.followedDirections) {
+        uiState.followedDirections.firstOrNull {
+            it.wikiValidatedPoint.isNotBlank() ||
+                it.wikiVerifiedPoint.isNotBlank() ||
+                it.wikiConclusionLine.isNotBlank() ||
+                it.assetSummary.isNotBlank()
+        } ?: uiState.followedDirections.firstOrNull()
+    }
+    val breakthroughDirection = remember(uiState.followedDirections) {
+        uiState.followedDirections.firstOrNull {
+            it.wikiOpenQuestion.isNotBlank() ||
+                it.wikiMaintenanceLine.isNotBlank() ||
+                it.wikiMaintenanceFocusLine.isNotBlank() ||
+                it.blocker.isNotBlank()
+        } ?: uiState.followedDirections.firstOrNull()
+    }
     val subtitle = remember(focus) {
         when (focus) {
             FlowFocus.TODAY -> "从提醒回来，先把今天最值得推进的一步接上。"
-            FlowFocus.RECONNECT -> "从提醒回来，先把那条该重新接上的想法接回来。"
-            FlowFocus.REVIEW -> "从提醒回来，先看这周最值得留下来的判断。"
-            FlowFocus.DIRECTION -> "从提醒回来，先看这条更长的方向。"
-            null -> "先推进今天最重要的一步，再看正在形成的方向。"
+            FlowFocus.RECONNECT -> "从提醒回来，先看哪条旧想法值得重新接回主线。"
+            FlowFocus.REVIEW -> "从提醒回来，先看最近真正沉淀下来的判断。"
+            FlowFocus.DIRECTION -> "从提醒回来，先看这条方向最该补的缺口。"
+            null -> "把散的想法，压成今天可用的判断。"
         }
     }
 
@@ -133,9 +153,9 @@ private fun FlowScreen(
         when (focus) {
             FlowFocus.TODAY,
             FlowFocus.RECONNECT,
-            null -> listState.scrollToItem(0)
+            null -> listState.scrollToItem(1)
             FlowFocus.REVIEW,
-            FlowFocus.DIRECTION -> listState.scrollToItem(2)
+            FlowFocus.DIRECTION -> listState.scrollToItem(4)
         }
     }
 
@@ -172,42 +192,42 @@ private fun FlowScreen(
                 }
 
                 item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "今日聚焦",
-                            headline = if (uiState.todayCount > 0) "今天已记 ${uiState.todayCount} 条" else "今天最值得先看这三件事",
-                        )
-                        TodayNoteCard(
-                            title = "先推进",
-                            note = uiState.continueNote,
-                            emptyText = "先从一条真正想做成的事开始，不必面面俱到。",
-                            accent = noteStatusAccent(uiState.continueNote?.status ?: NoteStatus.IN_PROGRESS),
-                            nextActionText = uiState.nextActionText,
-                            nextActionSource = uiState.nextActionSource,
-                            highlighted = highlightToday,
-                            modifier = Modifier.fillMaxWidth(),
-                            onOpenNote = onOpenNote,
-                        )
-                        if (uiState.staleNote != null) {
-                            GentleReconnectCard(
-                                note = uiState.staleNote,
-                                reason = uiState.staleReason,
-                                bridge = uiState.staleBridge,
-                                nextStep = uiState.staleNextStep,
-                                source = uiState.staleSource,
-                                highlighted = highlightReconnect,
-                                onOpenNote = onOpenNote,
-                            )
-                        }
-                        ExplorationPromptCard(
-                            prompts = uiState.explorationPrompts,
-                            source = uiState.explorationSource,
-                        )
-                    }
+                    MainlineFocusCard(
+                        note = uiState.continueNote,
+                        direction = primaryDirection,
+                        nextActionText = uiState.nextActionText,
+                        nextActionSource = uiState.nextActionSource,
+                        reconnectNote = uiState.staleNote,
+                        reconnectBridge = uiState.staleBridge,
+                        reconnectStep = uiState.staleNextStep,
+                        highlighted = highlightToday || highlightReconnect,
+                        onOpenThread = onOpenThread,
+                        onOpenNote = onOpenNote,
+                    )
                 }
 
                 item {
-                    DirectionCard(
+                    SettledKnowledgeCard(
+                        direction = settledDirection,
+                        highlighted = highlightReview,
+                        onOpenThread = onOpenThread,
+                        onOpenNote = onOpenNote,
+                    )
+                }
+
+                item {
+                    BreakthroughGapCard(
+                        direction = breakthroughDirection,
+                        explorationPrompts = uiState.explorationPrompts,
+                        explorationSource = uiState.explorationSource,
+                        highlighted = highlightDirection || highlightReconnect,
+                        onOpenThread = onOpenThread,
+                        onCreateCapture = onCreateCapture,
+                    )
+                }
+
+                item {
+                    KnowledgeTrailCard(
                         weeklyItems = uiState.weeklyReviewItems,
                         weeklySource = uiState.weeklyReviewSource,
                         weeklyStatsLine = uiState.weeklyReviewStatsLine,
@@ -215,14 +235,387 @@ private fun FlowScreen(
                         threads = uiState.themeThreads,
                         suggestions = uiState.fusionSuggestions,
                         fusionSource = uiState.fusionSource,
-                        highlightReview = highlightReview,
-                        highlightConnection = highlightDirection,
                         onOpenThread = onOpenThread,
-                        onOpenNote = onOpenNote,
-                        onCreateCapture = onCreateCapture,
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MainlineFocusCard(
+    note: NoteEntity?,
+    direction: FollowedDirectionSummary?,
+    nextActionText: String,
+    nextActionSource: DailyBriefSource,
+    reconnectNote: NoteEntity?,
+    reconnectBridge: String,
+    reconnectStep: String,
+    highlighted: Boolean,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    val accent = noteStatusAccent(note?.status ?: NoteStatus.IN_PROGRESS)
+    val title = direction?.thread?.title
+        ?: note?.topic?.takeIf { it.isNotBlank() }
+        ?: "先把一条真正想做成的事往前推进"
+    val mainLine = direction?.summary
+        ?.takeIf { it.isNotBlank() }
+        ?: nextActionText.takeIf { it.isNotBlank() }
+        ?: reconnectStep.takeIf { it.isNotBlank() }
+        ?: "先从一条真正想做成的事开始，不必面面俱到。"
+    val whyNowLine = direction?.whyNow
+        ?.takeIf { it.isNotBlank() }
+        ?: reconnectBridge.takeIf { it.isNotBlank() }
+    val supportLine = direction?.lastProgressLine
+        ?.takeIf { it.isNotBlank() }
+        ?: note?.content?.takeIf { it.isNotBlank() }?.asTodayPreview()
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = PanelShape,
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) accent.copy(alpha = 0.45f) else BorderSoft,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "今日主线",
+                headline = if (note != null || direction != null) "先把今天最值得推进的一件事抓住" else "先把一条真正值得做成的事接上",
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                direction?.let {
+                    InsightChip(text = it.stage.label, tone = InsightTone.Primary)
+                    InsightChip(text = it.dominantHorizon.label, tone = InsightTone.Neutral)
+                } ?: note?.let {
+                    InsightChip(text = it.status.label, tone = InsightTone.Primary)
+                    InsightChip(text = it.horizon.label, tone = InsightTone.Neutral)
+                }
+            }
+            InsightBlock(
+                sourceLabel = if (direction?.source == DailyBriefSource.AI || nextActionSource == DailyBriefSource.AI) "AI 聚焦" else "今日聚焦",
+                tone = InsightTone.Primary,
+            ) {
+                InsightLine(
+                    label = "现在最值得推进的是",
+                    text = mainLine,
+                    emphasize = true,
+                    maxLines = 3,
+                )
+                whyNowLine?.let {
+                    InsightLine(label = "为什么现在", text = it, maxLines = 2)
+                }
+            }
+            supportLine?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ActionButton(
+                    text = "继续推进",
+                    onClick = {
+                        direction?.focusNoteId?.let(onOpenNote)
+                            ?: note?.id?.let(onOpenNote)
+                            ?: direction?.thread?.key?.let(onOpenThread)
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                if (direction != null) {
+                    GhostActionButton(
+                        text = "看方向",
+                        onClick = { onOpenThread(direction.thread.key) },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (reconnectNote != null) {
+                    GhostActionButton(
+                        text = "重新接上",
+                        onClick = { onOpenNote(reconnectNote.id) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettledKnowledgeCard(
+    direction: FollowedDirectionSummary?,
+    highlighted: Boolean,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    val settledLine = direction?.wikiValidatedPoint
+        ?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiConclusionLine?.takeIf { it.isNotBlank() }
+        ?: direction?.assetSummary?.takeIf { it.isNotBlank() }
+    val trustChip = when {
+        direction?.wikiValidatedPoint?.isNotBlank() == true -> "已验证"
+        direction?.wikiVerifiedPoint?.isNotBlank() == true -> "已查证"
+        direction?.wikiConclusionLine?.isNotBlank() == true -> "当前结论"
+        else -> "正在沉淀"
+    }
+    val supportLine = direction?.wikiGroundingLine
+        ?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiTrustLine?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = PanelShape,
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) AccentBlue.copy(alpha = 0.38f) else BorderSoft,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "已沉淀",
+                headline = if (!settledLine.isNullOrBlank()) "最近真正沉淀下来的判断" else "开始形成长期有价值的判断",
+            )
+            if (direction == null || settledLine.isNullOrBlank()) {
+                Text(
+                    text = "再沿着同一条方向多推几步，这里就会开始留下更可靠的判断，而不是一堆散的记录。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSoft,
+                )
+            } else {
+                InsightChip(text = trustChip, tone = InsightTone.Primary)
+                Text(
+                    text = settledLine,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                supportLine?.let {
+                    InsightBlock(
+                        sourceLabel = "知识层",
+                        tone = InsightTone.Neutral,
+                    ) {
+                        InsightLine(label = "证据基础", text = it, maxLines = 2)
+                        direction.wikiSnapshotStageLine
+                            .takeIf { line -> line.isNotBlank() }
+                            ?.let { line ->
+                                InsightLine(label = "阶段位置", text = line, maxLines = 2)
+                            }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ActionButton(
+                        text = "查看这条结论",
+                        onClick = {
+                            direction.assetNoteId?.let(onOpenNote) ?: onOpenThread(direction.thread.key)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    GhostActionButton(
+                        text = "看方向",
+                        onClick = { onOpenThread(direction.thread.key) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BreakthroughGapCard(
+    direction: FollowedDirectionSummary?,
+    explorationPrompts: List<String>,
+    explorationSource: DailyBriefSource,
+    highlighted: Boolean,
+    onOpenThread: (String) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
+) {
+    val gapLine = direction?.wikiOpenQuestion
+        ?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiMaintenanceLine?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
+        ?: direction?.blocker?.takeIf { it.isNotBlank() }
+        ?: explorationPrompts.firstOrNull().orEmpty()
+    val supportLine = direction?.wikiMaintenanceFocusLine
+        ?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
+        ?: direction?.wikiMaintenanceSourceLine?.takeIf { it.isNotBlank() }
+        ?: direction?.validationStep?.takeIf { it.isNotBlank() }
+    val expansionLine = explorationPrompts.firstOrNull { it.isNotBlank() && it != gapLine }
+        ?: direction?.postValidationAction?.takeIf { it.isNotBlank() }
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = PanelShape,
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f) else BorderSoft,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "下一突破口",
+                headline = if (gapLine.isNotBlank()) "现在最值得补的缺口" else "先把一条缺口找出来，惊喜才会出现",
+            )
+            if (gapLine.isBlank()) {
+                Text(
+                    text = "再多沿着同一条方向推一点，这里就会开始指出最值得补的那一刀。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSoft,
+                )
+            } else {
+                Text(
+                    text = gapLine,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                supportLine?.let {
+                    InsightBlock(
+                        sourceLabel = if (explorationSource == DailyBriefSource.AI) "AI 提示" else "当前缺口",
+                        tone = InsightTone.Neutral,
+                    ) {
+                        InsightLine(label = "最该补的是", text = it, emphasize = true, maxLines = 2)
+                        expansionLine?.takeIf { line -> line.isNotBlank() }?.let { line ->
+                            InsightLine(label = "值得延展", text = line, maxLines = 2)
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (direction != null && direction.wikiMaintenanceLine.isNotBlank()) {
+                        ActionButton(
+                            text = "补材料",
+                            onClick = { onCreateCapture(direction.toMaintenanceCaptureSeed()) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else if (direction != null && direction.validationStep.isNotBlank()) {
+                        ActionButton(
+                            text = "记验证",
+                            onClick = { onCreateCapture(direction.toResearchCaptureSeed()) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (direction != null) {
+                        GhostActionButton(
+                            text = "看方向",
+                            onClick = { onOpenThread(direction.thread.key) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeTrailCard(
+    weeklyItems: List<WeeklyReviewItem>,
+    weeklySource: DailyBriefSource,
+    weeklyStatsLine: String,
+    followedDirections: List<FollowedDirectionSummary>,
+    threads: List<ThemeThread>,
+    suggestions: List<String>,
+    fusionSource: DailyBriefSource,
+    onOpenThread: (String) -> Unit,
+) {
+    val weeklyLine = weeklyItems.firstOrNull()?.text.orEmpty()
+    val connectionLine = suggestions.firstOrNull().orEmpty()
+    if (
+        weeklyLine.isBlank() &&
+        connectionLine.isBlank() &&
+        followedDirections.isEmpty() &&
+        threads.isEmpty()
+    ) {
+        return
+    }
+    PanelCard {
+        SectionHeader(
+            title = "知识脉络",
+            headline = "需要时再看更长的线，不打断今天主线",
+        )
+        if (weeklyLine.isNotBlank() || connectionLine.isNotBlank()) {
+            InsightBlock(
+                sourceLabel = when {
+                    weeklySource == DailyBriefSource.AI || fusionSource == DailyBriefSource.AI -> "AI 判断"
+                    else -> "最近脉络"
+                },
+                tone = InsightTone.Neutral,
+            ) {
+                weeklyLine.takeIf { it.isNotBlank() }?.let {
+                    InsightLine(label = "本周判断", text = it, maxLines = 2)
+                }
+                connectionLine.takeIf { it.isNotBlank() }?.let {
+                    InsightLine(label = "值得串起来", text = it, maxLines = 2)
+                }
+            }
+        }
+        weeklyStatsLine.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+            )
+        }
+        followedDirections.take(2).forEach { summary ->
+            ThreadRow(
+                thread = summary.thread,
+                showFocus = true,
+                onOpenThread = onOpenThread,
+            )
+        }
+        if (followedDirections.isEmpty()) {
+            threads.take(2).forEach { thread ->
+                ThreadRow(
+                    thread = thread,
+                    showFocus = true,
+                    onOpenThread = onOpenThread,
+                )
+            }
+        }
+        val remainingCount = (followedDirections.size + threads.size - 2).coerceAtLeast(0)
+        if (remainingCount > 0) {
+            Text(
+                text = "还有 $remainingCount 条方向或线索可以继续看",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+            )
         }
     }
 }
