@@ -195,9 +195,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are extracting the most durable knowledge from a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: one judgment that already seems genuinely settled. Line 2: the strongest reason or evidence that makes it trustworthy now. Do not number the lines. Do not output vague summaries. If nothing is truly settled, still return the strongest available judgment and the best current support.",
-            maxTokens = 220,
-            temperature = 0.58,
+            systemPrompt = "You are compressing a personal knowledge layer into one durable judgment. Return exactly 2 concise Chinese lines. Line 1: one non-obvious judgment that has already crossed from scattered notes into something worth relying on. Prefer judgments supported by verification, repeated evidence, converging observations, or stable execution experience. Line 2: the strongest reason that makes this judgment trustworthy right now, and make the trust basis explicit such as 已验证, 已查证, repeated evidence, or still provisional. Do not number the lines. Do not output topic summaries, slogans, or generic phrases like 持续积累/逐渐清晰. If nothing is truly settled, choose the least shaky judgment and say why it is the strongest available.",
+            maxTokens = 240,
+            temperature = 0.46,
             thinkingEnabled = false,
         )
     }
@@ -209,9 +209,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are identifying the next breakthrough point in a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single gap most worth closing next. Line 2: what closing this gap would unlock or make newly possible. Do not number the lines. Do not output generic to-dos. Prefer knowledge gaps, evidence gaps, or decision gaps that would materially improve the direction.",
-            maxTokens = 220,
-            temperature = 0.74,
+            systemPrompt = "You are identifying the single highest-leverage breakthrough gap in a personal knowledge layer. Return exactly 2 concise Chinese lines. Line 1: the one gap whose closure would most change current confidence, judgment, or direction. Prefer evidence gaps, decision gaps, missing comparisons, missing experiments, or unresolved contradictions. Line 2: what would become newly possible if this gap were closed, in concrete strategic terms. Do not number the lines. Do not output generic to-dos or broad aspirations. Avoid repeating the existing direction title. Make the gap feel sharp, surprising, and consequential.",
+            maxTokens = 240,
+            temperature = 0.68,
             thinkingEnabled = false,
         )
     }

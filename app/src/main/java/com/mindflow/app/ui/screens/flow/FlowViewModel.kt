@@ -469,10 +469,15 @@ class FlowViewModel(
             settledDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
+                direction.wikiValidatedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已验证：$it") }
+                direction.wikiVerifiedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已查证：$it") }
+                direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
                 direction.wikiGroundingLine.takeIf { it.isNotBlank() }?.let { appendLine("证据基础：$it") }
                 direction.wikiTrustLine.takeIf { it.isNotBlank() }?.let { appendLine("可信边界：$it") }
                 direction.wikiKnowledgeObjectLine.takeIf { it.isNotBlank() }?.let { appendLine("知识对象：$it") }
                 direction.wikiSnapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("阶段位置：$it") }
+                direction.wikiContinuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
+                direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("走势：$it") }
             }
             if (weeklyReviewState.items.isNotEmpty()) {
                 appendLine("本周判断：")
@@ -485,9 +490,12 @@ class FlowViewModel(
             breakthroughDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
+                direction.wikiHealthLine.takeIf { it.isNotBlank() }?.let { appendLine("健康状态：$it") }
                 direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
                 direction.wikiMaintenanceTargetLine.takeIf { it.isNotBlank() }?.let { appendLine("先维护：$it") }
                 direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
+                direction.wikiMaintenanceDimensionLine.takeIf { it.isNotBlank() }?.let { appendLine("最薄弱：$it") }
+                direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
                 direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
             }
             if (primary.explorationPrompts.isNotEmpty()) {
