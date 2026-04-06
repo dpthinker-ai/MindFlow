@@ -144,9 +144,6 @@ private fun FlowScreen(
     val highlightReconnect = focus == FlowFocus.RECONNECT
     val highlightReview = focus == FlowFocus.REVIEW
     val highlightDirection = focus == FlowFocus.DIRECTION
-    val primaryDirection = remember(uiState.followedDirections) {
-        uiState.followedDirections.firstOrNull()
-    }
     val settledDirection = remember(uiState.followedDirections) {
         uiState.followedDirections.firstOrNull {
             it.wikiValidatedPoint.isNotBlank() ||
@@ -243,7 +240,7 @@ private fun FlowScreen(
                     ) {
                         MainlineFocusCard(
                             note = uiState.continueNote,
-                            direction = primaryDirection,
+                            candidate = uiState.mainlineCandidate,
                             nextActionText = uiState.nextActionText,
                             compression = uiState.knowledgeCompression,
                             reconnectBridge = uiState.staleBridge,
@@ -329,7 +326,7 @@ private fun FlowScreen(
 @Composable
 private fun MainlineFocusCard(
     note: NoteEntity?,
-    direction: FollowedDirectionSummary?,
+    candidate: MainlineBetCandidate?,
     nextActionText: String,
     compression: FlowKnowledgeCompressionState,
     reconnectBridge: String,
@@ -340,15 +337,15 @@ private fun MainlineFocusCard(
     onOpenNote: (Long) -> Unit,
 ) {
     val accent = noteStatusAccent(note?.status ?: NoteStatus.IN_PROGRESS)
-    val title = direction?.thread?.title
+    val title = candidate?.title
         ?: note?.topic?.takeIf { it.isNotBlank() }
         ?: "今天先押这一件"
-    val mainLine = direction?.summary
+    val mainLine = candidate?.summary
         ?.takeIf { it.isNotBlank() }
         ?: nextActionText.takeIf { it.isNotBlank() }
         ?: reconnectStep.takeIf { it.isNotBlank() }
         ?: "先从一条真正想做成的事开始，不必面面俱到。"
-    val whyNowLine = direction?.whyNow
+    val whyNowLine = candidate?.whyNow
         ?.takeIf { it.isNotBlank() }
         ?: reconnectBridge.takeIf { it.isNotBlank() }
     val resolvedMainLine = compression.mainline.ifBlank { mainLine }
@@ -369,22 +366,28 @@ private fun MainlineFocusCard(
         ) {
             SectionHeader(
                 title = "今日押注",
-                headline = if (note != null || direction != null) "今天先推这一件" else "先把一条真正值得做成的事接上",
+                headline = if (note != null || candidate != null) "今天先推这一件" else "先把一条真正值得做成的事接上",
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                direction?.let {
-                    InsightChip(text = it.stage.label, tone = InsightTone.Primary)
-                    InsightChip(text = it.dominantHorizon.label, tone = InsightTone.Neutral)
+                candidate?.takeIf { it.stageLabel.isNotBlank() || it.horizonLabel.isNotBlank() }?.let {
+                    if (it.stageLabel.isNotBlank()) {
+                        InsightChip(text = it.stageLabel, tone = InsightTone.Primary)
+                    }
+                    if (it.horizonLabel.isNotBlank()) {
+                        InsightChip(text = it.horizonLabel, tone = InsightTone.Neutral)
+                    }
                 } ?: note?.let {
                     InsightChip(text = it.status.label, tone = InsightTone.Primary)
                     InsightChip(text = it.horizon.label, tone = InsightTone.Neutral)
                 }
             }
-            title.takeIf { it.isNotBlank() && (direction != null || note != null) }?.let {
+            title.takeIf { it.isNotBlank() && (candidate != null || note != null) }?.let {
                 AnchorLine(
                     text = "来自：$it",
                     onClick = {
-                        direction?.thread?.key?.let(onOpenThread)
+                        candidate?.focusNoteId?.let(onOpenNote)
+                            ?: candidate?.noteId?.let(onOpenNote)
+                            ?: candidate?.threadKey?.let(onOpenThread)
                             ?: note?.id?.let(onOpenNote)
                     },
                 )
@@ -422,9 +425,10 @@ private fun MainlineFocusCard(
                 ActionButton(
                     text = "继续推进",
                     onClick = {
-                        direction?.focusNoteId?.let(onOpenNote)
+                        candidate?.focusNoteId?.let(onOpenNote)
+                            ?: candidate?.noteId?.let(onOpenNote)
+                            ?: candidate?.threadKey?.let(onOpenThread)
                             ?: note?.id?.let(onOpenNote)
-                            ?: direction?.thread?.key?.let(onOpenThread)
                     },
                     modifier = Modifier.weight(1f),
                 )

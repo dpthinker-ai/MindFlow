@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 data class FlowUiState(
     val todayCount: Int = 0,
     val continueNote: NoteEntity? = null,
+    val mainlineCandidate: MainlineBetCandidate? = null,
     val nextActionText: String = "",
     val nextActionSource: DailyBriefSource = DailyBriefSource.RULE,
     val staleNote: NoteEntity? = null,
@@ -67,6 +68,19 @@ data class FlowUiState(
     val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
     val settledFeedback: FlowCardFeedback? = null,
     val gapFeedback: FlowCardFeedback? = null,
+)
+
+data class MainlineBetCandidate(
+    val key: String,
+    val title: String,
+    val stageLabel: String = "",
+    val horizonLabel: String = "",
+    val summary: String = "",
+    val whyNow: String = "",
+    val nextStep: String = "",
+    val threadKey: String? = null,
+    val focusNoteId: Long? = null,
+    val noteId: Long? = null,
 )
 
 enum class FlowCardFeedback {
@@ -158,6 +172,7 @@ class FlowViewModel(
         val mainlineKey: String,
         val settledKey: String,
         val gapKey: String,
+        val selectedMainlineCandidate: MainlineBetCandidate?,
         val mainlineContextSummary: String,
         val settledContextSummary: String,
         val gapContextSummary: String,
@@ -166,6 +181,7 @@ class FlowViewModel(
 
     private val directionState = MutableStateFlow(DirectionState())
     private val knowledgeCompressionState = MutableStateFlow(FlowKnowledgeCompressionState())
+    private val mainlineCandidateState = MutableStateFlow<MainlineBetCandidate?>(null)
     private val mainlineRefreshNonce = MutableStateFlow(0)
     private val gapRefreshNonce = MutableStateFlow(0)
     private val settledFeedbackState = MutableStateFlow<FlowCardFeedback?>(null)
@@ -219,6 +235,7 @@ class FlowViewModel(
         fusionSuggestionPlanner.state,
         directionState,
         knowledgeCompressionState,
+        mainlineCandidateState,
         settledFeedbackState,
         gapFeedbackState,
     ) { values ->
@@ -227,11 +244,13 @@ class FlowViewModel(
         val fusionState = values[2] as FusionSuggestionState
         val directions = values[3] as DirectionState
         val compression = values[4] as FlowKnowledgeCompressionState
-        val settledFeedback = values[5] as FlowCardFeedback?
-        val gapFeedback = values[6] as FlowCardFeedback?
+        val mainlineCandidate = values[5] as MainlineBetCandidate?
+        val settledFeedback = values[6] as FlowCardFeedback?
+        val gapFeedback = values[7] as FlowCardFeedback?
         FlowUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
+            mainlineCandidate = mainlineCandidate,
             nextActionText = primary.nextActionText,
             nextActionSource = primary.nextActionSource,
             staleNote = primary.staleNote,
@@ -384,6 +403,7 @@ class FlowViewModel(
                     gapFeedback = gapFeedback,
                 )
             }.collectLatest { input ->
+                mainlineCandidateState.value = input.selectedMainlineCandidate
                 val previous = knowledgeCompressionState.value
                 val next = flowKnowledgeCompressionPlanner.summarize(
                     mainlineKey = input.mainlineKey,
@@ -416,6 +436,12 @@ class FlowViewModel(
         gapFeedback: FlowCardFeedback?,
     ): FlowCompressionInput {
         val primaryDirection = directions.followedDirections.firstOrNull()
+        val mainlineCandidates = buildMainlineCandidates(
+            primary = primary,
+            directions = directions.followedDirections,
+        )
+        val selectedMainlineCandidate = mainlineCandidates
+            .getOrNull(mainlineNonce.floorMod(mainlineCandidates.size))
         val settledDirection = directions.followedDirections.firstOrNull {
             it.wikiValidatedPoint.isNotBlank() ||
                 it.wikiVerifiedPoint.isNotBlank() ||
@@ -431,12 +457,12 @@ class FlowViewModel(
         } ?: primaryDirection
 
         val fallback = FlowKnowledgeCompressionState(
-            mainline = primaryDirection?.summary
+            mainline = selectedMainlineCandidate?.summary
                 ?.takeIf { it.isNotBlank() }
                 ?: primary.nextActionText.takeIf { it.isNotBlank() }
                 ?: primary.staleNextStep.takeIf { it.isNotBlank() }
                 ?: "先把今天最值得推进的一件事抓住。",
-            whyNow = primaryDirection?.whyNow
+            whyNow = selectedMainlineCandidate?.whyNow
                 ?.takeIf { it.isNotBlank() }
                 ?: primary.staleBridge.takeIf { it.isNotBlank() }
                 ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty(),
@@ -483,6 +509,18 @@ class FlowViewModel(
             append(':')
             append(fusionState.generatedAt)
             append(':')
+            append(mainlineCandidates.joinToString("|") {
+                listOf(
+                    it.key,
+                    it.title,
+                    it.stageLabel,
+                    it.horizonLabel,
+                    it.summary,
+                    it.whyNow,
+                    it.nextStep,
+                ).joinToString("~")
+            })
+            append(':')
             append(directions.followedDirections.joinToString("|") {
                 listOf(
                     it.thread.key,
@@ -505,13 +543,29 @@ class FlowViewModel(
         val mainlineContextSummary = buildString {
             appendLine("请像主编一样，只选一个今天值得押注的方向。不要列候选，不要泛泛鼓励。")
             appendLine("这是今天的首页主卡，需要像编辑部给出的今日判断，一天内默认保持稳定。")
-            primaryDirection?.let { direction ->
-                appendLine("当前主方向：${direction.thread.title}")
-                appendLine("方向阶段：${direction.stage.label}")
-                appendLine("时间尺度：${direction.dominantHorizon.label}")
-                direction.summary.takeIf { it.isNotBlank() }?.let { appendLine("当前判断：$it") }
-                direction.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("为什么现在：$it") }
-                direction.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("最小动作：$it") }
+            if (mainlineCandidates.isNotEmpty()) {
+                appendLine("可选押注：")
+                mainlineCandidates.forEachIndexed { index, candidate ->
+                    appendLine("${index + 1}. ${candidate.title} · ${candidate.stageLabel.ifBlank { "无阶段" }} · ${candidate.horizonLabel.ifBlank { "无周期" }}")
+                    candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("  当前判断：$it") }
+                    candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("  为什么现在：$it") }
+                    candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("  最小动作：$it") }
+                }
+            }
+            selectedMainlineCandidate?.let { candidate ->
+                appendLine("这次要写的押注对象：${candidate.title}")
+                candidate.stageLabel.takeIf { it.isNotBlank() }?.let { appendLine("阶段：$it") }
+                candidate.horizonLabel.takeIf { it.isNotBlank() }?.let { appendLine("时间尺度：$it") }
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("已知判断：$it") }
+                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("已知为什么现在：$it") }
+                candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("已知最小动作：$it") }
+            }
+            if (mainlineNonce > 0 && mainlineCandidates.size > 1) {
+                appendLine("用户刚点了“换一个”，这次必须换到不同的真实候选方向，而不是改写同一条内容。")
+            } else if (mainlineNonce > 0) {
+                appendLine("用户刚点了“换一个”，候选不多时请至少换一个角度，不要只是同义改写。")
+            }
+            directions.followedDirections.firstOrNull { it.thread.key == selectedMainlineCandidate?.threadKey }?.let { direction ->
                 direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近推进：$it") }
             }
             primary.nextActionText.takeIf { it.isNotBlank() }?.let { appendLine("系统下一步：$it") }
@@ -627,6 +681,7 @@ class FlowViewModel(
             mainlineKey = mainlineKey,
             settledKey = settledKey,
             gapKey = gapKey,
+            selectedMainlineCandidate = selectedMainlineCandidate,
             mainlineContextSummary = mainlineContextSummary,
             settledContextSummary = settledContextSummary,
             gapContextSummary = gapContextSummary,
@@ -648,6 +703,58 @@ class FlowViewModel(
 
     fun markGapFeedback(helpful: Boolean) {
         gapFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
+    }
+
+    private fun buildMainlineCandidates(
+        primary: FlowPrimaryInputs,
+        directions: List<FollowedDirectionSummary>,
+    ): List<MainlineBetCandidate> {
+        val candidates = mutableListOf<MainlineBetCandidate>()
+        directions.forEach { direction ->
+            candidates += MainlineBetCandidate(
+                key = "thread:${direction.thread.key}",
+                title = direction.thread.title,
+                stageLabel = direction.stage.label,
+                horizonLabel = direction.dominantHorizon.label,
+                summary = direction.summary,
+                whyNow = direction.whyNow,
+                nextStep = direction.nextStep,
+                threadKey = direction.thread.key,
+                focusNoteId = direction.focusNoteId,
+                noteId = direction.focusNoteId,
+            )
+        }
+        primary.continueNote?.let { note ->
+            val exists = directions.any { summary -> summary.focusNoteId == note.id }
+            if (!exists) {
+                candidates += MainlineBetCandidate(
+                    key = "note:${note.id}",
+                    title = note.topic.ifBlank { "正在推进的记录" },
+                    stageLabel = note.status.label,
+                    horizonLabel = note.horizon.label,
+                    summary = primary.nextActionText.ifBlank { note.content.take(72).trim() },
+                    whyNow = "",
+                    nextStep = primary.nextActionText,
+                    noteId = note.id,
+                )
+            }
+        }
+        primary.staleNote?.let { note ->
+            val exists = candidates.any { candidate -> candidate.noteId == note.id }
+            if (!exists) {
+                candidates += MainlineBetCandidate(
+                    key = "stale:${note.id}",
+                    title = note.topic.ifBlank { "值得重新接上的记录" },
+                    stageLabel = note.status.label,
+                    horizonLabel = note.horizon.label,
+                    summary = primary.staleBridge,
+                    whyNow = primary.staleBridge,
+                    nextStep = primary.staleNextStep,
+                    noteId = note.id,
+                )
+            }
+        }
+        return candidates.distinctBy { it.key }
     }
 
     companion object {
@@ -682,6 +789,9 @@ class FlowViewModel(
         }
     }
 }
+
+private fun Int.floorMod(size: Int): Int =
+    if (size <= 0) 0 else ((this % size) + size) % size
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
     notes

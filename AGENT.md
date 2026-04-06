@@ -104,6 +104,7 @@ Notes:
 - AI naming should stay consistent and low-noise across Flow, thread, editor, and reminders.
 - AI results should reuse the same visual language across Flow, thread, and reminder copy: one source cue, one primary judgement, and a small set of supportive lines.
 - Flow should behave like a knowledge-compression layer, not an insight wall: one clear bet to push, one settled judgement to keep, and one new opening worth trying.
+- Flow's main bet must rotate across real candidate directions when the user asks for another one; a rewritten description of the same underlying direction does not count as a new bet.
 
 ## Engineering Rules
 

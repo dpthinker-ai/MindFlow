@@ -299,6 +299,7 @@ Current progress:
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces
 - Flow is being refocused into a knowledge-compression layer so the user sees one daily bet, one settled judgement, and one new opening instead of a stack of parallel AI cards
+- the daily bet is now expected to rotate across real candidate directions when the user asks for another one, instead of merely rephrasing the same candidate
 
 ## Success Criteria
 
