@@ -298,7 +298,7 @@ Current progress:
 - stable direction assets: first version implemented in thread workspace and followed-direction summaries
 - AI information architecture: first version implemented with `今日聚焦 / 方向判断 / 当前判断 / 研究 / 执行 / AI 整理`
 - AI result styling: first version implemented with shared source chips and insight blocks across Flow / thread surfaces
-- Flow is being refocused into a knowledge-compression layer so the user sees one mainline, one settled judgement, and one breakthrough gap instead of a stack of parallel AI cards
+- Flow is being refocused into a knowledge-compression layer so the user sees one daily bet, one settled judgement, and one new opening instead of a stack of parallel AI cards
 
 ## Success Criteria
 

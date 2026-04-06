@@ -153,11 +153,11 @@ private fun FlowScreen(
     }
     val subtitle = remember(focus) {
         when (focus) {
-            FlowFocus.TODAY -> "从提醒回来，先把今天最值得推进的一步接上。"
-            FlowFocus.RECONNECT -> "从提醒回来，先看哪条旧想法值得重新接回主线。"
-            FlowFocus.REVIEW -> "从提醒回来，先看最近真正沉淀下来的判断。"
-            FlowFocus.DIRECTION -> "从提醒回来，先看这条方向最该补的缺口。"
-            null -> "把散的想法，压成今天可用的判断。"
+            FlowFocus.TODAY -> "先押今天最值得推进的一件事。"
+            FlowFocus.RECONNECT -> "先把最值得重新接回来的那条线接上。"
+            FlowFocus.REVIEW -> "先看最近真正成立的一个判断。"
+            FlowFocus.DIRECTION -> "先看最可能打开新东西的那个切口。"
+            null -> "先押一件事，再守住一个已成立判断。"
         }
     }
     var showMainline by remember { mutableStateOf(false) }
@@ -278,18 +278,6 @@ private fun FlowScreen(
                     }
                 }
 
-                item {
-                    KnowledgeTrailCard(
-                        weeklyItems = uiState.weeklyReviewItems,
-                        weeklySource = uiState.weeklyReviewSource,
-                        weeklyStatsLine = uiState.weeklyReviewStatsLine,
-                        followedDirections = uiState.followedDirections,
-                        threads = uiState.themeThreads,
-                        suggestions = uiState.fusionSuggestions,
-                        fusionSource = uiState.fusionSource,
-                        onOpenThread = onOpenThread,
-                    )
-                }
             }
         }
     }
@@ -311,7 +299,7 @@ private fun MainlineFocusCard(
     val accent = noteStatusAccent(note?.status ?: NoteStatus.IN_PROGRESS)
     val title = direction?.thread?.title
         ?: note?.topic?.takeIf { it.isNotBlank() }
-        ?: "先把一条真正想做成的事往前推进"
+        ?: "今天先押这一件"
     val mainLine = direction?.summary
         ?.takeIf { it.isNotBlank() }
         ?: nextActionText.takeIf { it.isNotBlank() }
@@ -337,15 +325,8 @@ private fun MainlineFocusCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "今日主线",
-                headline = if (note != null || direction != null) "先把今天最值得推进的一件事抓住" else "先把一条真正值得做成的事接上",
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                title = "今日押注",
+                headline = if (note != null || direction != null) "今天先推这一件" else "先把一条真正值得做成的事接上",
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 direction?.let {
@@ -356,27 +337,39 @@ private fun MainlineFocusCard(
                     InsightChip(text = it.horizon.label, tone = InsightTone.Neutral)
                 }
             }
-            InsightBlock(
-                sourceLabel = if (compression.mainlineSource == DailyBriefSource.AI) "AI 聚焦" else "规则回退",
-                tone = InsightTone.Primary,
-            ) {
-                AnimatedContent(
-                    targetState = resolvedMainLine,
-                    label = "flowMainlineText",
-                ) { text ->
-                    InsightLine(
-                        label = "现在最值得推进的是",
-                        text = text,
-                        emphasize = true,
-                        maxLines = 3,
-                    )
-                }
-                AnimatedContent(
-                    targetState = resolvedWhyNow,
-                    label = "flowMainlineWhyNow",
-                ) { text ->
-                    if (text.isNotBlank()) {
-                        InsightLine(label = "为什么现在", text = text, maxLines = 2)
+            title.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            AnimatedContent(
+                targetState = resolvedMainLine,
+                label = "flowMainlineText",
+            ) { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (resolvedWhyNow.isNotBlank() || compression.mainlineSource != DailyBriefSource.AI) {
+                InsightBlock(
+                    sourceLabel = if (compression.mainlineSource == DailyBriefSource.AI) null else "本地判断",
+                    tone = InsightTone.Primary,
+                ) {
+                    AnimatedContent(
+                        targetState = resolvedWhyNow,
+                        label = "flowMainlineWhyNow",
+                    ) { text ->
+                        if (text.isNotBlank()) {
+                            InsightLine(label = "为什么现在", text = text, maxLines = 2)
+                        }
                     }
                 }
             }
@@ -451,12 +444,12 @@ private fun SettledKnowledgeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "已沉淀",
-                headline = if (resolvedSettledLine.isNotBlank()) "最近真正沉淀下来的判断" else "开始形成长期有价值的判断",
+                title = "已成立",
+                headline = if (resolvedSettledLine.isNotBlank()) "最近最值得信的一点" else "开始长出能被依赖的判断",
             )
             if (direction == null || resolvedSettledLine.isBlank()) {
                 Text(
-                    text = "再沿着同一条方向多推几步，这里就会开始留下更可靠的判断，而不是一堆散的记录。",
+                    text = "再沿着同一条方向多推几步，这里会开始留下真正能拿来用的判断，而不是一堆散记录。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
@@ -476,7 +469,7 @@ private fun SettledKnowledgeCard(
                 }
                 resolvedSupportLine.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = if (compression.settledSource == DailyBriefSource.AI) "AI 沉淀" else "规则回退",
+                        sourceLabel = if (compression.settledSource == DailyBriefSource.AI) null else "本地判断",
                         tone = InsightTone.Neutral,
                     ) {
                         AnimatedContent(
@@ -492,7 +485,7 @@ private fun SettledKnowledgeCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ActionButton(
-                        text = "查看这条结论",
+                        text = "看这条判断",
                         onClick = {
                             direction.assetNoteId?.let(onOpenNote) ?: onOpenThread(direction.thread.key)
                         },
@@ -546,12 +539,12 @@ private fun BreakthroughGapCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "下一突破口",
-                headline = if (resolvedGapLine.isNotBlank()) "现在最值得补的缺口" else "先把一条缺口找出来，惊喜才会出现",
+                title = "新机会",
+                headline = if (resolvedGapLine.isNotBlank()) "最可能打开新东西的一刀" else "先找到最值得试的新连接",
             )
             if (resolvedGapLine.isBlank()) {
                 Text(
-                    text = "再多沿着同一条方向推一点，这里就会开始指出最值得补的那一刀。",
+                    text = "再多沿着同一条方向推一点，这里会开始指出最值得试的新连接或切口。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
@@ -570,7 +563,7 @@ private fun BreakthroughGapCard(
                 }
                 resolvedGapSupport.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = if (compression.gapSource == DailyBriefSource.AI) "AI 突破口" else "规则回退",
+                        sourceLabel = if (compression.gapSource == DailyBriefSource.AI) null else "本地判断",
                         tone = InsightTone.Neutral,
                     ) {
                         AnimatedContent(
@@ -578,7 +571,7 @@ private fun BreakthroughGapCard(
                             label = "flowGapSupport",
                         ) { text ->
                             InsightLine(
-                                label = if (compression.gapSource == DailyBriefSource.AI) "补上后会打开" else "先从这里补",
+                                label = "为什么值得试",
                                 text = text,
                                 emphasize = true,
                                 maxLines = 2,
@@ -592,13 +585,13 @@ private fun BreakthroughGapCard(
                 ) {
                     if (direction != null && direction.wikiMaintenanceLine.isNotBlank()) {
                         ActionButton(
-                            text = "补材料",
+                            text = "记一条",
                             onClick = { onCreateCapture(direction.toMaintenanceCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
                     } else if (direction != null && direction.validationStep.isNotBlank()) {
                         ActionButton(
-                            text = "记验证",
+                            text = "记一条",
                             onClick = { onCreateCapture(direction.toResearchCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )

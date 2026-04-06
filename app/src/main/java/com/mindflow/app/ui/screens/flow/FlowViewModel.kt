@@ -445,7 +445,7 @@ class FlowViewModel(
         }
 
         val mainlineContextSummary = buildString {
-            appendLine("请只判断今天最该推进的一条主线。不要泛泛鼓励，不要罗列候选。")
+            appendLine("请像主编一样，只选一个今天值得押注的方向。不要列候选，不要泛泛鼓励。")
             primaryDirection?.let { direction ->
                 appendLine("当前主方向：${direction.thread.title}")
                 appendLine("方向阶段：${direction.stage.label}")
@@ -465,7 +465,7 @@ class FlowViewModel(
         }
 
         val settledContextSummary = buildString {
-            appendLine("请只压缩已经沉淀下来的判断。不要写计划，不要写鼓励。")
+            appendLine("请像知识编辑一样，只挑一个现在最值得保留下来的判断。不要写计划，不要写鼓励。")
             settledDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
@@ -486,7 +486,7 @@ class FlowViewModel(
         }
 
         val gapContextSummary = buildString {
-            appendLine("请只找当前最值得补的一个突破口。不要平均分配，不要列清单。")
+            appendLine("请像创新编辑一样，只找一个现在最值得试的新连接或新切口。不要平均分配，不要列清单。")
             breakthroughDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
                 appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
@@ -503,7 +503,7 @@ class FlowViewModel(
                 primary.explorationPrompts.take(2).forEach { appendLine(it) }
             }
             if (fusionState.lines.isNotEmpty()) {
-                appendLine("可延展融合：")
+                appendLine("潜在组合：")
                 fusionState.lines.take(2).forEach { appendLine(it) }
             }
         }
