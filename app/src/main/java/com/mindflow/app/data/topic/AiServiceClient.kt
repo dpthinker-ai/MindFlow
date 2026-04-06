@@ -174,16 +174,44 @@ class AiServiceClient {
         )
     }
 
-    suspend fun generateFlowKnowledgeCompression(
+    suspend fun generateFlowMainline(
         settings: AiSettings,
         contextSummary: String,
     ): AiChatResult = withContext(Dispatchers.IO) {
         requestChatCompletion(
             settings = settings,
-            userPrompt = contextSummary.take(6_000),
-            systemPrompt = "You are compressing a personal knowledge system into a high-value mobile dashboard. Return exactly 6 concise Chinese lines in this order: 1) the single most important mainline to push now, 2) why this matters now, 3) one settled judgment that seems genuinely durable, 4) the strongest support line that makes that judgment trustworthy, 5) the single breakthrough gap worth closing next, 6) what closing that gap would unlock or make newly possible. Do not number the lines. Do not repeat note titles mechanically. Do not output generic encouragement. Prefer sharp, non-obvious, usable judgments.",
-            maxTokens = 420,
-            temperature = 0.68,
+            userPrompt = contextSummary.take(4_000),
+            systemPrompt = "You are deciding the one thing worth pushing now in a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single most important mainline to push now. Line 2: why this matters now, with leverage or timing. Do not number the lines. Do not restate note titles mechanically. Do not give generic encouragement. Prefer sharp, non-obvious, usable judgments.",
+            maxTokens = 220,
+            temperature = 0.72,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateFlowSettledKnowledge(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(4_000),
+            systemPrompt = "You are extracting the most durable knowledge from a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: one judgment that already seems genuinely settled. Line 2: the strongest reason or evidence that makes it trustworthy now. Do not number the lines. Do not output vague summaries. If nothing is truly settled, still return the strongest available judgment and the best current support.",
+            maxTokens = 220,
+            temperature = 0.58,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateFlowBreakthroughGap(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(4_000),
+            systemPrompt = "You are identifying the next breakthrough point in a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single gap most worth closing next. Line 2: what closing this gap would unlock or make newly possible. Do not number the lines. Do not output generic to-dos. Prefer knowledge gaps, evidence gaps, or decision gaps that would materially improve the direction.",
+            maxTokens = 220,
+            temperature = 0.74,
             thinkingEnabled = false,
         )
     }

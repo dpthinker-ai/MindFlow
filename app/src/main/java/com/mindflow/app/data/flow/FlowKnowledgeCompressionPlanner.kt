@@ -5,15 +5,19 @@ import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiServiceClient
 import java.time.LocalDate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 data class FlowKnowledgeCompressionState(
     val mainline: String = "",
     val whyNow: String = "",
+    val mainlineSource: DailyBriefSource = DailyBriefSource.RULE,
     val settledLine: String = "",
     val settledSupport: String = "",
+    val settledSource: DailyBriefSource = DailyBriefSource.RULE,
     val gapLine: String = "",
     val gapSupport: String = "",
-    val source: DailyBriefSource = DailyBriefSource.RULE,
+    val gapSource: DailyBriefSource = DailyBriefSource.RULE,
 )
 
 class FlowKnowledgeCompressionPlanner(
@@ -24,7 +28,9 @@ class FlowKnowledgeCompressionPlanner(
 
     suspend fun summarize(
         signature: String,
-        contextSummary: String,
+        mainlineContextSummary: String,
+        settledContextSummary: String,
+        gapContextSummary: String,
         fallback: FlowKnowledgeCompressionState,
     ): FlowKnowledgeCompressionState {
         if (signature.isBlank()) return fallback
@@ -32,40 +38,70 @@ class FlowKnowledgeCompressionPlanner(
 
         val settings = aiSettingsRepository.getCurrent()
         val dayKey = LocalDate.now().toString()
-        val resolved = if (settings.aiEnabled && settings.isConfigured && contextSummary.isNotBlank()) {
+        val resolved = if (
+            settings.aiEnabled &&
+            settings.isConfigured &&
+            mainlineContextSummary.isNotBlank() &&
+            settledContextSummary.isNotBlank() &&
+            gapContextSummary.isNotBlank()
+        ) {
             aiSettingsRepository.recordUsage(
-                requestIncrement = 1,
+                requestIncrement = 3,
                 dayKey = dayKey,
             )
-            when (
-                val result = aiServiceClient.generateFlowKnowledgeCompression(
-                    settings = settings,
-                    contextSummary = contextSummary,
-                )
-            ) {
-                is AiChatResult.Success -> {
-                    val lines = parseLines(result.content)
-                    if (lines.size >= 5) {
-                        aiSettingsRepository.recordUsage(
-                            successIncrement = 1,
-                            tokenIncrement = result.totalTokens ?: 0,
-                            dayKey = dayKey,
-                        )
-                        fallback.copy(
-                            mainline = lines.getOrElse(0) { fallback.mainline }.ifBlank { fallback.mainline },
-                            whyNow = lines.getOrElse(1) { fallback.whyNow }.ifBlank { fallback.whyNow },
-                            settledLine = lines.getOrElse(2) { fallback.settledLine }.ifBlank { fallback.settledLine },
-                            settledSupport = lines.getOrElse(3) { fallback.settledSupport }.ifBlank { fallback.settledSupport },
-                            gapLine = lines.getOrElse(4) { fallback.gapLine }.ifBlank { fallback.gapLine },
-                            gapSupport = lines.getOrElse(5) { fallback.gapSupport }.ifBlank { fallback.gapSupport },
-                            source = DailyBriefSource.AI,
-                        )
-                    } else {
-                        fallback
-                    }
+            coroutineScope {
+                val mainlineDeferred = async {
+                    aiServiceClient.generateFlowMainline(
+                        settings = settings,
+                        contextSummary = mainlineContextSummary,
+                    )
+                }
+                val settledDeferred = async {
+                    aiServiceClient.generateFlowSettledKnowledge(
+                        settings = settings,
+                        contextSummary = settledContextSummary,
+                    )
+                }
+                val gapDeferred = async {
+                    aiServiceClient.generateFlowBreakthroughGap(
+                        settings = settings,
+                        contextSummary = gapContextSummary,
+                    )
                 }
 
-                is AiChatResult.Failure -> fallback
+                val mainlineResult = mainlineDeferred.await()
+                val settledResult = settledDeferred.await()
+                val gapResult = gapDeferred.await()
+
+                val mainlineLines = (mainlineResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
+                val settledLines = (settledResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
+                val gapLines = (gapResult as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
+
+                val successCount =
+                    listOf(mainlineResult, settledResult, gapResult).count { it is AiChatResult.Success }
+                val tokenCount = listOf(mainlineResult, settledResult, gapResult)
+                    .mapNotNull { (it as? AiChatResult.Success)?.totalTokens }
+                    .sum()
+
+                if (successCount > 0) {
+                    aiSettingsRepository.recordUsage(
+                        successIncrement = successCount,
+                        tokenIncrement = tokenCount,
+                        dayKey = dayKey,
+                    )
+                }
+
+                fallback.copy(
+                    mainline = mainlineLines.getOrElse(0) { fallback.mainline }.ifBlank { fallback.mainline },
+                    whyNow = mainlineLines.getOrElse(1) { fallback.whyNow }.ifBlank { fallback.whyNow },
+                    mainlineSource = if (mainlineLines.size >= 2) DailyBriefSource.AI else fallback.mainlineSource,
+                    settledLine = settledLines.getOrElse(0) { fallback.settledLine }.ifBlank { fallback.settledLine },
+                    settledSupport = settledLines.getOrElse(1) { fallback.settledSupport }.ifBlank { fallback.settledSupport },
+                    settledSource = if (settledLines.size >= 2) DailyBriefSource.AI else fallback.settledSource,
+                    gapLine = gapLines.getOrElse(0) { fallback.gapLine }.ifBlank { fallback.gapLine },
+                    gapSupport = gapLines.getOrElse(1) { fallback.gapSupport }.ifBlank { fallback.gapSupport },
+                    gapSource = if (gapLines.size >= 2) DailyBriefSource.AI else fallback.gapSource,
+                )
             }
         } else {
             fallback

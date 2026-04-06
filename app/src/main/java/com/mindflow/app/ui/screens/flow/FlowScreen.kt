@@ -1,5 +1,10 @@
 package com.mindflow.app.ui.screens.flow
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +74,7 @@ import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
+import kotlinx.coroutines.delay
 
 @Composable
 fun FlowRoute(
@@ -152,6 +160,9 @@ private fun FlowScreen(
             null -> "把散的想法，压成今天可用的判断。"
         }
     }
+    var showMainline by remember { mutableStateOf(false) }
+    var showSettled by remember { mutableStateOf(false) }
+    var showGap by remember { mutableStateOf(false) }
 
     LaunchedEffect(focus) {
         when (focus) {
@@ -161,6 +172,21 @@ private fun FlowScreen(
             FlowFocus.REVIEW,
             FlowFocus.DIRECTION -> listState.scrollToItem(4)
         }
+    }
+    LaunchedEffect(
+        uiState.knowledgeCompression.mainline,
+        uiState.knowledgeCompression.settledLine,
+        uiState.knowledgeCompression.gapLine,
+    ) {
+        showMainline = false
+        showSettled = false
+        showGap = false
+        delay(40)
+        showMainline = true
+        delay(70)
+        showSettled = true
+        delay(70)
+        showGap = true
     }
 
     ScreenBackground {
@@ -196,41 +222,60 @@ private fun FlowScreen(
                 }
 
                 item {
-                    MainlineFocusCard(
-                        note = uiState.continueNote,
-                        direction = primaryDirection,
-                        nextActionText = uiState.nextActionText,
-                        nextActionSource = uiState.nextActionSource,
-                        compression = uiState.knowledgeCompression,
-                        reconnectNote = uiState.staleNote,
-                        reconnectBridge = uiState.staleBridge,
-                        reconnectStep = uiState.staleNextStep,
-                        highlighted = highlightToday || highlightReconnect,
-                        onOpenThread = onOpenThread,
-                        onOpenNote = onOpenNote,
-                    )
+                    AnimatedVisibility(
+                        visible = showMainline,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 6 }),
+                        exit = fadeOut(),
+                        label = "flowMainlineReveal",
+                    ) {
+                        MainlineFocusCard(
+                            note = uiState.continueNote,
+                            direction = primaryDirection,
+                            nextActionText = uiState.nextActionText,
+                            compression = uiState.knowledgeCompression,
+                            reconnectNote = uiState.staleNote,
+                            reconnectBridge = uiState.staleBridge,
+                            reconnectStep = uiState.staleNextStep,
+                            highlighted = highlightToday || highlightReconnect,
+                            onOpenThread = onOpenThread,
+                            onOpenNote = onOpenNote,
+                        )
+                    }
                 }
 
                 item {
-                    SettledKnowledgeCard(
-                        direction = settledDirection,
-                        compression = uiState.knowledgeCompression,
-                        highlighted = highlightReview,
-                        onOpenThread = onOpenThread,
-                        onOpenNote = onOpenNote,
-                    )
+                    AnimatedVisibility(
+                        visible = showSettled,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 6 }),
+                        exit = fadeOut(),
+                        label = "flowSettledReveal",
+                    ) {
+                        SettledKnowledgeCard(
+                            direction = settledDirection,
+                            compression = uiState.knowledgeCompression,
+                            highlighted = highlightReview,
+                            onOpenThread = onOpenThread,
+                            onOpenNote = onOpenNote,
+                        )
+                    }
                 }
 
                 item {
-                    BreakthroughGapCard(
-                        direction = breakthroughDirection,
-                        explorationPrompts = uiState.explorationPrompts,
-                        explorationSource = uiState.explorationSource,
-                        compression = uiState.knowledgeCompression,
-                        highlighted = highlightDirection || highlightReconnect,
-                        onOpenThread = onOpenThread,
-                        onCreateCapture = onCreateCapture,
-                    )
+                    AnimatedVisibility(
+                        visible = showGap,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 6 }),
+                        exit = fadeOut(),
+                        label = "flowGapReveal",
+                    ) {
+                        BreakthroughGapCard(
+                            direction = breakthroughDirection,
+                            explorationPrompts = uiState.explorationPrompts,
+                            compression = uiState.knowledgeCompression,
+                            highlighted = highlightDirection || highlightReconnect,
+                            onOpenThread = onOpenThread,
+                            onCreateCapture = onCreateCapture,
+                        )
+                    }
                 }
 
                 item {
@@ -255,7 +300,6 @@ private fun MainlineFocusCard(
     note: NoteEntity?,
     direction: FollowedDirectionSummary?,
     nextActionText: String,
-    nextActionSource: DailyBriefSource,
     compression: FlowKnowledgeCompressionState,
     reconnectNote: NoteEntity?,
     reconnectBridge: String,
@@ -276,9 +320,6 @@ private fun MainlineFocusCard(
     val whyNowLine = direction?.whyNow
         ?.takeIf { it.isNotBlank() }
         ?: reconnectBridge.takeIf { it.isNotBlank() }
-    val supportLine = direction?.lastProgressLine
-        ?.takeIf { it.isNotBlank() }
-        ?: note?.content?.takeIf { it.isNotBlank() }?.asTodayPreview()
     val resolvedMainLine = compression.mainline.ifBlank { mainLine }
     val resolvedWhyNow = compression.whyNow.ifBlank { whyNowLine.orEmpty() }
     Surface(
@@ -316,27 +357,28 @@ private fun MainlineFocusCard(
                 }
             }
             InsightBlock(
-                sourceLabel = if (compression.source == DailyBriefSource.AI || direction?.source == DailyBriefSource.AI || nextActionSource == DailyBriefSource.AI) "AI 聚焦" else "今日聚焦",
+                sourceLabel = if (compression.mainlineSource == DailyBriefSource.AI) "AI 聚焦" else "规则回退",
                 tone = InsightTone.Primary,
             ) {
-                InsightLine(
-                    label = "现在最值得推进的是",
-                    text = resolvedMainLine,
-                    emphasize = true,
-                    maxLines = 3,
-                )
-                resolvedWhyNow.takeIf { it.isNotBlank() }?.let {
-                    InsightLine(label = "为什么现在", text = it, maxLines = 2)
+                AnimatedContent(
+                    targetState = resolvedMainLine,
+                    label = "flowMainlineText",
+                ) { text ->
+                    InsightLine(
+                        label = "现在最值得推进的是",
+                        text = text,
+                        emphasize = true,
+                        maxLines = 3,
+                    )
                 }
-            }
-            supportLine?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                AnimatedContent(
+                    targetState = resolvedWhyNow,
+                    label = "flowMainlineWhyNow",
+                ) { text ->
+                    if (text.isNotBlank()) {
+                        InsightLine(label = "为什么现在", text = text, maxLines = 2)
+                    }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -420,24 +462,29 @@ private fun SettledKnowledgeCard(
                 )
             } else {
                 InsightChip(text = trustChip, tone = InsightTone.Primary)
-                Text(
-                    text = resolvedSettledLine,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                AnimatedContent(
+                    targetState = resolvedSettledLine,
+                    label = "flowSettledLine",
+                ) { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = TextMain,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 resolvedSupportLine.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = if (compression.source == DailyBriefSource.AI) "AI 沉淀" else "知识层",
+                        sourceLabel = if (compression.settledSource == DailyBriefSource.AI) "AI 沉淀" else "规则回退",
                         tone = InsightTone.Neutral,
                     ) {
-                        InsightLine(label = "证据基础", text = it, maxLines = 2)
-                        direction.wikiSnapshotStageLine
-                            .takeIf { line -> line.isNotBlank() }
-                            ?.let { line ->
-                                InsightLine(label = "阶段位置", text = line, maxLines = 2)
-                            }
+                        AnimatedContent(
+                            targetState = it,
+                            label = "flowSettledSupport",
+                        ) { text ->
+                            InsightLine(label = "为什么可信", text = text, maxLines = 2)
+                        }
                     }
                 }
                 Row(
@@ -466,7 +513,6 @@ private fun SettledKnowledgeCard(
 private fun BreakthroughGapCard(
     direction: FollowedDirectionSummary?,
     explorationPrompts: List<String>,
-    explorationSource: DailyBriefSource,
     compression: FlowKnowledgeCompressionState,
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
@@ -483,8 +529,6 @@ private fun BreakthroughGapCard(
         ?: direction?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
         ?: direction?.wikiMaintenanceSourceLine?.takeIf { it.isNotBlank() }
         ?: direction?.validationStep?.takeIf { it.isNotBlank() }
-    val expansionLine = explorationPrompts.firstOrNull { it.isNotBlank() && it != gapLine }
-        ?: direction?.postValidationAction?.takeIf { it.isNotBlank() }
     val resolvedGapLine = compression.gapLine.ifBlank { gapLine }
     val resolvedGapSupport = compression.gapSupport.ifBlank { supportLine.orEmpty() }
     Surface(
@@ -512,21 +556,33 @@ private fun BreakthroughGapCard(
                     color = TextSoft,
                 )
             } else {
-                Text(
-                    text = resolvedGapLine,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                AnimatedContent(
+                    targetState = resolvedGapLine,
+                    label = "flowGapLine",
+                ) { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = TextMain,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 resolvedGapSupport.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = if (compression.source == DailyBriefSource.AI || explorationSource == DailyBriefSource.AI) "AI 提示" else "当前缺口",
+                        sourceLabel = if (compression.gapSource == DailyBriefSource.AI) "AI 突破口" else "规则回退",
                         tone = InsightTone.Neutral,
                     ) {
-                        InsightLine(label = "最该补的是", text = it, emphasize = true, maxLines = 2)
-                        (expansionLine?.takeIf { line -> line.isNotBlank() } ?: compression.gapSupport.takeIf { it.isNotBlank() && it != resolvedGapSupport })?.let { line ->
-                            InsightLine(label = "值得延展", text = line, maxLines = 2)
+                        AnimatedContent(
+                            targetState = it,
+                            label = "flowGapSupport",
+                        ) { text ->
+                            InsightLine(
+                                label = if (compression.gapSource == DailyBriefSource.AI) "补上后会打开" else "先从这里补",
+                                text = text,
+                                emphasize = true,
+                                maxLines = 2,
+                            )
                         }
                     }
                 }

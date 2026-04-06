@@ -148,7 +148,9 @@ class FlowViewModel(
 
     private data class FlowCompressionInput(
         val signature: String,
-        val contextSummary: String,
+        val mainlineContextSummary: String,
+        val settledContextSummary: String,
+        val gapContextSummary: String,
         val fallback: FlowKnowledgeCompressionState,
     )
 
@@ -347,7 +349,9 @@ class FlowViewModel(
             }.collectLatest { input ->
                 knowledgeCompressionState.value = flowKnowledgeCompressionPlanner.summarize(
                     signature = input.signature,
-                    contextSummary = input.contextSummary,
+                    mainlineContextSummary = input.mainlineContextSummary,
+                    settledContextSummary = input.settledContextSummary,
+                    gapContextSummary = input.gapContextSummary,
                     fallback = input.fallback,
                 )
             }
@@ -384,6 +388,7 @@ class FlowViewModel(
                 ?.takeIf { it.isNotBlank() }
                 ?: primary.staleBridge.takeIf { it.isNotBlank() }
                 ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty(),
+            mainlineSource = DailyBriefSource.RULE,
             settledLine = settledDirection?.wikiValidatedPoint
                 ?.takeIf { it.isNotBlank() }
                 ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
@@ -395,6 +400,7 @@ class FlowViewModel(
                 ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
                 ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
                 ?: weeklyReviewState.statsLine,
+            settledSource = DailyBriefSource.RULE,
             gapLine = breakthroughDirection?.wikiOpenQuestion
                 ?.takeIf { it.isNotBlank() }
                 ?: breakthroughDirection?.wikiMaintenanceLine?.takeIf { it.isNotBlank() }
@@ -405,7 +411,7 @@ class FlowViewModel(
                 ?: breakthroughDirection?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
                 ?: breakthroughDirection?.wikiMaintenanceSourceLine?.takeIf { it.isNotBlank() }
                 ?: fusionState.lines.firstOrNull().orEmpty(),
-            source = DailyBriefSource.RULE,
+            gapSource = DailyBriefSource.RULE,
         )
 
         val signature = buildString {
@@ -438,43 +444,67 @@ class FlowViewModel(
             })
         }
 
-        val contextSummary = buildString {
-            appendLine("请为一个人的个人知识系统生成移动端 Flow 知识压缩结果。")
-            appendLine("目标不是罗列信息，而是告诉他现在最值得推进什么、已经沉淀了什么、下一突破口是什么。")
+        val mainlineContextSummary = buildString {
+            appendLine("请只判断今天最该推进的一条主线。不要泛泛鼓励，不要罗列候选。")
             primaryDirection?.let { direction ->
                 appendLine("当前主方向：${direction.thread.title}")
+                appendLine("方向阶段：${direction.stage.label}")
+                appendLine("时间尺度：${direction.dominantHorizon.label}")
                 direction.summary.takeIf { it.isNotBlank() }?.let { appendLine("当前判断：$it") }
                 direction.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("为什么现在：$it") }
                 direction.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("最小动作：$it") }
+                direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近推进：$it") }
             }
+            primary.nextActionText.takeIf { it.isNotBlank() }?.let { appendLine("系统下一步：$it") }
+            primary.staleBridge.takeIf { it.isNotBlank() }?.let { appendLine("重连理由：$it") }
+            primary.staleNextStep.takeIf { it.isNotBlank() }?.let { appendLine("重连动作：$it") }
+            weeklyReviewState.items.firstOrNull { it.label == "推进" }
+                ?.text
+                ?.takeIf { it.isNotBlank() }
+                ?.let { appendLine("本周推进：$it") }
+        }
+
+        val settledContextSummary = buildString {
+            appendLine("请只压缩已经沉淀下来的判断。不要写计划，不要写鼓励。")
             settledDirection?.let { direction ->
-                appendLine("已沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
+                appendLine("方向：${direction.thread.title}")
+                appendLine("沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
                 direction.wikiGroundingLine.takeIf { it.isNotBlank() }?.let { appendLine("证据基础：$it") }
                 direction.wikiTrustLine.takeIf { it.isNotBlank() }?.let { appendLine("可信边界：$it") }
-            }
-            breakthroughDirection?.let { direction ->
-                appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
-                direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
-                direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
-                direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
+                direction.wikiKnowledgeObjectLine.takeIf { it.isNotBlank() }?.let { appendLine("知识对象：$it") }
+                direction.wikiSnapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("阶段位置：$it") }
             }
             if (weeklyReviewState.items.isNotEmpty()) {
                 appendLine("本周判断：")
-                weeklyReviewState.items.forEach { appendLine("${it.label}：${it.text}") }
+                weeklyReviewState.items.take(3).forEach { appendLine("${it.label}：${it.text}") }
             }
-            if (fusionState.lines.isNotEmpty()) {
-                appendLine("可延展融合：")
-                fusionState.lines.take(2).forEach { appendLine(it) }
+        }
+
+        val gapContextSummary = buildString {
+            appendLine("请只找当前最值得补的一个突破口。不要平均分配，不要列清单。")
+            breakthroughDirection?.let { direction ->
+                appendLine("方向：${direction.thread.title}")
+                appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
+                direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
+                direction.wikiMaintenanceTargetLine.takeIf { it.isNotBlank() }?.let { appendLine("先维护：$it") }
+                direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
+                direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
             }
             if (primary.explorationPrompts.isNotEmpty()) {
                 appendLine("探索提示：")
                 primary.explorationPrompts.take(2).forEach { appendLine(it) }
             }
+            if (fusionState.lines.isNotEmpty()) {
+                appendLine("可延展融合：")
+                fusionState.lines.take(2).forEach { appendLine(it) }
+            }
         }
 
         return FlowCompressionInput(
             signature = signature,
-            contextSummary = contextSummary,
+            mainlineContextSummary = mainlineContextSummary,
+            settledContextSummary = settledContextSummary,
+            gapContextSummary = gapContextSummary,
             fallback = fallback,
         )
     }
