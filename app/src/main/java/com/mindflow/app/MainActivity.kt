@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
         val nextActionPlanner: NextActionPlanner = appContainer.nextActionPlanner
         val weeklyReviewPlanner: WeeklyReviewPlanner = appContainer.weeklyReviewPlanner
         val fusionSuggestionPlanner: FusionSuggestionPlanner = appContainer.fusionSuggestionPlanner
+        val flowKnowledgeCompressionPlanner = appContainer.flowKnowledgeCompressionPlanner
         val staleReconnectPlanner: StaleReconnectPlanner = appContainer.staleReconnectPlanner
         val threadExecutionPlanner: ThreadExecutionPlanner = appContainer.threadExecutionPlanner
         val externalResearchPlanner: ExternalResearchPlanner = appContainer.externalResearchPlanner
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,

@@ -14,6 +14,7 @@ import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.local.MindFlowDatabase
 import com.mindflow.app.data.model.AiSettings
@@ -174,6 +175,11 @@ class AppContainer(context: Context) {
 
     val fusionSuggestionPlanner = FusionSuggestionPlanner(
         context = context.applicationContext,
+        aiSettingsRepository = aiSettingsRepository,
+        aiServiceClient = aiServiceClient,
+    )
+
+    val flowKnowledgeCompressionPlanner = FlowKnowledgeCompressionPlanner(
         aiSettingsRepository = aiSettingsRepository,
         aiServiceClient = aiServiceClient,
     )

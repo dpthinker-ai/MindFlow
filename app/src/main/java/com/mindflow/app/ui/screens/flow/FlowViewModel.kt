@@ -19,6 +19,8 @@ import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.followup.StaleReconnectPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteHorizon
@@ -62,6 +64,7 @@ data class FlowUiState(
     val themeThreads: List<ThemeThread> = emptyList(),
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
+    val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
 )
 
 data class FollowedDirectionSummary(
@@ -118,6 +121,7 @@ class FlowViewModel(
     private val nextActionPlanner: NextActionPlanner,
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
+    private val flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
     private val staleReconnectPlanner: StaleReconnectPlanner,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
@@ -142,7 +146,14 @@ class FlowViewModel(
         val explorationSource: DailyBriefSource,
     )
 
+    private data class FlowCompressionInput(
+        val signature: String,
+        val contextSummary: String,
+        val fallback: FlowKnowledgeCompressionState,
+    )
+
     private val directionState = MutableStateFlow(DirectionState())
+    private val knowledgeCompressionState = MutableStateFlow(FlowKnowledgeCompressionState())
 
     private val primaryInputs = combine(
         noteRepository.observeAllNotes(),
@@ -191,10 +202,12 @@ class FlowViewModel(
         weeklyReviewPlanner.state,
         fusionSuggestionPlanner.state,
         directionState,
+        knowledgeCompressionState,
     ) { primary,
         weeklyReviewState: WeeklyReviewState,
         fusionState: FusionSuggestionState,
-        directions: DirectionState ->
+        directions: DirectionState,
+        compression: FlowKnowledgeCompressionState ->
         FlowUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
@@ -214,6 +227,7 @@ class FlowViewModel(
             themeThreads = directions.themeThreads,
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
+            knowledgeCompression = compression,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
 
@@ -317,6 +331,152 @@ class FlowViewModel(
                 )
             }
         }
+        viewModelScope.launch {
+            combine(
+                primaryInputs,
+                weeklyReviewPlanner.state,
+                fusionSuggestionPlanner.state,
+                directionState,
+            ) { primary, weekly, fusion, directions ->
+                buildCompressionInput(
+                    primary = primary,
+                    weeklyReviewState = weekly,
+                    fusionState = fusion,
+                    directions = directions,
+                )
+            }.collectLatest { input ->
+                knowledgeCompressionState.value = flowKnowledgeCompressionPlanner.summarize(
+                    signature = input.signature,
+                    contextSummary = input.contextSummary,
+                    fallback = input.fallback,
+                )
+            }
+        }
+    }
+
+    private fun buildCompressionInput(
+        primary: FlowPrimaryInputs,
+        weeklyReviewState: WeeklyReviewState,
+        fusionState: FusionSuggestionState,
+        directions: DirectionState,
+    ): FlowCompressionInput {
+        val primaryDirection = directions.followedDirections.firstOrNull()
+        val settledDirection = directions.followedDirections.firstOrNull {
+            it.wikiValidatedPoint.isNotBlank() ||
+                it.wikiVerifiedPoint.isNotBlank() ||
+                it.wikiConclusionLine.isNotBlank() ||
+                it.assetSummary.isNotBlank()
+        } ?: primaryDirection
+        val breakthroughDirection = directions.followedDirections.firstOrNull {
+            it.wikiOpenQuestion.isNotBlank() ||
+                it.wikiMaintenanceLine.isNotBlank() ||
+                it.wikiMaintenanceFocusLine.isNotBlank() ||
+                it.blocker.isNotBlank()
+        } ?: primaryDirection
+
+        val fallback = FlowKnowledgeCompressionState(
+            mainline = primaryDirection?.summary
+                ?.takeIf { it.isNotBlank() }
+                ?: primary.nextActionText.takeIf { it.isNotBlank() }
+                ?: primary.staleNextStep.takeIf { it.isNotBlank() }
+                ?: "先把今天最值得推进的一件事抓住。",
+            whyNow = primaryDirection?.whyNow
+                ?.takeIf { it.isNotBlank() }
+                ?: primary.staleBridge.takeIf { it.isNotBlank() }
+                ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty(),
+            settledLine = settledDirection?.wikiValidatedPoint
+                ?.takeIf { it.isNotBlank() }
+                ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
+                ?: settledDirection?.wikiConclusionLine?.takeIf { it.isNotBlank() }
+                ?: settledDirection?.assetSummary?.takeIf { it.isNotBlank() }
+                ?: weeklyReviewState.items.firstOrNull { it.label == "主线" }?.text.orEmpty(),
+            settledSupport = settledDirection?.wikiGroundingLine
+                ?.takeIf { it.isNotBlank() }
+                ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
+                ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
+                ?: weeklyReviewState.statsLine,
+            gapLine = breakthroughDirection?.wikiOpenQuestion
+                ?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiMaintenanceLine?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.blocker?.takeIf { it.isNotBlank() }
+                ?: primary.explorationPrompts.firstOrNull().orEmpty(),
+            gapSupport = breakthroughDirection?.wikiMaintenanceFocusLine
+                ?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiMaintenanceSourceLine?.takeIf { it.isNotBlank() }
+                ?: fusionState.lines.firstOrNull().orEmpty(),
+            source = DailyBriefSource.RULE,
+        )
+
+        val signature = buildString {
+            append(primary.continueNote?.id ?: -1L)
+            append(':')
+            append(primary.continueNote?.updatedAt ?: 0L)
+            append(':')
+            append(primary.staleNote?.id ?: -1L)
+            append(':')
+            append(primary.staleNote?.updatedAt ?: 0L)
+            append(':')
+            append(weeklyReviewState.weekKey)
+            append(':')
+            append(weeklyReviewState.generatedAt)
+            append(':')
+            append(fusionState.generatedAt)
+            append(':')
+            append(directions.followedDirections.joinToString("|") {
+                listOf(
+                    it.thread.key,
+                    it.thread.noteCount.toString(),
+                    it.wikiConclusionLine,
+                    it.wikiValidatedPoint,
+                    it.wikiVerifiedPoint,
+                    it.wikiOpenQuestion,
+                    it.summary,
+                    it.whyNow,
+                    it.nextStep,
+                ).joinToString("~")
+            })
+        }
+
+        val contextSummary = buildString {
+            appendLine("请为一个人的个人知识系统生成移动端 Flow 知识压缩结果。")
+            appendLine("目标不是罗列信息，而是告诉他现在最值得推进什么、已经沉淀了什么、下一突破口是什么。")
+            primaryDirection?.let { direction ->
+                appendLine("当前主方向：${direction.thread.title}")
+                direction.summary.takeIf { it.isNotBlank() }?.let { appendLine("当前判断：$it") }
+                direction.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("为什么现在：$it") }
+                direction.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("最小动作：$it") }
+            }
+            settledDirection?.let { direction ->
+                appendLine("已沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
+                direction.wikiGroundingLine.takeIf { it.isNotBlank() }?.let { appendLine("证据基础：$it") }
+                direction.wikiTrustLine.takeIf { it.isNotBlank() }?.let { appendLine("可信边界：$it") }
+            }
+            breakthroughDirection?.let { direction ->
+                appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
+                direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
+                direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
+                direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
+            }
+            if (weeklyReviewState.items.isNotEmpty()) {
+                appendLine("本周判断：")
+                weeklyReviewState.items.forEach { appendLine("${it.label}：${it.text}") }
+            }
+            if (fusionState.lines.isNotEmpty()) {
+                appendLine("可延展融合：")
+                fusionState.lines.take(2).forEach { appendLine(it) }
+            }
+            if (primary.explorationPrompts.isNotEmpty()) {
+                appendLine("探索提示：")
+                primary.explorationPrompts.take(2).forEach { appendLine(it) }
+            }
+        }
+
+        return FlowCompressionInput(
+            signature = signature,
+            contextSummary = contextSummary,
+            fallback = fallback,
+        )
     }
 
     companion object {
@@ -327,6 +487,7 @@ class FlowViewModel(
             nextActionPlanner: NextActionPlanner,
             weeklyReviewPlanner: WeeklyReviewPlanner,
             fusionSuggestionPlanner: FusionSuggestionPlanner,
+            flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
             staleReconnectPlanner: StaleReconnectPlanner,
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,
@@ -340,6 +501,7 @@ class FlowViewModel(
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,

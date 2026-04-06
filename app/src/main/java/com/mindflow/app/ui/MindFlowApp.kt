@@ -51,6 +51,7 @@ import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -102,6 +103,7 @@ fun MindFlowApp(
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
+    flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
@@ -233,6 +235,7 @@ fun MindFlowApp(
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
+                    flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,

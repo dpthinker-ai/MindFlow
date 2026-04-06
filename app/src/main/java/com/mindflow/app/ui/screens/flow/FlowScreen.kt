@@ -32,6 +32,8 @@ import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
+import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.KnowledgeTrust
@@ -74,6 +76,7 @@ fun FlowRoute(
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
+    flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
@@ -91,6 +94,7 @@ fun FlowRoute(
             nextActionPlanner = nextActionPlanner,
             weeklyReviewPlanner = weeklyReviewPlanner,
             fusionSuggestionPlanner = fusionSuggestionPlanner,
+            flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
             staleReconnectPlanner = staleReconnectPlanner,
             threadExecutionPlanner = threadExecutionPlanner,
             externalResearchPlanner = externalResearchPlanner,
@@ -197,6 +201,7 @@ private fun FlowScreen(
                         direction = primaryDirection,
                         nextActionText = uiState.nextActionText,
                         nextActionSource = uiState.nextActionSource,
+                        compression = uiState.knowledgeCompression,
                         reconnectNote = uiState.staleNote,
                         reconnectBridge = uiState.staleBridge,
                         reconnectStep = uiState.staleNextStep,
@@ -209,6 +214,7 @@ private fun FlowScreen(
                 item {
                     SettledKnowledgeCard(
                         direction = settledDirection,
+                        compression = uiState.knowledgeCompression,
                         highlighted = highlightReview,
                         onOpenThread = onOpenThread,
                         onOpenNote = onOpenNote,
@@ -220,6 +226,7 @@ private fun FlowScreen(
                         direction = breakthroughDirection,
                         explorationPrompts = uiState.explorationPrompts,
                         explorationSource = uiState.explorationSource,
+                        compression = uiState.knowledgeCompression,
                         highlighted = highlightDirection || highlightReconnect,
                         onOpenThread = onOpenThread,
                         onCreateCapture = onCreateCapture,
@@ -249,6 +256,7 @@ private fun MainlineFocusCard(
     direction: FollowedDirectionSummary?,
     nextActionText: String,
     nextActionSource: DailyBriefSource,
+    compression: FlowKnowledgeCompressionState,
     reconnectNote: NoteEntity?,
     reconnectBridge: String,
     reconnectStep: String,
@@ -271,6 +279,8 @@ private fun MainlineFocusCard(
     val supportLine = direction?.lastProgressLine
         ?.takeIf { it.isNotBlank() }
         ?: note?.content?.takeIf { it.isNotBlank() }?.asTodayPreview()
+    val resolvedMainLine = compression.mainline.ifBlank { mainLine }
+    val resolvedWhyNow = compression.whyNow.ifBlank { whyNowLine.orEmpty() }
     Surface(
         color = WhiteGlass.copy(alpha = 0.94f),
         shape = PanelShape,
@@ -306,16 +316,16 @@ private fun MainlineFocusCard(
                 }
             }
             InsightBlock(
-                sourceLabel = if (direction?.source == DailyBriefSource.AI || nextActionSource == DailyBriefSource.AI) "AI 聚焦" else "今日聚焦",
+                sourceLabel = if (compression.source == DailyBriefSource.AI || direction?.source == DailyBriefSource.AI || nextActionSource == DailyBriefSource.AI) "AI 聚焦" else "今日聚焦",
                 tone = InsightTone.Primary,
             ) {
                 InsightLine(
                     label = "现在最值得推进的是",
-                    text = mainLine,
+                    text = resolvedMainLine,
                     emphasize = true,
                     maxLines = 3,
                 )
-                whyNowLine?.let {
+                resolvedWhyNow.takeIf { it.isNotBlank() }?.let {
                     InsightLine(label = "为什么现在", text = it, maxLines = 2)
                 }
             }
@@ -362,6 +372,7 @@ private fun MainlineFocusCard(
 @Composable
 private fun SettledKnowledgeCard(
     direction: FollowedDirectionSummary?,
+    compression: FlowKnowledgeCompressionState,
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -381,6 +392,8 @@ private fun SettledKnowledgeCard(
         ?.takeIf { it.isNotBlank() }
         ?: direction?.wikiTrustLine?.takeIf { it.isNotBlank() }
         ?: direction?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
+    val resolvedSettledLine = compression.settledLine.ifBlank { settledLine.orEmpty() }
+    val resolvedSupportLine = compression.settledSupport.ifBlank { supportLine.orEmpty() }
     Surface(
         color = WhiteGlass.copy(alpha = 0.94f),
         shape = PanelShape,
@@ -397,9 +410,9 @@ private fun SettledKnowledgeCard(
         ) {
             SectionHeader(
                 title = "已沉淀",
-                headline = if (!settledLine.isNullOrBlank()) "最近真正沉淀下来的判断" else "开始形成长期有价值的判断",
+                headline = if (resolvedSettledLine.isNotBlank()) "最近真正沉淀下来的判断" else "开始形成长期有价值的判断",
             )
-            if (direction == null || settledLine.isNullOrBlank()) {
+            if (direction == null || resolvedSettledLine.isBlank()) {
                 Text(
                     text = "再沿着同一条方向多推几步，这里就会开始留下更可靠的判断，而不是一堆散的记录。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -408,15 +421,15 @@ private fun SettledKnowledgeCard(
             } else {
                 InsightChip(text = trustChip, tone = InsightTone.Primary)
                 Text(
-                    text = settledLine,
+                    text = resolvedSettledLine,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = TextMain,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                supportLine?.let {
+                resolvedSupportLine.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = "知识层",
+                        sourceLabel = if (compression.source == DailyBriefSource.AI) "AI 沉淀" else "知识层",
                         tone = InsightTone.Neutral,
                     ) {
                         InsightLine(label = "证据基础", text = it, maxLines = 2)
@@ -454,6 +467,7 @@ private fun BreakthroughGapCard(
     direction: FollowedDirectionSummary?,
     explorationPrompts: List<String>,
     explorationSource: DailyBriefSource,
+    compression: FlowKnowledgeCompressionState,
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
@@ -471,6 +485,8 @@ private fun BreakthroughGapCard(
         ?: direction?.validationStep?.takeIf { it.isNotBlank() }
     val expansionLine = explorationPrompts.firstOrNull { it.isNotBlank() && it != gapLine }
         ?: direction?.postValidationAction?.takeIf { it.isNotBlank() }
+    val resolvedGapLine = compression.gapLine.ifBlank { gapLine }
+    val resolvedGapSupport = compression.gapSupport.ifBlank { supportLine.orEmpty() }
     Surface(
         color = WhiteGlass.copy(alpha = 0.94f),
         shape = PanelShape,
@@ -487,9 +503,9 @@ private fun BreakthroughGapCard(
         ) {
             SectionHeader(
                 title = "下一突破口",
-                headline = if (gapLine.isNotBlank()) "现在最值得补的缺口" else "先把一条缺口找出来，惊喜才会出现",
+                headline = if (resolvedGapLine.isNotBlank()) "现在最值得补的缺口" else "先把一条缺口找出来，惊喜才会出现",
             )
-            if (gapLine.isBlank()) {
+            if (resolvedGapLine.isBlank()) {
                 Text(
                     text = "再多沿着同一条方向推一点，这里就会开始指出最值得补的那一刀。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -497,19 +513,19 @@ private fun BreakthroughGapCard(
                 )
             } else {
                 Text(
-                    text = gapLine,
+                    text = resolvedGapLine,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = TextMain,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                supportLine?.let {
+                resolvedGapSupport.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(
-                        sourceLabel = if (explorationSource == DailyBriefSource.AI) "AI 提示" else "当前缺口",
+                        sourceLabel = if (compression.source == DailyBriefSource.AI || explorationSource == DailyBriefSource.AI) "AI 提示" else "当前缺口",
                         tone = InsightTone.Neutral,
                     ) {
                         InsightLine(label = "最该补的是", text = it, emphasize = true, maxLines = 2)
-                        expansionLine?.takeIf { line -> line.isNotBlank() }?.let { line ->
+                        (expansionLine?.takeIf { line -> line.isNotBlank() } ?: compression.gapSupport.takeIf { it.isNotBlank() && it != resolvedGapSupport })?.let { line ->
                             InsightLine(label = "值得延展", text = line, maxLines = 2)
                         }
                     }

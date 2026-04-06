@@ -174,6 +174,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateFlowKnowledgeCompression(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(6_000),
+            systemPrompt = "You are compressing a personal knowledge system into a high-value mobile dashboard. Return exactly 6 concise Chinese lines in this order: 1) the single most important mainline to push now, 2) why this matters now, 3) one settled judgment that seems genuinely durable, 4) the strongest support line that makes that judgment trustworthy, 5) the single breakthrough gap worth closing next, 6) what closing that gap would unlock or make newly possible. Do not number the lines. Do not repeat note titles mechanically. Do not output generic encouragement. Prefer sharp, non-obvious, usable judgments.",
+            maxTokens = 420,
+            temperature = 0.68,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun generateThreadWorkspace(
         settings: AiSettings,
         contextSummary: String,
