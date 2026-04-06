@@ -595,6 +595,20 @@ private fun BreakthroughGapCard(
                             onClick = { onCreateCapture(direction.toResearchCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
+                    } else if (resolvedGapLine.isNotBlank()) {
+                        ActionButton(
+                            text = "记一条",
+                            onClick = {
+                                onCreateCapture(
+                                    buildOpportunityCaptureSeed(
+                                        line = resolvedGapLine,
+                                        support = resolvedGapSupport,
+                                        direction = direction,
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                     if (direction != null) {
                         GhostActionButton(
@@ -1123,6 +1137,51 @@ private fun FollowedDirectionSummary.toMaintenanceCaptureSeed(): CaptureSeed =
             maintenanceFocusLine = wikiMaintenanceFocusLine,
         ),
     )
+
+private fun buildOpportunityCaptureSeed(
+    line: String,
+    support: String,
+    direction: FollowedDirectionSummary?,
+): CaptureSeed {
+    val cleanTitle = direction?.thread?.title?.removePrefix("#")?.trim().orEmpty()
+    val initialFolderKey = direction?.thread?.key
+        ?.takeIf { it.startsWith("folder:") }
+        ?.removePrefix("folder:")
+        ?.trim()
+        ?.ifBlank { null }
+    val initialTags = direction?.thread?.key
+        ?.takeIf { it.startsWith("tag:") }
+        ?.removePrefix("tag:")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::listOf)
+        .orEmpty()
+    val topic = if (cleanTitle.isNotBlank()) "$cleanTitle · 新机会" else "新机会"
+    return CaptureSeed(
+        initialTopic = topic,
+        initialContent = buildString {
+            appendLine("把这条新机会接成一条可继续推进的记录：")
+            if (cleanTitle.isNotBlank()) {
+                appendLine("- 相关方向：$cleanTitle")
+            }
+            appendLine("- 机会：$line")
+            support.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 为什么值得试：$it")
+            }
+            direction?.whyNow?.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 为什么现在：$it")
+            }
+            direction?.postValidationAction?.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 如果试成，下一步：$it")
+            }
+            appendLine("- 我准备怎么把它接成一条更具体的思路：")
+            appendLine("- 这条机会和我过去哪段经验最有关：")
+        },
+        initialFolderKey = initialFolderKey,
+        initialTags = initialTags,
+        initialKnowledgeTrust = KnowledgeTrust.SIGNAL,
+    )
+}
 
 private fun <T> Iterable<T>.firstNonBlankValue(
     selector: (T) -> String,

@@ -373,8 +373,9 @@ class FlowViewModel(
         } ?: primaryDirection
         val breakthroughDirection = directions.followedDirections.firstOrNull {
             it.wikiOpenQuestion.isNotBlank() ||
-                it.wikiMaintenanceLine.isNotBlank() ||
-                it.wikiMaintenanceFocusLine.isNotBlank() ||
+                it.contrarianQuestion.isNotBlank() ||
+                it.externalHypothesis.isNotBlank() ||
+                it.opportunityGap.isNotBlank() ||
                 it.blocker.isNotBlank()
         } ?: primaryDirection
 
@@ -401,16 +402,18 @@ class FlowViewModel(
                 ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
                 ?: weeklyReviewState.statsLine,
             settledSource = DailyBriefSource.RULE,
-            gapLine = breakthroughDirection?.wikiOpenQuestion
+            gapLine = breakthroughDirection?.contrarianQuestion
                 ?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.wikiMaintenanceLine?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.blocker?.takeIf { it.isNotBlank() }
-                ?: primary.explorationPrompts.firstOrNull().orEmpty(),
-            gapSupport = breakthroughDirection?.wikiMaintenanceFocusLine
-                ?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.wikiMaintenanceSourceLine?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.externalHypothesis?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.opportunityGap?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiOpenQuestion?.takeIf { it.isNotBlank() }
                 ?: fusionState.lines.firstOrNull().orEmpty(),
+            gapSupport = breakthroughDirection?.postValidationAction
+                ?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.validationReason?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.outsideAngle?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
+                ?: fusionState.lines.getOrNull(1).orEmpty(),
             gapSource = DailyBriefSource.RULE,
         )
 
@@ -479,9 +482,19 @@ class FlowViewModel(
                 direction.wikiContinuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
                 direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("走势：$it") }
             }
-            if (weeklyReviewState.items.isNotEmpty()) {
-                appendLine("本周判断：")
-                weeklyReviewState.items.take(3).forEach { appendLine("${it.label}：${it.text}") }
+            val corroboratingDirections = directions.followedDirections
+                .filter { it.thread.key != settledDirection?.thread?.key }
+                .mapNotNull { summary ->
+                    summary.wikiValidatedPoint
+                        .ifBlank { summary.wikiVerifiedPoint }
+                        .ifBlank { summary.wikiConclusionLine }
+                        .takeIf { it.isNotBlank() }
+                        ?.let { "${summary.thread.title}：$it" }
+                }
+                .take(2)
+            if (corroboratingDirections.isNotEmpty()) {
+                appendLine("旁证方向：")
+                corroboratingDirections.forEach { appendLine(it) }
             }
         }
 
@@ -495,6 +508,10 @@ class FlowViewModel(
                 direction.wikiMaintenanceTargetLine.takeIf { it.isNotBlank() }?.let { appendLine("先维护：$it") }
                 direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
                 direction.wikiMaintenanceDimensionLine.takeIf { it.isNotBlank() }?.let { appendLine("最薄弱：$it") }
+                direction.outsideAngle.takeIf { it.isNotBlank() }?.let { appendLine("外部角度：$it") }
+                direction.opportunityGap.takeIf { it.isNotBlank() }?.let { appendLine("机会缺口：$it") }
+                direction.contrarianQuestion.takeIf { it.isNotBlank() }?.let { appendLine("反常识问题：$it") }
+                direction.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("外部假设：$it") }
                 direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
                 direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
             }
@@ -505,6 +522,15 @@ class FlowViewModel(
             if (fusionState.lines.isNotEmpty()) {
                 appendLine("潜在组合：")
                 fusionState.lines.take(2).forEach { appendLine(it) }
+            }
+            val reusableAssets = directions.followedDirections
+                .mapNotNull { summary ->
+                    summary.assetSummary.takeIf { it.isNotBlank() }?.let { "${summary.thread.title}：$it" }
+                }
+                .take(3)
+            if (reusableAssets.isNotEmpty()) {
+                appendLine("可复用旧积累：")
+                reusableAssets.forEach { appendLine(it) }
             }
         }
 
