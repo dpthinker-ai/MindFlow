@@ -195,7 +195,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are choosing what has truly become established inside one person's evolving knowledge system. Return exactly 2 concise Chinese lines. Line 1: one established judgement that is now strong enough to change what this person should prioritize, stop, trust, or stop overthinking this week. It must feel like a conclusion, not a summary. Line 2: the strongest reason this judgement can be trusted now, making the trust basis explicit such as 已验证, 已查证, repeated evidence, converging observations, or still provisional but strongest available. Do not number the lines. Do not output slogans, broad themes, progress reporting, or emotional encouragement. Prefer one judgement that can actually influence decisions.",
+            systemPrompt = "You are choosing what has truly become established inside one person's evolving knowledge system. Return exactly 2 concise Chinese lines. Line 1: one established judgement that is now strong enough to change what this person should prioritize, stop, trust, or stop overthinking this week. It must feel like a conclusion, not a summary, and it must not simply restate today's bet. It should still matter next week even if no new notes are added. Line 2: the strongest reason this judgement can be trusted now, making the trust basis explicit such as 已验证, 已查证, repeated evidence, converging observations, or still provisional but strongest available. Do not number the lines. Do not output slogans, broad themes, progress reporting, or emotional encouragement. Prefer one judgement that can actually influence decisions.",
             maxTokens = 240,
             temperature = 0.42,
             thinkingEnabled = false,
@@ -209,9 +209,9 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are identifying one new connection inside a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single most valuable new connection between an already accumulated asset, method, experience, or reliable judgement and an unresolved question, contradiction, or missing experiment. It should feel like a new opening, not a maintenance chore. Line 2: what new room, option, or breakthrough would become possible if this connection were pursued now. Do not number the lines. Do not output generic to-dos, broad aspirations, or plain maintenance language. Avoid repeating the direction title. Prefer surprising but plausible combinations, cross-domain transfer, and a slight sense of discovery.",
+            systemPrompt = "You are identifying one new connection inside a personal knowledge system. Return exactly 2 concise Chinese lines. Line 1: the single most valuable new connection between two previously separate materials, preferably spanning different directions, folders, methods, experiences, or judgements. It should feel like a new opening, not a maintenance chore, and it must not simply repeat today's bet or the settled judgement. Line 2: what new room, option, or breakthrough would become possible if this connection were pursued now. Do not number the lines. Do not output generic to-dos, broad aspirations, or plain maintenance language. Avoid repeating the direction title. Prefer surprising but plausible combinations, cross-domain transfer, and a real sense of discovery.",
             maxTokens = 240,
-            temperature = 0.74,
+            temperature = 0.8,
             thinkingEnabled = false,
         )
     }

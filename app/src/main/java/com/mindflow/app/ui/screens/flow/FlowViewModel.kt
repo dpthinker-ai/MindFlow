@@ -581,10 +581,16 @@ class FlowViewModel(
 
         val settledContextSummary = buildString {
             appendLine("请像知识编辑一样，只挑一个现在最值得保留下来的判断。不要写计划，不要写鼓励。")
+            appendLine("不要把今日押注换一种说法重新写成已成立。已成立必须比今日押注更稳、更长期，最好影响未来一周而不是只影响今天。")
             when (settledFeedback) {
                 FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、带清楚可信基础的判断更有用。")
                 FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛的进步描述和不影响决策的判断。")
                 null -> Unit
+            }
+            selectedMainlineCandidate?.let { candidate ->
+                appendLine("今日押注：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("押注主句：$it") }
+                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("押注原因：$it") }
             }
             settledDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
@@ -629,10 +635,22 @@ class FlowViewModel(
         val gapContextSummary = buildString {
             appendLine("请像创新编辑一样，只找一个现在最值得试的新连接。不要平均分配，不要列清单。")
             appendLine("新连接的第一职责是把两个旧点重新接上，而不是给维护建议。")
+            appendLine("不要重复今日押注，也不要把已成立换个词说一遍。优先把不同方向、不同文件夹、不同经验之间真正值得连的两个点接起来。")
             when (gapFeedback) {
                 FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种跨方向连接、经验迁移和反常识组合更有用。")
                 FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护 chore、不要给显而易见的缺口，要更像两个旧点突然被连成了一个新方向。")
                 null -> Unit
+            }
+            selectedMainlineCandidate?.let { candidate ->
+                appendLine("今日押注：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("当前押注主句：$it") }
+            }
+            settledDirection?.let { direction ->
+                direction.wikiValidatedPoint
+                    .ifBlank { direction.wikiVerifiedPoint }
+                    .ifBlank { direction.wikiConclusionLine }
+                    .takeIf { it.isNotBlank() }
+                    ?.let { appendLine("最近已成立：$it") }
             }
             breakthroughDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
@@ -656,6 +674,26 @@ class FlowViewModel(
             if (fusionState.lines.isNotEmpty()) {
                 appendLine("潜在组合：")
                 fusionState.lines.take(2).forEach { appendLine(it) }
+            }
+            val crossDirectionAssets = directions.followedDirections
+                .filter { it.thread.key != breakthroughDirection?.thread?.key }
+                .filter { it.thread.key != selectedMainlineCandidate?.threadKey }
+                .mapNotNull { summary ->
+                    val stablePoint = summary.wikiValidatedPoint
+                        .ifBlank { summary.wikiVerifiedPoint }
+                        .ifBlank { summary.wikiConclusionLine }
+                        .ifBlank { summary.assetSummary }
+                    val openPoint = summary.wikiOpenQuestion
+                        .ifBlank { summary.contrarianQuestion }
+                        .ifBlank { summary.opportunityGap }
+                    val chosen = stablePoint.ifBlank { openPoint }
+                    chosen.takeIf { it.isNotBlank() }?.let { "${summary.thread.title}：$it" }
+                }
+                .distinct()
+                .take(3)
+            if (crossDirectionAssets.isNotEmpty()) {
+                appendLine("其他方向可借力：")
+                crossDirectionAssets.forEach { appendLine(it) }
             }
             val reusableAssets = directions.followedDirections
                 .mapNotNull { summary ->

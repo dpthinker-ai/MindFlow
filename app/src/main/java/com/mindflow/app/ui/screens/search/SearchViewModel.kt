@@ -14,9 +14,6 @@ import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.SearchFilters
 import com.mindflow.app.data.model.TimeRange
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.connect.ResearchEvidenceType
-import com.mindflow.app.data.wiki.DirectionWikiCoordinator
-import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +30,6 @@ import kotlinx.coroutines.launch
 data class SearchUiState(
     val filters: SearchFilters = SearchFilters(),
     val results: List<NoteEntity> = emptyList(),
-    val knowledgeResults: List<KnowledgeLayerSearchItem> = emptyList(),
     val availableFolders: List<MindFolder> = MindFolderCatalog.all,
     val availableTags: List<String> = emptyList(),
     val folderCounts: Map<String, Int> = emptyMap(),
@@ -51,7 +47,6 @@ sealed interface SearchEvent {
 class SearchViewModel(
     private val noteRepository: NoteRepository,
     private val backgroundFolderOrganizer: BackgroundFolderOrganizer,
-    private val directionWikiCoordinator: DirectionWikiCoordinator,
     initialStatus: NoteStatus? = null,
     initialArchivedOnly: Boolean = false,
 ) : ViewModel() {
@@ -95,34 +90,15 @@ class SearchViewModel(
             }
         },
         noteRepository.observeAllNotes(),
-        directionWikiCoordinator.snapshot,
-    ) { state, allNotes, wikiSnapshot ->
-        Triple(state, allNotes, wikiSnapshot)
-    }.combine(backgroundFolderOrganizer.status) { (state, allNotes, wikiSnapshot), organizerStatus ->
+    ) { state, allNotes ->
+        state to allNotes
+    }.combine(backgroundFolderOrganizer.status) { (state, allNotes), organizerStatus ->
         val activeNotes = allNotes.filter { !it.isArchived }
         val tags = allNotes
             .sortedByDescending { it.updatedAt }
             .flatMap { it.tags }
             .distinct()
-        val knowledgeResults = if (state.filters.query.isBlank()) {
-            emptyList()
-        } else {
-            val queryText = state.filters.query.trim().lowercase()
-            wikiSnapshot.knowledgeItems
-                .mapNotNull { item ->
-                    val score = knowledgeSearchScore(item, queryText, state.filters.query.trim())
-                    if (score <= 0) null else item to score
-                }
-                .sortedWith(
-                    compareByDescending<Pair<KnowledgeLayerSearchItem, Int>> { it.second }
-                        .thenByDescending { trustWeight(it.first.trustLabel) }
-                        .thenByDescending { it.first.updatedAt },
-                )
-                .map { it.first }
-                .take(8)
-        }
         state.copy(
-            knowledgeResults = knowledgeResults,
             availableTags = tags,
             folderCounts = MindFolderCatalog.all.associate { folder ->
                 folder.key to activeNotes.count { note ->
@@ -139,29 +115,6 @@ class SearchViewModel(
             lastAutoOrganizedCount = organizerStatus.lastOrganizedCount,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchUiState())
-
-    private fun knowledgeSearchScore(
-        item: KnowledgeLayerSearchItem,
-        queryText: String,
-        rawQuery: String,
-    ): Int {
-        var score = 0
-        if (item.title.lowercase().contains(queryText)) score += 60
-        if (item.summary.lowercase().contains(queryText)) score += 28
-        if (item.supportLine.lowercase().contains(queryText)) score += 18
-        if (item.trustLabel.lowercase().contains(queryText)) score += 24
-        if (item.type.label.contains(rawQuery)) score += 16
-        score += trustWeight(item.trustLabel) * 2
-        return score
-    }
-
-    private fun trustWeight(label: String): Int = when (label) {
-        ResearchEvidenceType.VALIDATED.label -> 4
-        ResearchEvidenceType.VERIFIED.label -> 3
-        ResearchEvidenceType.HYPOTHESIS.label -> 2
-        ResearchEvidenceType.SIGNAL.label -> 1
-        else -> 0
-    }
 
     fun updateQuery(value: String) {
         query.value = value
@@ -215,7 +168,6 @@ class SearchViewModel(
         fun factory(
             noteRepository: NoteRepository,
             backgroundFolderOrganizer: BackgroundFolderOrganizer,
-            directionWikiCoordinator: DirectionWikiCoordinator,
             initialStatus: NoteStatus? = null,
             initialArchivedOnly: Boolean = false,
         ): ViewModelProvider.Factory = viewModelFactory {
@@ -223,7 +175,6 @@ class SearchViewModel(
                 SearchViewModel(
                     noteRepository = noteRepository,
                     backgroundFolderOrganizer = backgroundFolderOrganizer,
-                    directionWikiCoordinator = directionWikiCoordinator,
                     initialStatus = initialStatus,
                     initialArchivedOnly = initialArchivedOnly,
                 )
