@@ -56,8 +56,8 @@ android {
         applicationId = "com.mindflow.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "2.0.10"
+        versionCode = 13
+        versionName = "2.0.11"
         resourceConfigurations += listOf("zh", "zh-rCN", "en")
         ndk {
             abiFilters += listOf("arm64-v8a")
