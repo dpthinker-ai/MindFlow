@@ -1,7 +1,9 @@
 package com.mindflow.app.data.flow
 
 import com.mindflow.app.data.brief.DailyBriefSource
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiServiceClient
 import java.time.LocalDate
@@ -23,6 +25,8 @@ data class FlowKnowledgeCompressionState(
 class FlowKnowledgeCompressionPlanner(
     private val aiSettingsRepository: AiSettingsRepository,
     private val aiServiceClient: AiServiceClient,
+    private val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
+    private val onDeviceAiClient: OnDeviceAiClient,
 ) {
     private data class CardCompression(
         val line: String,
@@ -45,8 +49,13 @@ class FlowKnowledgeCompressionPlanner(
     ): FlowKnowledgeCompressionState {
         if (mainlineKey.isBlank() || settledKey.isBlank() || gapKey.isBlank()) return fallback
 
+        val onDeviceSettings = onDeviceModelSettingsRepository.getCurrent()
         val settings = aiSettingsRepository.getCurrent()
         val dayKey = LocalDate.now().toString()
+        val localEnabled = onDeviceSettings.preferOnDevice && onDeviceSettings.isReady
+        val localMainlineKey = if (localEnabled) "local:${onDeviceSettings.localModelPath}:$mainlineKey" else mainlineKey
+        val localSettledKey = if (localEnabled) "local:${onDeviceSettings.localModelPath}:$settledKey" else settledKey
+        val localGapKey = if (localEnabled) "local:${onDeviceSettings.localModelPath}:$gapKey" else gapKey
         val shouldCallAi = (
             settings.aiEnabled &&
             settings.isConfigured &&
@@ -54,7 +63,56 @@ class FlowKnowledgeCompressionPlanner(
             settledContextSummary.isNotBlank() &&
             gapContextSummary.isNotBlank()
         )
-        val resolved = if (shouldCallAi) {
+        val resolved = if (localEnabled) {
+            val mainlineCard = mainlineCache[localMainlineKey]
+                ?: buildCardCompression(
+                    result = onDeviceAiClient.generateFlowMainline(
+                        settings = onDeviceSettings,
+                        contextSummary = mainlineContextSummary,
+                    ),
+                    fallbackLine = fallback.mainline,
+                    fallbackSupport = fallback.whyNow,
+                ).also {
+                    mainlineCache[localMainlineKey] = it
+                    trimCache(mainlineCache)
+                }
+            val settledCard = settledCache[localSettledKey]
+                ?: buildCardCompression(
+                    result = onDeviceAiClient.generateFlowSettledKnowledge(
+                        settings = onDeviceSettings,
+                        contextSummary = settledContextSummary,
+                    ),
+                    fallbackLine = fallback.settledLine,
+                    fallbackSupport = fallback.settledSupport,
+                ).also {
+                    settledCache[localSettledKey] = it
+                    trimCache(settledCache)
+                }
+            val gapCard = gapCache[localGapKey]
+                ?: buildCardCompression(
+                    result = onDeviceAiClient.generateFlowBreakthroughGap(
+                        settings = onDeviceSettings,
+                        contextSummary = gapContextSummary,
+                    ),
+                    fallbackLine = fallback.gapLine,
+                    fallbackSupport = fallback.gapSupport,
+                ).also {
+                    gapCache[localGapKey] = it
+                    trimCache(gapCache)
+                }
+
+            fallback.copy(
+                mainline = mainlineCard.line,
+                whyNow = mainlineCard.support,
+                mainlineSource = mainlineCard.source,
+                settledLine = settledCard.line,
+                settledSupport = settledCard.support,
+                settledSource = settledCard.source,
+                gapLine = gapCard.line,
+                gapSupport = gapCard.support,
+                gapSource = gapCard.source,
+            )
+        } else if (shouldCallAi) {
             val needMainline = mainlineCache[mainlineKey] == null
             val needSettled = settledCache[settledKey] == null
             val needGap = gapCache[gapKey] == null

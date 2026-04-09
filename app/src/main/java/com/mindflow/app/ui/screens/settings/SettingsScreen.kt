@@ -56,13 +56,17 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.model.OnDeviceModelStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
@@ -88,6 +92,7 @@ private enum class SettingsDestination {
     HOME,
     CLOUD,
     AI,
+    LOCAL_MODEL,
     REMINDER,
     TIME_BANK,
     DIRECTION_WIKI,
@@ -98,24 +103,30 @@ fun SettingsRoute(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
     timeBankSettingsRepository: TimeBankSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
+    onDeviceModelManager: OnDeviceModelManager,
     reminderScheduler: ReminderScheduler,
     directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
+    onDeviceAiClient: OnDeviceAiClient,
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(
             noteRepository = noteRepository,
             aiSettingsRepository = aiSettingsRepository,
             cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+            onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
             reminderSettingsRepository = reminderSettingsRepository,
             timeBankSettingsRepository = timeBankSettingsRepository,
             cloudBackupCoordinator = cloudBackupCoordinator,
+            onDeviceModelManager = onDeviceModelManager,
             reminderScheduler = reminderScheduler,
             directionWikiCoordinator = directionWikiCoordinator,
             aiServiceClient = aiServiceClient,
+            onDeviceAiClient = onDeviceAiClient,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -187,9 +198,15 @@ fun SettingsRoute(
         onApiKeyChange = viewModel::onApiKeyChange,
         onBaseUrlChange = viewModel::onBaseUrlChange,
         onModelChange = viewModel::onModelChange,
+        onLocalModelDownloadUrlChange = viewModel::onLocalModelDownloadUrlChange,
+        onLocalPreferOnDeviceChange = viewModel::onLocalPreferOnDeviceChange,
         onSaveAi = viewModel::saveAi,
+        onSaveLocalModel = viewModel::saveLocalModel,
         onTestAi = viewModel::testAiConnection,
+        onTestLocalModel = viewModel::testLocalModel,
         onClearAi = viewModel::clear,
+        onDownloadLocalModel = viewModel::downloadLocalModel,
+        onDeleteLocalModel = viewModel::deleteLocalModel,
         onCloudBaseUrlChange = viewModel::onCloudBaseUrlChange,
         onCloudUsernameChange = viewModel::onCloudUsernameChange,
         onCloudPasswordChange = viewModel::onCloudPasswordChange,
@@ -239,9 +256,15 @@ private fun SettingsScreen(
     onApiKeyChange: (String) -> Unit,
     onBaseUrlChange: (String) -> Unit,
     onModelChange: (String) -> Unit,
+    onLocalModelDownloadUrlChange: (String) -> Unit,
+    onLocalPreferOnDeviceChange: (Boolean) -> Unit,
     onSaveAi: () -> Unit,
+    onSaveLocalModel: () -> Unit,
     onTestAi: () -> Unit,
+    onTestLocalModel: () -> Unit,
     onClearAi: () -> Unit,
+    onDownloadLocalModel: () -> Unit,
+    onDeleteLocalModel: () -> Unit,
     onCloudBaseUrlChange: (String) -> Unit,
     onCloudUsernameChange: (String) -> Unit,
     onCloudPasswordChange: (String) -> Unit,
@@ -296,6 +319,7 @@ private fun SettingsScreen(
                 uiState = uiState,
                 onOpenCloud = { destination = SettingsDestination.CLOUD },
                 onOpenAi = { destination = SettingsDestination.AI },
+                onOpenLocalModel = { destination = SettingsDestination.LOCAL_MODEL },
                 onOpenReminder = { destination = SettingsDestination.REMINDER },
                 onOpenTimeBank = { destination = SettingsDestination.TIME_BANK },
                 onOpenDirectionWiki = { destination = SettingsDestination.DIRECTION_WIKI },
@@ -327,6 +351,16 @@ private fun SettingsScreen(
                 onTestAi = onTestAi,
                 onClearAi = onClearAi,
             )
+            SettingsDestination.LOCAL_MODEL -> LocalModelSettingsScreen(
+                uiState = uiState,
+                onBack = { destination = SettingsDestination.HOME },
+                onLocalModelDownloadUrlChange = onLocalModelDownloadUrlChange,
+                onLocalPreferOnDeviceChange = onLocalPreferOnDeviceChange,
+                onSaveLocalModel = onSaveLocalModel,
+                onTestLocalModel = onTestLocalModel,
+                onDownloadLocalModel = onDownloadLocalModel,
+                onDeleteLocalModel = onDeleteLocalModel,
+            )
             SettingsDestination.REMINDER -> ReminderSettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
@@ -357,6 +391,7 @@ private fun SettingsHomeScreen(
     uiState: SettingsUiState,
     onOpenCloud: () -> Unit,
     onOpenAi: () -> Unit,
+    onOpenLocalModel: () -> Unit,
     onOpenReminder: () -> Unit,
     onOpenTimeBank: () -> Unit,
     onOpenDirectionWiki: () -> Unit,
@@ -407,6 +442,27 @@ private fun SettingsHomeScreen(
                     headline = if (uiState.isConfigured) "AI 整理 + 判断" else "本地规则",
                     accent = Accent,
                     onClick = onOpenAi,
+                )
+            }
+
+            item {
+                SettingsEntryCard(
+                    title = "本地模型",
+                    summary = when (uiState.localModelStatus) {
+                        OnDeviceModelStatus.READY -> "${uiState.localModelLabel} · ${formatFileSize(uiState.localModelDownloadedBytes)}"
+                        OnDeviceModelStatus.DOWNLOADING -> "正在下载"
+                        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank { "下载失败" }
+                        OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
+                    },
+                    headline = if (uiState.localModelPreferOnDevice && uiState.localModelStatus == OnDeviceModelStatus.READY) {
+                        "本地优先"
+                    } else if (uiState.localModelStatus == OnDeviceModelStatus.READY) {
+                        "已就绪"
+                    } else {
+                        "未就绪"
+                    },
+                    accent = AccentBlue,
+                    onClick = onOpenLocalModel,
                 )
             }
 
@@ -535,6 +591,127 @@ private fun DirectionWikiSettingsScreen(
                     onClick = onRefreshDirectionWiki,
                     enabled = !uiState.isRefreshingDirectionWiki,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalModelSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onLocalModelDownloadUrlChange: (String) -> Unit,
+    onLocalPreferOnDeviceChange: (Boolean) -> Unit,
+    onSaveLocalModel: () -> Unit,
+    onTestLocalModel: () -> Unit,
+    onDownloadLocalModel: () -> Unit,
+    onDeleteLocalModel: () -> Unit,
+) {
+    val statusHeadline = when (uiState.localModelStatus) {
+        OnDeviceModelStatus.READY -> "已就绪"
+        OnDeviceModelStatus.DOWNLOADING -> "下载中"
+        OnDeviceModelStatus.ERROR -> "下载失败"
+        OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
+    }
+    DetailScreenFrame(
+        title = "本地模型",
+        subtitle = "Gemma 4 E4B 运行时下载，不打进安装包",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "当前状态", headline = statusHeadline)
+                Text(
+                    text = when {
+                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 会优先用本地模型生成今日押注、已成立和新连接。"
+                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，完成后不会增加安装包体积。"
+                        uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
+                        else -> "先填入 Gemma 4 E4B 的模型直链，再下载到本地。"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                uiState.localModelPath.takeIf { it.isNotBlank() }?.let { path ->
+                    Text(
+                        text = path,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (uiState.localModelDownloadedBytes > 0L) {
+                    Text(
+                        text = "已下载 ${formatFileSize(uiState.localModelDownloadedBytes)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "模型配置",
+                description = "端侧模型只负责本地主编和知识召回。模型文件运行时下载，不会被打进 APK。",
+            ) {
+                SettingsField(
+                    value = uiState.localModelDownloadUrl,
+                    onValueChange = onLocalModelDownloadUrlChange,
+                    label = "模型下载链接",
+                    secret = false,
+                )
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.92f),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("本地优先", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                text = "本地模型就绪后，Flow 三张卡会优先走端侧，再回退云端和规则。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = uiState.localModelPreferOnDevice,
+                            onCheckedChange = onLocalPreferOnDeviceChange,
+                        )
+                    }
+                }
+                GhostActionButton(
+                    text = if (uiState.isDownloadingLocalModel) "下载中..." else "下载模型",
+                    onClick = onDownloadLocalModel,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isDownloadingLocalModel,
+                    icon = Icons.Outlined.FileDownload,
+                )
+                GhostActionButton(
+                    text = if (uiState.isTestingLocalModel) "测试中..." else "测试本地模型",
+                    onClick = onTestLocalModel,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isTestingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
+                )
+                ActionButton(
+                    text = if (uiState.isSavingLocalModel) "保存中..." else "保存本地模型设置",
+                    onClick = onSaveLocalModel,
+                    enabled = !uiState.isSavingLocalModel,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Save,
+                )
+                GhostActionButton(
+                    text = if (uiState.isDeletingLocalModel) "删除中..." else "删除本地模型",
+                    onClick = onDeleteLocalModel,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isDeletingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
                 )
             }
         }
@@ -1122,6 +1299,13 @@ private fun SettingsEntryCard(
             )
         }
     }
+}
+
+private fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> String.format("%.1f GB", bytes / (1024f * 1024f * 1024f))
+    bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024f * 1024f))
+    bytes >= 1024L -> String.format("%.0f KB", bytes / 1024f)
+    else -> "$bytes B"
 }
 
 @Composable

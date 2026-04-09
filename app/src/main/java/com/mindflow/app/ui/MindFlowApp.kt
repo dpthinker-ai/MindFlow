@@ -59,9 +59,13 @@ import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
@@ -70,6 +74,7 @@ import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.FlowRoute
+import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
 import com.mindflow.app.ui.screens.settings.SettingsRoute
@@ -93,10 +98,12 @@ fun MindFlowApp(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
     timeBankSettingsRepository: TimeBankSettingsRepository,
     threadPreferencesRepository: ThreadPreferencesRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
+    onDeviceModelManager: OnDeviceModelManager,
     reminderScheduler: ReminderScheduler,
     backgroundFolderOrganizer: BackgroundFolderOrganizer,
     dailyBriefPlanner: DailyBriefPlanner,
@@ -109,6 +116,8 @@ fun MindFlowApp(
     externalResearchPlanner: ExternalResearchPlanner,
     directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
+    onDeviceAiClient: OnDeviceAiClient,
+    editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
 ) {
@@ -244,6 +253,16 @@ fun MindFlowApp(
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
+                    onOpenGraph = { navController.navigate(MindFlowDestinations.graphRoute()) },
+                )
+            }
+
+            composable(MindFlowDestinations.FLOW_GRAPH) {
+                KnowledgeGraphRoute(
+                    directionWikiCoordinator = directionWikiCoordinator,
+                    onBack = { navController.popBackStack() },
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
+                    onOpenNote = openNoteSafely,
                 )
             }
 
@@ -317,12 +336,15 @@ fun MindFlowApp(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,
                     directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
+                    onDeviceAiClient = onDeviceAiClient,
                 )
             }
 
@@ -336,6 +358,7 @@ fun MindFlowApp(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
+                    editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = null,
                     captureSessionKey = seedId,
                     initialContent = captureSeed.initialContent,
@@ -369,6 +392,7 @@ fun MindFlowApp(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     aiServiceClient = aiServiceClient,
+                    editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = noteId,
                     captureSessionKey = null,
                     initialContent = "",

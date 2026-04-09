@@ -22,9 +22,13 @@ import androidx.compose.runtime.mutableStateOf
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.ui.MindFlowApp
 import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 import com.mindflow.app.ui.theme.MindFlowTheme
@@ -51,10 +55,13 @@ class MainActivity : ComponentActivity() {
         val aiSettingsRepository: AiSettingsRepository = appContainer.aiSettingsRepository
         val cloudBackupSettingsRepository: CloudBackupSettingsRepository =
             appContainer.cloudBackupSettingsRepository
+        val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository =
+            appContainer.onDeviceModelSettingsRepository
         val reminderSettingsRepository: ReminderSettingsRepository = appContainer.reminderSettingsRepository
         val timeBankSettingsRepository: TimeBankSettingsRepository = appContainer.timeBankSettingsRepository
         val threadPreferencesRepository: ThreadPreferencesRepository = appContainer.threadPreferencesRepository
         val cloudBackupCoordinator: CloudBackupCoordinator = appContainer.cloudBackupCoordinator
+        val onDeviceModelManager: OnDeviceModelManager = appContainer.onDeviceModelManager
         val reminderScheduler: ReminderScheduler = appContainer.reminderScheduler
         val dailyBriefPlanner: DailyBriefPlanner = appContainer.dailyBriefPlanner
         val nextActionPlanner: NextActionPlanner = appContainer.nextActionPlanner
@@ -66,16 +73,20 @@ class MainActivity : ComponentActivity() {
         val externalResearchPlanner: ExternalResearchPlanner = appContainer.externalResearchPlanner
         val directionWikiCoordinator: DirectionWikiCoordinator = appContainer.directionWikiCoordinator
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
+        val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
+        val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
         setContent {
             MindFlowTheme {
                 MindFlowApp(
                     noteRepository = repository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,
                     backgroundFolderOrganizer = appContainer.backgroundFolderOrganizer,
                     dailyBriefPlanner = dailyBriefPlanner,
@@ -88,6 +99,8 @@ class MainActivity : ComponentActivity() {
                     externalResearchPlanner = externalResearchPlanner,
                     directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
+                    onDeviceAiClient = onDeviceAiClient,
+                    editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     launchRequest = launchRequestState.value,
                     onLaunchRequestConsumed = { requestId ->
                         if (launchRequestState.value?.requestId == requestId) {
@@ -112,6 +125,7 @@ class MainActivity : ComponentActivity() {
             appContainer.backgroundFolderOrganizer.organizeInBackgroundIfNeeded()
             appContainer.cloudBackupCoordinator.syncInBackgroundIfNeeded()
             appContainer.directionWikiCoordinator.refreshInBackgroundIfNeeded()
+            appContainer.localKnowledgeMaintenancePlanner.maintainInBackgroundIfNeeded()
         }
     }
 }

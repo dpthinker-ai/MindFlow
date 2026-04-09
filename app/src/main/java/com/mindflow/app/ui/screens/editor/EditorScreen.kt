@@ -52,9 +52,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,6 +76,8 @@ import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.localmodel.EditorKnowledgeRecallResult
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.ui.components.ActionButton
@@ -99,6 +102,7 @@ fun EditorRoute(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
     aiServiceClient: AiServiceClient,
+    editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     noteId: Long?,
     captureSessionKey: Long? = null,
     initialContent: String = "",
@@ -215,6 +219,29 @@ fun EditorRoute(
             )
         }
     }
+    val knowledgeRecall by produceState<EditorKnowledgeRecallResult?>(
+        initialValue = null,
+        uiState.isLoading,
+        uiState.noteId,
+        uiState.topic,
+        uiState.content,
+        uiState.folderKey,
+        uiState.tags,
+        suggestedThread?.key,
+        relatedNotes.map { it.id to it.updatedAt },
+    ) {
+        if (uiState.isLoading) {
+            value = null
+            return@produceState
+        }
+        delay(180)
+        value = editorKnowledgeRecallPlanner.summarize(
+            draftTopic = uiState.topic,
+            draftContent = uiState.content,
+            suggestedThreadTitle = suggestedThread?.title,
+            relatedNotes = relatedNotes,
+        )
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -260,6 +287,7 @@ fun EditorRoute(
         onRetriggerTag = viewModel::retriggerTagExtraction,
         suggestedThread = suggestedThread,
         onOpenSuggestedThread = onOpenThread,
+        knowledgeRecall = knowledgeRecall,
         relatedNotes = relatedNotes,
         onOpenRelatedNote = onOpenNote,
     )
@@ -294,6 +322,7 @@ private fun EditorScreen(
     onRetriggerTag: () -> Unit,
     suggestedThread: com.mindflow.app.data.connect.ThemeThread?,
     onOpenSuggestedThread: (String) -> Unit,
+    knowledgeRecall: EditorKnowledgeRecallResult?,
     relatedNotes: List<NoteEntity>,
     onOpenRelatedNote: (Long) -> Unit,
 ) {
@@ -782,6 +811,41 @@ private fun EditorScreen(
                                         GhostActionButton(
                                             text = "打开方向",
                                             onClick = { onOpenSuggestedThread(suggestedThread.key) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        knowledgeRecall?.let { recall ->
+                            Text("旧知识召回", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Surface(
+                                color = WhiteGlass.copy(alpha = 0.9f),
+                                shape = MaterialTheme.shapes.medium,
+                                border = BorderStroke(1.dp, BorderSoft),
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = recall.line,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    recall.support.takeIf { it.isNotBlank() }?.let { support ->
+                                        Text(
+                                            text = support,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (recall.usedOnDevice) AccentBlue else TextSoft,
+                                        )
+                                    }
+                                    if (!uiState.hasUnsavedChanges && recall.anchorNoteId != null) {
+                                        GhostActionButton(
+                                            text = recall.anchorLabel.ifBlank { "打开相关记录" },
+                                            onClick = { onOpenRelatedNote(recall.anchorNoteId) },
                                         )
                                     }
                                 }

@@ -96,6 +96,7 @@ fun FlowRoute(
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenGraph: () -> Unit,
 ) {
     val viewModel: FlowViewModel = viewModel(
         factory = FlowViewModel.factory(
@@ -123,6 +124,7 @@ fun FlowRoute(
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
         onCreateCapture = onCreateCapture,
+        onOpenGraph = onOpenGraph,
     )
 }
 
@@ -137,6 +139,7 @@ private fun FlowScreen(
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenGraph: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -162,14 +165,14 @@ private fun FlowScreen(
     }
     val subtitle = remember(focus) {
         when (focus) {
-            FlowFocus.TODAY -> "先押今天最值得推进的一件事。"
-            FlowFocus.RECONNECT -> "先把最值得重新接回来的那条线接上。"
-            FlowFocus.REVIEW -> "先看最近真正成立的一个判断。"
-            FlowFocus.DIRECTION -> "先看最近最值得连起来的新连接。"
-            null -> "先押一件事，再守住一个已成立判断。"
+            FlowFocus.TODAY -> "先看今天新进来的材料，和它们已经推成了什么判断。"
+            FlowFocus.RECONNECT -> "先看哪条旧线还值得重新吸收进当前判断里。"
+            FlowFocus.REVIEW -> "先看最近刚被写进积累的一条结果。"
+            FlowFocus.DIRECTION -> "先看当前最该厘清的一处张力。"
+            null -> "本地维护你的材料，再把最值得看的结果给你。"
         }
     }
-    val moreAccumulationIndex = 5
+    val moreAccumulationIndex = 6
     var showMainline by remember { mutableStateOf(false) }
     var showSettled by remember { mutableStateOf(false) }
     var showGap by remember { mutableStateOf(false) }
@@ -219,7 +222,7 @@ private fun FlowScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "MindFlow",
+                            text = "AI Flow",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -229,6 +232,18 @@ private fun FlowScreen(
                             color = TextSoft,
                         )
                     }
+                }
+
+                item {
+                    SourceIngestCard(
+                        todayCount = uiState.todayCount,
+                        continueNote = uiState.continueNote,
+                        staleNote = uiState.staleNote,
+                        directionCount = uiState.followedDirections.size,
+                        highlighted = highlightToday || highlightReconnect,
+                        onCreateCapture = onCreateCapture,
+                        onOpenNote = onOpenNote,
+                    )
                 }
 
                 item {
@@ -307,6 +322,9 @@ private fun FlowScreen(
                         ) {
                             Text(text = "看更多积累", color = AccentBlue)
                         }
+                        TextButton(onClick = onOpenGraph) {
+                            Text(text = "知识图谱", color = AccentBlue)
+                        }
                     }
                 }
 
@@ -318,6 +336,69 @@ private fun FlowScreen(
                     )
                 }
 
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceIngestCard(
+    todayCount: Int,
+    continueNote: NoteEntity?,
+    staleNote: NoteEntity?,
+    directionCount: Int,
+    highlighted: Boolean,
+    onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    val headline = when {
+        todayCount > 0 -> "今天新进了 $todayCount 条材料"
+        directionCount > 0 -> "今天没有新材料，但已有 $directionCount 条方向在维护里"
+        else -> "先喂一条材料进来，本地维护才有东西可吸收"
+    }
+    val anchorNote = continueNote ?: staleNote
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.9f),
+        shape = PanelShape,
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "今日新材料",
+                headline = headline,
+            )
+            Text(
+                text = when {
+                    anchorNote != null -> "本地维护会先从最近这条材料开始，把它和旧积累一起压成判断与张力。"
+                    directionCount > 0 -> "没有新材料时，本地维护会继续从旧积累里修正判断、保留结果、发现张力。"
+                    else -> "先记下一条真正有信息量的材料，AI Flow 才会开始像一个知识维护员工作。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSoft,
+            )
+            anchorNote?.let { note ->
+                AnchorLine(
+                    text = "最近材料：${note.topic.ifBlank { "一条记录" }}",
+                    onClick = { onOpenNote(note.id) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ActionButton(
+                    text = "记一条",
+                    onClick = { onCreateCapture(CaptureSeed()) },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -365,8 +446,8 @@ private fun MainlineFocusCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "今日押注",
-                headline = if (note != null || candidate != null) "今天先推这一件" else "先把一条真正值得做成的事接上",
+                title = "当前综合判断",
+                headline = if (note != null || candidate != null) "今天先沿这一条判断继续看" else "先把今天最值得看的综合判断压出来",
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 candidate?.takeIf { it.stageLabel.isNotBlank() || it.horizonLabel.isNotBlank() }?.let {
@@ -383,7 +464,7 @@ private fun MainlineFocusCard(
             }
             title.takeIf { it.isNotBlank() && (candidate != null || note != null) }?.let {
                 AnchorLine(
-                    text = "来自：$it",
+                    text = "主要来自：$it",
                     onClick = {
                         candidate?.focusNoteId?.let(onOpenNote)
                             ?: candidate?.noteId?.let(onOpenNote)
@@ -423,7 +504,7 @@ private fun MainlineFocusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ActionButton(
-                    text = "继续推进",
+                    text = "沿这条看",
                     onClick = {
                         candidate?.focusNoteId?.let(onOpenNote)
                             ?: candidate?.noteId?.let(onOpenNote)
@@ -433,7 +514,7 @@ private fun MainlineFocusCard(
                     modifier = Modifier.weight(1f),
                 )
                 GhostActionButton(
-                    text = "换一个",
+                    text = "再压一次",
                     onClick = onRefresh,
                     modifier = Modifier.weight(1f),
                 )
@@ -484,18 +565,18 @@ private fun SettledKnowledgeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "已成立",
-                headline = if (resolvedSettledLine.isNotBlank()) "最近最值得信的一点" else "开始长出能被依赖的判断",
+                title = "最近吸收",
+                headline = if (resolvedSettledLine.isNotBlank()) "刚被写进积累的一条结果" else "先让同一条线继续积累，这里才会开始变厚",
             )
             if (direction == null || resolvedSettledLine.isBlank()) {
                 Text(
-                    text = "再沿着同一条方向多推几步，这里会开始留下真正能拿来用的判断，而不是一堆散记录。",
+                    text = "再沿着同一条方向多推几步，这里才会开始留下真正能复用的结果，而不是一堆散记录。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
             } else {
                 AnchorLine(
-                    text = "来自：${direction.thread.title}",
+                    text = "写自：${direction.thread.title}",
                     onClick = { onOpenThread(direction.thread.key) },
                 )
                 AnimatedContent(
@@ -527,7 +608,7 @@ private fun SettledKnowledgeCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ActionButton(
-                        text = "看这条判断",
+                        text = "看这条积累",
                         onClick = {
                             direction.assetNoteId?.let(onOpenNote) ?: onOpenThread(direction.thread.key)
                         },
@@ -586,19 +667,19 @@ private fun BreakthroughGapCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "新连接",
-                headline = if (resolvedGapLine.isNotBlank()) "最近最值得连起来的两个点" else "先等一个值得接起来的新连接",
+                title = "待厘清",
+                headline = if (resolvedGapLine.isNotBlank()) "当前最该补的一处张力" else "再多一点材料，这里会开始露出真正的张力",
             )
             if (resolvedGapLine.isBlank()) {
                 Text(
-                    text = "再多沿着同一条方向推一点，这里会开始长出值得接起来的新连接。",
+                    text = "再多沿着同一条方向推一点，这里会开始露出哪一处最该补、最该查、最该重新连接。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
             } else {
                 direction?.let {
                     AnchorLine(
-                        text = "来自：${it.thread.title}",
+                        text = "牵涉方向：${it.thread.title}",
                         onClick = { onOpenThread(it.thread.key) },
                     )
                 }
@@ -623,7 +704,7 @@ private fun BreakthroughGapCard(
                             label = "flowGapSupport",
                         ) { text ->
                             InsightLine(
-                                label = "如果接上",
+                                label = "下一次摄入",
                                 text = text,
                                 emphasize = true,
                                 maxLines = 2,
@@ -637,19 +718,19 @@ private fun BreakthroughGapCard(
                 ) {
                     if (direction != null && direction.wikiMaintenanceLine.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "补一条材料",
                             onClick = { onCreateCapture(direction.toMaintenanceCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
                     } else if (direction != null && direction.validationStep.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "补一条材料",
                             onClick = { onCreateCapture(direction.toResearchCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
                     } else if (resolvedGapLine.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "补一条材料",
                             onClick = {
                                 onCreateCapture(
                                     buildOpportunityCaptureSeed(
@@ -663,14 +744,14 @@ private fun BreakthroughGapCard(
                         )
                     }
                     if (direction != null) {
-                        GhostActionButton(
-                            text = "换个角度",
+                    GhostActionButton(
+                            text = "换个视角",
                             onClick = onRefresh,
                             modifier = Modifier.weight(1f),
                         )
                     } else {
                         GhostActionButton(
-                            text = "换个角度",
+                            text = "换个视角",
                             onClick = onRefresh,
                             modifier = Modifier.weight(1f),
                         )
@@ -729,12 +810,12 @@ private fun MoreAccumulationSection(
 ) {
     PanelCard {
         SectionHeader(
-            title = "更多积累",
+            title = "看更多积累",
             headline = if (directions.isNotEmpty()) "${directions.size} 条方向" else null,
         )
         if (directions.isEmpty()) {
             Text(
-                text = "先关注几条真正想长期经营的方向，这里会开始积累方向下的判断和知识。",
+                text = "先让几条真正想长期经营的方向稳定下来，这里才会开始出现可复用的积累。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSoft,
             )

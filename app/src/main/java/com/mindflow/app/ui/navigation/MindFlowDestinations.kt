@@ -8,6 +8,7 @@ object MindFlowDestinations {
     const val FLOW_BASE = "flow"
     const val FLOW = "flow?focus={focus}"
     const val FLOW_FOCUS_ARG = "focus"
+    const val FLOW_GRAPH = "flow/graph"
     const val THREAD = "flow/thread/{threadKey}"
     const val THREAD_ARG = "threadKey"
     const val SEARCH_BASE = "search"
@@ -27,6 +28,7 @@ object MindFlowDestinations {
     fun folderRoute(folderKey: String): String = "folder/$folderKey"
     fun detailRoute(noteId: Long): String = "detail/$noteId"
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
+    fun graphRoute(): String = FLOW_GRAPH
     fun captureRoute(seedId: Long): String = "capture/$seedId"
     fun flowRoute(focus: FlowFocus? = null): String =
         if (focus == null) FLOW_BASE else "$FLOW_BASE?$FLOW_FOCUS_ARG=${focus.name}"

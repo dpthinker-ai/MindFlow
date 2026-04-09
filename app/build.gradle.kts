@@ -56,8 +56,8 @@ android {
         applicationId = "com.mindflow.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.0.11"
+        versionCode = 14
+        versionName = "3.0.0"
         resourceConfigurations += listOf("zh", "zh-rCN", "en")
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -144,6 +144,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("com.google.mediapipe:tasks-genai:0.10.33")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.commonmark:commonmark:0.21.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

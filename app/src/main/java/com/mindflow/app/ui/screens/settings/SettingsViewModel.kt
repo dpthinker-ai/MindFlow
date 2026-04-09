@@ -6,16 +6,21 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.model.OnDeviceModelSettings
+import com.mindflow.app.data.model.OnDeviceModelStatus
 import com.mindflow.app.data.model.ReminderSettings
 import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.topic.AiServiceClient
@@ -41,6 +46,14 @@ data class SettingsUiState(
     val aiRequestsToday: Int = 0,
     val aiSuccessesToday: Int = 0,
     val aiTokensToday: Int = 0,
+    val localModelLabel: String = OnDeviceModelSettings.DEFAULT_MODEL_LABEL,
+    val localModelDownloadUrl: String = "",
+    val localModelPreferOnDevice: Boolean = false,
+    val localModelPath: String = "",
+    val localModelDownloadedBytes: Long = 0L,
+    val localModelLastDownloadedAt: Long = 0L,
+    val localModelStatus: OnDeviceModelStatus = OnDeviceModelStatus.NOT_DOWNLOADED,
+    val localModelLastMessage: String = "",
     val cloudBaseUrl: String = CloudBackupSettings.DEFAULT_BASE_URL,
     val cloudUsername: String = "",
     val cloudPassword: String = "",
@@ -58,12 +71,16 @@ data class SettingsUiState(
     val directionWikiLastRefreshedAt: Long = 0L,
     val directionWikiRootPath: String = "",
     val isSavingAi: Boolean = false,
+    val isSavingLocalModel: Boolean = false,
     val isSavingCloud: Boolean = false,
     val isSavingReminder: Boolean = false,
     val isSavingTimeBank: Boolean = false,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
     val isTestingAi: Boolean = false,
+    val isTestingLocalModel: Boolean = false,
+    val isDownloadingLocalModel: Boolean = false,
+    val isDeletingLocalModel: Boolean = false,
     val isBackingUpCloud: Boolean = false,
     val isRestoringCloud: Boolean = false,
     val isRefreshingDirectionWiki: Boolean = false,
@@ -85,11 +102,14 @@ class SettingsViewModel(
     private val noteRepository: NoteRepository,
     private val aiSettingsRepository: AiSettingsRepository,
     private val cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+    private val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     private val reminderSettingsRepository: ReminderSettingsRepository,
     private val timeBankSettingsRepository: TimeBankSettingsRepository,
     private val cloudBackupCoordinator: CloudBackupCoordinator,
+    private val onDeviceModelManager: OnDeviceModelManager,
     private val reminderScheduler: ReminderScheduler,
     private val aiServiceClient: AiServiceClient,
+    private val onDeviceAiClient: OnDeviceAiClient,
     private val directionWikiCoordinator: DirectionWikiCoordinator,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -116,6 +136,22 @@ class SettingsViewModel(
                         aiRequestsToday = settings.requestsToday,
                         aiSuccessesToday = settings.successesToday,
                         aiTokensToday = settings.tokensToday,
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            onDeviceModelSettingsRepository.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(
+                        localModelLabel = settings.modelLabel,
+                        localModelDownloadUrl = settings.modelDownloadUrl,
+                        localModelPreferOnDevice = settings.preferOnDevice,
+                        localModelPath = settings.localModelPath,
+                        localModelDownloadedBytes = settings.downloadedBytes,
+                        localModelLastDownloadedAt = settings.lastDownloadedAt,
+                        localModelStatus = settings.status,
+                        localModelLastMessage = settings.lastMessage,
                     )
                 }
             }
@@ -202,6 +238,14 @@ class SettingsViewModel(
                 )
             }
         }
+    }
+
+    fun onLocalModelDownloadUrlChange(value: String) {
+        _uiState.update { it.copy(localModelDownloadUrl = value) }
+    }
+
+    fun onLocalPreferOnDeviceChange(value: Boolean) {
+        _uiState.update { it.copy(localModelPreferOnDevice = value) }
     }
 
     fun onCloudBaseUrlChange(value: String) {
@@ -304,6 +348,93 @@ class SettingsViewModel(
         viewModelScope.launch {
             aiSettingsRepository.clear()
             _events.emit(SettingsEvent.Message("AI 设置已清空"))
+        }
+    }
+
+    fun saveLocalModel() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingLocalModel = true) }
+            onDeviceModelSettingsRepository.save(
+                OnDeviceModelSettings(
+                    modelLabel = state.localModelLabel,
+                    modelDownloadUrl = state.localModelDownloadUrl,
+                    preferOnDevice = state.localModelPreferOnDevice,
+                    localModelPath = state.localModelPath,
+                    downloadedBytes = state.localModelDownloadedBytes,
+                    lastDownloadedAt = state.localModelLastDownloadedAt,
+                    lastMessage = state.localModelLastMessage,
+                    status = state.localModelStatus,
+                )
+            )
+            _uiState.update { it.copy(isSavingLocalModel = false) }
+            _events.emit(SettingsEvent.Message("本地模型设置已保存"))
+        }
+    }
+
+    fun downloadLocalModel() {
+        val state = _uiState.value
+        val settings = OnDeviceModelSettings(
+            modelLabel = state.localModelLabel,
+            modelDownloadUrl = state.localModelDownloadUrl,
+            preferOnDevice = state.localModelPreferOnDevice,
+            localModelPath = state.localModelPath,
+            downloadedBytes = state.localModelDownloadedBytes,
+            lastDownloadedAt = state.localModelLastDownloadedAt,
+            lastMessage = state.localModelLastMessage,
+            status = state.localModelStatus,
+        )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDownloadingLocalModel = true) }
+            onDeviceModelSettingsRepository.save(settings)
+            onDeviceModelManager.downloadModel(settings)
+                .onSuccess {
+                    _events.emit(SettingsEvent.Message("本地模型下载完成"))
+                }
+                .onFailure {
+                    _events.emit(SettingsEvent.Message(it.message ?: "本地模型下载失败"))
+                }
+            _uiState.update { it.copy(isDownloadingLocalModel = false) }
+        }
+    }
+
+    fun deleteLocalModel() {
+        val state = _uiState.value
+        val settings = OnDeviceModelSettings(
+            modelLabel = state.localModelLabel,
+            modelDownloadUrl = state.localModelDownloadUrl,
+            preferOnDevice = state.localModelPreferOnDevice,
+            localModelPath = state.localModelPath,
+            downloadedBytes = state.localModelDownloadedBytes,
+            lastDownloadedAt = state.localModelLastDownloadedAt,
+            lastMessage = state.localModelLastMessage,
+            status = state.localModelStatus,
+        )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingLocalModel = true) }
+            onDeviceModelManager.deleteModel(settings)
+            _uiState.update { it.copy(isDeletingLocalModel = false) }
+            _events.emit(SettingsEvent.Message("已删除本地模型"))
+        }
+    }
+
+    fun testLocalModel() {
+        val state = _uiState.value
+        val settings = OnDeviceModelSettings(
+            modelLabel = state.localModelLabel,
+            modelDownloadUrl = state.localModelDownloadUrl,
+            preferOnDevice = state.localModelPreferOnDevice,
+            localModelPath = state.localModelPath,
+            downloadedBytes = state.localModelDownloadedBytes,
+            lastDownloadedAt = state.localModelLastDownloadedAt,
+            lastMessage = state.localModelLastMessage,
+            status = state.localModelStatus,
+        )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTestingLocalModel = true) }
+            val result = onDeviceAiClient.testModel(settings)
+            _events.emit(SettingsEvent.Message(result.message))
+            _uiState.update { it.copy(isTestingLocalModel = false) }
         }
     }
 
@@ -421,11 +552,14 @@ class SettingsViewModel(
             noteRepository: NoteRepository,
             aiSettingsRepository: AiSettingsRepository,
             cloudBackupSettingsRepository: CloudBackupSettingsRepository,
+            onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
             reminderSettingsRepository: ReminderSettingsRepository,
             timeBankSettingsRepository: TimeBankSettingsRepository,
             cloudBackupCoordinator: CloudBackupCoordinator,
+            onDeviceModelManager: OnDeviceModelManager,
             reminderScheduler: ReminderScheduler,
             aiServiceClient: AiServiceClient,
+            onDeviceAiClient: OnDeviceAiClient,
             directionWikiCoordinator: DirectionWikiCoordinator,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -433,11 +567,14 @@ class SettingsViewModel(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
+                    onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
+                    onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,
                     aiServiceClient = aiServiceClient,
+                    onDeviceAiClient = onDeviceAiClient,
                     directionWikiCoordinator = directionWikiCoordinator,
                 )
             }

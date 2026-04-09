@@ -471,7 +471,7 @@ class FlowViewModel(
                 ?.takeIf { it.isNotBlank() }
                 ?: primary.nextActionText.takeIf { it.isNotBlank() }
                 ?: primary.staleNextStep.takeIf { it.isNotBlank() }
-                ?: "先把今天最值得推进的一件事抓住。",
+                ?: "先把今天最新进来的材料压成一个当前综合判断。",
             whyNow = selectedMainlineCandidate?.whyNow
                 ?.takeIf { it.isNotBlank() }
                 ?: primary.staleBridge.takeIf { it.isNotBlank() }
@@ -551,11 +551,11 @@ class FlowViewModel(
         val gapKey = "$signature:gap:$gapNonce"
 
         val mainlineContextSummary = buildString {
-            appendLine("请像主编一样，只选一个今天值得押注的方向。不要列候选，不要泛泛鼓励。")
-            appendLine("这是今天的首页主卡，需要像编辑部给出的今日判断，一天内默认保持稳定。")
+            appendLine("请像本地知识维护员一样，把今天新进来的材料和已有积累压成一个当前综合判断。不要列候选，不要泛泛鼓励。")
+            appendLine("这是 Flow 第一张主卡，需要像 llm-wiki 已经维护出来的当前综合判断，而不是即时摘要。")
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("这次要写的押注对象：${candidate.title}")
-                appendLine("来自：${candidate.anchorLabel}")
+                appendLine("当前最值得看的对象：${candidate.title}")
+                appendLine("主要来自：${candidate.anchorLabel}")
                 candidate.stageLabel.takeIf { it.isNotBlank() }?.let { appendLine("阶段：$it") }
                 candidate.horizonLabel.takeIf { it.isNotBlank() }?.let { appendLine("时间尺度：$it") }
                 candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("已知判断：$it") }
@@ -563,9 +563,9 @@ class FlowViewModel(
                 candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("已知最小动作：$it") }
             }
             if (mainlineNonce > 0 && mainlineCandidates.size > 1) {
-                appendLine("用户刚点了“换一个”，这次必须切到不同项目、文件夹或方向的真实候选，而不是改写同一主题。")
+                appendLine("用户刚点了“再压一次”，这次必须切到不同项目、文件夹或方向的真实候选，而不是改写同一主题。")
             } else if (mainlineNonce > 0) {
-                appendLine("用户刚点了“换一个”，候选不多时请至少换一个角度，不要只是同义改写。")
+                appendLine("用户刚点了“再压一次”，候选不多时请至少换一个角度，不要只是同义改写。")
             }
             directions.followedDirections.firstOrNull { it.thread.key == selectedMainlineCandidate?.threadKey }?.let { direction ->
                 direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近推进：$it") }
@@ -577,24 +577,25 @@ class FlowViewModel(
                 ?.text
                 ?.takeIf { it.isNotBlank() }
                 ?.let { appendLine("本周推进：$it") }
+            appendLine("目标：输出一个当前综合判断，而不是行动号召。")
         }
 
         val settledContextSummary = buildString {
-            appendLine("请像知识编辑一样，只挑一个现在最值得保留下来的判断。不要写计划，不要写鼓励。")
-            appendLine("不要把今日押注换一种说法重新写成已成立。已成立必须比今日押注更稳、更长期，最好影响未来一周而不是只影响今天。")
+            appendLine("请像 wiki 维护员一样，只挑一个最近真正被吸收进知识层的结果。不要写计划，不要写鼓励。")
+            appendLine("不要把当前综合判断换一种说法重新写成最近吸收。最近吸收必须更像已被写入知识层的结果、结论或方法。")
             when (settledFeedback) {
                 FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、带清楚可信基础的判断更有用。")
                 FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛的进步描述和不影响决策的判断。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("今日押注：${candidate.title}")
-                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("押注主句：$it") }
-                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("押注原因：$it") }
+                appendLine("当前综合判断对象：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("综合判断主句：$it") }
+                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("综合判断原因：$it") }
             }
             settledDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
-                appendLine("沉淀候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
+                appendLine("吸收候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
                 direction.wikiValidatedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已验证：$it") }
                 direction.wikiVerifiedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已查证：$it") }
                 direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
@@ -630,31 +631,32 @@ class FlowViewModel(
             if (repeatedHorizons.isNotBlank()) {
                 appendLine("你最近长期在推：$repeatedHorizons")
             }
+            appendLine("目标：输出一条最近刚被写进知识层的结果，而不是趋势总结。")
         }
 
         val gapContextSummary = buildString {
-            appendLine("请像创新编辑一样，只找一个现在最值得试的新连接。不要平均分配，不要列清单。")
-            appendLine("新连接的第一职责是把两个旧点重新接上，而不是给维护建议。")
-            appendLine("不要重复今日押注，也不要把已成立换个词说一遍。优先把不同方向、不同文件夹、不同经验之间真正值得连的两个点接起来。")
+            appendLine("请像 wiki maintainer 一样，只找一个当前最该厘清的张力。不要平均分配，不要列清单。")
+            appendLine("这张卡的职责不是制造灵感，而是指出知识层里最该补的一处张力，以及下一次该摄入什么材料。")
+            appendLine("不要重复当前综合判断，也不要把最近吸收换个词说一遍。")
             when (gapFeedback) {
-                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种跨方向连接、经验迁移和反常识组合更有用。")
-                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护 chore、不要给显而易见的缺口，要更像两个旧点突然被连成了一个新方向。")
+                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出张力和下一次摄入对象的结果更有用。")
+                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给显而易见的缺口，要明确指出哪一处知识最薄。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("今日押注：${candidate.title}")
-                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("当前押注主句：$it") }
+                appendLine("当前综合判断：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("综合判断主句：$it") }
             }
             settledDirection?.let { direction ->
                 direction.wikiValidatedPoint
                     .ifBlank { direction.wikiVerifiedPoint }
                     .ifBlank { direction.wikiConclusionLine }
                     .takeIf { it.isNotBlank() }
-                    ?.let { appendLine("最近已成立：$it") }
+                    ?.let { appendLine("最近吸收：$it") }
             }
             breakthroughDirection?.let { direction ->
                 appendLine("方向：${direction.thread.title}")
-                appendLine("突破口候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
+                appendLine("张力候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
                 direction.wikiHealthLine.takeIf { it.isNotBlank() }?.let { appendLine("健康状态：$it") }
                 direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
                 direction.wikiMaintenanceTargetLine.takeIf { it.isNotBlank() }?.let { appendLine("先维护：$it") }
@@ -666,14 +668,6 @@ class FlowViewModel(
                 direction.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("外部假设：$it") }
                 direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
                 direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
-            }
-            if (primary.explorationPrompts.isNotEmpty()) {
-                appendLine("探索提示：")
-                primary.explorationPrompts.take(2).forEach { appendLine(it) }
-            }
-            if (fusionState.lines.isNotEmpty()) {
-                appendLine("潜在组合：")
-                fusionState.lines.take(2).forEach { appendLine(it) }
             }
             val crossDirectionAssets = directions.followedDirections
                 .filter { it.thread.key != breakthroughDirection?.thread?.key }
@@ -692,28 +686,18 @@ class FlowViewModel(
                 .distinct()
                 .take(3)
             if (crossDirectionAssets.isNotEmpty()) {
-                appendLine("其他方向可借力：")
+                appendLine("其他方向可借来的积累：")
                 crossDirectionAssets.forEach { appendLine(it) }
             }
-            val reusableAssets = directions.followedDirections
-                .mapNotNull { summary ->
-                    summary.assetSummary.takeIf { it.isNotBlank() }?.let { "${summary.thread.title}：$it" }
-                }
-                .take(3)
-            if (reusableAssets.isNotEmpty()) {
-                appendLine("可复用旧积累：")
-                reusableAssets.forEach { appendLine(it) }
+            if (primary.explorationPrompts.isNotEmpty()) {
+                appendLine("待吸收提示：")
+                primary.explorationPrompts.take(2).forEach { appendLine(it) }
             }
-            val reusableMethods = directions.followedDirections
-                .mapNotNull { summary ->
-                    summary.wikiKnowledgeObjectLine.takeIf { it.contains("方法") || it.contains("实验") }
-                        ?.let { "${summary.thread.title}：$it" }
-                }
-                .take(2)
-            if (reusableMethods.isNotEmpty()) {
-                appendLine("可迁移方法：")
-                reusableMethods.forEach { appendLine(it) }
+            if (fusionState.lines.isNotEmpty()) {
+                appendLine("潜在张力：")
+                fusionState.lines.take(2).forEach { appendLine(it) }
             }
+            appendLine("目标：输出当前最该厘清的张力，以及下一次摄入什么材料。")
         }
 
         return FlowCompressionInput(

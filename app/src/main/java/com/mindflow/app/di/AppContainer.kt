@@ -16,6 +16,11 @@ import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
+import com.mindflow.app.data.localmodel.MediaPipeOnDeviceAiClient
+import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.local.MindFlowDatabase
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -25,8 +30,10 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.repository.OfflineFirstNoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
+import com.mindflow.app.data.settings.PreferencesOnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
 import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
@@ -78,6 +85,11 @@ class AppContainer(context: Context) {
             context = context.applicationContext,
         )
 
+    val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository =
+        PreferencesOnDeviceModelSettingsRepository(
+            context = context.applicationContext,
+        )
+
     val reminderSettingsRepository: ReminderSettingsRepository =
         PreferencesReminderSettingsRepository(
             context = context.applicationContext,
@@ -98,6 +110,17 @@ class AppContainer(context: Context) {
     )
 
     val aiServiceClient = AiServiceClient()
+    val onDeviceAiClient: OnDeviceAiClient = MediaPipeOnDeviceAiClient(
+        context = context.applicationContext,
+    )
+    val onDeviceModelManager = OnDeviceModelManager(
+        context = context.applicationContext,
+        repository = onDeviceModelSettingsRepository,
+    )
+    val editorKnowledgeRecallPlanner = EditorKnowledgeRecallPlanner(
+        onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
+        onDeviceAiClient = onDeviceAiClient,
+    )
 
     private val topicExtractor = CombinedTopicExtractor(
         aiTopicExtractor = AiTopicExtractor(
@@ -182,6 +205,8 @@ class AppContainer(context: Context) {
     val flowKnowledgeCompressionPlanner = FlowKnowledgeCompressionPlanner(
         aiSettingsRepository = aiSettingsRepository,
         aiServiceClient = aiServiceClient,
+        onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
+        onDeviceAiClient = onDeviceAiClient,
     )
 
     val staleReconnectPlanner = StaleReconnectPlanner(
@@ -206,6 +231,15 @@ class AppContainer(context: Context) {
         threadPreferencesRepository = threadPreferencesRepository,
         threadExecutionPlanner = threadExecutionPlanner,
         externalResearchPlanner = externalResearchPlanner,
+        applicationScope = applicationScope,
+    )
+
+    val localKnowledgeMaintenancePlanner = LocalKnowledgeMaintenancePlanner(
+        context = context.applicationContext,
+        noteRepository = noteRepository,
+        directionWikiCoordinator = directionWikiCoordinator,
+        onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
+        onDeviceAiClient = onDeviceAiClient,
         applicationScope = applicationScope,
     )
 

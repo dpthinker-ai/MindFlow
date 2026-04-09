@@ -39,6 +39,7 @@ class ReminderWorker(
 
         val app = applicationContext as? MindFlowApplication ?: return Result.failure()
         val container = app.appContainer
+        container.localKnowledgeMaintenancePlanner.maintainInBackgroundIfNeeded()
         val kind = inputData.getString(KEY_KIND)
             ?.let { raw -> ReminderKind.entries.firstOrNull { it.name == raw } }
             ?: return Result.failure()

@@ -206,6 +206,11 @@ Planned items:
 
 4. Knowledge Layer integration
 - status: first direction-focused slice implemented locally
+- local maintainer update:
+  - on-device model download entry added
+  - Flow can now prefer a local model
+  - editor can recall older knowledge while drafting
+  - a lightweight local maintenance pass can run in the background
 - target shape:
   - keep MindFlow database as runtime truth
   - add a separate markdown `MindFlow Knowledge Layer`
