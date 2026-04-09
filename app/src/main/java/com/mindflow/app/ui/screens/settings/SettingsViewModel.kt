@@ -47,7 +47,7 @@ data class SettingsUiState(
     val aiSuccessesToday: Int = 0,
     val aiTokensToday: Int = 0,
     val localModelLabel: String = OnDeviceModelSettings.DEFAULT_MODEL_LABEL,
-    val localModelDownloadUrl: String = "",
+    val localModelDownloadUrl: String = OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
     val localModelPreferOnDevice: Boolean = false,
     val localModelPath: String = "",
     val localModelDownloadedBytes: Long = 0L,

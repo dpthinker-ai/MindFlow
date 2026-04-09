@@ -181,7 +181,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are maintaining the front page of a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: the single current synthesis that best compresses the newest raw materials together with the existing maintained knowledge. It should read like a current thesis, not a to-do list or recap. Line 2: why this synthesis is the right thing to keep in view now, based on leverage, tension, recency, or compounding effect. Do not number the lines. Do not restate note titles mechanically. Do not give generic encouragement.",
+            systemPrompt = "You are maintaining the front page of a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: the single current synthesis that best compresses the newest raw materials together with the existing maintained knowledge. It should read like a current thesis, not a to-do list or recap. Line 2: why this synthesis is the right thing to keep in view now, based on leverage, tension, recency, or compounding effect. If the materials contain multiple folders or projects, prefer a real candidate from a different folder when the user asked to switch; do not just paraphrase the same topic. Do not number the lines. Do not restate note titles mechanically. Do not give generic encouragement.",
             maxTokens = 220,
             temperature = 0.72,
             thinkingEnabled = false,
@@ -195,7 +195,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are selecting one thing that has already been absorbed into a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: one result, judgement, method, or conclusion that has recently crossed the threshold from scattered notes into reusable knowledge. It must not simply restate the current synthesis. Line 2: the strongest trust basis for why this is now worth keeping, such as 已验证, 已查证, converging evidence, or repeated lived confirmation. Do not number the lines. Do not output slogans, broad themes, progress reporting, or emotional encouragement.",
+            systemPrompt = "You are selecting one thing that has already been absorbed into a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: one result, judgement, method, or conclusion that has recently crossed the threshold from scattered notes into reusable knowledge. It must not simply restate the current synthesis. If other folders or projects contain stronger settled material, prefer them instead of repeating the current project. Line 2: the strongest trust basis for why this is now worth keeping, such as 已验证, 已查证, converging evidence, or repeated lived confirmation. Do not number the lines. Do not output slogans, broad themes, progress reporting, or emotional encouragement.",
             maxTokens = 240,
             temperature = 0.38,
             thinkingEnabled = false,
@@ -209,7 +209,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(4_000),
-            systemPrompt = "You are finding the main open tension in a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: the single most important unresolved tension, contradiction, missing source, or weak link that is currently limiting the knowledge from becoming stronger. It must not simply repeat the current synthesis or the recently absorbed result. Line 2: the next kind of material, evidence, or source that should be ingested to clarify this tension. Do not number the lines. Avoid maintenance jargon, broad aspirations, or generic advice. Make it feel like the next ingest target for the wiki.",
+            systemPrompt = "You are finding the most valuable new connection or unresolved tension in a personal LLM wiki. Return exactly 2 concise Chinese lines. Line 1: the single most valuable new connection, contradiction, missing source, or weak link that is currently limiting the knowledge from becoming stronger. Prefer cross-folder, cross-project, or cross-experience connections when such materials exist. It must not simply repeat the current synthesis or the recently absorbed result. Line 2: the next kind of material, evidence, or source that should be ingested to clarify this tension or test this new connection. Do not number the lines. Avoid maintenance jargon, broad aspirations, or generic advice. Make it feel like the next ingest target for the wiki.",
             maxTokens = 240,
             temperature = 0.68,
             thinkingEnabled = false,

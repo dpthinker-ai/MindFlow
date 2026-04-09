@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
         val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
         val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
+        val localKnowledgeMaintenancePlanner = appContainer.localKnowledgeMaintenancePlanner
         setContent {
             MindFlowTheme {
                 MindFlowApp(
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
                     aiServiceClient = aiServiceClient,
                     onDeviceAiClient = onDeviceAiClient,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                     launchRequest = launchRequestState.value,
                     onLaunchRequestConsumed = { requestId ->
                         if (launchRequestState.value?.requestId == requestId) {

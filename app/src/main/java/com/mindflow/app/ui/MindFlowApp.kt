@@ -65,6 +65,7 @@ import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
@@ -118,6 +119,7 @@ fun MindFlowApp(
     aiServiceClient: AiServiceClient,
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
+    localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
 ) {
@@ -249,6 +251,7 @@ fun MindFlowApp(
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
                     directionWikiCoordinator = directionWikiCoordinator,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                     initialFocus = focus,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
@@ -260,6 +263,7 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FLOW_GRAPH) {
                 KnowledgeGraphRoute(
                     directionWikiCoordinator = directionWikiCoordinator,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                     onBack = { navController.popBackStack() },
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,

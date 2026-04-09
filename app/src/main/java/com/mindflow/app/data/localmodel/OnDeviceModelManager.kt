@@ -18,8 +18,9 @@ class OnDeviceModelManager(
     private val httpClient: OkHttpClient = OkHttpClient(),
 ) {
     suspend fun downloadModel(settings: OnDeviceModelSettings): Result<OnDeviceModelDownloadResult> = runCatching {
-        val downloadUrl = settings.modelDownloadUrl.trim()
-        require(downloadUrl.isNotBlank()) { "请先填入模型下载链接" }
+        val downloadUrl = settings.modelDownloadUrl
+            .trim()
+            .ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL }
         repository.markDownloading(downloadUrl)
 
         val request = Request.Builder().url(downloadUrl).build()

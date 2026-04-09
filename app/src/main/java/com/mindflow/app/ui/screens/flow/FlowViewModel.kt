@@ -23,6 +23,8 @@ import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
@@ -66,6 +68,7 @@ data class FlowUiState(
     val themeThreads: List<ThemeThread> = emptyList(),
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
+    val localMaintainerSnapshot: LocalKnowledgeMaintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
     val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
     val settledFeedback: FlowCardFeedback? = null,
     val gapFeedback: FlowCardFeedback? = null,
@@ -89,6 +92,13 @@ data class MainlineBetCandidate(
 private data class MainlineCandidateSeed(
     val candidate: MainlineBetCandidate,
     val score: Int,
+)
+
+private data class FolderSlice(
+    val folderKey: String,
+    val anchorLabel: String,
+    val line: String,
+    val support: String,
 )
 
 enum class FlowCardFeedback {
@@ -155,6 +165,7 @@ class FlowViewModel(
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
     private val directionWikiCoordinator: DirectionWikiCoordinator,
+    private val localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
 ) : ViewModel() {
     private data class DirectionState(
         val followedDirections: List<FollowedDirectionSummary> = emptyList(),
@@ -186,9 +197,11 @@ class FlowViewModel(
         val settledContextSummary: String,
         val gapContextSummary: String,
         val fallback: FlowKnowledgeCompressionState,
+        val preferMaintainerSnapshot: Boolean,
     )
 
     private val directionState = MutableStateFlow(DirectionState())
+    private val localMaintainerSnapshotState = MutableStateFlow(LocalKnowledgeMaintenanceSnapshot())
     private val knowledgeCompressionState = MutableStateFlow(FlowKnowledgeCompressionState())
     private val mainlineCandidateState = MutableStateFlow<MainlineBetCandidate?>(null)
     private val mainlineRefreshNonce = MutableStateFlow(0)
@@ -244,6 +257,7 @@ class FlowViewModel(
         weeklyReviewPlanner.state,
         fusionSuggestionPlanner.state,
         directionState,
+        localMaintainerSnapshotState,
         knowledgeCompressionState,
         mainlineCandidateState,
         settledFeedbackState,
@@ -253,10 +267,11 @@ class FlowViewModel(
         val weeklyReviewState = values[1] as WeeklyReviewState
         val fusionState = values[2] as FusionSuggestionState
         val directions = values[3] as DirectionState
-        val compression = values[4] as FlowKnowledgeCompressionState
-        val mainlineCandidate = values[5] as MainlineBetCandidate?
-        val settledFeedback = values[6] as FlowCardFeedback?
-        val gapFeedback = values[7] as FlowCardFeedback?
+        val localSnapshot = values[4] as LocalKnowledgeMaintenanceSnapshot
+        val compression = values[5] as FlowKnowledgeCompressionState
+        val mainlineCandidate = values[6] as MainlineBetCandidate?
+        val settledFeedback = values[7] as FlowCardFeedback?
+        val gapFeedback = values[8] as FlowCardFeedback?
         FlowUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
@@ -277,6 +292,7 @@ class FlowViewModel(
             themeThreads = directions.themeThreads,
             fusionSuggestions = fusionState.lines,
             fusionSource = fusionState.source,
+            localMaintainerSnapshot = localSnapshot,
             knowledgeCompression = compression,
             settledFeedback = settledFeedback,
             gapFeedback = gapFeedback,
@@ -284,6 +300,12 @@ class FlowViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
 
     init {
+        localKnowledgeMaintenancePlanner.maintainInBackgroundIfNeeded()
+        viewModelScope.launch {
+            localKnowledgeMaintenancePlanner.snapshot.collect { snapshot ->
+                localMaintainerSnapshotState.value = snapshot
+            }
+        }
         viewModelScope.launch {
             combine(
                 noteRepository.observeAllNotes(),
@@ -389,6 +411,7 @@ class FlowViewModel(
                 weeklyReviewPlanner.state,
                 fusionSuggestionPlanner.state,
                 directionState,
+                localMaintainerSnapshotState,
                 mainlineRefreshNonce,
                 gapRefreshNonce,
                 settledFeedbackState,
@@ -398,15 +421,17 @@ class FlowViewModel(
                 val weekly = values[1] as WeeklyReviewState
                 val fusion = values[2] as FusionSuggestionState
                 val directions = values[3] as DirectionState
-                val mainlineNonce = values[4] as Int
-                val gapNonce = values[5] as Int
-                val settledFeedback = values[6] as FlowCardFeedback?
-                val gapFeedback = values[7] as FlowCardFeedback?
+                val maintainerSnapshot = values[4] as LocalKnowledgeMaintenanceSnapshot
+                val mainlineNonce = values[5] as Int
+                val gapNonce = values[6] as Int
+                val settledFeedback = values[7] as FlowCardFeedback?
+                val gapFeedback = values[8] as FlowCardFeedback?
                 buildCompressionInput(
                     primary = primary,
                     weeklyReviewState = weekly,
                     fusionState = fusion,
                     directions = directions,
+                    maintainerSnapshot = maintainerSnapshot,
                     mainlineNonce = mainlineNonce,
                     gapNonce = gapNonce,
                     settledFeedback = settledFeedback,
@@ -415,15 +440,19 @@ class FlowViewModel(
             }.collectLatest { input ->
                 mainlineCandidateState.value = input.selectedMainlineCandidate
                 val previous = knowledgeCompressionState.value
-                val next = flowKnowledgeCompressionPlanner.summarize(
-                    mainlineKey = input.mainlineKey,
-                    settledKey = input.settledKey,
-                    gapKey = input.gapKey,
-                    mainlineContextSummary = input.mainlineContextSummary,
-                    settledContextSummary = input.settledContextSummary,
-                    gapContextSummary = input.gapContextSummary,
-                    fallback = input.fallback,
-                )
+                val next = if (input.preferMaintainerSnapshot) {
+                    input.fallback
+                } else {
+                    flowKnowledgeCompressionPlanner.summarize(
+                        mainlineKey = input.mainlineKey,
+                        settledKey = input.settledKey,
+                        gapKey = input.gapKey,
+                        mainlineContextSummary = input.mainlineContextSummary,
+                        settledContextSummary = input.settledContextSummary,
+                        gapContextSummary = input.gapContextSummary,
+                        fallback = input.fallback,
+                    )
+                }
                 knowledgeCompressionState.value = next
                 if (previous.settledLine != next.settledLine) {
                     settledFeedbackState.value = null
@@ -440,6 +469,7 @@ class FlowViewModel(
         weeklyReviewState: WeeklyReviewState,
         fusionState: FusionSuggestionState,
         directions: DirectionState,
+        maintainerSnapshot: LocalKnowledgeMaintenanceSnapshot,
         mainlineNonce: Int,
         gapNonce: Int,
         settledFeedback: FlowCardFeedback?,
@@ -452,55 +482,97 @@ class FlowViewModel(
         )
         val selectedMainlineCandidate = mainlineCandidates
             .getOrNull(mainlineNonce.floorMod(mainlineCandidates.size))
-        val settledDirection = directions.followedDirections.firstOrNull {
-            it.wikiValidatedPoint.isNotBlank() ||
-                it.wikiVerifiedPoint.isNotBlank() ||
-                it.wikiConclusionLine.isNotBlank() ||
-                it.assetSummary.isNotBlank()
-        } ?: primaryDirection
-        val breakthroughDirection = directions.followedDirections.firstOrNull {
-            it.wikiOpenQuestion.isNotBlank() ||
-                it.contrarianQuestion.isNotBlank() ||
-                it.externalHypothesis.isNotBlank() ||
-                it.opportunityGap.isNotBlank() ||
-                it.blocker.isNotBlank()
-        } ?: primaryDirection
+        val selectedMainlineFolderKey = selectedMainlineCandidate?.bucketKey?.folderKeyFromBucket()
+        val directionFolderKeys = directions.followedDirections.associate { direction ->
+            direction.thread.key to directionFolderKey(direction, primary.activeNotes)
+        }
+        val settledDirection = selectDirectionSummary(
+            directions = directions.followedDirections,
+            directionFolderKeys = directionFolderKeys,
+            excludedThreadKeys = setOfNotNull(selectedMainlineCandidate?.threadKey),
+            preferredDifferentFolderFrom = setOfNotNull(selectedMainlineFolderKey),
+            predicate = {
+                it.wikiValidatedPoint.isNotBlank() ||
+                    it.wikiVerifiedPoint.isNotBlank() ||
+                    it.wikiConclusionLine.isNotBlank() ||
+                    it.assetSummary.isNotBlank()
+            },
+        ) ?: primaryDirection
+        val breakthroughDirection = selectDirectionSummary(
+            directions = directions.followedDirections,
+            directionFolderKeys = directionFolderKeys,
+            excludedThreadKeys = setOfNotNull(selectedMainlineCandidate?.threadKey, settledDirection?.thread?.key),
+            preferredDifferentFolderFrom = setOfNotNull(
+                selectedMainlineFolderKey,
+                settledDirection?.thread?.key?.let(directionFolderKeys::get),
+            ),
+            predicate = {
+                it.wikiOpenQuestion.isNotBlank() ||
+                    it.contrarianQuestion.isNotBlank() ||
+                    it.externalHypothesis.isNotBlank() ||
+                    it.opportunityGap.isNotBlank() ||
+                    it.blocker.isNotBlank()
+            },
+        ) ?: primaryDirection
+        val crossFolderSlices = buildFolderSlices(
+            notes = primary.activeNotes,
+            excludedFolderKeys = setOfNotNull(
+                selectedMainlineFolderKey,
+                settledDirection?.thread?.key?.let(directionFolderKeys::get),
+            ),
+        )
 
         val fallback = FlowKnowledgeCompressionState(
-            mainline = selectedMainlineCandidate?.summary
-                ?.takeIf { it.isNotBlank() }
-                ?: primary.nextActionText.takeIf { it.isNotBlank() }
-                ?: primary.staleNextStep.takeIf { it.isNotBlank() }
-                ?: "先把今天最新进来的材料压成一个当前综合判断。",
-            whyNow = selectedMainlineCandidate?.whyNow
-                ?.takeIf { it.isNotBlank() }
-                ?: primary.staleBridge.takeIf { it.isNotBlank() }
-                ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty(),
+            mainline = maintainerSnapshot.currentJudgement.line.ifBlank {
+                selectedMainlineCandidate?.summary
+                    ?.takeIf { it.isNotBlank() }
+                    ?: primary.nextActionText.takeIf { it.isNotBlank() }
+                    ?: primary.staleNextStep.takeIf { it.isNotBlank() }
+                    ?: "先把今天最新进来的材料压成一个当前综合判断。"
+            },
+            whyNow = maintainerSnapshot.currentJudgement.support.ifBlank {
+                selectedMainlineCandidate?.whyNow
+                    ?.takeIf { it.isNotBlank() }
+                    ?: primary.staleBridge.takeIf { it.isNotBlank() }
+                    ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty()
+            },
             mainlineSource = DailyBriefSource.RULE,
-            settledLine = settledDirection?.wikiValidatedPoint
-                ?.takeIf { it.isNotBlank() }
-                ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
-                ?: settledDirection?.wikiConclusionLine?.takeIf { it.isNotBlank() }
-                ?: settledDirection?.assetSummary?.takeIf { it.isNotBlank() }
-                ?: weeklyReviewState.items.firstOrNull { it.label == "主线" }?.text.orEmpty(),
-            settledSupport = settledDirection?.wikiGroundingLine
-                ?.takeIf { it.isNotBlank() }
-                ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
-                ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
-                ?: weeklyReviewState.statsLine,
+            settledLine = maintainerSnapshot.recentAbsorption.line.ifBlank {
+                settledDirection?.wikiValidatedPoint
+                    ?.takeIf { it.isNotBlank() }
+                    ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
+                    ?: settledDirection?.wikiConclusionLine?.takeIf { it.isNotBlank() }
+                    ?: settledDirection?.assetSummary?.takeIf { it.isNotBlank() }
+                    ?: crossFolderSlices.firstOrNull()?.line
+                    ?: weeklyReviewState.items.firstOrNull { it.label == "主线" }?.text.orEmpty()
+            },
+            settledSupport = maintainerSnapshot.recentAbsorption.support.ifBlank {
+                settledDirection?.wikiGroundingLine
+                    ?.takeIf { it.isNotBlank() }
+                    ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
+                    ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
+                    ?: crossFolderSlices.firstOrNull()?.support
+                    ?: weeklyReviewState.statsLine
+            },
             settledSource = DailyBriefSource.RULE,
-            gapLine = breakthroughDirection?.contrarianQuestion
-                ?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.externalHypothesis?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.opportunityGap?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.wikiOpenQuestion?.takeIf { it.isNotBlank() }
-                ?: fusionState.lines.firstOrNull().orEmpty(),
-            gapSupport = breakthroughDirection?.postValidationAction
-                ?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.validationReason?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.outsideAngle?.takeIf { it.isNotBlank() }
-                ?: breakthroughDirection?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
-                ?: fusionState.lines.getOrNull(1).orEmpty(),
+            gapLine = maintainerSnapshot.newConnection.line.ifBlank {
+                breakthroughDirection?.contrarianQuestion
+                    ?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.externalHypothesis?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.opportunityGap?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.wikiOpenQuestion?.takeIf { it.isNotBlank() }
+                    ?: crossFolderSlices.getOrNull(1)?.line
+                    ?: fusionState.lines.firstOrNull().orEmpty()
+            },
+            gapSupport = maintainerSnapshot.newConnection.support.ifBlank {
+                breakthroughDirection?.postValidationAction
+                    ?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.validationReason?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.outsideAngle?.takeIf { it.isNotBlank() }
+                    ?: breakthroughDirection?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
+                    ?: crossFolderSlices.getOrNull(1)?.support
+                    ?: fusionState.lines.getOrNull(1).orEmpty()
+            },
             gapSource = DailyBriefSource.RULE,
         )
 
@@ -567,6 +639,12 @@ class FlowViewModel(
             } else if (mainlineNonce > 0) {
                 appendLine("用户刚点了“再压一次”，候选不多时请至少换一个角度，不要只是同义改写。")
             }
+            if (crossFolderSlices.isNotEmpty()) {
+                appendLine("除当前对象外，其他文件夹里还有这些真实材料：")
+                crossFolderSlices.take(3).forEach { slice ->
+                    appendLine("${slice.anchorLabel}：${slice.line}")
+                }
+            }
             directions.followedDirections.firstOrNull { it.thread.key == selectedMainlineCandidate?.threadKey }?.let { direction ->
                 direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近推进：$it") }
             }
@@ -631,6 +709,12 @@ class FlowViewModel(
             if (repeatedHorizons.isNotBlank()) {
                 appendLine("你最近长期在推：$repeatedHorizons")
             }
+            if (crossFolderSlices.isNotEmpty()) {
+                appendLine("如果其他项目或文件夹里已经有更成熟的积累，优先从不同文件夹里挑最近真正成立的结果，不要继续围着同一主题改写。")
+                crossFolderSlices.take(3).forEach { slice ->
+                    appendLine("${slice.anchorLabel}：${slice.line}｜${slice.support}")
+                }
+            }
             appendLine("目标：输出一条最近刚被写进知识层的结果，而不是趋势总结。")
         }
 
@@ -689,6 +773,12 @@ class FlowViewModel(
                 appendLine("其他方向可借来的积累：")
                 crossDirectionAssets.forEach { appendLine(it) }
             }
+            if (crossFolderSlices.isNotEmpty()) {
+                appendLine("如果有其他项目或文件夹的材料，优先把当前主线和不同文件夹的旧积累连起来，不要继续围着同一方向打转。")
+                crossFolderSlices.take(3).forEach { slice ->
+                    appendLine("${slice.anchorLabel}：${slice.line}")
+                }
+            }
             if (primary.explorationPrompts.isNotEmpty()) {
                 appendLine("待吸收提示：")
                 primary.explorationPrompts.take(2).forEach { appendLine(it) }
@@ -710,6 +800,7 @@ class FlowViewModel(
             settledContextSummary = settledContextSummary,
             gapContextSummary = gapContextSummary,
             fallback = fallback,
+            preferMaintainerSnapshot = maintainerSnapshot.hasContent && mainlineNonce == 0 && gapNonce == 0,
         )
     }
 
@@ -842,6 +933,7 @@ class FlowViewModel(
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,
             directionWikiCoordinator: DirectionWikiCoordinator,
+            localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FlowViewModel(
@@ -856,6 +948,7 @@ class FlowViewModel(
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,
                     directionWikiCoordinator = directionWikiCoordinator,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                 )
             }
         }
@@ -882,6 +975,59 @@ private fun diversifyCandidates(
     }
     return ordered.distinctBy { it.key }
 }
+
+private fun selectDirectionSummary(
+    directions: List<FollowedDirectionSummary>,
+    directionFolderKeys: Map<String, String?>,
+    excludedThreadKeys: Set<String>,
+    preferredDifferentFolderFrom: Set<String>,
+    predicate: (FollowedDirectionSummary) -> Boolean,
+): FollowedDirectionSummary? {
+    val filtered = directions.filter { predicate(it) && it.thread.key !in excludedThreadKeys }
+    return filtered.firstOrNull { summary ->
+        val folderKey = directionFolderKeys[summary.thread.key]
+        folderKey != null && folderKey !in preferredDifferentFolderFrom
+    } ?: filtered.firstOrNull()
+}
+
+private fun directionFolderKey(
+    direction: FollowedDirectionSummary,
+    notes: List<NoteEntity>,
+): String? = dominantFolderKey(NoteConnectionAnalyzer.notesForThread(direction.thread.key, notes))
+
+private fun buildFolderSlices(
+    notes: List<NoteEntity>,
+    excludedFolderKeys: Set<String>,
+): List<FolderSlice> = notes
+    .filter { !it.isArchived }
+    .groupBy { MindFolderCatalog.normalizedKey(it.folderKey) ?: "uncategorized" }
+    .entries
+    .sortedWith(
+        compareByDescending<Map.Entry<String, List<NoteEntity>>> { (_, grouped) ->
+            grouped.count { it.status == NoteStatus.IN_PROGRESS }
+        }.thenByDescending { (_, grouped) ->
+            grouped.maxOfOrNull { it.updatedAt } ?: 0L
+        },
+    )
+    .mapNotNull { (folderKey, grouped) ->
+        if (folderKey in excludedFolderKeys) return@mapNotNull null
+        val note = grouped.sortedWith(
+            compareByDescending<NoteEntity> { it.status == NoteStatus.IN_PROGRESS }
+                .thenByDescending { it.horizon.priority }
+                .thenByDescending { it.updatedAt },
+        ).firstOrNull() ?: return@mapNotNull null
+        val folderName = MindFolderCatalog.fromKey(folderKey)?.name ?: "其他"
+        FolderSlice(
+            folderKey = folderKey,
+            anchorLabel = "$folderName · ${note.topic.ifBlank { "一条记录" }}",
+            line = buildNoteCandidateSummary(note),
+            support = buildNoteCandidateWhyNow(note),
+        )
+    }
+    .take(4)
+
+private fun String.folderKeyFromBucket(): String? =
+    takeIf { startsWith("folder:") }?.removePrefix("folder:")
 
 private fun dominantFolderKey(notes: List<NoteEntity>): String? =
     notes

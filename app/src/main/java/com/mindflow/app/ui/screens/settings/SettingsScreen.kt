@@ -61,6 +61,7 @@ import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.ExportPayload
+import com.mindflow.app.data.model.OnDeviceModelSettings
 import com.mindflow.app.data.model.OnDeviceModelStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
@@ -616,7 +617,7 @@ private fun LocalModelSettingsScreen(
     }
     DetailScreenFrame(
         title = "本地模型",
-        subtitle = "Gemma 4 E4B 运行时下载，不打进安装包",
+        subtitle = "默认用 Gemma 4 E4B LiteRT 包，运行时下载，不打进安装包",
         onBack = onBack,
     ) {
         item {
@@ -627,7 +628,7 @@ private fun LocalModelSettingsScreen(
                         uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 会优先用本地模型生成今日押注、已成立和新连接。"
                         uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，完成后不会增加安装包体积。"
                         uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
-                        else -> "先填入 Gemma 4 E4B 的模型直链，再下载到本地。"
+                        else -> "已经帮你填好默认直链，可以直接下载到本地。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -654,13 +655,18 @@ private fun LocalModelSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "端侧模型只负责本地主编和知识召回。模型文件运行时下载，不会被打进 APK。",
+                description = "端侧模型只负责本地主编和知识召回。默认直链指向 Gemma 4 E4B 的公开 LiteRT 包，不会被打进 APK。",
             ) {
                 SettingsField(
                     value = uiState.localModelDownloadUrl,
                     onValueChange = onLocalModelDownloadUrlChange,
                     label = "模型下载链接",
                     secret = false,
+                )
+                Text(
+                    text = "官方来源：${OnDeviceModelSettings.DEFAULT_MODEL_SOURCE_URL}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
                 )
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.92f),

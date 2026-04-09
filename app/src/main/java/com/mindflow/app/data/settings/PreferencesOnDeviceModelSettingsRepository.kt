@@ -31,7 +31,9 @@ class PreferencesOnDeviceModelSettingsRepository(
         .map { preferences ->
             OnDeviceModelSettings(
                 modelLabel = preferences[MODEL_LABEL] ?: OnDeviceModelSettings.DEFAULT_MODEL_LABEL,
-                modelDownloadUrl = preferences[MODEL_DOWNLOAD_URL].orEmpty(),
+                modelDownloadUrl = preferences[MODEL_DOWNLOAD_URL]
+                    ?.takeIf { it.isNotBlank() }
+                    ?: OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
                 preferOnDevice = preferences[PREFER_ON_DEVICE] ?: false,
                 localModelPath = preferences[LOCAL_MODEL_PATH].orEmpty(),
                 downloadedBytes = preferences[DOWNLOADED_BYTES] ?: 0L,
@@ -48,7 +50,9 @@ class PreferencesOnDeviceModelSettingsRepository(
     override suspend fun save(settings: OnDeviceModelSettings) {
         context.onDeviceModelDataStore.edit { preferences ->
             preferences[MODEL_LABEL] = settings.modelLabel.trim().ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_LABEL }
-            preferences[MODEL_DOWNLOAD_URL] = settings.modelDownloadUrl.trim()
+            preferences[MODEL_DOWNLOAD_URL] = settings.modelDownloadUrl
+                .trim()
+                .ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL }
             preferences[PREFER_ON_DEVICE] = settings.preferOnDevice
         }
     }
@@ -90,6 +94,7 @@ class PreferencesOnDeviceModelSettingsRepository(
             preferences.remove(LAST_DOWNLOADED_AT)
             preferences[STATUS] = OnDeviceModelStatus.NOT_DOWNLOADED.name
             preferences[LAST_MESSAGE] = ""
+            preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL
         }
     }
 

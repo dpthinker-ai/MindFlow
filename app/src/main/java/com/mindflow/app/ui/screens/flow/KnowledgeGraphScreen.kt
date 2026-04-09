@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
@@ -64,13 +66,16 @@ private data class GraphNodeUi(
 @androidx.compose.runtime.Composable
 fun KnowledgeGraphRoute(
     directionWikiCoordinator: DirectionWikiCoordinator,
+    localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
     onBack: () -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
     val snapshot = directionWikiCoordinator.snapshot.collectAsStateWithLifecycle().value
+    val maintainerSnapshot = localKnowledgeMaintenancePlanner.snapshot.collectAsStateWithLifecycle().value
     KnowledgeGraphScreen(
         snapshot = snapshot,
+        maintainerSnapshot = maintainerSnapshot,
         onBack = onBack,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
@@ -80,6 +85,7 @@ fun KnowledgeGraphRoute(
 @androidx.compose.runtime.Composable
 private fun KnowledgeGraphScreen(
     snapshot: DirectionWikiSnapshot,
+    maintainerSnapshot: LocalKnowledgeMaintenanceSnapshot,
     onBack: () -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -104,7 +110,7 @@ private fun KnowledgeGraphScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "知识图谱",
+                            text = "变化图谱",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -125,7 +131,49 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "当前知识网络",
+                            title = "今天图谱变化",
+                            headline = if (maintainerSnapshot.hasContent) {
+                                "${maintainerSnapshot.graphPulse.newSourceCount} 条新材料 · ${maintainerSnapshot.graphPulse.newNodeCount} 个活跃节点"
+                            } else {
+                                "先让本地维护跑出一轮结果"
+                            },
+                        )
+                        if (!maintainerSnapshot.hasContent) {
+                            Text(
+                                text = "等本地维护跑完之后，这里会告诉你今天新长了什么节点、哪条线最活跃、哪处连接最该补。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSoft,
+                            )
+                        } else {
+                            Text(
+                                text = maintainerSnapshot.currentJudgement.line,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = TextMain,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "活跃枢纽：${maintainerSnapshot.graphPulse.activeHubLabel.ifBlank { maintainerSnapshot.updatedDirectionTitle.ifBlank { "还没形成稳定枢纽" } }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+                            maintainerSnapshot.graphPulse.missingLinkLabel.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    text = "待补连接：$it",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "当前骨架",
                             headline = if (graphNodes.isNotEmpty()) "${graphNodes.size} 个关键节点" else "还没有足够节点",
                         )
                         if (graphNodes.isEmpty()) {
@@ -147,7 +195,33 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "当前包含",
+                            title = "今天维护结果",
+                            headline = "${snapshot.directions.size} 条方向 · ${snapshot.knowledgeItems.size} 个知识对象",
+                        )
+                        if (maintainerSnapshot.hasContent) {
+                            SummaryLineCard(
+                                title = "今天新吸收",
+                                line = maintainerSnapshot.recentAbsorption.line,
+                                support = maintainerSnapshot.recentAbsorption.support,
+                            )
+                            SummaryLineCard(
+                                title = "当前成立",
+                                line = maintainerSnapshot.currentJudgement.line,
+                                support = maintainerSnapshot.currentJudgement.support,
+                            )
+                            SummaryLineCard(
+                                title = "今天新连接",
+                                line = maintainerSnapshot.newConnection.line,
+                                support = maintainerSnapshot.newConnection.support,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "方向骨架",
                             headline = "${snapshot.directions.size} 条方向 · ${snapshot.knowledgeItems.size} 个知识对象",
                         )
                         snapshot.directions.values
@@ -300,6 +374,48 @@ private fun KnowledgeGraphCanvas(
                 onOpenNote = onOpenNote,
                 compact = true,
             )
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun SummaryLineCard(
+    title: String,
+    line: String,
+    support: String,
+) {
+    if (line.isBlank()) return
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = AccentBlue,
+            )
+            Text(
+                text = line,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            support.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
