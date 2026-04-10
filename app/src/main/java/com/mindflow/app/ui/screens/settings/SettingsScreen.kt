@@ -655,12 +655,12 @@ private fun LocalModelSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "端侧模型只负责本地主编和知识召回。默认直链指向 Gemma 4 E4B 的公开 LiteRT 包，不会被打进 APK。",
+                description = "端侧模型只负责本地主编和知识召回。默认直链指向 Gemma 4 E4B 的官方 LiteRT 包，不会被打进 APK；填仓库页或 repo id 也会自动纠正成可下载直链。",
             ) {
                 SettingsField(
                     value = uiState.localModelDownloadUrl,
                     onValueChange = onLocalModelDownloadUrlChange,
-                    label = "模型下载链接",
+                    label = "模型仓库或下载链接",
                     secret = false,
                 )
                 Text(

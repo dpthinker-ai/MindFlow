@@ -18,9 +18,7 @@ class OnDeviceModelManager(
     private val httpClient: OkHttpClient = OkHttpClient(),
 ) {
     suspend fun downloadModel(settings: OnDeviceModelSettings): Result<OnDeviceModelDownloadResult> = runCatching {
-        val downloadUrl = settings.modelDownloadUrl
-            .trim()
-            .ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL }
+        val downloadUrl = OnDeviceModelSettings.normalizeDownloadUrl(settings.modelDownloadUrl)
         repository.markDownloading(downloadUrl)
 
         val request = Request.Builder().url(downloadUrl).build()
@@ -64,12 +62,13 @@ class OnDeviceModelManager(
     }
 
     fun resolveModelFile(downloadUrl: String): File {
-        val extension = when {
-            downloadUrl.endsWith(".task", ignoreCase = true) -> ".task"
-            downloadUrl.endsWith(".litertlm", ignoreCase = true) -> ".litertlm"
-            else -> ".task"
+        val cleanedPath = downloadUrl.substringBefore('?').substringAfterLast('/')
+        val fileName = cleanedPath.takeIf { it.isNotBlank() && it.contains('.') } ?: when {
+            downloadUrl.endsWith(".task", ignoreCase = true) -> "local-model.task"
+            downloadUrl.endsWith(".litertlm", ignoreCase = true) -> "local-model.litertlm"
+            else -> "local-model.task"
         }
-        return File(modelDirectory(), "gemma4-e4b$extension")
+        return File(modelDirectory(), fileName)
     }
 
     fun modelDirectory(): File = File(context.filesDir, "local-models")

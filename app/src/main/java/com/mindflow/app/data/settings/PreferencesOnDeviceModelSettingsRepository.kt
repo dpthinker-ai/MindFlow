@@ -31,9 +31,11 @@ class PreferencesOnDeviceModelSettingsRepository(
         .map { preferences ->
             OnDeviceModelSettings(
                 modelLabel = preferences[MODEL_LABEL] ?: OnDeviceModelSettings.DEFAULT_MODEL_LABEL,
-                modelDownloadUrl = preferences[MODEL_DOWNLOAD_URL]
-                    ?.takeIf { it.isNotBlank() }
-                    ?: OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
+                modelDownloadUrl = OnDeviceModelSettings.normalizeDownloadUrl(
+                    preferences[MODEL_DOWNLOAD_URL]
+                        ?.takeIf { it.isNotBlank() }
+                        ?: OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
+                ),
                 preferOnDevice = preferences[PREFER_ON_DEVICE] ?: false,
                 localModelPath = preferences[LOCAL_MODEL_PATH].orEmpty(),
                 downloadedBytes = preferences[DOWNLOADED_BYTES] ?: 0L,
@@ -50,16 +52,14 @@ class PreferencesOnDeviceModelSettingsRepository(
     override suspend fun save(settings: OnDeviceModelSettings) {
         context.onDeviceModelDataStore.edit { preferences ->
             preferences[MODEL_LABEL] = settings.modelLabel.trim().ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_LABEL }
-            preferences[MODEL_DOWNLOAD_URL] = settings.modelDownloadUrl
-                .trim()
-                .ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL }
+            preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(settings.modelDownloadUrl)
             preferences[PREFER_ON_DEVICE] = settings.preferOnDevice
         }
     }
 
     override suspend fun markDownloading(downloadUrl: String) {
         context.onDeviceModelDataStore.edit { preferences ->
-            preferences[MODEL_DOWNLOAD_URL] = downloadUrl.trim()
+            preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(downloadUrl)
             preferences[STATUS] = OnDeviceModelStatus.DOWNLOADING.name
             preferences[LAST_MESSAGE] = "正在下载本地模型"
         }
