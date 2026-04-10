@@ -649,6 +649,20 @@ private fun LocalModelSettingsScreen(
                         color = TextSoft,
                     )
                 }
+                Text(
+                    text = "模型约 ${formatFileSize(OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES)}，建议至少预留 5GB 可用空间。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
+                )
+                if (uiState.localModelStatus == OnDeviceModelStatus.ERROR) {
+                    Text(
+                        text = "当前实际下载地址：${OnDeviceModelSettings.normalizeDownloadUrl(uiState.localModelDownloadUrl)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 

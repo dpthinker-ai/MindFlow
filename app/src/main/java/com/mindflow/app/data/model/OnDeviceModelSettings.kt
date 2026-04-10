@@ -25,6 +25,7 @@ data class OnDeviceModelSettings(
         private const val DEFAULT_MODEL_ID = "litert-community/gemma-4-E4B-it-litert-lm"
         private const val DEFAULT_MODEL_FILE = "gemma-4-E4B-it.litertlm"
         private const val DEFAULT_MODEL_COMMIT = "9695417f248178c63a9f318c6e0c56cb917cb837"
+        const val DEFAULT_MODEL_SIZE_BYTES = 3_654_467_584L
         const val DEFAULT_MODEL_DOWNLOAD_URL =
             "https://huggingface.co/$DEFAULT_MODEL_ID/resolve/$DEFAULT_MODEL_COMMIT/$DEFAULT_MODEL_FILE?download=true"
         const val DEFAULT_MODEL_SOURCE_URL = "https://huggingface.co/$DEFAULT_MODEL_ID"
