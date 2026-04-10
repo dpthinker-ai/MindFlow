@@ -349,6 +349,7 @@ fun MindFlowApp(
                     directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
                     onDeviceAiClient = onDeviceAiClient,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                 )
             }
 

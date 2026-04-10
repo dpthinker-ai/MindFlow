@@ -105,6 +105,7 @@ Notes:
 - AI results should reuse the same visual language across Flow, thread, and reminder copy: one source cue, one primary judgement, and a small set of supportive lines.
 - Flow should behave like a knowledge-compression layer, not an insight wall: one clear bet to push, one settled judgement to keep, and one new opening worth trying.
 - Flow's main bet must rotate across real candidate directions when the user asks for another one; a rewritten description of the same underlying direction does not count as a new bet.
+- When a local on-device maintainer is available, Flow should prefer maintained results over instant chat-like generation. The front surface should read like a local wiki maintainer report, not a temporary answer.
 
 ## Engineering Rules
 
@@ -114,6 +115,7 @@ Notes:
   - the app database stays the runtime source of truth for mobile interactions
   - the knowledge layer stores persistent direction pages, concepts, evidence, verified conclusions, open questions, methods, experiments, and stage snapshots
   - it should be maintained by background agent workflows, not by foreground mobile UI logic
+- Local on-device maintenance should follow the same pattern in miniature: ingest raw sources, update maintained pages, append index/log results, then let Flow and graph surfaces read the maintained outputs.
 - New automation should be low-frequency and battery-aware.
 - Release builds matter more than debug-only polish.
 

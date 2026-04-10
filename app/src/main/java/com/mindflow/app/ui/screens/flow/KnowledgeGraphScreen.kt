@@ -131,6 +131,56 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
+                            title = "当前知识长相",
+                            headline = maintainerSnapshot.knowledgeInventoryLine.ifBlank {
+                                if (maintainerSnapshot.hasContent) {
+                                    "${maintainerSnapshot.graphPulse.newSourceCount} 条新材料 · ${maintainerSnapshot.graphPulse.newNodeCount} 个活跃节点"
+                                } else {
+                                    "先让本地维护跑出一轮结果"
+                                }
+                            },
+                        )
+                        if (!maintainerSnapshot.hasContent) {
+                            Text(
+                                text = "等本地维护跑完之后，这里会告诉你当前知识主要围绕什么、已经包含哪些点、今天新长了什么节点和连接。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSoft,
+                            )
+                        } else {
+                            maintainerSnapshot.knowledgeShape.line.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = TextMain,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            maintainerSnapshot.knowledgeShape.support.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (maintainerSnapshot.knowledgePointLabels.isNotEmpty()) {
+                                Text(
+                                    text = "包含：${maintainerSnapshot.knowledgePointLabels.take(5).joinToString("、")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
                             title = "今天图谱变化",
                             headline = if (maintainerSnapshot.hasContent) {
                                 "${maintainerSnapshot.graphPulse.newSourceCount} 条新材料 · ${maintainerSnapshot.graphPulse.newNodeCount} 个活跃节点"

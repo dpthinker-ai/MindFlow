@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Timelapse
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
@@ -113,6 +115,7 @@ fun SettingsRoute(
     directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
     onDeviceAiClient: OnDeviceAiClient,
+    localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(
@@ -128,6 +131,7 @@ fun SettingsRoute(
             directionWikiCoordinator = directionWikiCoordinator,
             aiServiceClient = aiServiceClient,
             onDeviceAiClient = onDeviceAiClient,
+            localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -208,6 +212,7 @@ fun SettingsRoute(
         onClearAi = viewModel::clear,
         onDownloadLocalModel = viewModel::downloadLocalModel,
         onDeleteLocalModel = viewModel::deleteLocalModel,
+        onRefreshLocalKnowledge = viewModel::refreshLocalKnowledge,
         onCloudBaseUrlChange = viewModel::onCloudBaseUrlChange,
         onCloudUsernameChange = viewModel::onCloudUsernameChange,
         onCloudPasswordChange = viewModel::onCloudPasswordChange,
@@ -266,6 +271,7 @@ private fun SettingsScreen(
     onClearAi: () -> Unit,
     onDownloadLocalModel: () -> Unit,
     onDeleteLocalModel: () -> Unit,
+    onRefreshLocalKnowledge: () -> Unit,
     onCloudBaseUrlChange: (String) -> Unit,
     onCloudUsernameChange: (String) -> Unit,
     onCloudPasswordChange: (String) -> Unit,
@@ -361,6 +367,7 @@ private fun SettingsScreen(
                 onTestLocalModel = onTestLocalModel,
                 onDownloadLocalModel = onDownloadLocalModel,
                 onDeleteLocalModel = onDeleteLocalModel,
+                onRefreshLocalKnowledge = onRefreshLocalKnowledge,
             )
             SettingsDestination.REMINDER -> ReminderSettingsScreen(
                 uiState = uiState,
@@ -452,7 +459,9 @@ private fun SettingsHomeScreen(
                     summary = when (uiState.localModelStatus) {
                         OnDeviceModelStatus.READY -> "${uiState.localModelLabel} · ${formatFileSize(uiState.localModelDownloadedBytes)}"
                         OnDeviceModelStatus.DOWNLOADING -> "正在下载"
-                        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank { "下载失败" }
+                        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank {
+                            if (uiState.localModelDownloadedBytes > 0L) "下载中断，可继续下载" else "下载失败"
+                        }
                         OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
                     },
                     headline = if (uiState.localModelPreferOnDevice && uiState.localModelStatus == OnDeviceModelStatus.READY) {
@@ -608,11 +617,12 @@ private fun LocalModelSettingsScreen(
     onTestLocalModel: () -> Unit,
     onDownloadLocalModel: () -> Unit,
     onDeleteLocalModel: () -> Unit,
+    onRefreshLocalKnowledge: () -> Unit,
 ) {
     val statusHeadline = when (uiState.localModelStatus) {
         OnDeviceModelStatus.READY -> "已就绪"
         OnDeviceModelStatus.DOWNLOADING -> "下载中"
-        OnDeviceModelStatus.ERROR -> "下载失败"
+        OnDeviceModelStatus.ERROR -> if (uiState.localModelDownloadedBytes > 0L) "下载中断" else "下载失败"
         OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
     }
     DetailScreenFrame(
@@ -626,7 +636,8 @@ private fun LocalModelSettingsScreen(
                 Text(
                     text = when {
                         uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 会优先用本地模型生成今日押注、已成立和新连接。"
-                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，完成后不会增加安装包体积。"
+                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，进度会自动保存，断开后可以继续下载。"
+                        uiState.localModelStatus == OnDeviceModelStatus.ERROR && uiState.localModelDownloadedBytes > 0L -> uiState.localModelLastMessage.ifBlank { "下载已中断，当前进度已保留，可以继续下载。" }
                         uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
                         else -> "已经帮你填好默认直链，可以直接下载到本地。"
                     },
@@ -642,11 +653,34 @@ private fun LocalModelSettingsScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                val effectiveTargetBytes = uiState.localModelDownloadTargetBytes
+                    .takeIf { it > 0L }
+                    ?: OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES
                 if (uiState.localModelDownloadedBytes > 0L) {
                     Text(
-                        text = "已下载 ${formatFileSize(uiState.localModelDownloadedBytes)}",
+                        text = "已下载 ${formatFileSize(uiState.localModelDownloadedBytes)} / ${formatFileSize(effectiveTargetBytes)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSoft,
+                    )
+                }
+                if (
+                    effectiveTargetBytes > 0L &&
+                    (uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING || uiState.localModelDownloadedBytes > 0L) &&
+                    uiState.localModelStatus != OnDeviceModelStatus.READY
+                ) {
+                    val progress = (uiState.localModelDownloadedBytes.toFloat() / effectiveTargetBytes.toFloat())
+                        .coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    )
+                    Text(
+                        text = "${formatPercentage(progress)} · 下载中断后可继续下载",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 Text(
@@ -708,7 +742,11 @@ private fun LocalModelSettingsScreen(
                     }
                 }
                 GhostActionButton(
-                    text = if (uiState.isDownloadingLocalModel) "下载中..." else "下载模型",
+                    text = when {
+                        uiState.isDownloadingLocalModel -> "下载中..."
+                        uiState.localModelDownloadedBytes > 0L && uiState.localModelStatus != OnDeviceModelStatus.READY -> "继续下载"
+                        else -> "下载模型"
+                    },
                     onClick = onDownloadLocalModel,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isDownloadingLocalModel,
@@ -719,6 +757,25 @@ private fun LocalModelSettingsScreen(
                     onClick = onTestLocalModel,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isTestingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
+                )
+                if (uiState.isRefreshingLocalKnowledge) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                    )
+                    Text(
+                        text = "正在用本地模型维护本地知识层，会读取最近材料、方向页、结论页和日志。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                    )
+                }
+                GhostActionButton(
+                    text = if (uiState.isRefreshingLocalKnowledge) "维护中..." else "立即维护知识层",
+                    onClick = onRefreshLocalKnowledge,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isRefreshingLocalKnowledge && uiState.localModelStatus == OnDeviceModelStatus.READY,
+                    icon = Icons.Outlined.Timelapse,
                 )
                 ActionButton(
                     text = if (uiState.isSavingLocalModel) "保存中..." else "保存本地模型设置",
@@ -1327,6 +1384,9 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes >= 1024L -> String.format("%.0f KB", bytes / 1024f)
     else -> "$bytes B"
 }
+
+private fun formatPercentage(progress: Float): String =
+    String.format("%.0f%%", (progress * 100f).coerceIn(0f, 100f))
 
 @Composable
 private fun SettingsStatusChip(

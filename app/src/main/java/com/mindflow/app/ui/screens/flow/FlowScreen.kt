@@ -232,6 +232,36 @@ private fun FlowScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
+                        if (maintainerSnapshot.knowledgeShape.hasContent || maintainerSnapshot.knowledgeInventoryLine.isNotBlank()) {
+                            InsightBlock(
+                                tone = InsightTone.Neutral,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp),
+                            ) {
+                                maintainerSnapshot.knowledgeShape.line.takeIf { it.isNotBlank() }?.let {
+                                    InsightLine(label = "当前知识", text = it, maxLines = 2)
+                                }
+                                maintainerSnapshot.knowledgeShape.support.takeIf { it.isNotBlank() }?.let {
+                                    InsightLine(label = "包含哪些点", text = it, maxLines = 2)
+                                }
+                                maintainerSnapshot.knowledgeInventoryLine.takeIf { it.isNotBlank() }?.let {
+                                    InsightLine(label = "当前库存", text = it, maxLines = 2)
+                                }
+                            }
+                            if (maintainerSnapshot.knowledgePointLabels.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    maintainerSnapshot.knowledgePointLabels.take(3).forEach { label ->
+                                        InsightChip(text = label, tone = InsightTone.Neutral)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -324,6 +354,7 @@ private fun FlowScreen(
                 item {
                     MoreAccumulationSection(
                         directions = uiState.followedDirections,
+                        inventoryLine = maintainerSnapshot.knowledgeInventoryLine,
                         onOpenThread = onOpenThread,
                         onOpenNote = onOpenNote,
                     )
@@ -850,13 +881,14 @@ private fun FeedbackRow(
 @Composable
 private fun MoreAccumulationSection(
     directions: List<FollowedDirectionSummary>,
+    inventoryLine: String,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
     PanelCard {
         SectionHeader(
             title = "看更多积累",
-            headline = if (directions.isNotEmpty()) "${directions.size} 条方向" else null,
+            headline = inventoryLine.ifBlank { if (directions.isNotEmpty()) "${directions.size} 条方向" else null },
         )
         if (directions.isEmpty()) {
             Text(

@@ -16,6 +16,8 @@ interface OnDeviceAiClient {
     suspend fun generateFlowMainline(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateFlowSettledKnowledge(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateFlowBreakthroughGap(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun generateLocalKnowledgeShape(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun generateLocalOpenQuestion(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateEditorRecall(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
 }
 
@@ -71,6 +73,22 @@ class MediaPipeOnDeviceAiClient(
     ): AiChatResult = runPrompt(
         settings = settings,
         prompt = FlowOnDevicePromptFactory.gap(contextSummary),
+    )
+
+    override suspend fun generateLocalKnowledgeShape(
+        settings: OnDeviceModelSettings,
+        contextSummary: String,
+    ): AiChatResult = runPrompt(
+        settings = settings,
+        prompt = FlowOnDevicePromptFactory.knowledgeShape(contextSummary),
+    )
+
+    override suspend fun generateLocalOpenQuestion(
+        settings: OnDeviceModelSettings,
+        contextSummary: String,
+    ): AiChatResult = runPrompt(
+        settings = settings,
+        prompt = FlowOnDevicePromptFactory.openQuestion(contextSummary),
     )
 
     override suspend fun generateEditorRecall(

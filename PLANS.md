@@ -210,7 +210,8 @@ Planned items:
   - on-device model download entry added
   - Flow can now prefer a local model
   - editor can recall older knowledge while drafting
-  - a lightweight local maintenance pass can run in the background
+  - a local maintenance pass can read `raw sources + wiki/index + wiki/log + key object pages`
+  - local maintainer now writes its own `index.md / log.md / current-judgement / recent-absorption / new-connection / open-question / knowledge-shape`
 - target shape:
   - keep MindFlow database as runtime truth
   - add a separate markdown `MindFlow Knowledge Layer`

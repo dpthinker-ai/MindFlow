@@ -23,6 +23,10 @@ data class LocalKnowledgeMaintenanceSnapshot(
     val rootPath: String = "",
     val generatedAt: Long = 0L,
     val date: String = "",
+    val knowledgeShape: LocalMaintainerCard = LocalMaintainerCard(),
+    val knowledgeInventoryLine: String = "",
+    val knowledgePointLabels: List<String> = emptyList(),
+    val lastLogLine: String = "",
     val recentAbsorption: LocalMaintainerCard = LocalMaintainerCard(),
     val currentJudgement: LocalMaintainerCard = LocalMaintainerCard(),
     val newConnection: LocalMaintainerCard = LocalMaintainerCard(),
@@ -32,5 +36,5 @@ data class LocalKnowledgeMaintenanceSnapshot(
     val updatedDirectionTitle: String = "",
 ) {
     val hasContent: Boolean
-        get() = recentAbsorption.hasContent || currentJudgement.hasContent || newConnection.hasContent
+        get() = knowledgeShape.hasContent || recentAbsorption.hasContent || currentJudgement.hasContent || newConnection.hasContent
 }

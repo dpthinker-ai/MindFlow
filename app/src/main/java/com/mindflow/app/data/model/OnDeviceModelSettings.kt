@@ -13,12 +13,16 @@ data class OnDeviceModelSettings(
     val preferOnDevice: Boolean = false,
     val localModelPath: String = "",
     val downloadedBytes: Long = 0L,
+    val downloadTargetBytes: Long = DEFAULT_MODEL_SIZE_BYTES,
     val lastDownloadedAt: Long = 0L,
     val lastMessage: String = "",
     val status: OnDeviceModelStatus = OnDeviceModelStatus.NOT_DOWNLOADED,
 ) {
     val isReady: Boolean
         get() = status == OnDeviceModelStatus.READY && localModelPath.isNotBlank()
+
+    val hasPartialDownload: Boolean
+        get() = !isReady && downloadedBytes > 0L
 
     companion object {
         const val DEFAULT_MODEL_LABEL = "Gemma 4 E4B"

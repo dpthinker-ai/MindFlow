@@ -1,20 +1,28 @@
 package com.mindflow.app.data.localmodel
 
 import android.content.Context
+import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
+import com.mindflow.app.data.wiki.DirectionWikiSnapshot
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 class LocalKnowledgeMaintenancePlanner(
@@ -25,8 +33,47 @@ class LocalKnowledgeMaintenancePlanner(
     private val onDeviceAiClient: OnDeviceAiClient,
     private val applicationScope: CoroutineScope,
 ) {
-    private val rootDir = File(context.filesDir, "knowledge-layer/wiki/local-maintainer")
+    private data class MaintainerSnippet(
+        val title: String,
+        val summary: String,
+        val relativePath: String,
+        val updatedAt: Long,
+    )
+
+    private data class MaintainerCorpus(
+        val rawIndexEntries: List<String>,
+        val wikiIndexEntries: List<String>,
+        val recentSources: List<MaintainerSnippet>,
+        val directions: List<MaintainerSnippet>,
+        val conclusions: List<MaintainerSnippet>,
+        val concepts: List<MaintainerSnippet>,
+        val evidence: List<MaintainerSnippet>,
+        val questions: List<MaintainerSnippet>,
+        val methods: List<MaintainerSnippet>,
+        val experiments: List<MaintainerSnippet>,
+        val recentLogEntries: List<String>,
+        val inventoryLine: String,
+        val pointLabels: List<String>,
+        val rawSourceCount: Int,
+        val directionCount: Int,
+        val knowledgeObjectCount: Int,
+        val newSourceCount: Int,
+        val newNodeCount: Int,
+        val newEdgeCount: Int,
+        val activeHubLabel: String,
+        val missingLinkLabel: String,
+        val updatedDirectionTitle: String,
+        val preferredSettledDirection: DirectionWikiDirectionSummary?,
+        val preferredConnectionDirection: DirectionWikiDirectionSummary?,
+    )
+
+    private val knowledgeLayerRoot = File(context.filesDir, "knowledge-layer")
+    private val wikiRootDir = File(knowledgeLayerRoot, "wiki")
+    private val rawRootDir = File(knowledgeLayerRoot, "raw")
+    private val rootDir = File(wikiRootDir, "local-maintainer")
     private val refreshIntervalMs = 18L * 60L * 60L * 1000L
+    private val displayDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val displayTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     private val _snapshot = MutableStateFlow(loadSnapshotFromDisk())
     val snapshot: StateFlow<LocalKnowledgeMaintenanceSnapshot> = _snapshot
 
@@ -39,164 +86,382 @@ class LocalKnowledgeMaintenancePlanner(
         }
     }
 
-    suspend fun refreshNow(): Result<Unit> = runCatching {
-        val settings = onDeviceModelSettingsRepository.getCurrent()
-        if (!settings.preferOnDevice || !settings.isReady) return@runCatching
+    suspend fun refreshNow(): Result<Unit> = withContext(Dispatchers.Default) {
+        runCatching {
+            val settings = onDeviceModelSettingsRepository.getCurrent()
+            if (!settings.preferOnDevice || !settings.isReady) return@runCatching
 
-        val notes = noteRepository.observeAllNotes().first().filter { !it.isArchived }
-        val snapshot = directionWikiCoordinator.snapshot.value
+            runCatching { directionWikiCoordinator.refreshNow() }
 
-        val recentNotes = notes.sortedByDescending { it.updatedAt }.take(6)
-        val topDirections = snapshot.directions.values.sortedByDescending { it.updatedAt }.take(3)
-        if (recentNotes.isEmpty() && topDirections.isEmpty()) return@runCatching
-        val zoneId = ZoneId.systemDefault()
-        val today = LocalDate.now(zoneId)
-
-        val settledDirection = topDirections.firstOrNull {
-            it.validatedPoints.isNotEmpty() ||
-                it.verifiedPoints.isNotEmpty() ||
-                it.conclusionLine.isNotBlank() ||
-                it.assetSummary.isNotBlank()
-        } ?: topDirections.firstOrNull()
-        val connectionDirection = topDirections.firstOrNull {
-            it.openQuestions.isNotEmpty() ||
-                it.maintenanceLine.isNotBlank() ||
-                it.hypothesisPoints.isNotEmpty()
-        } ?: topDirections.firstOrNull()
-
-        val mainlineContext = buildString {
-            appendLine("最近新材料：")
-            recentNotes.forEachIndexed { index, note ->
-                appendLine("${index + 1}. ${note.topic.ifBlank { "未命名记录" }}｜${note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)}")
-            }
-            appendLine("已有方向：")
-            topDirections.forEachIndexed { index, direction ->
-                appendLine("${index + 1}. ${direction.title}｜${direction.conclusionLine.ifBlank { direction.assetSummary }.ifBlank { direction.healthLine }}")
-            }
-        }
-        val settledContext = buildString {
-            appendLine("已成立方向结果：")
-            topDirections.forEachIndexed { index, direction ->
-                appendLine("${index + 1}. ${direction.title}｜${direction.conclusionLine.ifBlank { direction.validatedPoints.firstOrNull().orEmpty() }.ifBlank { direction.verifiedPoints.firstOrNull().orEmpty() }.ifBlank { direction.assetSummary }}")
-            }
-            appendLine("最近稳定材料：")
-            recentNotes.filter { it.knowledgeTrust.name == "VALIDATED" || it.knowledgeTrust.name == "VERIFIED" }
-                .take(4)
-                .forEachIndexed { index, note ->
-                    appendLine("${index + 1}. ${note.topic.ifBlank { "未命名记录" }}｜${note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)}")
-                }
-        }
-        val gapContext = buildString {
-            appendLine("当前张力：")
-            topDirections.forEachIndexed { index, direction ->
-                appendLine("${index + 1}. ${direction.title}｜${direction.openQuestions.firstOrNull().orEmpty().ifBlank { direction.maintenanceLine }.ifBlank { direction.healthLine }}")
-            }
-            appendLine("最近还没压实的新材料：")
-            recentNotes.take(4).forEachIndexed { index, note ->
-                appendLine("${index + 1}. ${note.topic.ifBlank { "未命名记录" }}｜${note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)}")
-            }
-        }
-
-        val mainline = onDeviceAiClient.generateFlowMainline(settings, mainlineContext)
-        val settled = onDeviceAiClient.generateFlowSettledKnowledge(settings, settledContext)
-        val gap = onDeviceAiClient.generateFlowBreakthroughGap(settings, gapContext)
-
-        val date = today.toString()
-        val generatedAt = System.currentTimeMillis()
-        val localSnapshot = LocalKnowledgeMaintenanceSnapshot(
-            rootPath = rootDir.absolutePath,
-            generatedAt = generatedAt,
-            date = date,
-            recentAbsorption = buildCard(
-                result = settled,
-                fallbackLine = settledDirection?.validatedPoints?.firstOrNull()
-                    ?: settledDirection?.verifiedPoints?.firstOrNull()
-                    ?: settledDirection?.conclusionLine
-                    ?: settledDirection?.assetSummary
-                    ?: "今天还没有真正被吸收进知识层的新结果。",
-                fallbackSupport = settledDirection?.groundingLine
-                    ?: settledDirection?.trustLine
-                    ?: settledDirection?.knowledgeObjectLine
-                    ?: "再多给一点稳定材料，这里会开始留下更可复用的判断。",
-                anchorLabel = settledDirection?.title.orEmpty(),
-                threadKey = settledDirection?.threadKey.orEmpty(),
-            ),
-            currentJudgement = buildCard(
-                result = mainline,
-                fallbackLine = topDirections.firstOrNull()?.conclusionLine
-                    ?: topDirections.firstOrNull()?.assetSummary
-                    ?: "今天还没有被压成真正可用的综合判断。",
-                fallbackSupport = topDirections.firstOrNull()?.nextShiftLine
-                    ?: topDirections.firstOrNull()?.continuityLine
-                    ?: "再沿着同一条线走一小步，本地维护会把它压成更稳的当前判断。",
-                anchorLabel = topDirections.firstOrNull()?.title.orEmpty(),
-                threadKey = topDirections.firstOrNull()?.threadKey.orEmpty(),
-            ),
-            newConnection = buildCard(
-                result = gap,
-                fallbackLine = connectionDirection?.openQuestions?.firstOrNull()
-                    ?: connectionDirection?.maintenanceFocusLine
-                    ?: connectionDirection?.maintenanceLine
-                    ?: connectionDirection?.hypothesisPoints?.firstOrNull()
-                    ?: "今天还没有长出真正值得试的新连接。",
-                fallbackSupport = connectionDirection?.maintenanceSourceLine
-                    ?: connectionDirection?.nextShiftLine
-                    ?: connectionDirection?.groundingLine
-                    ?: "再喂一点跨项目、跨文件夹的材料，这里更容易长出新连接。",
-                anchorLabel = connectionDirection?.title.orEmpty(),
-                threadKey = connectionDirection?.threadKey.orEmpty(),
-            ),
-            openQuestion = LocalMaintainerCard(
-                line = connectionDirection?.openQuestions?.firstOrNull()
-                    ?: connectionDirection?.maintenanceLine
-                    ?: connectionDirection?.healthLine
-                    ?: "",
-                support = connectionDirection?.maintenanceSourceLine
-                    ?: connectionDirection?.maintenanceFocusLine
-                    ?: "",
-                anchorLabel = connectionDirection?.title.orEmpty(),
-                threadKey = connectionDirection?.threadKey.orEmpty(),
-            ),
-            graphPulse = LocalKnowledgeGraphPulse(
-                newSourceCount = notes.count { it.updatedAt.toLocalDate(zoneId) == today },
-                newNodeCount = snapshot.knowledgeItems.count { it.updatedAt > generatedAt - 36L * 60L * 60L * 1000L } +
-                    snapshot.directions.values.count { it.updatedAt > generatedAt - 36L * 60L * 60L * 1000L },
-                newEdgeCount = topDirections.count {
-                    it.knowledgeObjectLine.isNotBlank() || it.groundingLine.isNotBlank() || it.trustLine.isNotBlank()
-                },
-                activeHubLabel = topDirections.firstOrNull()?.title.orEmpty(),
-                missingLinkLabel = connectionDirection?.maintenanceFocusLine
-                    ?: connectionDirection?.openQuestions?.firstOrNull()
-                    ?: "",
-            ),
-            activeDirectionCount = snapshot.directions.size,
-            updatedDirectionTitle = topDirections.firstOrNull()?.title.orEmpty(),
-        )
-        val latestFile = File(rootDir, "latest.md")
-        val latestJsonFile = File(rootDir, "latest.json")
-        val dailyFile = File(rootDir, "$date.md")
-        withContext(Dispatchers.IO) {
-            rootDir.mkdirs()
-            val content = buildMarkdown(
-                snapshot = localSnapshot,
+            val notes = noteRepository.observeAllNotes().first().filter { !it.isArchived }
+            val snapshot = directionWikiCoordinator.snapshot.value
+            val zoneId = ZoneId.systemDefault()
+            val generatedAt = System.currentTimeMillis()
+            val today = LocalDate.now(zoneId)
+            val corpus = buildCorpus(
+                notes = notes,
+                snapshot = snapshot,
+                generatedAt = generatedAt,
+                zoneId = zoneId,
             )
-            latestFile.writeText(content)
-            dailyFile.writeText(content)
-            latestJsonFile.writeText(localSnapshot.toJson().toString(2))
+            if (
+                corpus.directionCount == 0 &&
+                corpus.recentSources.isEmpty() &&
+                corpus.knowledgeObjectCount == 0
+            ) {
+                return@runCatching
+            }
+
+            val knowledgeShape = onDeviceAiClient.generateLocalKnowledgeShape(
+                settings = settings,
+                contextSummary = buildKnowledgeShapeContext(corpus),
+            )
+            val mainline = onDeviceAiClient.generateFlowMainline(
+                settings = settings,
+                contextSummary = buildCurrentJudgementContext(corpus),
+            )
+            val absorption = onDeviceAiClient.generateFlowSettledKnowledge(
+                settings = settings,
+                contextSummary = buildRecentAbsorptionContext(corpus),
+            )
+            val connection = onDeviceAiClient.generateFlowBreakthroughGap(
+                settings = settings,
+                contextSummary = buildNewConnectionContext(corpus),
+            )
+            val openQuestion = onDeviceAiClient.generateLocalOpenQuestion(
+                settings = settings,
+                contextSummary = buildOpenQuestionContext(corpus),
+            )
+
+            val localSnapshot = LocalKnowledgeMaintenanceSnapshot(
+                rootPath = rootDir.absolutePath,
+                generatedAt = generatedAt,
+                date = today.toString(),
+                knowledgeShape = buildCard(
+                    result = knowledgeShape,
+                    fallbackLine = fallbackKnowledgeShapeLine(corpus),
+                    fallbackSupport = fallbackKnowledgeShapeSupport(corpus),
+                    anchorLabel = corpus.updatedDirectionTitle,
+                    threadKey = corpus.preferredSettledDirection?.threadKey.orEmpty(),
+                ),
+                knowledgeInventoryLine = corpus.inventoryLine,
+                knowledgePointLabels = corpus.pointLabels,
+                lastLogLine = corpus.recentLogEntries.firstOrNull().orEmpty(),
+                recentAbsorption = buildCard(
+                    result = absorption,
+                    fallbackLine = corpus.preferredSettledDirection?.validatedPoints?.firstOrNull()
+                        ?: corpus.preferredSettledDirection?.verifiedPoints?.firstOrNull()
+                        ?: corpus.preferredSettledDirection?.conclusionLine
+                        ?: corpus.conclusions.firstOrNull()?.summary
+                        ?: corpus.recentSources.firstOrNull()?.summary
+                        ?: "今天还没有真正被吸收进知识层的新结果。",
+                    fallbackSupport = corpus.preferredSettledDirection?.groundingLine
+                        ?: corpus.preferredSettledDirection?.trustLine
+                        ?: corpus.preferredSettledDirection?.knowledgeObjectLine
+                        ?: corpus.evidence.firstOrNull()?.summary
+                        ?: "再喂一点更稳定的材料，这里会开始留下更可复用的结果。",
+                    anchorLabel = corpus.preferredSettledDirection?.title
+                        ?: corpus.conclusions.firstOrNull()?.title
+                        ?: corpus.updatedDirectionTitle,
+                    threadKey = corpus.preferredSettledDirection?.threadKey.orEmpty(),
+                ),
+                currentJudgement = buildCard(
+                    result = mainline,
+                    fallbackLine = corpus.preferredSettledDirection?.conclusionLine
+                        ?: corpus.directions.firstOrNull()?.summary
+                        ?: "今天还没有被压成真正可用的综合判断。",
+                    fallbackSupport = corpus.preferredSettledDirection?.nextShiftLine
+                        ?: corpus.preferredSettledDirection?.continuityLine
+                        ?: corpus.questions.firstOrNull()?.summary
+                        ?: "先让本地维护把今天进来的材料和已有积累压成更稳的一条判断。",
+                    anchorLabel = corpus.updatedDirectionTitle,
+                    threadKey = corpus.preferredSettledDirection?.threadKey.orEmpty(),
+                ),
+                newConnection = buildCard(
+                    result = connection,
+                    fallbackLine = corpus.preferredConnectionDirection?.openQuestions?.firstOrNull()
+                        ?: corpus.preferredConnectionDirection?.maintenanceFocusLine
+                        ?: corpus.preferredConnectionDirection?.maintenanceLine
+                        ?: fallbackNewConnectionLine(corpus)
+                        ?: "今天还没有长出真正值得试的新连接。",
+                    fallbackSupport = corpus.preferredConnectionDirection?.maintenanceSourceLine
+                        ?: corpus.preferredConnectionDirection?.nextShiftLine
+                        ?: corpus.preferredConnectionDirection?.groundingLine
+                        ?: fallbackNewConnectionSupport(corpus)
+                        ?: "再喂一点跨项目、跨方向的材料，这里会更容易长出新连接。",
+                    anchorLabel = corpus.preferredConnectionDirection?.title
+                        ?: corpus.concepts.firstOrNull()?.title
+                        ?: corpus.updatedDirectionTitle,
+                    threadKey = corpus.preferredConnectionDirection?.threadKey.orEmpty(),
+                ),
+                openQuestion = buildCard(
+                    result = openQuestion,
+                    fallbackLine = corpus.preferredConnectionDirection?.openQuestions?.firstOrNull()
+                        ?: corpus.questions.firstOrNull()?.summary
+                        ?: corpus.missingLinkLabel,
+                    fallbackSupport = corpus.preferredConnectionDirection?.maintenanceSourceLine
+                        ?: corpus.preferredConnectionDirection?.maintenanceFocusLine
+                        ?: corpus.methods.firstOrNull()?.summary
+                        ?: "",
+                    anchorLabel = corpus.preferredConnectionDirection?.title
+                        ?: corpus.questions.firstOrNull()?.title.orEmpty(),
+                    threadKey = corpus.preferredConnectionDirection?.threadKey.orEmpty(),
+                ),
+                graphPulse = LocalKnowledgeGraphPulse(
+                    newSourceCount = corpus.newSourceCount,
+                    newNodeCount = corpus.newNodeCount,
+                    newEdgeCount = corpus.newEdgeCount,
+                    activeHubLabel = corpus.activeHubLabel,
+                    missingLinkLabel = corpus.missingLinkLabel,
+                ),
+                activeDirectionCount = corpus.directionCount,
+                updatedDirectionTitle = corpus.updatedDirectionTitle,
+            )
+
+            withContext(Dispatchers.IO) {
+                writeMaintainerFiles(snapshot = localSnapshot, corpus = corpus)
+            }
+            _snapshot.value = localSnapshot
         }
-        _snapshot.value = localSnapshot
     }
 
-    private fun buildMarkdown(snapshot: LocalKnowledgeMaintenanceSnapshot): String = buildString {
-        appendLine("# Local maintainer")
+    private fun buildCorpus(
+        notes: List<NoteEntity>,
+        snapshot: DirectionWikiSnapshot,
+        generatedAt: Long,
+        zoneId: ZoneId,
+    ): MaintainerCorpus {
+        val rawNotes = readMarkdownSnippets(File(rawRootDir, "notes"), rawRootDir, limit = 8)
+        val rawResearch = readMarkdownSnippets(File(rawRootDir, "research"), rawRootDir, limit = 6)
+        val rawValidations = readMarkdownSnippets(File(rawRootDir, "validations"), rawRootDir, limit = 6)
+        val rawReflections = readMarkdownSnippets(File(rawRootDir, "reflections"), rawRootDir, limit = 4)
+        val rawReviews = readMarkdownSnippets(File(rawRootDir, "reviews"), rawRootDir, limit = 6)
+        val rawIndexEntries = readIndexEntries(File(rawRootDir, "index.md"), limit = 8)
+        val wikiIndexEntries = readIndexEntries(File(wikiRootDir, "index.md"), limit = 10)
+        val recentSources = listOf(rawNotes, rawResearch, rawValidations, rawReflections, rawReviews)
+            .flatten()
+            .sortedByDescending { it.updatedAt }
+            .take(10)
+
+        val directions = readMarkdownSnippets(File(wikiRootDir, "directions"), wikiRootDir, limit = 6)
+        val conclusions = readMarkdownSnippets(File(wikiRootDir, "conclusions"), wikiRootDir, limit = 6)
+        val concepts = readMarkdownSnippets(File(wikiRootDir, "concepts"), wikiRootDir, limit = 6)
+        val evidence = readMarkdownSnippets(File(wikiRootDir, "evidence"), wikiRootDir, limit = 6)
+        val questions = readMarkdownSnippets(File(wikiRootDir, "questions"), wikiRootDir, limit = 6)
+        val methods = readMarkdownSnippets(File(wikiRootDir, "methods"), wikiRootDir, limit = 6)
+        val experiments = readMarkdownSnippets(File(wikiRootDir, "experiments"), wikiRootDir, limit = 6)
+        val recentLogEntries = readLogEntries(File(wikiRootDir, "log.md"), limit = 6)
+
+        val directionCount = snapshot.directions.size
+        val conclusionCount = countMarkdownPages(File(wikiRootDir, "conclusions"))
+        val conceptCount = countMarkdownPages(File(wikiRootDir, "concepts"))
+        val questionCount = countMarkdownPages(File(wikiRootDir, "questions"))
+        val methodCount = countMarkdownPages(File(wikiRootDir, "methods"))
+        val experimentCount = countMarkdownPages(File(wikiRootDir, "experiments"))
+        val rawSourceCount = countMarkdownPages(File(rawRootDir, "notes")) +
+            countMarkdownPages(File(rawRootDir, "research")) +
+            countMarkdownPages(File(rawRootDir, "validations")) +
+            countMarkdownPages(File(rawRootDir, "reflections")) +
+            countMarkdownPages(File(rawRootDir, "reviews"))
+
+        val updatedThreshold = generatedAt - 36L * 60L * 60L * 1000L
+        val newSourceCount = notes.count { Instant.ofEpochMilli(it.updatedAt).atZone(zoneId).toLocalDate() == LocalDate.now(zoneId) }
+        val newNodeCount = snapshot.knowledgeItems.count { it.updatedAt > updatedThreshold } +
+            snapshot.directions.values.count { it.updatedAt > updatedThreshold }
+        val newEdgeCount = snapshot.directions.values.count {
+            it.knowledgeObjectLine.isNotBlank() ||
+                it.groundingLine.isNotBlank() ||
+                it.trustLine.isNotBlank()
+        }
+        val preferredSettledDirection = snapshot.directions.values
+            .sortedByDescending { it.updatedAt }
+            .firstOrNull {
+                it.validatedPoints.isNotEmpty() ||
+                    it.verifiedPoints.isNotEmpty() ||
+                    it.conclusionLine.isNotBlank() ||
+                    it.assetSummary.isNotBlank()
+            } ?: snapshot.directions.values.maxByOrNull { it.updatedAt }
+        val preferredConnectionDirection = snapshot.directions.values
+            .sortedByDescending { it.updatedAt }
+            .firstOrNull {
+                it.openQuestions.isNotEmpty() ||
+                    it.maintenanceFocusLine.isNotBlank() ||
+                    it.maintenanceLine.isNotBlank() ||
+                    it.hypothesisPoints.isNotEmpty()
+            } ?: snapshot.directions.values.maxByOrNull { it.updatedAt }
+
+        val inventoryLine = buildString {
+            append("${directionCount} 条方向")
+            append(" · ${conclusionCount} 条结论")
+            append(" · ${conceptCount} 个概念")
+            append(" · ${questionCount} 个问题")
+            append(" · ${methodCount} 个方法")
+            append(" · ${experimentCount} 个实验")
+        }
+        val pointLabels = buildPointLabels(snapshot.knowledgeItems, snapshot.directions.values.toList())
+
+        return MaintainerCorpus(
+            rawIndexEntries = rawIndexEntries,
+            wikiIndexEntries = wikiIndexEntries,
+            recentSources = recentSources,
+            directions = directions,
+            conclusions = conclusions,
+            concepts = concepts,
+            evidence = evidence,
+            questions = questions,
+            methods = methods,
+            experiments = experiments,
+            recentLogEntries = recentLogEntries,
+            inventoryLine = inventoryLine,
+            pointLabels = pointLabels,
+            rawSourceCount = rawSourceCount,
+            directionCount = directionCount,
+            knowledgeObjectCount = snapshot.knowledgeItems.size,
+            newSourceCount = newSourceCount,
+            newNodeCount = newNodeCount,
+            newEdgeCount = newEdgeCount,
+            activeHubLabel = preferredSettledDirection?.title.orEmpty(),
+            missingLinkLabel = preferredConnectionDirection?.maintenanceFocusLine
+                ?.takeIf { it.isNotBlank() }
+                ?: preferredConnectionDirection?.openQuestions?.firstOrNull().orEmpty(),
+            updatedDirectionTitle = preferredSettledDirection?.title.orEmpty(),
+            preferredSettledDirection = preferredSettledDirection,
+            preferredConnectionDirection = preferredConnectionDirection,
+        )
+    }
+
+    private fun buildKnowledgeShapeContext(corpus: MaintainerCorpus): String = buildString {
+        appendLine("你正在维护一套本地 llm-wiki。下面是当前 wiki 的索引、最新 source 和知识对象分布。")
+        appendLine("知识库存量：${corpus.inventoryLine}")
+        if (corpus.rawIndexEntries.isNotEmpty()) {
+            appendLine("raw index：")
+            corpus.rawIndexEntries.forEach { appendLine("- $it") }
+        }
+        if (corpus.wikiIndexEntries.isNotEmpty()) {
+            appendLine("wiki index：")
+            corpus.wikiIndexEntries.forEach { appendLine("- $it") }
+        }
+        appendLine("最近维护日志：")
+        if (corpus.recentLogEntries.isEmpty()) {
+            appendLine("- 还没有维护日志")
+        } else {
+            corpus.recentLogEntries.forEach { appendLine("- $it") }
+        }
+        appendSnippetSection("最近 source", corpus.recentSources.take(6))
+        appendSnippetSection("方向页面", corpus.directions.take(5))
+        appendSnippetSection("结论页面", corpus.conclusions.take(5))
+        appendSnippetSection("概念页面", corpus.concepts.take(5))
+        appendSnippetSection("问题页面", corpus.questions.take(4))
+        appendSnippetSection("方法页面", corpus.methods.take(4))
+        appendSnippetSection("实验页面", corpus.experiments.take(4))
+        if (corpus.pointLabels.isNotEmpty()) {
+            appendLine("当前高频知识点：${corpus.pointLabels.joinToString(" / ")}")
+        }
+        appendLine("请说明当前知识长成什么样，以及它现在主要包含哪些点。")
+    }
+
+    private fun buildCurrentJudgementContext(corpus: MaintainerCorpus): String = buildString {
+        appendLine("你在做本地 llm-wiki 的 maintainer pass。请基于最近 source、方向页、结论页和日志，压出一个当前综合判断。")
+        appendLine("不要做即时摘要，要像已经维护过 wiki 之后读出来的当前结论。")
+        appendLine("知识库存量：${corpus.inventoryLine}")
+        if (corpus.wikiIndexEntries.isNotEmpty()) {
+            appendLine("wiki index：")
+            corpus.wikiIndexEntries.take(8).forEach { appendLine("- $it") }
+        }
+        corpus.preferredSettledDirection?.let { direction ->
+            appendLine("当前最稳方向：${direction.title}")
+            direction.conclusionLine.takeIf { it.isNotBlank() }?.let { appendLine("当前结论：$it") }
+            direction.validatedPoints.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("已验证：$it") }
+            direction.verifiedPoints.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("已查证：$it") }
+            direction.nextShiftLine.takeIf { it.isNotBlank() }?.let { appendLine("下一步承接：$it") }
+            direction.continuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
+        }
+        appendSnippetSection("最近 source", corpus.recentSources.take(6))
+        appendSnippetSection("最近结论页", corpus.conclusions.take(4))
+        appendSnippetSection("最近证据页", corpus.evidence.take(4))
+        appendSnippetSection("最近维护日志", corpus.recentLogEntries.map { MaintainerSnippet(it, "", "wiki/log.md", 0L) })
+        appendLine("目标：输出一条会改变优先级的判断。")
+    }
+
+    private fun buildRecentAbsorptionContext(corpus: MaintainerCorpus): String = buildString {
+        appendLine("请挑出最近真正被吸收进本地知识层的一条结果。它应该像被写进 wiki 的结论、方法或稳定判断。")
+        appendLine("知识库存量：${corpus.inventoryLine}")
+        if (corpus.rawIndexEntries.isNotEmpty()) {
+            appendLine("raw index：")
+            corpus.rawIndexEntries.take(6).forEach { appendLine("- $it") }
+        }
+        corpus.preferredSettledDirection?.let { direction ->
+            appendLine("优先方向：${direction.title}")
+            direction.validatedPoints.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("已验证：$it") }
+            direction.verifiedPoints.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("已查证：$it") }
+            direction.conclusionLine.takeIf { it.isNotBlank() }?.let { appendLine("结论：$it") }
+            direction.groundingLine.takeIf { it.isNotBlank() }?.let { appendLine("证据基础：$it") }
+        }
+        appendSnippetSection("最近 source", corpus.recentSources.take(6))
+        appendSnippetSection("结论页", corpus.conclusions.take(5))
+        appendSnippetSection("证据页", corpus.evidence.take(5))
+        appendLine("目标：输出最近吸收进知识层的一条结果，不要写趋势总结。")
+    }
+
+    private fun buildNewConnectionContext(corpus: MaintainerCorpus): String = buildString {
+        appendLine("请像本地 llm-wiki 维护员一样，找出今天知识层里最值得长出来的一条新连接。")
+        appendLine("不要复述当前判断，要优先连接不同方向、不同概念、不同方法或不同经验。")
+        appendLine("知识库存量：${corpus.inventoryLine}")
+        if (corpus.wikiIndexEntries.isNotEmpty()) {
+            appendLine("wiki index：")
+            corpus.wikiIndexEntries.take(8).forEach { appendLine("- $it") }
+        }
+        corpus.preferredConnectionDirection?.let { direction ->
+            appendLine("当前主要张力：${direction.title}")
+            direction.openQuestions.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("开放问题：$it") }
+            direction.maintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("维护焦点：$it") }
+            direction.maintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("缺来源：$it") }
+            direction.hypothesisPoints.firstOrNull()?.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
+        }
+        appendSnippetSection("概念页", corpus.concepts.take(5))
+        appendSnippetSection("问题页", corpus.questions.take(5))
+        appendSnippetSection("方法页", corpus.methods.take(4))
+        appendSnippetSection("实验页", corpus.experiments.take(4))
+        appendSnippetSection("方向页", corpus.directions.take(4))
+        appendLine("高频知识点：${corpus.pointLabels.joinToString(" / ")}")
+        appendLine("目标：输出一条新连接，以及下一次该摄入什么材料。")
+    }
+
+    private fun buildOpenQuestionContext(corpus: MaintainerCorpus): String = buildString {
+        appendLine("请像本地知识维护员一样，挑一个当前最值得继续追问的问题。")
+        appendLine("这个问题应该来自真实知识张力，而不是普通待办。")
+        appendLine("知识库存量：${corpus.inventoryLine}")
+        if (corpus.wikiIndexEntries.isNotEmpty()) {
+            appendLine("wiki index：")
+            corpus.wikiIndexEntries.take(8).forEach { appendLine("- $it") }
+        }
+        appendSnippetSection("问题页", corpus.questions.take(6))
+        appendSnippetSection("证据页", corpus.evidence.take(4))
+        appendSnippetSection("最近日志", corpus.recentLogEntries.map { MaintainerSnippet(it, "", "wiki/log.md", 0L) })
+        corpus.preferredConnectionDirection?.let { direction ->
+            direction.openQuestions.take(3).forEach { appendLine("- ${direction.title}：$it") }
+        }
+        appendLine("目标：输出一个最值得追的问题，以及为什么现在要追它。")
+    }
+
+    private fun buildMaintainerMarkdown(snapshot: LocalKnowledgeMaintenanceSnapshot): String = buildString {
+        appendLine("# Local Maintainer")
         appendLine()
         appendLine("- date: ${snapshot.date}")
         appendLine("- model: Gemma 4 E4B")
-        appendLine("- new_sources: ${snapshot.graphPulse.newSourceCount}")
+        appendLine("- generated_at: ${displayTime(snapshot.generatedAt)}")
         appendLine("- active_directions: ${snapshot.activeDirectionCount}")
+        appendLine("- inventory: ${snapshot.knowledgeInventoryLine}")
         appendLine()
+        appendSection("当前知识长相", snapshot.knowledgeShape)
+        if (snapshot.knowledgePointLabels.isNotEmpty()) {
+            appendLine("## 当前包含的点")
+            snapshot.knowledgePointLabels.forEach { appendLine("- $it") }
+            appendLine()
+        }
         appendLine("## 今天图谱变化")
         appendLine("- 活跃枢纽：${snapshot.graphPulse.activeHubLabel.ifBlank { "还没形成稳定枢纽" }}")
+        appendLine("- 新材料：${snapshot.graphPulse.newSourceCount}")
         appendLine("- 新节点：${snapshot.graphPulse.newNodeCount}")
         appendLine("- 新连接：${snapshot.graphPulse.newEdgeCount}")
         snapshot.graphPulse.missingLinkLabel.takeIf { it.isNotBlank() }?.let {
@@ -206,20 +471,101 @@ class LocalKnowledgeMaintenancePlanner(
         appendSection("今天新吸收", snapshot.recentAbsorption)
         appendSection("当前成立", snapshot.currentJudgement)
         appendSection("今天新连接", snapshot.newConnection)
-        if (snapshot.openQuestion.hasContent) {
-            appendSection("待厘清", snapshot.openQuestion)
-        }
+        appendSection("待厘清", snapshot.openQuestion)
     }
 
-    private fun StringBuilder.appendSection(
+    private fun writeMaintainerFiles(
+        snapshot: LocalKnowledgeMaintenanceSnapshot,
+        corpus: MaintainerCorpus,
+    ) {
+        rootDir.mkdirs()
+        val latestFile = File(rootDir, "latest.md")
+        val latestJsonFile = File(rootDir, "latest.json")
+        val dailyFile = File(rootDir, "${snapshot.date}.md")
+        val shapeFile = File(rootDir, "knowledge-shape.md")
+        val judgementFile = File(rootDir, "current-judgement.md")
+        val absorptionFile = File(rootDir, "recent-absorption.md")
+        val connectionFile = File(rootDir, "new-connection.md")
+        val questionFile = File(rootDir, "open-question.md")
+        val indexFile = File(rootDir, "index.md")
+        val logFile = File(rootDir, "log.md")
+
+        val latestContent = buildMaintainerMarkdown(snapshot)
+        latestFile.writeText(latestContent)
+        dailyFile.writeText(latestContent)
+        latestJsonFile.writeText(snapshot.toJson().toString(2))
+
+        shapeFile.writeText(
+            buildString {
+                appendLine("# 当前知识长相")
+                appendLine()
+                appendLine(snapshot.knowledgeShape.line.ifBlank { fallbackKnowledgeShapeLine(corpus) })
+                appendLine()
+                appendLine(snapshot.knowledgeShape.support.ifBlank { fallbackKnowledgeShapeSupport(corpus) })
+                appendLine()
+                appendLine("## 当前库存")
+                appendLine(snapshot.knowledgeInventoryLine)
+                appendLine()
+                if (snapshot.knowledgePointLabels.isNotEmpty()) {
+                    appendLine("## 当前包含的点")
+                    snapshot.knowledgePointLabels.forEach { appendLine("- $it") }
+                    appendLine()
+                }
+                appendSnippetSection("最近方向页", corpus.directions.take(4))
+                appendSnippetSection("最近结论页", corpus.conclusions.take(4))
+                appendSnippetSection("最近概念页", corpus.concepts.take(4))
+            },
+        )
+        judgementFile.writeText(buildCardMarkdown("当前成立", snapshot.currentJudgement, corpus.conclusions, corpus.evidence))
+        absorptionFile.writeText(buildCardMarkdown("今天新吸收", snapshot.recentAbsorption, corpus.recentSources, corpus.conclusions))
+        connectionFile.writeText(buildCardMarkdown("今天新连接", snapshot.newConnection, corpus.concepts + corpus.questions, corpus.methods + corpus.experiments))
+        questionFile.writeText(buildCardMarkdown("待厘清", snapshot.openQuestion, corpus.questions, corpus.evidence))
+        indexFile.writeText(
+            buildString {
+                appendLine("# Local Maintainer Index")
+                appendLine()
+                appendLine("更新时间：${displayTime(snapshot.generatedAt)}")
+                appendLine()
+                appendLine("- [当前知识长相](knowledge-shape.md) · ${snapshot.knowledgeShape.line}")
+                appendLine("- [当前成立](current-judgement.md) · ${snapshot.currentJudgement.line}")
+                appendLine("- [今天新吸收](recent-absorption.md) · ${snapshot.recentAbsorption.line}")
+                appendLine("- [今天新连接](new-connection.md) · ${snapshot.newConnection.line}")
+                appendLine("- [待厘清](open-question.md) · ${snapshot.openQuestion.line}")
+            },
+        )
+        logFile.appendText(
+            buildString {
+                appendLine("## [${displayDate(snapshot.generatedAt)}] maintain | ${snapshot.activeDirectionCount} directions · ${corpus.rawSourceCount} raw sources")
+                appendLine("- 当前知识：${snapshot.knowledgeShape.line}")
+                appendLine("- 当前成立：${snapshot.currentJudgement.line}")
+                appendLine("- 今天新吸收：${snapshot.recentAbsorption.line}")
+                appendLine("- 今天新连接：${snapshot.newConnection.line}")
+                snapshot.openQuestion.line.takeIf { it.isNotBlank() }?.let { appendLine("- 待厘清：$it") }
+                appendLine()
+            },
+        )
+    }
+
+    private fun buildCardMarkdown(
         title: String,
         card: LocalMaintainerCard,
-    ) {
-        appendLine("## $title")
-        appendLine(card.line.ifBlank { "暂无内容" })
-        card.support.takeIf { it.isNotBlank() }?.let { appendLine(it) }
-        card.anchorLabel.takeIf { it.isNotBlank() }?.let { appendLine("来自：$it") }
+        primaryReferences: List<MaintainerSnippet>,
+        secondaryReferences: List<MaintainerSnippet>,
+    ): String = buildString {
+        appendLine("# $title")
         appendLine()
+        appendLine(card.line.ifBlank { "暂无内容" })
+        appendLine()
+        card.support.takeIf { it.isNotBlank() }?.let {
+            appendLine(it)
+            appendLine()
+        }
+        card.anchorLabel.takeIf { it.isNotBlank() }?.let {
+            appendLine("主要来自：$it")
+            appendLine()
+        }
+        appendSnippetSection("主要参考", primaryReferences.take(5))
+        appendSnippetSection("次级参考", secondaryReferences.take(4))
     }
 
     private fun buildCard(
@@ -238,6 +584,200 @@ class LocalKnowledgeMaintenancePlanner(
             threadKey = threadKey,
             noteId = noteId,
         )
+    }
+
+    private fun fallbackKnowledgeShapeLine(corpus: MaintainerCorpus): String {
+        val primaryDirection = corpus.updatedDirectionTitle.takeIf { it.isNotBlank() }
+        val topPoint = corpus.pointLabels.firstOrNull()
+        return when {
+            primaryDirection != null && topPoint != null ->
+                "当前知识主要围绕 $primaryDirection 展开，并开始把 $topPoint 这样的点写进更稳定的积累里。"
+            primaryDirection != null ->
+                "当前知识主要围绕 $primaryDirection 展开，最近的维护在把零散材料压成更稳定的结果。"
+            corpus.inventoryLine.isNotBlank() ->
+                "当前知识已经开始长出稳定骨架，不再只是零散记录。"
+            else -> "当前知识还在形成中。"
+        }
+    }
+
+    private fun fallbackKnowledgeShapeSupport(corpus: MaintainerCorpus): String {
+        val pointPreview = corpus.pointLabels.take(4)
+        return when {
+            pointPreview.isNotEmpty() ->
+                "现在最明显的点包括：${pointPreview.joinToString("、")}。"
+            corpus.inventoryLine.isNotBlank() ->
+                "当前库存：${corpus.inventoryLine}。"
+            else -> "继续喂入真实材料，本地维护才会把知识层长起来。"
+        }
+    }
+
+    private fun fallbackNewConnectionLine(corpus: MaintainerCorpus): String? {
+        val first = corpus.pointLabels.firstOrNull() ?: return null
+        val second = corpus.pointLabels.getOrNull(1) ?: return null
+        return "把 $first 和 $second 连起来，可能会打开一条更具体的新方向。"
+    }
+
+    private fun fallbackNewConnectionSupport(corpus: MaintainerCorpus): String? {
+        val question = corpus.questions.firstOrNull()?.title
+        val method = corpus.methods.firstOrNull()?.title
+        return when {
+            question != null && method != null -> "下一次可以围绕“$question”补材料，再试着借用“$method”的做法。"
+            question != null -> "下一次可以先围绕“$question”继续补来源。"
+            method != null -> "下一次可以先试着把“$method”迁到另一个方向。"
+            else -> null
+        }
+    }
+
+    private fun buildPointLabels(
+        knowledgeItems: List<KnowledgeLayerSearchItem>,
+        directions: List<DirectionWikiDirectionSummary>,
+    ): List<String> {
+        val labels = knowledgeItems
+            .sortedWith(
+                compareBy<KnowledgeLayerSearchItem> { graphTypePriority(it.type) }
+                    .thenByDescending { it.updatedAt },
+            )
+            .map { it.title.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(6)
+            .toMutableList()
+        if (labels.size < 4) {
+            directions.sortedByDescending { it.updatedAt }
+                .map { it.title.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { label ->
+                    if (label !in labels && labels.size < 6) labels += label
+                }
+        }
+        return labels
+    }
+
+    private fun graphTypePriority(type: KnowledgeLayerSearchType): Int =
+        when (type) {
+            KnowledgeLayerSearchType.CONCLUSION -> 0
+            KnowledgeLayerSearchType.EVIDENCE -> 1
+            KnowledgeLayerSearchType.CONCEPT -> 2
+            KnowledgeLayerSearchType.QUESTION -> 3
+            KnowledgeLayerSearchType.METHOD -> 4
+            KnowledgeLayerSearchType.EXPERIMENT -> 5
+            KnowledgeLayerSearchType.DIRECTION -> 6
+        }
+
+    private fun readMarkdownSnippets(
+        directory: File,
+        relativeBase: File,
+        limit: Int,
+    ): List<MaintainerSnippet> {
+        if (!directory.exists()) return emptyList()
+        return directory.listFiles()
+            .orEmpty()
+            .filter { it.isFile && it.extension == "md" && it.name != "index.md" }
+            .sortedByDescending { it.lastModified() }
+            .take(limit)
+            .mapNotNull { readSnippet(it, relativeBase) }
+    }
+
+    private fun countMarkdownPages(directory: File): Int =
+        directory.listFiles()
+            .orEmpty()
+            .count { it.isFile && it.extension == "md" && it.name != "index.md" }
+
+    private fun readSnippet(
+        file: File,
+        relativeBase: File,
+    ): MaintainerSnippet? {
+        val lines = runCatching { file.readLines() }.getOrNull() ?: return null
+        val title = lines.firstOrNull { it.trim().startsWith("# ") }
+            ?.removePrefix("# ")
+            ?.trim()
+            .orEmpty()
+            .ifBlank { file.nameWithoutExtension }
+        val summary = extractMarkdownSummary(lines)
+        val relativePath = runCatching { file.relativeTo(relativeBase).path }.getOrElse { file.name }
+        return MaintainerSnippet(
+            title = title,
+            summary = summary,
+            relativePath = relativePath,
+            updatedAt = file.lastModified(),
+        )
+    }
+
+    private fun extractMarkdownSummary(lines: List<String>): String {
+        val cleaned = lines.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filterNot { it.startsWith("#") }
+            .filterNot { it.startsWith("- 更新时间") }
+            .filterNot { it.startsWith("- 最近更新") }
+            .filterNot { it.startsWith("- 类型") }
+            .filterNot { it.startsWith("- 相关方向") }
+            .filterNot { it.startsWith("- 相关记录") }
+            .filterNot { it.startsWith("- 当前条目数") }
+            .filterNot { it.startsWith("- date:") }
+            .filterNot { it.startsWith("- model:") }
+            .filterNot { it.startsWith("- generated_at:") }
+            .filterNot { it.startsWith("- active_directions:") }
+            .filterNot { it.startsWith("- inventory:") }
+            .map {
+                if (it.startsWith("- ")) it.removePrefix("- ").trim() else it
+            }
+            .filter { it.isNotBlank() }
+            .toList()
+        return cleaned.firstOrNull()?.take(140).orEmpty()
+    }
+
+    private fun readLogEntries(
+        file: File,
+        limit: Int,
+    ): List<String> {
+        if (!file.exists()) return emptyList()
+        return runCatching {
+            file.readLines()
+                .map { it.trim() }
+                .filter { it.startsWith("## [") }
+                .takeLast(limit)
+                .reversed()
+        }.getOrElse { emptyList() }
+    }
+
+    private fun readIndexEntries(
+        file: File,
+        limit: Int,
+    ): List<String> {
+        if (!file.exists()) return emptyList()
+        return runCatching {
+            file.readLines()
+                .map { it.trim() }
+                .filter { it.startsWith("- ") }
+                .map { it.removePrefix("- ").trim() }
+                .filter { it.isNotBlank() }
+                .take(limit)
+        }.getOrElse { emptyList() }
+    }
+
+    private fun StringBuilder.appendSection(
+        title: String,
+        card: LocalMaintainerCard,
+    ) {
+        if (!card.hasContent) return
+        appendLine("## $title")
+        appendLine(card.line)
+        card.support.takeIf { it.isNotBlank() }?.let { appendLine(it) }
+        card.anchorLabel.takeIf { it.isNotBlank() }?.let { appendLine("来自：$it") }
+        appendLine()
+    }
+
+    private fun StringBuilder.appendSnippetSection(
+        title: String,
+        items: List<MaintainerSnippet>,
+    ) {
+        if (items.isEmpty()) return
+        appendLine("## $title")
+        items.forEach { item ->
+            appendLine("- ${item.title}｜${item.summary.ifBlank { item.relativePath }}")
+        }
+        appendLine()
     }
 
     private fun parseLines(raw: String): List<String> =
@@ -270,6 +810,10 @@ class LocalKnowledgeMaintenancePlanner(
         put("date", date)
         put("generatedAt", generatedAt)
         put("rootPath", rootPath)
+        put("knowledgeShape", knowledgeShape.toJson())
+        put("knowledgeInventoryLine", knowledgeInventoryLine)
+        put("knowledgePointLabels", JSONArray(knowledgePointLabels))
+        put("lastLogLine", lastLogLine)
         put("activeDirectionCount", activeDirectionCount)
         put("updatedDirectionTitle", updatedDirectionTitle)
         put("recentAbsorption", recentAbsorption.toJson())
@@ -300,6 +844,10 @@ class LocalKnowledgeMaintenancePlanner(
             rootPath = optString("rootPath", rootPath).ifBlank { rootPath },
             generatedAt = optLong("generatedAt"),
             date = optString("date"),
+            knowledgeShape = optJSONObject("knowledgeShape").toCard(),
+            knowledgeInventoryLine = optString("knowledgeInventoryLine"),
+            knowledgePointLabels = optJSONArray("knowledgePointLabels").toStringList(),
+            lastLogLine = optString("lastLogLine"),
             recentAbsorption = optJSONObject("recentAbsorption").toCard(),
             currentJudgement = optJSONObject("currentJudgement").toCard(),
             newConnection = optJSONObject("newConnection").toCard(),
@@ -335,6 +883,20 @@ class LocalKnowledgeMaintenancePlanner(
             )
         }
 
-    private fun Long.toLocalDate(zoneId: ZoneId): LocalDate =
-        java.time.Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()
+    private fun JSONArray?.toStringList(): List<String> =
+        if (this == null) {
+            emptyList()
+        } else {
+            buildList {
+                for (index in 0 until length()) {
+                    optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+        }
+
+    private fun displayDate(timestamp: Long): String =
+        Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(displayDateFormatter)
+
+    private fun displayTime(timestamp: Long): String =
+        Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(displayTimeFormatter)
 }

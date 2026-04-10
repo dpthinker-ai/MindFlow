@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
@@ -51,6 +52,7 @@ data class SettingsUiState(
     val localModelPreferOnDevice: Boolean = false,
     val localModelPath: String = "",
     val localModelDownloadedBytes: Long = 0L,
+    val localModelDownloadTargetBytes: Long = OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES,
     val localModelLastDownloadedAt: Long = 0L,
     val localModelStatus: OnDeviceModelStatus = OnDeviceModelStatus.NOT_DOWNLOADED,
     val localModelLastMessage: String = "",
@@ -81,6 +83,7 @@ data class SettingsUiState(
     val isTestingLocalModel: Boolean = false,
     val isDownloadingLocalModel: Boolean = false,
     val isDeletingLocalModel: Boolean = false,
+    val isRefreshingLocalKnowledge: Boolean = false,
     val isBackingUpCloud: Boolean = false,
     val isRestoringCloud: Boolean = false,
     val isRefreshingDirectionWiki: Boolean = false,
@@ -111,6 +114,7 @@ class SettingsViewModel(
     private val aiServiceClient: AiServiceClient,
     private val onDeviceAiClient: OnDeviceAiClient,
     private val directionWikiCoordinator: DirectionWikiCoordinator,
+    private val localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState
@@ -149,6 +153,7 @@ class SettingsViewModel(
                         localModelPreferOnDevice = settings.preferOnDevice,
                         localModelPath = settings.localModelPath,
                         localModelDownloadedBytes = settings.downloadedBytes,
+                        localModelDownloadTargetBytes = settings.downloadTargetBytes,
                         localModelLastDownloadedAt = settings.lastDownloadedAt,
                         localModelStatus = settings.status,
                         localModelLastMessage = settings.lastMessage,
@@ -362,6 +367,7 @@ class SettingsViewModel(
                     preferOnDevice = state.localModelPreferOnDevice,
                     localModelPath = state.localModelPath,
                     downloadedBytes = state.localModelDownloadedBytes,
+                    downloadTargetBytes = state.localModelDownloadTargetBytes,
                     lastDownloadedAt = state.localModelLastDownloadedAt,
                     lastMessage = state.localModelLastMessage,
                     status = state.localModelStatus,
@@ -380,6 +386,7 @@ class SettingsViewModel(
             preferOnDevice = state.localModelPreferOnDevice,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
+            downloadTargetBytes = state.localModelDownloadTargetBytes,
             lastDownloadedAt = state.localModelLastDownloadedAt,
             lastMessage = state.localModelLastMessage,
             status = state.localModelStatus,
@@ -406,6 +413,7 @@ class SettingsViewModel(
             preferOnDevice = state.localModelPreferOnDevice,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
+            downloadTargetBytes = state.localModelDownloadTargetBytes,
             lastDownloadedAt = state.localModelLastDownloadedAt,
             lastMessage = state.localModelLastMessage,
             status = state.localModelStatus,
@@ -418,6 +426,24 @@ class SettingsViewModel(
         }
     }
 
+    fun refreshLocalKnowledge() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingLocalKnowledge = true) }
+            runCatching { localKnowledgeMaintenancePlanner.refreshNow() }
+                .onSuccess { result ->
+                    result.onSuccess {
+                        _events.emit(SettingsEvent.Message("已用本地模型维护当前知识层"))
+                    }.onFailure {
+                        _events.emit(SettingsEvent.Message(it.message ?: "本地知识维护失败"))
+                    }
+                }
+                .onFailure {
+                    _events.emit(SettingsEvent.Message(it.message ?: "本地知识维护失败"))
+                }
+            _uiState.update { it.copy(isRefreshingLocalKnowledge = false) }
+        }
+    }
+
     fun testLocalModel() {
         val state = _uiState.value
         val settings = OnDeviceModelSettings(
@@ -426,6 +452,7 @@ class SettingsViewModel(
             preferOnDevice = state.localModelPreferOnDevice,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
+            downloadTargetBytes = state.localModelDownloadTargetBytes,
             lastDownloadedAt = state.localModelLastDownloadedAt,
             lastMessage = state.localModelLastMessage,
             status = state.localModelStatus,
@@ -561,6 +588,7 @@ class SettingsViewModel(
             aiServiceClient: AiServiceClient,
             onDeviceAiClient: OnDeviceAiClient,
             directionWikiCoordinator: DirectionWikiCoordinator,
+            localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SettingsViewModel(
@@ -576,6 +604,7 @@ class SettingsViewModel(
                     aiServiceClient = aiServiceClient,
                     onDeviceAiClient = onDeviceAiClient,
                     directionWikiCoordinator = directionWikiCoordinator,
+                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                 )
             }
         }

@@ -39,6 +39,7 @@ class PreferencesOnDeviceModelSettingsRepository(
                 preferOnDevice = preferences[PREFER_ON_DEVICE] ?: false,
                 localModelPath = preferences[LOCAL_MODEL_PATH].orEmpty(),
                 downloadedBytes = preferences[DOWNLOADED_BYTES] ?: 0L,
+                downloadTargetBytes = preferences[DOWNLOAD_TARGET_BYTES] ?: OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES,
                 lastDownloadedAt = preferences[LAST_DOWNLOADED_AT] ?: 0L,
                 lastMessage = preferences[LAST_MESSAGE].orEmpty(),
                 status = preferences[STATUS]
@@ -54,34 +55,63 @@ class PreferencesOnDeviceModelSettingsRepository(
             preferences[MODEL_LABEL] = settings.modelLabel.trim().ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_LABEL }
             preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(settings.modelDownloadUrl)
             preferences[PREFER_ON_DEVICE] = settings.preferOnDevice
+            preferences[DOWNLOAD_TARGET_BYTES] = settings.downloadTargetBytes
         }
     }
 
-    override suspend fun markDownloading(downloadUrl: String) {
+    override suspend fun markDownloading(
+        downloadUrl: String,
+        downloadedBytes: Long,
+        targetBytes: Long,
+        message: String,
+    ) {
         context.onDeviceModelDataStore.edit { preferences ->
             preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(downloadUrl)
+            preferences[DOWNLOADED_BYTES] = downloadedBytes
+            preferences[DOWNLOAD_TARGET_BYTES] = targetBytes
             preferences[STATUS] = OnDeviceModelStatus.DOWNLOADING.name
-            preferences[LAST_MESSAGE] = "正在下载本地模型"
+            preferences[LAST_MESSAGE] = message
+        }
+    }
+
+    override suspend fun markDownloadProgress(
+        downloadedBytes: Long,
+        targetBytes: Long,
+        message: String,
+    ) {
+        context.onDeviceModelDataStore.edit { preferences ->
+            preferences[DOWNLOADED_BYTES] = downloadedBytes
+            preferences[DOWNLOAD_TARGET_BYTES] = targetBytes
+            preferences[STATUS] = OnDeviceModelStatus.DOWNLOADING.name
+            preferences[LAST_MESSAGE] = message
         }
     }
 
     override suspend fun markReady(
         localModelPath: String,
         downloadedBytes: Long,
+        targetBytes: Long,
         message: String,
         downloadedAt: Long,
     ) {
         context.onDeviceModelDataStore.edit { preferences ->
             preferences[LOCAL_MODEL_PATH] = localModelPath
             preferences[DOWNLOADED_BYTES] = downloadedBytes
+            preferences[DOWNLOAD_TARGET_BYTES] = targetBytes
             preferences[LAST_DOWNLOADED_AT] = downloadedAt
             preferences[STATUS] = OnDeviceModelStatus.READY.name
             preferences[LAST_MESSAGE] = message
         }
     }
 
-    override suspend fun markError(message: String) {
+    override suspend fun markError(
+        message: String,
+        downloadedBytes: Long?,
+        targetBytes: Long?,
+    ) {
         context.onDeviceModelDataStore.edit { preferences ->
+            downloadedBytes?.let { preferences[DOWNLOADED_BYTES] = it }
+            targetBytes?.let { preferences[DOWNLOAD_TARGET_BYTES] = it }
             preferences[STATUS] = OnDeviceModelStatus.ERROR.name
             preferences[LAST_MESSAGE] = message.trim()
         }
@@ -91,6 +121,7 @@ class PreferencesOnDeviceModelSettingsRepository(
         context.onDeviceModelDataStore.edit { preferences ->
             preferences.remove(LOCAL_MODEL_PATH)
             preferences.remove(DOWNLOADED_BYTES)
+            preferences[DOWNLOAD_TARGET_BYTES] = OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES
             preferences.remove(LAST_DOWNLOADED_AT)
             preferences[STATUS] = OnDeviceModelStatus.NOT_DOWNLOADED.name
             preferences[LAST_MESSAGE] = ""
@@ -104,6 +135,7 @@ class PreferencesOnDeviceModelSettingsRepository(
         val PREFER_ON_DEVICE = booleanPreferencesKey("prefer_on_device")
         val LOCAL_MODEL_PATH = stringPreferencesKey("local_model_path")
         val DOWNLOADED_BYTES = longPreferencesKey("downloaded_bytes")
+        val DOWNLOAD_TARGET_BYTES = longPreferencesKey("download_target_bytes")
         val LAST_DOWNLOADED_AT = longPreferencesKey("last_downloaded_at")
         val LAST_MESSAGE = stringPreferencesKey("last_message")
         val STATUS = stringPreferencesKey("status")
