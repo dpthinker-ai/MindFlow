@@ -56,6 +56,14 @@ data class SettingsUiState(
     val localModelLastDownloadedAt: Long = 0L,
     val localModelStatus: OnDeviceModelStatus = OnDeviceModelStatus.NOT_DOWNLOADED,
     val localModelLastMessage: String = "",
+    val localMaintenanceProgress: Float = 0f,
+    val localMaintenanceStep: String = "",
+    val localMaintenanceLastStartedAt: Long = 0L,
+    val localMaintenanceLastFinishedAt: Long = 0L,
+    val localMaintenanceLastSucceededAt: Long = 0L,
+    val localMaintenanceLastError: String = "",
+    val localMaintenanceLastTracePath: String = "",
+    val localMaintenanceLogDir: String = "",
     val cloudBaseUrl: String = CloudBackupSettings.DEFAULT_BASE_URL,
     val cloudUsername: String = "",
     val cloudPassword: String = "",
@@ -123,6 +131,11 @@ class SettingsViewModel(
     val events = _events.asSharedFlow()
 
     init {
+        _uiState.update {
+            it.copy(
+                localMaintenanceLogDir = localKnowledgeMaintenancePlanner.logDirectoryPath,
+            )
+        }
         viewModelScope.launch {
             aiSettingsRepository.settings.collectLatest { settings ->
                 _uiState.update {
@@ -205,6 +218,21 @@ class SettingsViewModel(
                         directionWikiDirectionCount = snapshot.directions.size,
                         directionWikiLastRefreshedAt = snapshot.lastGeneratedAt,
                         directionWikiRootPath = snapshot.rootPath,
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            localKnowledgeMaintenancePlanner.maintenanceStatus.collectLatest { status ->
+                _uiState.update {
+                    it.copy(
+                        localMaintenanceProgress = status.progress,
+                        localMaintenanceStep = status.step,
+                        localMaintenanceLastStartedAt = status.lastStartedAt,
+                        localMaintenanceLastFinishedAt = status.lastFinishedAt,
+                        localMaintenanceLastSucceededAt = status.lastSucceededAt,
+                        localMaintenanceLastError = status.lastError,
+                        localMaintenanceLastTracePath = status.lastTracePath,
                     )
                 }
             }
@@ -434,11 +462,27 @@ class SettingsViewModel(
                     result.onSuccess {
                         _events.emit(SettingsEvent.Message("已用本地模型维护当前知识层"))
                     }.onFailure {
-                        _events.emit(SettingsEvent.Message(it.message ?: "本地知识维护失败"))
+                        val tracePath = localKnowledgeMaintenancePlanner.maintenanceStatus.value.lastTracePath
+                        val message = buildString {
+                            append(it.message ?: "本地知识维护失败")
+                            if (tracePath.isNotBlank()) {
+                                append("，日志已导出到：")
+                                append(tracePath)
+                            }
+                        }
+                        _events.emit(SettingsEvent.Message(message))
                     }
                 }
                 .onFailure {
-                    _events.emit(SettingsEvent.Message(it.message ?: "本地知识维护失败"))
+                    val tracePath = localKnowledgeMaintenancePlanner.maintenanceStatus.value.lastTracePath
+                    val message = buildString {
+                        append(it.message ?: "本地知识维护失败")
+                        if (tracePath.isNotBlank()) {
+                            append("，日志已导出到：")
+                            append(tracePath)
+                        }
+                    }
+                    _events.emit(SettingsEvent.Message(message))
                 }
             _uiState.update { it.copy(isRefreshingLocalKnowledge = false) }
         }

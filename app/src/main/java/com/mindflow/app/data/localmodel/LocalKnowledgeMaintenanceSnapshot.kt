@@ -19,6 +19,20 @@ data class LocalKnowledgeGraphPulse(
     val missingLinkLabel: String = "",
 )
 
+data class LocalKnowledgeMaintenanceStatus(
+    val isRunning: Boolean = false,
+    val progress: Float = 0f,
+    val step: String = "",
+    val lastStartedAt: Long = 0L,
+    val lastFinishedAt: Long = 0L,
+    val lastSucceededAt: Long = 0L,
+    val lastError: String = "",
+    val lastTracePath: String = "",
+) {
+    val hasError: Boolean
+        get() = lastError.isNotBlank()
+}
+
 data class LocalKnowledgeMaintenanceSnapshot(
     val rootPath: String = "",
     val generatedAt: Long = 0L,

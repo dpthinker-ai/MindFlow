@@ -11,6 +11,8 @@ import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -33,6 +35,9 @@ class LocalKnowledgeMaintenancePlanner(
     private val onDeviceAiClient: OnDeviceAiClient,
     private val applicationScope: CoroutineScope,
 ) {
+    val logDirectoryPath: String
+        get() = externalLogDir.absolutePath
+
     private data class MaintainerSnippet(
         val title: String,
         val summary: String,
@@ -71,11 +76,21 @@ class LocalKnowledgeMaintenancePlanner(
     private val wikiRootDir = File(knowledgeLayerRoot, "wiki")
     private val rawRootDir = File(knowledgeLayerRoot, "raw")
     private val rootDir = File(wikiRootDir, "local-maintainer")
+    private val statusFile = File(rootDir, "status.json")
+    private val latestErrorFile = File(rootDir, "latest-error.md")
+    private val externalLogDir = File(
+        context.getExternalFilesDir(null) ?: context.filesDir,
+        "mindflow-logs",
+    )
+    private val externalStatusFile = File(externalLogDir, "local-maintainer-status.json")
+    private val externalLatestErrorFile = File(externalLogDir, "latest-local-maintainer-error.md")
     private val refreshIntervalMs = 18L * 60L * 60L * 1000L
     private val displayDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val displayTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     private val _snapshot = MutableStateFlow(loadSnapshotFromDisk())
     val snapshot: StateFlow<LocalKnowledgeMaintenanceSnapshot> = _snapshot
+    private val _maintenanceStatus = MutableStateFlow(loadStatusFromDisk())
+    val maintenanceStatus: StateFlow<LocalKnowledgeMaintenanceStatus> = _maintenanceStatus
 
     fun maintainInBackgroundIfNeeded() {
         val latest = File(rootDir, "latest.md")
@@ -87,12 +102,25 @@ class LocalKnowledgeMaintenancePlanner(
     }
 
     suspend fun refreshNow(): Result<Unit> = withContext(Dispatchers.Default) {
-        runCatching {
+        var currentStep = "准备本地维护"
+        val startedAt = System.currentTimeMillis()
+        try {
+            markMaintenanceStarted(startedAt)
+            currentStep = "检查本地模型状态"
+            updateMaintenanceProgress(currentStep, 0.06f)
             val settings = onDeviceModelSettingsRepository.getCurrent()
-            if (!settings.preferOnDevice || !settings.isReady) return@runCatching
+            if (!settings.preferOnDevice || !settings.isReady) {
+                val error = IllegalStateException("本地模型尚未就绪或没有开启本地优先。")
+                markMaintenanceFailure(error.message.orEmpty(), currentStep, "")
+                return@withContext Result.failure(error)
+            }
 
+            currentStep = "刷新知识层切片"
+            updateMaintenanceProgress(currentStep, 0.14f)
             runCatching { directionWikiCoordinator.refreshNow() }
 
+            currentStep = "收集本地材料"
+            updateMaintenanceProgress(currentStep, 0.28f)
             val notes = noteRepository.observeAllNotes().first().filter { !it.isArchived }
             val snapshot = directionWikiCoordinator.snapshot.value
             val zoneId = ZoneId.systemDefault()
@@ -109,25 +137,36 @@ class LocalKnowledgeMaintenancePlanner(
                 corpus.recentSources.isEmpty() &&
                 corpus.knowledgeObjectCount == 0
             ) {
-                return@runCatching
+                markMaintenanceSuccess("当前还没有足够的本地材料可维护。", generatedAt)
+                return@withContext Result.success(Unit)
             }
 
+            currentStep = "生成当前知识长相"
+            updateMaintenanceProgress(currentStep, 0.42f)
             val knowledgeShape = onDeviceAiClient.generateLocalKnowledgeShape(
                 settings = settings,
                 contextSummary = buildKnowledgeShapeContext(corpus),
             )
+            currentStep = "生成当前综合判断"
+            updateMaintenanceProgress(currentStep, 0.54f)
             val mainline = onDeviceAiClient.generateFlowMainline(
                 settings = settings,
                 contextSummary = buildCurrentJudgementContext(corpus),
             )
+            currentStep = "生成最近吸收结果"
+            updateMaintenanceProgress(currentStep, 0.66f)
             val absorption = onDeviceAiClient.generateFlowSettledKnowledge(
                 settings = settings,
                 contextSummary = buildRecentAbsorptionContext(corpus),
             )
+            currentStep = "生成今天新连接"
+            updateMaintenanceProgress(currentStep, 0.78f)
             val connection = onDeviceAiClient.generateFlowBreakthroughGap(
                 settings = settings,
                 contextSummary = buildNewConnectionContext(corpus),
             )
+            currentStep = "生成待厘清问题"
+            updateMaintenanceProgress(currentStep, 0.88f)
             val openQuestion = onDeviceAiClient.generateLocalOpenQuestion(
                 settings = settings,
                 contextSummary = buildOpenQuestionContext(corpus),
@@ -218,10 +257,25 @@ class LocalKnowledgeMaintenancePlanner(
                 updatedDirectionTitle = corpus.updatedDirectionTitle,
             )
 
+            currentStep = "写回本地知识层文件"
+            updateMaintenanceProgress(currentStep, 0.96f)
             withContext(Dispatchers.IO) {
                 writeMaintainerFiles(snapshot = localSnapshot, corpus = corpus)
             }
             _snapshot.value = localSnapshot
+            markMaintenanceSuccess("已完成本地知识层维护。", generatedAt)
+            Result.success(Unit)
+        } catch (throwable: Throwable) {
+            val tracePath = withContext(Dispatchers.IO) {
+                writeFailureTrace(step = currentStep, throwable = throwable)
+            }
+            markMaintenanceFailure(
+                message = throwable.message?.takeIf { it.isNotBlank() }
+                    ?: throwable::class.java.simpleName,
+                step = currentStep,
+                tracePath = tracePath,
+            )
+            Result.failure(throwable)
         }
     }
 
@@ -626,6 +680,149 @@ class LocalKnowledgeMaintenancePlanner(
             method != null -> "下一次可以先试着把“$method”迁到另一个方向。"
             else -> null
         }
+    }
+
+    private fun markMaintenanceStarted(startedAt: Long) {
+        updateMaintenanceStatus(
+            LocalKnowledgeMaintenanceStatus(
+                isRunning = true,
+                progress = 0f,
+                step = "准备本地维护",
+                lastStartedAt = startedAt,
+                lastFinishedAt = _maintenanceStatus.value.lastFinishedAt,
+                lastSucceededAt = _maintenanceStatus.value.lastSucceededAt,
+                lastError = "",
+                lastTracePath = "",
+            ),
+        )
+    }
+
+    private fun updateMaintenanceProgress(step: String, progress: Float) {
+        updateMaintenanceStatus(
+            _maintenanceStatus.value.copy(
+                isRunning = true,
+                progress = progress.coerceIn(0f, 1f),
+                step = step,
+                lastError = "",
+                lastTracePath = "",
+            ),
+        )
+    }
+
+    private fun markMaintenanceSuccess(message: String, finishedAt: Long) {
+        updateMaintenanceStatus(
+            _maintenanceStatus.value.copy(
+                isRunning = false,
+                progress = 1f,
+                step = message,
+                lastFinishedAt = finishedAt,
+                lastSucceededAt = finishedAt,
+                lastError = "",
+                lastTracePath = "",
+            ),
+        )
+    }
+
+    private fun markMaintenanceFailure(
+        message: String,
+        step: String,
+        tracePath: String,
+    ) {
+        updateMaintenanceStatus(
+            _maintenanceStatus.value.copy(
+                isRunning = false,
+                progress = _maintenanceStatus.value.progress.coerceAtLeast(0.01f),
+                step = step,
+                lastFinishedAt = System.currentTimeMillis(),
+                lastError = if (step.isNotBlank()) "$message（停在：$step）" else message,
+                lastTracePath = tracePath,
+            ),
+        )
+    }
+
+    private fun updateMaintenanceStatus(status: LocalKnowledgeMaintenanceStatus) {
+        _maintenanceStatus.value = status
+        rootDir.mkdirs()
+        externalLogDir.mkdirs()
+        val json = statusToJson(status).toString(2)
+        statusFile.writeText(json)
+        externalStatusFile.writeText(json)
+    }
+
+    private fun loadStatusFromDisk(): LocalKnowledgeMaintenanceStatus {
+        val sourceFile = when {
+            statusFile.exists() -> statusFile
+            externalStatusFile.exists() -> externalStatusFile
+            else -> return LocalKnowledgeMaintenanceStatus()
+        }
+        val persisted = runCatching {
+            val json = JSONObject(sourceFile.readText())
+            LocalKnowledgeMaintenanceStatus(
+                isRunning = json.optBoolean("isRunning"),
+                progress = json.optDouble("progress").toFloat(),
+                step = json.optString("step"),
+                lastStartedAt = json.optLong("lastStartedAt"),
+                lastFinishedAt = json.optLong("lastFinishedAt"),
+                lastSucceededAt = json.optLong("lastSucceededAt"),
+                lastError = json.optString("lastError"),
+                lastTracePath = json.optString("lastTracePath"),
+            )
+        }.getOrNull() ?: return LocalKnowledgeMaintenanceStatus()
+        return if (persisted.isRunning) {
+            persisted.copy(
+                isRunning = false,
+                progress = persisted.progress.coerceAtLeast(0.01f),
+                lastFinishedAt = System.currentTimeMillis(),
+                lastError = persisted.lastError.ifBlank {
+                    if (persisted.step.isNotBlank()) {
+                        "上次维护意外中断，停在：${persisted.step}"
+                    } else {
+                        "上次维护意外中断。"
+                    }
+                },
+            )
+        } else {
+            persisted
+        }
+    }
+
+    private fun statusToJson(status: LocalKnowledgeMaintenanceStatus): JSONObject = JSONObject().apply {
+        put("isRunning", status.isRunning)
+        put("progress", status.progress.toDouble())
+        put("step", status.step)
+        put("lastStartedAt", status.lastStartedAt)
+        put("lastFinishedAt", status.lastFinishedAt)
+        put("lastSucceededAt", status.lastSucceededAt)
+        put("lastError", status.lastError)
+        put("lastTracePath", status.lastTracePath)
+    }
+
+    private fun writeFailureTrace(step: String, throwable: Throwable): String {
+        rootDir.mkdirs()
+        externalLogDir.mkdirs()
+        val timestamp = System.currentTimeMillis()
+        val file = File(rootDir, "error-$timestamp.md")
+        val externalFile = File(externalLogDir, "local-maintainer-error-$timestamp.md")
+        val stackTrace = StringWriter().also { writer ->
+            throwable.printStackTrace(PrintWriter(writer))
+        }.toString()
+        val content = buildString {
+            appendLine("# Local Maintainer Error")
+            appendLine()
+            appendLine("- at: ${displayTime(timestamp)}")
+            appendLine("- step: ${step.ifBlank { "未知步骤" }}")
+            appendLine("- type: ${throwable::class.java.name}")
+            appendLine("- message: ${throwable.message.orEmpty()}")
+            appendLine()
+            appendLine("```")
+            appendLine(stackTrace.trim())
+            appendLine("```")
+        }
+        file.writeText(content)
+        latestErrorFile.writeText(content)
+        externalFile.writeText(content)
+        externalLatestErrorFile.writeText(content)
+        return externalFile.absolutePath
     }
 
     private fun buildPointLabels(

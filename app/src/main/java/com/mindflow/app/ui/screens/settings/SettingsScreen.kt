@@ -758,18 +758,76 @@ private fun LocalModelSettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isTestingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
                 )
-                if (uiState.isRefreshingLocalKnowledge) {
+                val hasMaintenanceProgress = uiState.isRefreshingLocalKnowledge ||
+                    uiState.localMaintenanceProgress > 0f ||
+                    uiState.localMaintenanceStep.isNotBlank()
+                if (hasMaintenanceProgress) {
                     LinearProgressIndicator(
+                        progress = {
+                            uiState.localMaintenanceProgress.takeIf { it > 0f } ?: 0.06f
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 2.dp),
                     )
                     Text(
-                        text = "正在用本地模型维护本地知识层，会读取最近材料、方向页、结论页和日志。",
+                        text = uiState.localMaintenanceStep.ifBlank {
+                            "正在用本地模型维护本地知识层，会读取最近材料、方向页、结论页和日志。"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSoft,
                     )
                 }
+                uiState.localMaintenanceLastStartedAt
+                    .takeIf { it > 0L }
+                    ?.let { startedAt ->
+                        Text(
+                            text = "最近开始维护 ${TimeFormatter.compact(startedAt)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                    }
+                uiState.localMaintenanceLastSucceededAt
+                    .takeIf { it > 0L }
+                    ?.let { succeededAt ->
+                        Text(
+                            text = "最近成功维护 ${TimeFormatter.compact(succeededAt)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                    }
+                uiState.localMaintenanceLastError
+                    .takeIf { it.isNotBlank() }
+                    ?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                uiState.localMaintenanceLastTracePath
+                    .takeIf { it.isNotBlank() }
+                    ?.let { path ->
+                        Text(
+                            text = "维护日志导出位置：$path",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                Text(
+                    text = "崩溃和维护日志目录：${uiState.localMaintenanceLogDir.ifBlank { "Android/data/com.mindflow.app/files/mindflow-logs/" }}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "如果本地整理闪退，请把这个目录里的 latest-crash.md 或 latest-local-maintainer-error.md 发给我。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
+                )
                 GhostActionButton(
                     text = if (uiState.isRefreshingLocalKnowledge) "维护中..." else "立即维护知识层",
                     onClick = onRefreshLocalKnowledge,
