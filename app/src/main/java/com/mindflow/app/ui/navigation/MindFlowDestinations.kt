@@ -15,7 +15,6 @@ object MindFlowDestinations {
     const val SEARCH = "search?status={status}&archivedOnly={archivedOnly}"
     const val SEARCH_STATUS_ARG = "status"
     const val SEARCH_ARCHIVED_ONLY_ARG = "archivedOnly"
-    const val STATS = "stats"
     const val SETTINGS = "settings"
     const val CAPTURE = "capture/{captureSeedId}"
     const val CAPTURE_ARG = "captureSeedId"

@@ -1,239 +1,164 @@
 # MindFlow Agent Guide
 
 ## Mission
-MindFlow is not just a note app. It is a personal AI action system for:
 
-- capturing fleeting ideas quickly
-- organizing thoughts into durable themes
-- turning ideas into next actions
-- improving work, health, and life outcomes over time
+MindFlow exists to help the user:
 
-## Product Principles
+- catch fragile ideas before they disappear
+- recognize recurring threads across time
+- create useful collisions between old and new thoughts
+- grow mature ideas into reusable assets
 
-1. Content first
-- Title and content always stay visually primary.
-- Metadata such as tags, folders, status, and timestamps should support the note, not overpower it.
+MindFlow is an `idea incubator`, not a generic AI note app.
 
-2. Fast capture
-- New input must be low friction.
-- The shortest path to writing should stay obvious on mobile.
+## Product invariants
 
-3. AI as augmentation
-- AI should assist with topic extraction, tags, folder classification, polishing, and insight generation.
-- AI should not silently override user edits.
-- User intent always wins over automation.
-- AI surfaces should feel like one product role, not many disconnected tools.
-- Preferred AI layering:
-  - record layer: AI 整理
-  - today layer: 今日聚焦
-  - direction layer: 当前判断 / 研究 / 执行
-  - rhythm layer: reminder cadence and follow-up
+### 1. Capture first
 
-4. Daily usefulness
-- Every major feature should improve one of these loops:
-- capture
-- recall
-- connect
-- act
+- the shortest path to saving a thought stays obvious
+- no mandatory structure before save
+- speed beats organization at the moment of capture
 
-5. Calm but premium design
-- The app should feel simple, direct, and polished.
-- Avoid clutter, over-explaining UI, and decorative noise.
+### 2. Incubation over inspection
 
-## Information Architecture
+The product should create motion:
 
-Core record fields:
+- rescue
+- expand
+- collide
+- verify
+- reuse
 
-- content
-- topic
-- tags
-- status
-- horizon
-- knowledgeTrust
-- folder
-- createdAt
-- updatedAt
-- archive state
+It should not feel like a dashboard to inspect.
 
-Primary surfaces:
+### 3. Local-first memory
 
-- Home: capture, overview, recent notes
-- Search: filters, tags, folders, result-first retrieval
-- Heatmap: contribution-style activity view
-- Editor: preview/edit, AI helpers, save flow
-- Settings: AI, cloud backup, import/export
+- the maintained local knowledge layer is the long-term memory source of truth
+- raw sources are append-only
+- app-facing summaries and insights should read from maintained memory when available
 
-## AI Boundaries
+### 4. Cloud is an upgrade path
 
-AI is allowed to:
+- local model use is the default
+- cloud use should be deliberate and legible
+- no silent cloud escalation for background maintenance
+- cloud-derived output must file back into local memory with provenance
 
-- extract topic
-- extract tags
-- classify folder
-- polish content
-- generate brief insight later
+### 5. One product role
 
-AI is not allowed to:
+AI should feel like one coherent system role:
 
-- overwrite manual topic, tags, or folder choices without explicit user action
-- hide failure states
-- block note saving
+- capture help
+- memory maintenance
+- thread detection
+- collision generation
+- asset shaping
 
-## Current Folder Model
+Not a bag of disconnected AI tricks.
 
-Fixed top-level folders:
+## User-facing object model
 
-- work
-- life
-- project
-- health
+Prefer product language built around these objects:
 
-Notes:
+- `Spark`
+- `Thread`
+- `Collision`
+- `Asset`
+- `Gap`
 
-- fitness is merged into health
-- uncategorized notes remain valid and should be recoverable
-- research trust should stay explicit when the user marks a note as external clue, to-be-validated, verified, or validated; knowledge-layer analysis should prefer this explicit state over pure heuristic guessing
+Do not lead with backend maintenance terms on user-facing surfaces.
 
-## Design Rules
+## Primary surfaces
 
-- Keep status bar readable on all light backgrounds.
-- Prefer folded controls over long filter walls.
-- Swipe actions should reveal buttons first, never perform destructive actions immediately.
-- Share visuals should stay elegant and minimal.
-- Secondary planning widgets such as time-bank data should stay supportive, never outrank capture.
-- AI naming should stay consistent and low-noise across Flow, thread, editor, and reminders.
-- AI results should reuse the same visual language across Flow, thread, and reminder copy: one source cue, one primary judgement, and a small set of supportive lines.
-- Flow should behave like a knowledge-compression layer, not an insight wall: one clear bet to push, one settled judgement to keep, and one new opening worth trying.
-- Flow's main bet must rotate across real candidate directions when the user asks for another one; a rewritten description of the same underlying direction does not count as a new bet.
-- When a local on-device maintainer is available, Flow should prefer maintained results over instant chat-like generation. The front surface should read like a local wiki maintainer report, not a temporary answer.
+- `记录`: fast capture
+- `Flow`: incubation feed
+- `查询`: directed thinking over maintained memory
+- `图谱`: shape, hubs, isolation, missing links
+- `设置`: model controls, sync, diagnostics
 
-## Engineering Rules
+## Flow rules
 
-- Keep local database as the runtime source of truth.
-- Markdown remains the readable interchange format for export, import, and cloud backup.
-- A future `MindFlow Knowledge Layer` should become the long-term knowledge asset layer:
-  - the app database stays the runtime source of truth for mobile interactions
-  - the knowledge layer stores persistent direction pages, concepts, evidence, verified conclusions, open questions, methods, experiments, and stage snapshots
-  - it should be maintained by background agent workflows, not by foreground mobile UI logic
-- Local on-device maintenance should follow the same pattern in miniature: ingest raw sources, update maintained pages, append index/log results, then let Flow and graph surfaces read the maintained outputs.
-- New automation should be low-frequency and battery-aware.
-- Release builds matter more than debug-only polish.
+Flow is not:
 
-## Knowledge Layer
+- an AI brief
+- a system status screen
+- a direction dashboard
+- a maintainer console
 
-MindFlow should not become a heavy Obsidian clone.
+Flow is:
 
-The intended long-term split is:
+- the home of the incubator
+- a readable feed of what is alive in the user's idea system
 
-- MindFlow App
-  - fast capture
-  - daily focus
-  - direction follow-up
-  - reminders and lightweight execution
-- MindFlow Knowledge Layer
-  - long-lived markdown knowledge base for your evolving knowledge system
-  - direction pages as one view, not the whole model
-  - concept pages
-  - evidence pages
-  - question pages
-  - method / experiment pages
-  - verified conclusions and stage snapshots
+Preferred section logic:
 
-Knowledge Layer principles:
+1. fragile spark worth rescuing
+2. recurring thread worth naming
+3. collision worth trying
+4. asset that has matured
+5. gap worth feeding
 
-- raw sources are append-only and never silently rewritten
-- the knowledge layer is a compounding artifact maintained by agents
-- app-facing summaries must be exported back into MindFlow in a lightweight structured form
-- current implementation starts with followed directions, but the long-term layer must extend to concepts, evidence, questions, methods, and experiments
-- if the knowledge layer is unavailable, the app must continue working with local summaries and planners
+Avoid labels like:
 
-## Near-Term Direction
+- `当前知识`
+- `库存`
+- `维护状态`
+- `方向资产`
 
-MindFlow should evolve toward:
+## Query rules
 
-- daily AI brief
-- weekly review
-- idea-to-action extraction
-- note linking and theme connection
-- long-term personal innovation memory
+Query should feel like a verb, not a chatbot.
 
-Current status:
+Preferred intents:
 
-- daily AI brief: implemented
-- weekly review: implemented
-- idea-to-action extraction: implemented
-- morning/evening reminder hooks: implemented
-- faster capture entry points: first version implemented
-- thread follow and curation: first version implemented
-- voice capture in editor: first version implemented
-- thread focus and lightweight promotion: first version implemented
-- external voice capture entry: first version implemented
-- widget-level voice capture: first version implemented
-- external research enrichment: first version implemented
-- stale note follow-up prompts: first version implemented
-- thread-level weekly review: first version implemented
-- reminder main tap deep link to Flow: implemented
-- reminder main tap contextual note landing: implemented
-- richer stale-note reasoning: first version implemented
-- thread research structure and source handling: first version implemented
-- thread-level action refinement: first version implemented
-- research result capture back into threads: first version implemented
-- thread-level review/action capture back into notes: first version implemented
-- notification quick capture refinement: first version implemented
-- richer stale-note reasoning with AI when useful: first version implemented
-- thread-level follow-up actions for reminders: first version implemented
-- thread-context capture persistence: first version implemented
-- reminder-to-flow contextual focus: first version implemented
-- thread action summaries inside Flow: first version implemented
-- thread-level external research memory: first version implemented
-- thread-level research-to-action summaries: first version implemented
-- widget-level capture polish: first version implemented
-- thread follow-up summaries outside the thread page: first version implemented
-- thread research clustering: first version implemented
-- richer note-to-thread capture hints: first version implemented
-- richer research surfaces outside the thread page: first version implemented
-- grouped validation loops for research themes: first version implemented
-- lighter Flow-to-thread action handoff: first version implemented
-- lighter capture-back from research loops: first version implemented
-- thread-aware research-to-action carry-over in reminders: first version implemented
-- richer capture-back from clustered research: first version implemented
-- thread-aware research follow-up summaries: first version implemented
-- reminder summaries that explain why a validation step matters now: first version implemented
-- research-derived prompts that bridge from validation back into execution: first version implemented
-- shared thread execution summaries across Flow / thread / reminders: first version implemented
-- AI external perspective snapshots for directions: first version implemented
-- thread page restructured into judgement / research / execution: first version implemented
-- note horizons for short / medium / long follow-up: implemented
-- direction-stage execution rhythm across Flow / thread / reminders: first version implemented
-- home time bank planning card: first version implemented
-- thread-level stage history: first version implemented
-- research evidence stratification inside thread workspace: first version implemented
-- horizon-aware reminder cadence: first version implemented
-- direction assets surfaced from verified and grounded research: first version implemented
-- local Knowledge Layer generation, raw-source ingest, and app-facing asset reflow: first version implemented as a direction-focused first slice
-- richer knowledge grounding with evidence stratification, concept pages, and question / method / experiment pages: first version implemented in the direction-focused first slice
-- first knowledge-health lint summaries and app-facing health lines: implemented in the direction-focused first slice
-- conclusion pages and conclusion file-back into Flow / thread: first version implemented in the direction-focused first slice
-- review syntheses now file back into the knowledge layer as raw sources, and lint begins checking contradiction / stale-conclusion / weak-handoff issues
-- concept / question / method / experiment pages now start maintaining cross-links instead of staying as isolated slices
-- knowledge-layer lint now also exports one actionable maintenance line so Flow / thread can show what to补 next
-- longer-lived direction stage and continuity summaries across Flow / thread / reminders: first version implemented
-- direction-level execution summaries that feel more continuous across Flow / thread / reminders: first version implemented
-- durable snapshot history exported back into Flow / thread: first version implemented in the direction-focused first slice
-- knowledge-layer lint now also points out the weakest maintenance dimension so Flow / thread can show not only what to补, but which knowledge dimension is currently thinnest
-- knowledge-layer lint should keep getting more concrete: after target, source, and weakest dimension, it should also identify the specific page or knowledge object that deserves attention first
-- synthesized reviews, open questions, validation loops, and next-step handoffs now also file back into question / experiment / method objects, not only into direction conclusion pages
-- research syntheses such as contrarian questions and external hypotheses should also be promoted into durable question / experiment objects instead of staying as one-shot thread hints
-- evidence pages should behave like first-class knowledge objects: linked to concepts, linked to related questions / methods / experiments, and able to carry maintenance guidance
-- conclusion pages should also be treated as maintained knowledge objects, with links back into concepts and reusable question / method / experiment objects
-- lint should increasingly speak in terms of concrete maintenance targets such as evidence pages, conclusion pages, and reusable knowledge objects, not only abstract missing-material advice
-- app-facing lint reflow should eventually tell the user both what page/object to maintain and what kind of new source to add next
-- app-facing lint should also clarify which dimension is weakest right now, such as evidence, question definition, method accumulation, conclusion freshness, recent progress, or object coverage
-- reusable knowledge objects should keep linking back to the direction, conclusion, and evidence pages they belong to; otherwise the knowledge layer drifts back into isolated markdown slices
-- knowledge-layer maintenance guidance should no longer stop at diagnosis: Flow / thread can now turn that guidance into seeded `补材料` captures with the right page/object/source context prefilled
-- search should increasingly become a knowledge query surface, not only a note retriever; the first implemented slice now surfaces matching directions, concepts, questions, methods, experiments, conclusions, and evidence before raw note hits
+- `继续养`
+- `撞一下`
+- `反驳它`
+- `帮我抽象`
+- `帮我拉成方案`
+- `帮我找证据`
 
-Next strongest direction:
+Good query results should be promotable into durable memory.
 
-- stronger external research grounding beyond the current local knowledge-layer exports
-- broader maintain + file-back passes that keep writing useful syntheses back into the knowledge layer
+## Graph rules
+
+The graph should explain pressure and shape, not merely draw topology.
+
+Prefer:
+
+- hubs
+- isolated nodes
+- densifying clusters
+- missing links
+
+Do not default to a raw global note dump.
+
+## Engineering rules
+
+- keep the local database as the runtime interaction layer
+- keep the maintained markdown/wiki layer as the compounding long-term memory layer
+- local on-device maintenance should ingest sources, update maintained pages, append index/log state, and export readable summaries back to the app
+- use `LiteRT-LM` for the on-device Gemma 4 path
+- local build and release verification require `JDK 21`
+- new automation should be low-frequency and battery-aware
+- release behavior matters more than debug-only polish
+
+## Trust boundary
+
+When implementing AI flows, preserve these rules:
+
+- raw capture stays local by default
+- background maintenance stays local by default
+- cloud use must be explicit or strongly implied by the user's chosen action
+- users should be able to understand what left the device and why
+- any cloud-assisted result worth keeping must write back locally
+
+## Anti-patterns
+
+Do not steer the product back toward:
+
+- daily AI brief as the primary value proposition
+- direction-first framing for every screen
+- dashboard language at the top of Flow
+- model selection UI in the main workflow
+- cloud output that lives only in chat history

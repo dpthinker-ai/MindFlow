@@ -3,10 +3,9 @@ package com.mindflow.app.ui.screens.search
 import android.graphics.Color as AndroidColor
 import android.widget.Toast
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,11 +16,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -35,47 +40,48 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.SearchFilters
 import com.mindflow.app.data.model.TimeRange
+import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.share.NoteShareCardGenerator
 import com.mindflow.app.share.NoteShareStyle
 import com.mindflow.app.share.shareNoteCard
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
+import com.mindflow.app.ui.components.GhostActionButton
+import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
-import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.noteStatusAccent
+import com.mindflow.app.ui.navigation.CaptureSeed
+import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.BorderSoft
+import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoFixHigh
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.UnfoldLess
+import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import com.mindflow.app.data.organize.BackgroundFolderOrganizer
-import com.mindflow.app.ui.components.GhostActionButton
-import com.mindflow.app.ui.navigation.MindFlowDestinations
-import com.mindflow.app.util.TimeFormatter
 
 @Composable
 fun SearchRoute(
@@ -84,6 +90,8 @@ fun SearchRoute(
     initialStatus: NoteStatus?,
     initialArchivedOnly: Boolean,
     onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(
@@ -100,6 +108,15 @@ fun SearchRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
     var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
+    var legacySearchExpanded by rememberSaveable {
+        mutableStateOf(initialStatus != null || initialArchivedOnly)
+    }
+
+    LaunchedEffect(uiState.filters) {
+        if (uiState.filters.hasActiveConstraints()) {
+            legacySearchExpanded = true
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -133,13 +150,18 @@ fun SearchRoute(
         uiState = uiState,
         hiddenNoteIds = pendingDeletedIds,
         snackbarHostState = snackbarHostState,
+        legacySearchExpanded = legacySearchExpanded,
+        onToggleLegacySearch = { legacySearchExpanded = !legacySearchExpanded },
         onQueryChange = viewModel::updateQuery,
         onFolderChange = viewModel::updateFolder,
         onTagChange = viewModel::updateTag,
         onStatusChange = viewModel::updateStatus,
         onTimeRangeChange = viewModel::updateTimeRange,
         onToggleArchived = viewModel::toggleArchived,
+        onSelectAction = viewModel::selectAction,
         onOpenNote = onOpenNote,
+        onOpenThread = onOpenThread,
+        onCreateCapture = onCreateCapture,
         onClassifyPendingFolders = viewModel::classifyPendingFolders,
         onDeleteNote = { note ->
             scope.launch {
@@ -166,22 +188,29 @@ private fun SearchScreen(
     uiState: SearchUiState,
     hiddenNoteIds: Set<Long>,
     snackbarHostState: SnackbarHostState,
+    legacySearchExpanded: Boolean,
+    onToggleLegacySearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onFolderChange: (String?) -> Unit,
     onTagChange: (String?) -> Unit,
     onStatusChange: (NoteStatus?) -> Unit,
     onTimeRangeChange: (TimeRange) -> Unit,
     onToggleArchived: () -> Unit,
+    onSelectAction: (QueryAction) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
     onClassifyPendingFolders: () -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
     var showAllTags by remember(uiState.availableTags) { mutableStateOf(false) }
-    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
     var foldersExpanded by rememberSaveable { mutableStateOf(false) }
     val visibleTags = remember(uiState.availableTags, showAllTags) {
         if (showAllTags) uiState.availableTags else uiState.availableTags.take(6)
+    }
+    val visibleResults = remember(uiState.results, hiddenNoteIds) {
+        uiState.results.filterNot { it.id in hiddenNoteIds }
     }
     val activeFilterLabels = remember(uiState) {
         buildList {
@@ -206,14 +235,12 @@ private fun SearchScreen(
     }
     val filterSummary = remember(activeFilterLabels) {
         if (activeFilterLabels.isEmpty()) {
-            "按关键词、状态、标签或时间筛选"
+            "按关键词、状态、标签或时间回看记录"
         } else {
             activeFilterLabels.joinToString(" · ")
         }
     }
-    val visibleResults = remember(uiState.results, hiddenNoteIds) {
-        uiState.results.filterNot { it.id in hiddenNoteIds }
-    }
+
     ScreenBackground {
         Column(
             modifier = Modifier
@@ -231,162 +258,90 @@ private fun SearchScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    PanelCard {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text(
-                                    text = "搜索",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = "${uiState.results.size} 条匹配",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                )
-                            }
-                            IconPillButton(
-                                icon = if (filtersExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.Tune,
-                                contentDescription = if (filtersExpanded) "收起筛选" else "展开筛选",
-                                onClick = { filtersExpanded = !filtersExpanded },
-                                accent = AccentBlue,
-                            )
-                        }
-                        OutlinedTextField(
-                            value = uiState.filters.query,
-                            onValueChange = onQueryChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("关键词") },
-                            placeholder = { Text("搜主题或正文") },
-                            shape = MaterialTheme.shapes.medium,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = WhiteGlass,
-                                unfocusedContainerColor = WhiteGlass,
-                            ),
-                        )
-
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = filterSummary,
+                            text = "查询",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "先决定想对想法做什么，再选对象。关键词搜索放到后面。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
+                    }
+                }
 
-                        if (filtersExpanded) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                FilterSectionLabel(text = "状态")
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    FilterChip(
-                                        selected = uiState.filters.status == null,
-                                        onClick = { onStatusChange(null) },
-                                        label = { Text("全部", maxLines = 1) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Accent.copy(alpha = 0.14f),
-                                            selectedLabelColor = Accent,
-                                        ),
-                                    )
-                                    NoteStatus.entries.forEach { status ->
-                                        FilterChip(
-                                            selected = uiState.filters.status == status,
-                                            onClick = { onStatusChange(status) },
-                                            label = { Text(status.label, maxLines = 1) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
-                                                selectedLabelColor = noteStatusAccent(status),
-                                            ),
-                                        )
-                                    }
-                                }
-
-                                FilterSectionLabel(
-                                    text = if (showAllTags || uiState.availableTags.size <= 6) "标签" else "标签 · 最近 6 个",
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "这次想怎么问",
+                            headline = uiState.selectedAction.title,
+                        )
+                        Text(
+                            text = uiState.selectedAction.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
+                        Text(
+                            text = uiState.focusLine,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AccentBlue,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            QueryAction.entries.forEach { action ->
+                                FilterChip(
+                                    selected = uiState.selectedAction == action,
+                                    onClick = { onSelectAction(action) },
+                                    label = { Text(action.label, maxLines = 1) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
+                                        selectedLabelColor = AccentBlue,
+                                    ),
                                 )
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    FilterChip(
-                                        selected = uiState.filters.tag == null,
-                                        onClick = { onTagChange(null) },
-                                        label = { Text("全部标签", maxLines = 1) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                            selectedLabelColor = AccentBlue,
-                                        ),
-                                    )
-                                    visibleTags.forEach { tag ->
-                                        FilterChip(
-                                            selected = uiState.filters.tag == tag,
-                                            onClick = { onTagChange(tag) },
-                                            label = { Text(tag, maxLines = 1) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = Accent.copy(alpha = 0.14f),
-                                                selectedLabelColor = Accent,
-                                            ),
-                                        )
-                                    }
-                                }
-                                if (uiState.availableTags.size > 6) {
-                                    Text(
-                                        text = if (showAllTags) "收起标签" else "更多标签",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = AccentBlue,
-                                        modifier = Modifier
-                                            .padding(top = 2.dp)
-                                            .clickable { showAllTags = !showAllTags },
-                                    )
-                                }
-
-                                FilterSectionLabel(text = "时间")
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    TimeRange.entries.forEach { timeRange ->
-                                        FilterChip(
-                                            selected = uiState.filters.timeRange == timeRange,
-                                            onClick = { onTimeRangeChange(timeRange) },
-                                            label = { Text(timeRange.label, maxLines = 1) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                                selectedLabelColor = AccentBlue,
-                                            ),
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    color = WhiteGlass.copy(alpha = 0.9f),
-                                    shape = MaterialTheme.shapes.medium,
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    ) {
-                                        Text("含归档", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                        Switch(
-                                            checked = uiState.filters.includeArchived || uiState.filters.archivedOnly,
-                                            onCheckedChange = { onToggleArchived() },
-                                        )
-                                    }
-                                }
                             }
+                        }
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "推荐对象",
+                            headline = if (uiState.suggestions.isEmpty()) "先从空白页开始" else "${uiState.suggestions.size} 个入口",
+                        )
+                        if (uiState.suggestions.isEmpty()) {
+                            EmptyState(
+                                title = "现在还没有合适对象",
+                                description = uiState.selectedAction.emptyState,
+                            )
+                            GhostActionButton(
+                                text = "直接开始",
+                                onClick = { onCreateCapture(uiState.selectedAction.defaultCaptureSeed()) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            uiState.suggestions.forEach { suggestion ->
+                                QuerySuggestionCard(
+                                    suggestion = suggestion,
+                                    onOpen = {
+                                        when {
+                                            suggestion.noteId != null -> onOpenNote(suggestion.noteId)
+                                            suggestion.threadKey != null -> onOpenThread(suggestion.threadKey)
+                                            else -> onCreateCapture(suggestion.toCaptureSeed())
+                                        }
+                                    },
+                                    onStart = { onCreateCapture(suggestion.toCaptureSeed()) },
+                                )
+                            }
+                            GhostActionButton(
+                                text = "从空白页开始",
+                                onClick = { onCreateCapture(uiState.selectedAction.defaultCaptureSeed()) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                 }
@@ -403,117 +358,272 @@ private fun SearchScreen(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(
-                                    text = "文件夹",
+                                    text = "搜索记录",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    text = if (uiState.uncategorizedCount > 0) {
-                                        "${uiState.folderCounts.values.count { it > 0 }} 类 · 未分类 ${uiState.uncategorizedCount}"
-                                    } else {
-                                        "${uiState.folderCounts.values.count { it > 0 }} 类"
-                                    },
+                                    text = "${visibleResults.size} 条匹配 · $filterSummary",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSoft,
                                 )
                             }
                             IconPillButton(
-                                icon = if (foldersExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.FolderOpen,
-                                contentDescription = if (foldersExpanded) "收起文件夹" else "展开文件夹",
-                                onClick = { foldersExpanded = !foldersExpanded },
+                                icon = if (legacySearchExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.Search,
+                                contentDescription = if (legacySearchExpanded) "收起搜索" else "展开搜索",
+                                onClick = onToggleLegacySearch,
                                 accent = AccentBlue,
                             )
                         }
-
                         Text(
-                            text = if (uiState.lastAutoOrganizedAt > 0L) {
-                                "最近整理 ${TimeFormatter.compact(uiState.lastAutoOrganizedAt)} · 归类 ${uiState.lastAutoOrganizedCount} 条"
-                            } else {
-                                "按文件夹筛选记录；未分类内容可手动整理。"
-                            },
+                            text = "需要精确回看旧记录、按状态筛选或整理未分类内容时，再展开这里。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
 
-                        if (foldersExpanded) {
+                        if (legacySearchExpanded) {
+                            OutlinedTextField(
+                                value = uiState.filters.query,
+                                onValueChange = onQueryChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("关键词") },
+                                placeholder = { Text("搜主题或正文") },
+                                shape = MaterialTheme.shapes.medium,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = WhiteGlass,
+                                    unfocusedContainerColor = WhiteGlass,
+                                ),
+                            )
+
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 FilterChip(
-                                    selected = uiState.filters.folderKey == null,
-                                    onClick = { onFolderChange(null) },
-                                    label = { Text("全部文件夹", maxLines = 1) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                        selectedLabelColor = AccentBlue,
-                                    ),
-                                )
-                                uiState.availableFolders.forEach { folder ->
-                                    val accent = Color(AndroidColor.parseColor(folder.colorHex))
-                                    val count = uiState.folderCounts[folder.key] ?: 0
-                                    FilterChip(
-                                        selected = uiState.filters.folderKey == folder.key,
-                                        onClick = { onFolderChange(folder.key) },
-                                        label = { Text("${folder.name} $count", maxLines = 1) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = accent.copy(alpha = 0.14f),
-                                            selectedLabelColor = accent,
-                                        ),
-                                    )
-                                }
-                                FilterChip(
-                                    selected = uiState.filters.folderKey == MindFlowDestinations.UNCATEGORIZED_FOLDER,
-                                    onClick = { onFolderChange(MindFlowDestinations.UNCATEGORIZED_FOLDER) },
-                                    label = { Text("未分类 ${uiState.uncategorizedCount}", maxLines = 1) },
+                                    selected = uiState.filters.status == null,
+                                    onClick = { onStatusChange(null) },
+                                    label = { Text("全部状态", maxLines = 1) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Accent.copy(alpha = 0.14f),
                                         selectedLabelColor = Accent,
                                     ),
                                 )
+                                NoteStatus.entries.forEach { status ->
+                                    FilterChip(
+                                        selected = uiState.filters.status == status,
+                                        onClick = { onStatusChange(status) },
+                                        label = { Text(status.label, maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
+                                            selectedLabelColor = noteStatusAccent(status),
+                                        ),
+                                    )
+                                }
                             }
 
-                            if (uiState.uncategorizedCount > 0) {
-                                GhostActionButton(
-                                    text = if (uiState.pendingFolderClassificationCount > 0) {
-                                        "自动归类未分类记录"
-                                    } else {
-                                        "尝试整理未分类记录"
-                                    },
-                                    onClick = onClassifyPendingFolders,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    icon = Icons.Outlined.AutoFixHigh,
+                            FilterSectionLabel(
+                                text = if (showAllTags || uiState.availableTags.size <= 6) "标签" else "标签 · 最近 6 个",
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip(
+                                    selected = uiState.filters.tag == null,
+                                    onClick = { onTagChange(null) },
+                                    label = { Text("全部标签", maxLines = 1) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
+                                        selectedLabelColor = AccentBlue,
+                                    ),
                                 )
+                                visibleTags.forEach { tag ->
+                                    FilterChip(
+                                        selected = uiState.filters.tag == tag,
+                                        onClick = { onTagChange(tag) },
+                                        label = { Text(tag, maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Accent.copy(alpha = 0.14f),
+                                            selectedLabelColor = Accent,
+                                        ),
+                                    )
+                                }
+                            }
+                            if (uiState.availableTags.size > 6) {
+                                Text(
+                                    text = if (showAllTags) "收起标签" else "更多标签",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AccentBlue,
+                                    modifier = Modifier.clickable { showAllTags = !showAllTags },
+                                )
+                            }
+
+                            FilterSectionLabel(text = "时间")
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                TimeRange.entries.forEach { timeRange ->
+                                    FilterChip(
+                                        selected = uiState.filters.timeRange == timeRange,
+                                        onClick = { onTimeRangeChange(timeRange) },
+                                        label = { Text(timeRange.label, maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
+                                            selectedLabelColor = AccentBlue,
+                                        ),
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                color = WhiteGlass.copy(alpha = 0.9f),
+                                shape = MaterialTheme.shapes.medium,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                ) {
+                                    Text("含归档", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                    Switch(
+                                        checked = uiState.filters.includeArchived || uiState.filters.archivedOnly,
+                                        onCheckedChange = { onToggleArchived() },
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                if (visibleResults.isNotEmpty()) {
+                if (legacySearchExpanded) {
                     item {
-                        SectionHeader(
-                            title = "结果",
-                            headline = "${visibleResults.size} 条",
-                        )
-                    }
-                }
+                        PanelCard {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        text = "文件夹",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = if (uiState.uncategorizedCount > 0) {
+                                            "${uiState.folderCounts.values.count { it > 0 }} 类 · 未分类 ${uiState.uncategorizedCount}"
+                                        } else {
+                                            "${uiState.folderCounts.values.count { it > 0 }} 类"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSoft,
+                                    )
+                                }
+                                IconPillButton(
+                                    icon = if (foldersExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.FolderOpen,
+                                    contentDescription = if (foldersExpanded) "收起文件夹" else "展开文件夹",
+                                    onClick = { foldersExpanded = !foldersExpanded },
+                                    accent = AccentBlue,
+                                )
+                            }
 
-                if (visibleResults.isEmpty()) {
-                    item {
-                        EmptyState(
-                            title = "没有匹配结果",
-                            description = "试试更短的关键词，或者放宽状态与时间窗口。",
-                        )
+                            Text(
+                                text = if (uiState.lastAutoOrganizedAt > 0L) {
+                                    "最近整理 ${TimeFormatter.compact(uiState.lastAutoOrganizedAt)} · 归类 ${uiState.lastAutoOrganizedCount} 条"
+                                } else {
+                                    "按文件夹筛选记录；未分类内容可手动整理。"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+
+                            if (foldersExpanded) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    FilterChip(
+                                        selected = uiState.filters.folderKey == null,
+                                        onClick = { onFolderChange(null) },
+                                        label = { Text("全部文件夹", maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
+                                            selectedLabelColor = AccentBlue,
+                                        ),
+                                    )
+                                    uiState.availableFolders.forEach { folder ->
+                                        val accent = Color(AndroidColor.parseColor(folder.colorHex))
+                                        val count = uiState.folderCounts[folder.key] ?: 0
+                                        FilterChip(
+                                            selected = uiState.filters.folderKey == folder.key,
+                                            onClick = { onFolderChange(folder.key) },
+                                            label = { Text("${folder.name} $count", maxLines = 1) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = accent.copy(alpha = 0.14f),
+                                                selectedLabelColor = accent,
+                                            ),
+                                        )
+                                    }
+                                    FilterChip(
+                                        selected = uiState.filters.folderKey == MindFlowDestinations.UNCATEGORIZED_FOLDER,
+                                        onClick = { onFolderChange(MindFlowDestinations.UNCATEGORIZED_FOLDER) },
+                                        label = { Text("未分类 ${uiState.uncategorizedCount}", maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Accent.copy(alpha = 0.14f),
+                                            selectedLabelColor = Accent,
+                                        ),
+                                    )
+                                }
+
+                                if (uiState.uncategorizedCount > 0) {
+                                    GhostActionButton(
+                                        text = if (uiState.pendingFolderClassificationCount > 0) {
+                                            "自动归类未分类记录"
+                                        } else {
+                                            "尝试整理未分类记录"
+                                        },
+                                        onClick = onClassifyPendingFolders,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        icon = Icons.Outlined.AutoFixHigh,
+                                    )
+                                }
+                            }
+                        }
                     }
-                } else {
-                    items(visibleResults, key = { it.id }) { note ->
-                        SwipeRevealNoteCard(
-                            note = note,
-                            onOpen = { onOpenNote(note.id) },
-                            onToggleArchive = null,
-                            onShare = { onShareNote(note) },
-                            onDelete = { onDeleteNote(note) },
-                        )
+
+                    if (visibleResults.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "搜索结果",
+                                headline = "${visibleResults.size} 条",
+                            )
+                        }
+                    }
+
+                    if (visibleResults.isEmpty()) {
+                        item {
+                            EmptyState(
+                                title = "没有匹配结果",
+                                description = "试试更短的关键词，或者放宽状态与时间窗口。",
+                            )
+                        }
+                    } else {
+                        items(visibleResults, key = { it.id }) { note ->
+                            SwipeRevealNoteCard(
+                                note = note,
+                                onOpen = { onOpenNote(note.id) },
+                                onToggleArchive = null,
+                                onShare = { onShareNote(note) },
+                                onDelete = { onDeleteNote(note) },
+                            )
+                        }
                     }
                 }
             }
@@ -529,6 +639,65 @@ private fun SearchScreen(
 }
 
 @Composable
+private fun QuerySuggestionCard(
+    suggestion: QuerySuggestion,
+    onOpen: () -> Unit,
+    onStart: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen),
+        color = WhiteGlass.copy(alpha = 0.86f),
+        shape = MaterialTheme.shapes.medium,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = suggestion.support,
+                style = MaterialTheme.typography.labelLarge,
+                color = AccentBlue,
+            )
+            Text(
+                text = suggestion.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = suggestion.detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                GhostActionButton(
+                    text = "打开对象",
+                    onClick = onOpen,
+                    modifier = Modifier.weight(1f),
+                )
+                GhostActionButton(
+                    text = suggestion.actionLabel,
+                    onClick = onStart,
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Tune,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun FilterSectionLabel(
     text: String,
 ) {
@@ -539,3 +708,41 @@ private fun FilterSectionLabel(
         modifier = Modifier.heightIn(min = 20.dp),
     )
 }
+
+private fun SearchFilters.hasActiveConstraints(): Boolean =
+    query.isNotBlank() ||
+        tag != null ||
+        folderKey != null ||
+        status != null ||
+        timeRange != TimeRange.ALL ||
+        includeArchived ||
+        archivedOnly
+
+private fun QuerySuggestion.toCaptureSeed(): CaptureSeed =
+    CaptureSeed(
+        initialTopic = captureTopic,
+        initialContent = captureContent,
+        initialFolderKey = captureFolderKey,
+        initialTags = captureTags,
+        initialKnowledgeTrust = captureKnowledgeTrust,
+    )
+
+private fun QueryAction.defaultCaptureSeed(): CaptureSeed =
+    CaptureSeed(
+        initialTopic = when (this) {
+            QueryAction.NURTURE -> "继续养这颗火花"
+            QueryAction.COLLIDE -> "让两个点撞一下"
+            QueryAction.CHALLENGE -> "反驳一个判断"
+            QueryAction.ABSTRACT -> "抽出一个模式"
+            QueryAction.PLAN -> "拉成方案"
+            QueryAction.EVIDENCE -> "补一条证据"
+        },
+        initialContent = buildString {
+            appendLine(title)
+            appendLine(description)
+            appendLine()
+            appendLine("- 这次想处理的对象：")
+            appendLine("- 为什么现在做：")
+            appendLine("- 期望产出的结果：")
+        },
+    )

@@ -16,7 +16,7 @@ import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
-import com.mindflow.app.data.localmodel.MediaPipeOnDeviceAiClient
+import com.mindflow.app.data.localmodel.LiteRtLmOnDeviceAiClient
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
@@ -110,7 +110,7 @@ class AppContainer(context: Context) {
     )
 
     val aiServiceClient = AiServiceClient()
-    val onDeviceAiClient: OnDeviceAiClient = MediaPipeOnDeviceAiClient(
+    val onDeviceAiClient: OnDeviceAiClient = LiteRtLmOnDeviceAiClient(
         context = context.applicationContext,
     )
     val onDeviceModelManager = OnDeviceModelManager(

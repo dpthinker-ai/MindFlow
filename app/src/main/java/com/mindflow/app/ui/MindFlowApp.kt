@@ -79,7 +79,6 @@ import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
 import com.mindflow.app.ui.screens.settings.SettingsRoute
-import com.mindflow.app.ui.screens.stats.StatsRoute
 import com.mindflow.app.ui.screens.thread.ThreadRoute
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
@@ -182,13 +181,14 @@ fun MindFlowApp(
     val topLevelDestinations = listOf(
         TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.SpaceDashboard),
         TopLevelDestination(MindFlowDestinations.FLOW_BASE, "Flow", Icons.Outlined.AutoAwesome),
-        TopLevelDestination(MindFlowDestinations.SEARCH_BASE, "查找", Icons.Outlined.Search),
-        TopLevelDestination(MindFlowDestinations.STATS, "统计", Icons.Outlined.QueryStats),
+        TopLevelDestination(MindFlowDestinations.SEARCH_BASE, "查询", Icons.Outlined.Search),
+        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.QueryStats),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
     )
 
     val normalizedRoute = when {
         currentRoute == null -> null
+        currentRoute.startsWith(MindFlowDestinations.FLOW_GRAPH) -> MindFlowDestinations.FLOW_GRAPH
         currentRoute.startsWith(MindFlowDestinations.FLOW_BASE) -> MindFlowDestinations.FLOW_BASE
         currentRoute.startsWith(MindFlowDestinations.SEARCH_BASE) -> MindFlowDestinations.SEARCH_BASE
         else -> currentRoute
@@ -198,7 +198,7 @@ fun MindFlowApp(
         MindFlowDestinations.FEED,
         MindFlowDestinations.FLOW_BASE,
         MindFlowDestinations.SEARCH_BASE,
-        MindFlowDestinations.STATS,
+        MindFlowDestinations.FLOW_GRAPH,
         MindFlowDestinations.SETTINGS,
     )
 
@@ -325,13 +325,8 @@ fun MindFlowApp(
                     initialStatus = initialStatus,
                     initialArchivedOnly = archivedOnly,
                     onOpenNote = openNoteSafely,
-                )
-            }
-
-            composable(MindFlowDestinations.STATS) {
-                StatsRoute(
-                    noteRepository = noteRepository,
-                    onOpenNote = openNoteSafely,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
+                    onCreateCapture = ::openCapture,
                 )
             }
 

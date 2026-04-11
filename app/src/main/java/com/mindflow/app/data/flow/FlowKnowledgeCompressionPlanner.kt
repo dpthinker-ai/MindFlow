@@ -72,6 +72,7 @@ class FlowKnowledgeCompressionPlanner(
                     ),
                     fallbackLine = fallback.mainline,
                     fallbackSupport = fallback.whyNow,
+                    preferredSource = DailyBriefSource.LOCAL,
                 ).also {
                     mainlineCache[localMainlineKey] = it
                     trimCache(mainlineCache)
@@ -84,6 +85,7 @@ class FlowKnowledgeCompressionPlanner(
                     ),
                     fallbackLine = fallback.settledLine,
                     fallbackSupport = fallback.settledSupport,
+                    preferredSource = DailyBriefSource.LOCAL,
                 ).also {
                     settledCache[localSettledKey] = it
                     trimCache(settledCache)
@@ -96,6 +98,7 @@ class FlowKnowledgeCompressionPlanner(
                     ),
                     fallbackLine = fallback.gapLine,
                     fallbackSupport = fallback.gapSupport,
+                    preferredSource = DailyBriefSource.LOCAL,
                 ).also {
                     gapCache[localGapKey] = it
                     trimCache(gapCache)
@@ -178,6 +181,7 @@ class FlowKnowledgeCompressionPlanner(
                         result = mainlineResult,
                         fallbackLine = fallback.mainline,
                         fallbackSupport = fallback.whyNow,
+                        preferredSource = DailyBriefSource.AI,
                     ).also {
                         mainlineCache[mainlineKey] = it
                         trimCache(mainlineCache)
@@ -187,6 +191,7 @@ class FlowKnowledgeCompressionPlanner(
                         result = settledResult,
                         fallbackLine = fallback.settledLine,
                         fallbackSupport = fallback.settledSupport,
+                        preferredSource = DailyBriefSource.AI,
                     ).also {
                         settledCache[settledKey] = it
                         trimCache(settledCache)
@@ -196,6 +201,7 @@ class FlowKnowledgeCompressionPlanner(
                         result = gapResult,
                         fallbackLine = fallback.gapLine,
                         fallbackSupport = fallback.gapSupport,
+                        preferredSource = DailyBriefSource.AI,
                     ).also {
                         gapCache[gapKey] = it
                         trimCache(gapCache)
@@ -223,12 +229,13 @@ class FlowKnowledgeCompressionPlanner(
         result: AiChatResult?,
         fallbackLine: String,
         fallbackSupport: String,
+        preferredSource: DailyBriefSource,
     ): CardCompression {
         val lines = (result as? AiChatResult.Success)?.content?.let(::parseLines).orEmpty()
         return CardCompression(
             line = lines.getOrElse(0) { fallbackLine }.ifBlank { fallbackLine },
             support = lines.getOrElse(1) { fallbackSupport }.ifBlank { fallbackSupport },
-            source = if (lines.size >= 2) DailyBriefSource.AI else DailyBriefSource.RULE,
+            source = if (lines.size >= 2) preferredSource else DailyBriefSource.RULE,
         )
     }
 

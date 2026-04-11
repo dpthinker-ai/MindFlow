@@ -1,322 +1,211 @@
 # MindFlow
 
-MindFlow 是一个原生 Android 的个人 AI 灵感与行动系统。它不只负责记录，还会帮你：
+MindFlow is a native Android `idea incubator`.
 
-- 快速写下零散想法
-- 用 AI 提取主题、标签、文件夹和润色内容
-- 每天给出推进方向、探索方向和下一步动作
-- 通过搜索、热力图、文件夹和回看机制持续复用历史记录
+It is built for one job:
 
-## 下一阶段架构
+- capture strange, early, unfinished thoughts fast
+- keep them alive over time
+- surface recurring threads and promising collisions
+- turn mature patterns into reusable personal assets
 
-MindFlow 2.0 的下一阶段，不是把应用继续做成更重的笔记系统，而是补一层长期知识资产层：
+This is not a generic note app with AI bolted on.
 
-- `MindFlow App`
-  - 负责移动端快速记录、今日聚焦、方向经营、提醒和轻执行
-- `MindFlow Knowledge Layer`
-  - 负责把想法、经验、研究、证据、问题、方法和实验沉淀成长期 markdown 资产
-  - `方向` 只是其中一个重要视角，不是全部
-  - 记录外部研究、证据分层、已验证结论、阶段快照和方向资产
-  - 由后台 agent 工作流维护，而不是在移动端前台直接生成
+## Product thesis
 
-当前已经实现的是这个知识层的第一块：一个本地生成、以“关注方向”为中心的 direction-focused slice。它不替代本地数据库，而是先给 `Flow / 线程 / 提醒` 提供更稳定、更长期的知识资产。
+MindFlow has two layers:
 
-## 当前能力
+1. `frontstage`: an idea incubator for capture, recall, collision, and growth
+2. `backstage`: a local-first `LLM Wiki` maintainer that keeps long-term memory coherent
 
-- 首页：
-  - 总览、完成进度、新建记录
-  - 时间银行：按可主动投入天数显示摘要
-  - 最近记录流
-  - 轻量入口，不堆叠洞察信息
-- Flow：
-  - 现已重构成更贴近 `llm-wiki` 的 `AI Flow`
-    - `今日新材料`
-    - `当前综合判断`
-    - `最近吸收`
-    - `待厘清`
-  - 额外提供 `知识图谱` 入口，用轻量网络拓扑图呈现当前方向、结论、证据和概念节点
-  - 现在优先以 `AI 主编页 / 知识压缩层` 的方式呈现：
-    - `今日押注`
-    - `已成立`
-    - `新连接`
-  - `今日押注` 一天内默认保持稳定；点 `换一个` 时，会切到不同的真实候选方向，而不是只改写同一条内容
-  - `Flow` 不再主打一堆并列 AI 卡，而是优先回答：
-    - 今天最值得推进什么
-    - 最近真正成立了什么
-    - 当前最值得接起来的新连接是什么
-  - `Flow` 第一屏会保留一个轻量入口：`看更多积累`
-    - 先看方向
-    - 再看每条方向下面真正有价值的积累
-  - `新连接` 可直接转成一条预填的新记录，并支持 `换个角度`
-  - `本周判断`
-    - 主线 / 推进 / 重启 / 串联
-    - 轻量周进展统计
-  - 主题线程与线程详情页
-  - 可关注的长期方向
-  - 每条方向会显示当前阶段：`形成中 / 验证中 / 推进中 / 沉淀中`
-  - 在 `Flow` 里会直接提示每条关注方向当前最值得先抓的那条记录
-  - 在 `Flow` 里会直接展示每条关注方向的 `当前执行`：
-    - 为什么现在值得推进
-    - 最近一次推进
-    - 当前最小动作
-    - 当前验证动作
-    - 下次检查
-    - 为什么现在要做这次验证
-    - 如果验证成立，下一步怎么继续推进
-  - 会显示更长期的方向节奏与走势，不只停在“当前下一步”
-  - 可直接从关注方向打开当前焦点记录
-  - 如果某条方向已经有稳定沉淀，会在 `Flow` 里露出一条轻量方向资产摘要
-  - `Flow` 里的方向也会露出知识层回流的证据基础，如 `外部线索 / 待验证 / 已查证 / 已验证`
-  - 在 `Flow` 里也会露出 `AI 外部线索`，包括外部角度、机会缺口、反常识问题和外部假设
-  - 关注方向的主按钮会优先直接把你带回当前最该继续的记录
-  - 研究验证动作可直接从 `Flow` 生成一条带上下文的新记录
-  - 线程内当前焦点、下一步建议与轻量开始推进
-  - 可直接在线程里补一条新记录，继续沿着这个方向写
-  - 从线程里补出的记录会自动继承对应标签或文件夹，避免方向漂移
-  - 线程内本周回看
-  - 可把线程内本周回看沉淀成一条记录
-  - 可把线程内当前判断与下一步沉淀成一条记录
-  - 线程页分为 `当前判断 / 研究 / 执行`
-  - 会显示方向阶段、当前节奏和主导时间尺度
-  - 会显示最近几周的阶段历史，帮助判断这条方向是在形成、验证、推进还是沉淀
-  - 会补一条更长期的连续性判断，说明这条方向最近是在稳定推进、缓慢前进还是开始停住
-  - 会把 `当前判断 / 已查证 / 已验证` 内容进一步沉淀成轻量 `方向资产`
-  - 知识层回流会在这里明确区分 `证据基础 / 待验证 / 已查证 / 已验证`
-  - 知识层还会回流基于历史快照累积出来的 `长期阶段 / 快照节奏`
-  - 线程内外部线索、机会缺口、反常识问题、外部假设与可直接检索的研究词
-  - 会区分研究证据层次：`外部线索 / 待验证 / 已查证 / 已验证`
-  - 研究内容会标注 AI / 规则来源，默认显示为 `AI 外部线索`
-  - 可直接把研究线索沉淀成线程内的新记录
-  - 线程内会保留最近的研究记录，方便持续接着查
-  - 执行区会继续说明：
-    - 当前焦点
-    - 为什么现在推进
-    - 当前验证动作
-    - 如果验证成立，下一步怎么推
-  - 多条研究记录会进一步聚成轻量“研究脉络”，并可沉淀成新的线程记录
-  - 研究脉络会进一步带出一条最小验证循环，帮助从研究走向实验
-  - 线程页可直接把“最值得先验证”的那一组研究沉淀成独立记录
-- 记录：
-  - 快速新建与编辑
-  - Markdown 预览与原文编辑切换
-  - 自动记录创建/更新时间
-  - 状态流转：`想法 / 进行中 / 已实现`
-  - 时间尺度：`短期 / 中期 / 长期`
-  - 研究状态：`外部线索 / 待验证 / 已查证 / 已验证`
-    - 这是用户可显式确认的可信边界，知识层会优先采用它，而不是只靠内容猜测
-  - 归档、删除、状态历史
-  - 新建记录会保留你在编辑页手动设置的主题、标签、文件夹和状态
-  - 编辑页会轻提示这条记录更像属于哪条方向，并可直接跳过去
-  - 编辑页支持 `旧知识召回`
-    - 本地模型可用时，会提示当前草稿更像在接哪条旧线
-  - 编辑页把 AI 显式入口统一收成 `AI 整理`
-    - 整理正文
-    - 整理主题
-    - 整理标签
-    - 整理分类
-  - 时间尺度、文件夹、标签、状态等补充信息放在保存后区域，正文优先
-- AI：
-  - 设置页统一为 `AI 能力`
-  - 新增 `本地模型`
-    - 运行时下载，不进 APK
-    - 目标模型：`Gemma 4 E4B`
-    - 可启用 `本地优先`
-    - 可手动 `立即维护知识层`
-    - 本地维护会读取 `raw sources + wiki/index + wiki/log + 方向/结论/概念/问题/方法/实验页`
-  - 编辑页统一入口为 `AI 整理`
-  - `Flow / 线程 / 提醒` 的 AI 结果已统一成同一套来源标签和判断块，不再各说各话
-  - 主题提取
-  - 标签提取
-  - 文件夹分类
-  - 内容润色
-  - 每日 brief
-  - 下一步动作
-  - 每周回看
-- Markdown：
-  - 正文预览支持标题、列表、引用、加粗、斜体、行内代码、代码块基础展示
-- 搜索与组织：
-  - 关键词搜索
-  - 搜索会先给出知识层结果，再给出记录结果
-  - 知识层结果当前支持：方向、概念、问题、方法、实验、结论、证据
-  - 知识层结果会直接显示 `可信边界`，并优先把 `已验证 / 已查证` 的结果排在更靠前的位置
-  - 知识结果可直接打开原记录或相关方向
-  - 状态、标签、文件夹、时间范围筛选
-  - 折叠式筛选区
-  - 固定一级文件夹：`工作 / 生活 / 项目 / 健康`
-- 统计：
-  - 热力图活动视图
-  - 点击具体日期查看当天记录
-- 分享：
-  - 生成内容优先、支持浅色/深色主题、尺寸随内容自适应的卡片式分享图
-  - 短内容会自动切到更紧凑的构图，避免大片空白
-- 快速入口：
-  - 长按应用图标快捷进入 `新建记录 / 查找 / Flow`
-  - 长按应用图标可直接进入 `语音记录`
-  - 桌面 `快速记录` 小组件
-    - 记一条
-    - 语音记
-    - 会优先带你回到当前最该继续的一条记录，没有明确继续项时再打开最近记录或 `Flow`
-  - 系统分享文本到 MindFlow 直接生成预填记录
-  - 编辑页支持语音转文字，直接补进正文
-- 备份与恢复：
-  - 本地 Markdown 导入导出
-  - WebDAV 云备份与恢复
-- 提醒：
-  - `AI 提醒` 设置页
-  - 晨间 `今日聚焦` 通知
-  - 晚间 `回看` 通知
-  - 通知主点击优先直达最相关的记录，没有具体记录时再进入 `Flow`
-  - 从提醒进入 `Flow` 时，会自动聚焦到更相关的区块：`今天 / 重新接上 / 本周回看 / 方向`
-  - 通知内会根据上下文提供 `继续推进 / 重新接上 / 记回看 / 补一条 / 语音记` 等快捷动作
-  - 当提醒涉及的记录已经归属于明确方向时，可直接从通知进入对应线程
-  - 晨间会在合适时机轻提醒一条值得重新接上的旧记录
-  - 短期 / 中期 / 长期记录会有不同的提醒节奏，长期方向不会被高频催促
-  - 如果晨间提醒关联的方向已经有研究脉络，还会直接带上一条最小验证动作，并给出 `记验证` 快捷入口
-  - 晨间提醒也会先解释为什么这一步现在值得验证，避免动作显得突兀
-  - 当验证动作已经足够明确时，提醒里也会补一条“如果成立，下一步怎么推进”
-  - `记验证` 生成的记录会继续带上一条“如果成立，下一步怎么推进”的执行提示
-  - 每日提醒和退后台同步时，会触发一轮本地轻维护 pass，更新当天本地知识压缩结果
+The app should feel like:
 
-## 本地运行
+- a pocket lab notebook
+- a long-memory thinking companion
+- a place where weak signals compound
 
-1. 确保本机有 Android SDK，并在 `local.properties` 中配置：
+It should not feel like:
+
+- an AI dashboard
+- a model playground
+- a direction tracker
+- a wiki admin console
+
+## Core product loop
+
+1. capture a spark
+2. let the system absorb and connect it
+3. surface a live thread
+4. deepen or collide it
+5. grow it into an asset
+6. feed the next missing material
+
+## Navigation
+
+MindFlow now organizes around five product surfaces:
+
+- `记录`
+- `Flow`
+- `查询`
+- `图谱`
+- `设置`
+
+### 记录
+
+Fast capture beats forgetting.
+
+Primary inputs:
+
+- quick text
+- voice thought
+- pasted link
+- screenshot
+- clipped excerpt
+
+### Flow
+
+The home feed for idea incubation.
+
+It should answer:
+
+- which spark should not be lost
+- which thread keeps recurring
+- which two points are worth colliding
+- what has matured enough to reuse
+- what to feed next
+
+### 查询
+
+Directed thinking over the maintained knowledge layer.
+
+The user should feel they are doing one of these:
+
+- `继续养`
+- `撞一下`
+- `反驳它`
+- `帮我抽象`
+- `帮我拉成方案`
+- `帮我找证据`
+
+### 图谱
+
+Not a node dump.
+
+It should show:
+
+- what is becoming a hub
+- what is still isolated
+- which cluster is getting denser
+- which missing edge looks valuable
+
+### 设置
+
+All system-facing controls stay here:
+
+- local model management
+- cloud model/provider configuration
+- sync and export
+- maintenance diagnostics
+- performance and battery tradeoffs
+
+## Model strategy
+
+MindFlow supports both:
+
+- `Local Gemma 4`
+- `Cloud models`
+
+This is one product, not two product modes.
+
+### Local Gemma 4
+
+Default layer for:
+
+- capture enrichment
+- old-note recall
+- routine maintenance
+- low-latency synthesis
+- privacy-sensitive workflows
+
+### Cloud models
+
+Escalation layer for:
+
+- harder critique
+- deeper cross-domain synthesis
+- stronger reframing
+- richer proposal shaping
+
+### Routing rule
+
+The user should choose an intention, not a model.
+
+The system routes the work.
+
+### Trust boundary
+
+This is non-negotiable:
+
+- local is the default for raw capture, recall, and maintenance
+- raw sources must not be silently sent to the cloud during background maintenance
+- cloud use must be user-invoked or clearly signaled by the action the user chose
+- cloud-derived output must be marked with provenance and filed back into local memory
+- the product must remain useful with cloud disabled
+
+## Current implementation status
+
+Already in the product:
+
+- fast note capture and editing
+- voice-to-text capture
+- share-to-capture
+- widget and launcher shortcuts
+- search and filtering
+- thread and related-note structure
+- reminder flows
+- local knowledge-layer maintenance
+- local `Gemma 4 E4B` download and runtime support
+- local runtime upgraded to `LiteRT-LM`
+- cloud model configuration
+- local-first knowledge export back into app surfaces
+
+The current codebase still contains older `AI brief / direction dashboard` language in some places.
+The current phase is to realign those surfaces to the idea-incubator thesis above.
+
+## Local-first knowledge layer
+
+The maintained knowledge layer stores durable objects like:
+
+- concepts
+- questions
+- methods
+- experiments
+- evidence
+- conclusions
+- links
+- logs and index pages
+
+Raw sources stay append-only.
+
+High-value query results and cloud-assisted outputs must file back into this layer, or they do not compound.
+
+## Build
+
+The local Gemma 4 path now uses `LiteRT-LM`.
+
+Requirements:
+
+- Android SDK configured in `local.properties`
+- `JDK 21` for local build and release verification
+
+Example:
 
 ```properties
 sdk.dir=/your/android/sdk
 ```
 
-2. 构建 Release 包：
-
 ```bash
+export JAVA_HOME=/path/to/jdk-21
+export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew --no-daemon assembleRelease
 ```
-
-## MindFlow Knowledge Layer 规划
-
-这是已落地的第一版长期知识层，后续会从“方向切片”继续扩展成更完整的个人知识层。
-
-目标：
-- 把想法、历史经验、研究、证据、问题、方法和实验沉淀成可查询、可复用、可激发创新的长期 markdown 资产
-- 把外部研究、已查证、已验证和阶段历史沉淀成可复用资产
-- 再把轻量摘要回流到 App
-
-计划中的结构：
-
-```text
-knowledge-layer/
-  raw/
-  wiki/
-    index.md
-    log.md
-    directions/
-    concepts/
-    evidence/
-    questions/
-    methods/
-    experiments/
-    lint/
-    snapshots/
-  AGENTS.md
-```
-
-当前原则：
-- App 数据库继续作为运行时 source of truth
-- 当前实现先服务“关注方向”，但长期目标不止方向，还会扩展到概念、问题、方法和实验
-- 原始输入追加到 `raw/`，不做静默覆盖
-- Agent 维护知识对象页面、索引和日志
-- App 通过轻量导出物读取 `方向资产 / 已验证结论 / 阶段历史摘要 / 开放问题`
-
-当前第一版包含：
-- 本地 `knowledge-layer/` 目录生成
-- `raw/notes/`、`raw/research/`、`raw/validations/`、`raw/reflections/`、`raw/index.md`
-- `raw/reviews/`，把周回看、当前判断、下一步承接等综合结果也作为 source 留存
-- `wiki/directions/`、`wiki/evidence/`、`wiki/snapshots/`、`wiki/lint/`、`wiki/index.md`、`wiki/log.md`
-- `wiki/concepts/` 概念页，由重复出现的方向标签自动聚合生成
-- `wiki/questions/`、`wiki/methods/`、`wiki/experiments/`，由记录内容自动归纳生成
-- 周回看、开放问题、验证动作、下一步承接等综合判断，也会继续 file back 成问题 / 实验 / 方法对象，而不只停在方向摘要里
-- 研究里的 `外部追问 / 外部假设` 也会继续 file back 成更耐用的问题 / 实验对象，而不是只停在线程提示里
-- `wiki/evidence/index.md` 开始把证据页提升成更明确的一等索引入口
-- 证据页也开始反向链接概念与相关知识对象，不再只是平铺证据列表
-- 结论页也开始反向链接概念与相关知识对象，让 `当前结论` 不再停留在孤立摘要里
-- 概念页与问题 / 方法 / 实验页之间会开始互相链接，知识对象不再各自孤立
-- 问题 / 方法 / 实验页也会继续回链到对应的方向页、结论页、证据页，知识层不再只按单一对象类型浏览
-- 设置里的手动 `更新知识层`
-- App 退到后台时的低频自动刷新
-- `Flow` 和线程页对方向资产、证据基础、开放问题、阶段历史摘要的回流展示
-- `wiki/conclusions/` 方向结论页，以及回流到 `Flow / 线程` 的 `当前结论 / 下一步承接`
-- `Flow` 和线程页还会轻量回流知识对象覆盖与知识健康线
-- `Flow` 和线程页还会轻量回流一条 `建议先补`，提示知识层现在最值得补哪类材料
-- `Flow` 和线程页也会继续回流更结构化的维护线索：`先维护哪类页面 / 对象`、`先补哪类来源`
-- `Flow` 和线程页现在还会回流 `最薄弱维度`，说明当前更缺的是证据、问题定义、方法沉淀、结论维护、最近进展还是对象覆盖
-- `Flow` 和线程页现在也会回流 `优先对象`，把维护建议从抽象层再往前推一步，直接指出当前最值得先维护的页面或知识对象
-- `Flow` 和线程页现在还能直接基于这些维护建议生成一条 `补材料` 记录，把“该补什么 / 先维护什么 / 先补哪类来源”预先写好，减少从诊断到行动的断层
-- `Flow` 和线程页还会回流知识层的长期快照阶段与快照节奏
-- 提醒也会回流这类长期节奏信息，说明为什么这一步现在值得做
-- 提醒会继续带出方向的最近推进与下次检查，让执行摘要不是一次性建议
-
-当前还没有完整实现，但这是下一阶段要吸收 `llm-wiki` 精髓去补齐的部分：
-- query 和综合结论要继续 file back 回知识层，而不只是停在 UI 卡片里
-- 知识层要开始维护更稳定的跨对象关系，而不只是按方向导出一轮页面
-- 把 lint 从当前的一轮健康检查推进成更强的冲突、陈旧、孤立和弱证据维护系统
-- 让综合判断、周回看和研究结论更稳定地 file back 回知识层，而不是只停在 App UI
-
-## AI 主题提取配置
-
-AI 能力是增强层，不配置也能正常使用，本地规则会兜底。
-
-支持三种接入方式：
-- `智谱`：默认方案
-- `OpenAI`：可选官方接口
-- `自定义`：任何 OpenAI 兼容接口
-
-智谱默认配置示例，可通过 `local.properties` 或环境变量注入：
-
-```properties
-mindflow.ai.apiKey=YOUR_ZHIPU_API_KEY
-mindflow.ai.baseUrl=https://open.bigmodel.cn/api/paas/v4
-mindflow.ai.model=glm-4.7
-```
-
-对应环境变量：
-
-- `ZHIPU_API_KEY`
-- `ZHIPU_BASE_URL`
-- `ZHIPU_MODEL`
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_MODEL`
-- `MINDFLOW_AI_API_KEY`
-- `MINDFLOW_AI_BASE_URL`
-- `MINDFLOW_AI_MODEL`
-
-如果你想切到 OpenAI，也可以直接在应用里选择 `OpenAI` 预设，或手动填：
-
-```properties
-mindflow.ai.apiKey=YOUR_OPENAI_API_KEY
-mindflow.ai.baseUrl=https://api.openai.com/v1
-mindflow.ai.model=gpt-5.4
-```
-
-如果 `apiKey`、`baseUrl` 或 `model` 缺失，应用会直接回退本地规则提取。
-默认模型现在是智谱 `glm-4.7`；如果你切到 OpenAI，也可以直接用 `gpt-5.4`，或按成本和速度考虑改成 `gpt-5-mini`。
-
-## 每日提醒
-
-- 设置路径：`设置 -> 每日提醒`
-- 当前支持：
-  - `晨间 brief`：每天 08:30
-  - `晚间 review`：每天 21:30
-  - 点通知主体会优先打开最相关的记录，没有明确记录时再进入 `Flow`
-- Android 13 及以上会在你开启提醒时请求通知权限
-
-## 时间银行
-
-- 设置路径：`设置 -> 时间银行`
-- 首页右上角会显示更鲜明的时间银行标记
-- 默认按“每周主动投入天数”换算后的可主动投入时间显示，而不是只显示剩余人生天数
-
-## 导入恢复
-
-- 通过应用内“设置 -> 本地备份”选择 Markdown 文件
-- 当前支持导入由 MindFlow 自己导出的 Markdown 格式
-- 导入会把记录和状态历史追加到当前数据库中，不做去重

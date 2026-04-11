@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.map
 private val Context.dailyBriefDataStore by preferencesDataStore(name = "mindflow_daily_brief")
 
 enum class DailyBriefSource {
+    LOCAL,
     AI,
     RULE,
 }

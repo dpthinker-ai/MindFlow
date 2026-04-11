@@ -151,29 +151,17 @@ private fun FlowScreen(
     val highlightReview = focus == FlowFocus.REVIEW
     val highlightDirection = focus == FlowFocus.DIRECTION
     val maintainerSnapshot = uiState.localMaintainerSnapshot
-    val absorptionDirection = remember(uiState.followedDirections, maintainerSnapshot) {
-        uiState.followedDirections.firstOrNull { it.thread.key == maintainerSnapshot.recentAbsorption.threadKey }
-            ?: uiState.followedDirections.firstOrNull()
-    }
-    val breakthroughDirection = remember(uiState.followedDirections, maintainerSnapshot) {
-        uiState.followedDirections.firstOrNull { it.thread.key == maintainerSnapshot.newConnection.threadKey }
-            ?: uiState.followedDirections.firstOrNull {
-                it.wikiOpenQuestion.isNotBlank() ||
-                    it.wikiMaintenanceLine.isNotBlank() ||
-                    it.wikiMaintenanceFocusLine.isNotBlank() ||
-                    it.blocker.isNotBlank()
-            } ?: uiState.followedDirections.firstOrNull()
-    }
+    val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
     val subtitle = remember(focus) {
         when (focus) {
-            FlowFocus.TODAY -> "先看今天刚被本地维护吸收下来的材料和判断。"
-            FlowFocus.RECONNECT -> "先看哪条旧线被重新吸收进了今天的维护结果里。"
-            FlowFocus.REVIEW -> "先看最近刚被写进本地积累的一条结果。"
-            FlowFocus.DIRECTION -> "先看今天刚长出来的一条新连接。"
-            null -> "本地维护你的材料，再把今天最值得看的三个结果交给你。"
+            FlowFocus.TODAY -> "先救起今天最不该丢的一颗火花。"
+            FlowFocus.RECONNECT -> "先看哪条旧线又重新活了过来。"
+            FlowFocus.REVIEW -> "先看哪条想法已经长成可复用的东西。"
+            FlowFocus.DIRECTION -> "先看今天最值得试的一次碰撞。"
+            null -> "把最近的火花、旧线、碰撞和缺口排成今天的孵化流。"
         }
     }
-    val moreAccumulationIndex = 5
+    val moreAccumulationIndex = 7
     var showMainline by remember { mutableStateOf(false) }
     var showSettled by remember { mutableStateOf(false) }
     var showGap by remember { mutableStateOf(false) }
@@ -183,8 +171,8 @@ private fun FlowScreen(
             FlowFocus.TODAY,
             FlowFocus.RECONNECT,
             null -> listState.scrollToItem(1)
-            FlowFocus.REVIEW,
-            FlowFocus.DIRECTION -> listState.scrollToItem(4)
+            FlowFocus.DIRECTION -> listState.scrollToItem(3)
+            FlowFocus.REVIEW -> listState.scrollToItem(4)
         }
     }
     LaunchedEffect(
@@ -223,7 +211,7 @@ private fun FlowScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "AI Flow",
+                            text = "Flow",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -232,36 +220,6 @@ private fun FlowScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
-                        if (maintainerSnapshot.knowledgeShape.hasContent || maintainerSnapshot.knowledgeInventoryLine.isNotBlank()) {
-                            InsightBlock(
-                                tone = InsightTone.Neutral,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 6.dp),
-                            ) {
-                                maintainerSnapshot.knowledgeShape.line.takeIf { it.isNotBlank() }?.let {
-                                    InsightLine(label = "当前知识", text = it, maxLines = 2)
-                                }
-                                maintainerSnapshot.knowledgeShape.support.takeIf { it.isNotBlank() }?.let {
-                                    InsightLine(label = "包含哪些点", text = it, maxLines = 2)
-                                }
-                                maintainerSnapshot.knowledgeInventoryLine.takeIf { it.isNotBlank() }?.let {
-                                    InsightLine(label = "当前库存", text = it, maxLines = 2)
-                                }
-                            }
-                            if (maintainerSnapshot.knowledgePointLabels.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    maintainerSnapshot.knowledgePointLabels.take(3).forEach { label ->
-                                        InsightChip(text = label, tone = InsightTone.Neutral)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -275,7 +233,8 @@ private fun FlowScreen(
                         RecentAbsorptionCard(
                             snapshot = maintainerSnapshot,
                             todayCount = uiState.todayCount,
-                            direction = absorptionDirection,
+                            direction = surface.sparkDirection,
+                            provenance = surface.sparkProvenance,
                             highlighted = highlightToday || highlightReconnect,
                             onOpenThread = onOpenThread,
                             onOpenNote = onOpenNote,
@@ -294,17 +253,18 @@ private fun FlowScreen(
                         MainlineFocusCard(
                             note = uiState.continueNote,
                             candidate = uiState.mainlineCandidate,
+                            direction = surface.threadDirection,
+                            provenance = surface.threadProvenance,
                             snapshot = maintainerSnapshot,
                             nextActionText = uiState.nextActionText,
                             compression = uiState.knowledgeCompression,
                             reconnectBridge = uiState.staleBridge,
                             reconnectStep = uiState.staleNextStep,
-                            feedback = uiState.settledFeedback,
                             highlighted = highlightReview || highlightToday,
                             onRefresh = onRefreshMainline,
-                            onFeedback = onMarkSettledFeedback,
                             onOpenThread = onOpenThread,
                             onOpenNote = onOpenNote,
+                            onCreateCapture = onCreateCapture,
                         )
                     }
                 }
@@ -318,7 +278,8 @@ private fun FlowScreen(
                     ) {
                         BreakthroughGapCard(
                             snapshot = maintainerSnapshot,
-                            direction = breakthroughDirection,
+                            direction = surface.collisionDirection,
+                            provenance = surface.collisionProvenance,
                             explorationPrompts = uiState.explorationPrompts,
                             compression = uiState.knowledgeCompression,
                             feedback = uiState.gapFeedback,
@@ -326,6 +287,45 @@ private fun FlowScreen(
                             onRefresh = onRefreshGap,
                             onFeedback = onMarkGapFeedback,
                             onOpenThread = onOpenThread,
+                            onCreateCapture = onCreateCapture,
+                        )
+                    }
+                }
+
+                item {
+                    AnimatedVisibility(
+                        visible = showSettled,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 6 }),
+                        exit = fadeOut(),
+                        label = "flowAssetReveal",
+                    ) {
+                        SettledKnowledgeCard(
+                            direction = surface.assetDirection,
+                            provenance = surface.assetProvenance,
+                            compression = uiState.knowledgeCompression,
+                            feedback = uiState.settledFeedback,
+                            highlighted = highlightReview,
+                            onFeedback = onMarkSettledFeedback,
+                            onOpenThread = onOpenThread,
+                            onOpenNote = onOpenNote,
+                        )
+                    }
+                }
+
+                item {
+                    AnimatedVisibility(
+                        visible = showGap,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 6 }),
+                        exit = fadeOut(),
+                        label = "flowFeedGapReveal",
+                    ) {
+                        FeedGapCard(
+                            snapshot = maintainerSnapshot,
+                            direction = surface.gapDirection,
+                            provenance = surface.gapProvenance,
+                            highlighted = highlightDirection,
+                            onOpenThread = onOpenThread,
+                            onOpenNote = onOpenNote,
                             onCreateCapture = onCreateCapture,
                         )
                     }
@@ -343,10 +343,10 @@ private fun FlowScreen(
                                 }
                             },
                         ) {
-                            Text(text = "看更多积累", color = AccentBlue)
+                            Text(text = "翻翻其他活线", color = AccentBlue)
                         }
                         TextButton(onClick = onOpenGraph) {
-                            Text(text = "变化图谱", color = AccentBlue)
+                            Text(text = "去图谱", color = AccentBlue)
                         }
                     }
                 }
@@ -370,6 +370,7 @@ private fun RecentAbsorptionCard(
     snapshot: com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot,
     todayCount: Int,
     direction: FollowedDirectionSummary?,
+    provenance: FlowCardProvenance,
     highlighted: Boolean,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -378,7 +379,7 @@ private fun RecentAbsorptionCard(
     val card = snapshot.recentAbsorption
     val directionCount = snapshot.activeDirectionCount
     val headline = when {
-        card.hasContent -> "今天刚被吸收进知识层的一条结果"
+        card.hasContent -> "最近这颗火花最值得先救起来"
         todayCount > 0 -> "今天新进了 $todayCount 条材料"
         directionCount > 0 -> "今天没有新材料，但已有 $directionCount 条方向在维护里"
         else -> "先喂一条材料进来，本地维护才有东西可吸收"
@@ -398,13 +399,14 @@ private fun RecentAbsorptionCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "今天新吸收",
+                title = "别丢这颗火花",
                 headline = headline,
             )
+            InsightChip(text = provenance.label, tone = InsightTone.Neutral)
             if (card.hasContent) {
                 card.anchorLabel.takeIf { it.isNotBlank() }?.let { anchor ->
                     AnchorLine(
-                        text = "吸收自：$anchor",
+                        text = "火花来自：$anchor",
                         onClick = {
                             card.noteId?.let(onOpenNote)
                                 ?: card.threadKey.takeIf { it.isNotBlank() }?.let(onOpenThread)
@@ -421,26 +423,26 @@ private fun RecentAbsorptionCard(
                 )
                 card.support.takeIf { it.isNotBlank() }?.let {
                     InsightBlock(tone = InsightTone.Neutral) {
-                        InsightLine(label = "为什么留下", text = it, maxLines = 2)
+                        InsightLine(label = "为什么它还活着", text = it, maxLines = 2)
                     }
                 }
             } else {
                 AnchorLine(
-                    text = "先喂一条材料进来",
+                    text = "先记下一颗火花",
                     onClick = { onCreateCapture(CaptureSeed()) },
                 )
                 Text(
                     text = if (directionCount > 0) {
-                        "没有新材料时，本地维护会继续从旧积累里修正判断、保留结果、发现张力。"
+                        "没有新材料时，本地维护也会继续从旧积累里修正判断，但火花还是要你先喂进来。"
                     } else {
-                        "先记下一条真正有信息量的材料，AI Flow 才会开始像一个知识维护员工作。"
+                        "先记下一条真正有信息量的想法，Flow 才会开始像一个孵化器而不是空壳。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
             }
             ActionButton(
-                text = if (card.hasContent) "沿这条继续看" else "记一条",
+                text = if (card.hasContent) "继续养这颗火花" else "记个火花",
                 onClick = {
                     if (card.hasContent) {
                         card.noteId?.let(onOpenNote)
@@ -462,34 +464,37 @@ private fun MainlineFocusCard(
     note: NoteEntity?,
     candidate: MainlineBetCandidate?,
     snapshot: com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot,
+    direction: FollowedDirectionSummary?,
+    provenance: FlowCardProvenance,
     nextActionText: String,
     compression: FlowKnowledgeCompressionState,
     reconnectBridge: String,
     reconnectStep: String,
-    feedback: FlowCardFeedback?,
     highlighted: Boolean,
     onRefresh: () -> Unit,
-    onFeedback: (Boolean) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     val accent = noteStatusAccent(note?.status ?: NoteStatus.IN_PROGRESS)
-    val title = snapshot.currentJudgement.anchorLabel.takeIf { it.isNotBlank() }
-        ?: candidate?.title
+    val anchoredJudgement = snapshot.currentJudgement.takeIf {
+        it.threadKey.isNotBlank() || it.noteId != null
+    }
+    val title = candidate?.title
+        ?: anchoredJudgement?.anchorLabel?.takeIf { it.isNotBlank() }
         ?: note?.topic?.takeIf { it.isNotBlank() }
-        ?: "当前成立的一条判断"
-    val mainLine = snapshot.currentJudgement.line
-        .takeIf { it.isNotBlank() }
-        ?: candidate?.summary?.takeIf { it.isNotBlank() }
+        ?: "一条正在成形的暗线"
+    val mainLine = candidate?.summary?.takeIf { it.isNotBlank() }
+        ?: anchoredJudgement?.line?.takeIf { it.isNotBlank() }
         ?: nextActionText.takeIf { it.isNotBlank() }
         ?: reconnectStep.takeIf { it.isNotBlank() }
-        ?: "先把今天新进来的材料压成一条真正能指导决策的判断。"
-    val whyNowLine = snapshot.currentJudgement.support
-        .takeIf { it.isNotBlank() }
-        ?: candidate?.whyNow?.takeIf { it.isNotBlank() }
+        ?: "先让几条记录开始互相咬合，这里才会长出真正值得继续养的暗线。"
+    val whyNowLine = candidate?.whyNow?.takeIf { it.isNotBlank() }
+        ?: anchoredJudgement?.support?.takeIf { it.isNotBlank() }
         ?: reconnectBridge.takeIf { it.isNotBlank() }
     val resolvedMainLine = compression.mainline.ifBlank { mainLine }
     val resolvedWhyNow = compression.whyNow.ifBlank { whyNowLine.orEmpty() }
+    val hasRecurringContext = candidate != null || note != null || anchoredJudgement?.hasContent == true
     Surface(
         color = WhiteGlass.copy(alpha = 0.94f),
         shape = PanelShape,
@@ -505,13 +510,14 @@ private fun MainlineFocusCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "当前成立",
-                headline = if (note != null || candidate != null || snapshot.currentJudgement.hasContent) {
-                    "现在可以据此做决定的一条判断"
+                title = "你其实一直在想这个",
+                headline = if (hasRecurringContext) {
+                    "一条反复回来的暗线，已经开始露出轮廓"
                 } else {
-                    "先让本地维护把今天的材料压成一条更稳的判断"
+                    "先让几条记录开始互相呼应，这里才会长出真正的主线"
                 },
             )
+            InsightChip(text = provenance.label, tone = InsightTone.Neutral)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 candidate?.takeIf { it.stageLabel.isNotBlank() || it.horizonLabel.isNotBlank() }?.let {
                     if (it.stageLabel.isNotBlank()) {
@@ -525,15 +531,15 @@ private fun MainlineFocusCard(
                     InsightChip(text = it.horizon.label, tone = InsightTone.Neutral)
                 }
             }
-            title.takeIf { it.isNotBlank() && (candidate != null || note != null || snapshot.currentJudgement.hasContent) }?.let {
+            title.takeIf { it.isNotBlank() && hasRecurringContext }?.let {
                 AnchorLine(
-                    text = "主要来自：$it",
+                    text = "这条线主要来自：$it",
                     onClick = {
-                        snapshot.currentJudgement.noteId?.let(onOpenNote)
-                            ?: snapshot.currentJudgement.threadKey.takeIf { it.isNotBlank() }?.let(onOpenThread)
-                            ?: candidate?.focusNoteId?.let(onOpenNote)
+                        candidate?.focusNoteId?.let(onOpenNote)
                             ?: candidate?.noteId?.let(onOpenNote)
                             ?: candidate?.threadKey?.let(onOpenThread)
+                            ?: anchoredJudgement?.noteId?.let(onOpenNote)
+                            ?: anchoredJudgement?.threadKey?.takeIf { it.isNotBlank() }?.let(onOpenThread)
                             ?: note?.id?.let(onOpenNote)
                     },
                 )
@@ -569,28 +575,23 @@ private fun MainlineFocusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ActionButton(
-                    text = "看这条判断",
+                    text = "继续养这条线",
                     onClick = {
-                        snapshot.currentJudgement.noteId?.let(onOpenNote)
-                            ?: snapshot.currentJudgement.threadKey.takeIf { it.isNotBlank() }?.let(onOpenThread)
-                            ?: candidate?.focusNoteId?.let(onOpenNote)
+                        candidate?.focusNoteId?.let(onOpenNote)
                             ?: candidate?.noteId?.let(onOpenNote)
                             ?: candidate?.threadKey?.let(onOpenThread)
+                            ?: anchoredJudgement?.noteId?.let(onOpenNote)
+                            ?: anchoredJudgement?.threadKey?.takeIf { it.isNotBlank() }?.let(onOpenThread)
                             ?: note?.id?.let(onOpenNote)
+                            ?: direction?.thread?.key?.let(onOpenThread)
+                            ?: onCreateCapture(CaptureSeed())
                     },
                     modifier = Modifier.weight(1f),
                 )
                 GhostActionButton(
-                    text = "换一个",
+                    text = "换一条线",
                     onClick = onRefresh,
                     modifier = Modifier.weight(1f),
-                )
-            }
-            if (resolvedMainLine.isNotBlank()) {
-                FeedbackRow(
-                    feedback = feedback,
-                    onHelpful = { onFeedback(true) },
-                    onFlat = { onFeedback(false) },
                 )
             }
         }
@@ -600,6 +601,7 @@ private fun MainlineFocusCard(
 @Composable
 private fun SettledKnowledgeCard(
     direction: FollowedDirectionSummary?,
+    provenance: FlowCardProvenance,
     compression: FlowKnowledgeCompressionState,
     feedback: FlowCardFeedback?,
     highlighted: Boolean,
@@ -639,18 +641,19 @@ private fun SettledKnowledgeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "最近吸收",
-                headline = if (resolvedSettledLine.isNotBlank()) "刚被写进积累的一条结果" else "先让同一条线继续积累，这里才会开始变厚",
+                title = "已经长成了",
+                headline = if (resolvedSettledLine.isNotBlank()) "这条已经能当成你的资产" else "先把同一条线反复养几轮，这里才会开始长出资产",
             )
+            InsightChip(text = provenance.label, tone = InsightTone.Neutral)
             if (direction == null || resolvedSettledLine.isBlank()) {
                 Text(
-                    text = "再沿着同一条方向多推几步，这里才会开始留下真正能复用的结果，而不是一堆散记录。",
+                    text = "再沿着同一条线多推几步，这里才会开始留下真正能复用的东西，而不是散落判断。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
             } else {
                 AnchorLine(
-                    text = "写自：${direction.thread.title}",
+                    text = "长自：${direction.thread.title}",
                     onClick = { onOpenThread(direction.thread.key) },
                 )
                 AnimatedContent(
@@ -682,7 +685,7 @@ private fun SettledKnowledgeCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ActionButton(
-                        text = "看这条积累",
+                        text = "看这条资产",
                         onClick = {
                             direction.assetNoteId?.let(onOpenNote) ?: onOpenThread(direction.thread.key)
                         },
@@ -703,6 +706,7 @@ private fun SettledKnowledgeCard(
 private fun BreakthroughGapCard(
     snapshot: com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot,
     direction: FollowedDirectionSummary?,
+    provenance: FlowCardProvenance,
     explorationPrompts: List<String>,
     compression: FlowKnowledgeCompressionState,
     feedback: FlowCardFeedback?,
@@ -746,12 +750,13 @@ private fun BreakthroughGapCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "今天新连接",
-                headline = if (resolvedGapLine.isNotBlank()) "今天最值得试的一次知识重组" else "再多一点跨方向材料，这里会开始长出新连接",
+                title = "把这两个点撞一下",
+                headline = if (resolvedGapLine.isNotBlank()) "今天最值得试的一次碰撞" else "再让几条线各自长一点，这里会开始长出真正的碰撞",
             )
+            InsightChip(text = provenance.label, tone = InsightTone.Neutral)
             if (resolvedGapLine.isBlank()) {
                 Text(
-                    text = "先让几条方向各自长出一点结果，这里才会开始出现真正值得试的新连接。",
+                    text = "先让几条线各自长出一点结果，这里才会开始出现真正值得试的新连接。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSoft,
                 )
@@ -760,7 +765,7 @@ private fun BreakthroughGapCard(
                     ?: direction?.thread?.title
                 anchorText?.let {
                     AnchorLine(
-                        text = "连接自：$it",
+                        text = "碰撞自：$it",
                         onClick = {
                             snapshot.newConnection.threadKey.takeIf { key -> key.isNotBlank() }?.let(onOpenThread)
                                 ?: direction?.thread?.key?.let(onOpenThread)
@@ -788,7 +793,7 @@ private fun BreakthroughGapCard(
                             label = "flowGapSupport",
                         ) { text ->
                             InsightLine(
-                                label = "如果顺手试",
+                                label = "为什么现在值得撞",
                                 text = text,
                                 emphasize = true,
                                 maxLines = 2,
@@ -802,19 +807,19 @@ private fun BreakthroughGapCard(
                 ) {
                     if (direction != null && direction.wikiMaintenanceLine.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "撞一下",
                             onClick = { onCreateCapture(direction.toMaintenanceCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
                     } else if (direction != null && direction.validationStep.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "撞一下",
                             onClick = { onCreateCapture(direction.toResearchCaptureSeed()) },
                             modifier = Modifier.weight(1f),
                         )
                     } else if (resolvedGapLine.isNotBlank()) {
                         ActionButton(
-                            text = "记一条",
+                            text = "撞一下",
                             onClick = {
                                 onCreateCapture(
                                     buildOpportunityCaptureSeed(
@@ -828,7 +833,7 @@ private fun BreakthroughGapCard(
                         )
                     }
                     GhostActionButton(
-                        text = "换个角度",
+                        text = "换一组",
                         onClick = onRefresh,
                         modifier = Modifier.weight(1f),
                     )
@@ -837,6 +842,104 @@ private fun BreakthroughGapCard(
                     feedback = feedback,
                     onHelpful = { onFeedback(true) },
                     onFlat = { onFeedback(false) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedGapCard(
+    snapshot: com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot,
+    direction: FollowedDirectionSummary?,
+    provenance: FlowCardProvenance,
+    highlighted: Boolean,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
+) {
+    val card = snapshot.openQuestion
+    val line = card.line.ifBlank {
+        direction?.wikiOpenQuestion
+            ?.takeIf { it.isNotBlank() }
+            ?: direction?.wikiMaintenanceLine?.takeIf { it.isNotBlank() }
+            ?: direction?.blocker?.takeIf { it.isNotBlank() }
+            ?: direction?.validationStep?.takeIf { it.isNotBlank() }
+            ?: ""
+    }
+    val support = card.support.ifBlank {
+        direction?.wikiMaintenanceFocusLine
+            ?.takeIf { it.isNotBlank() }
+            ?: direction?.wikiMaintenanceTargetLine?.takeIf { it.isNotBlank() }
+            ?: direction?.validationReason?.takeIf { it.isNotBlank() }
+            ?: direction?.postValidationAction?.takeIf { it.isNotBlank() }
+            ?: ""
+    }
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = PanelShape,
+        border = BorderStroke(
+            1.dp,
+            if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "再喂什么",
+                headline = if (line.isNotBlank()) "如果你想把一条线继续养大，下一口该喂这个" else "先让材料变多一点，这里才会出现值得追的缺口",
+            )
+            InsightChip(text = provenance.label, tone = InsightTone.Neutral)
+            if (line.isBlank()) {
+                Text(
+                    text = "当旧线开始互相打架、互相证明、互相拉扯时，这里才会出现真正值得补的那一口材料。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSoft,
+                )
+            } else {
+                val anchorText = card.anchorLabel.takeIf { it.isNotBlank() } ?: direction?.thread?.title
+                anchorText?.let {
+                    AnchorLine(
+                        text = "当前卡在：$it",
+                        onClick = {
+                            card.noteId?.let(onOpenNote)
+                                ?: card.threadKey.takeIf { key -> key.isNotBlank() }?.let(onOpenThread)
+                                ?: direction?.thread?.key?.let(onOpenThread)
+                        },
+                    )
+                }
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                support.takeIf { it.isNotBlank() }?.let {
+                    InsightBlock(tone = InsightTone.Neutral) {
+                        InsightLine(label = "下一口材料", text = it, maxLines = 2)
+                    }
+                }
+                ActionButton(
+                    text = "补一条材料",
+                    onClick = {
+                        when {
+                            direction?.wikiMaintenanceLine?.isNotBlank() == true -> onCreateCapture(direction.toMaintenanceCaptureSeed())
+                            direction?.validationStep?.isNotBlank() == true -> onCreateCapture(direction.toResearchCaptureSeed())
+                            else -> onCreateCapture(
+                                buildGapCaptureSeed(
+                                    line = line,
+                                    support = support,
+                                    direction = direction,
+                                ),
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -887,12 +990,12 @@ private fun MoreAccumulationSection(
 ) {
     PanelCard {
         SectionHeader(
-            title = "看更多积累",
+            title = "其他活线",
             headline = inventoryLine.ifBlank { if (directions.isNotEmpty()) "${directions.size} 条方向" else null },
         )
         if (directions.isEmpty()) {
             Text(
-                text = "先让几条真正想长期经营的方向稳定下来，这里才会开始出现可复用的积累。",
+                text = "等更多线头被你反复喂过几轮，这里才会开始出现更厚的活线。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSoft,
             )
@@ -1522,6 +1625,49 @@ private fun buildOpportunityCaptureSeed(
         initialFolderKey = initialFolderKey,
         initialTags = initialTags,
         initialKnowledgeTrust = KnowledgeTrust.SIGNAL,
+    )
+}
+
+private fun buildGapCaptureSeed(
+    line: String,
+    support: String,
+    direction: FollowedDirectionSummary?,
+): CaptureSeed {
+    val cleanTitle = direction?.thread?.title?.removePrefix("#")?.trim().orEmpty()
+    val initialFolderKey = direction?.thread?.key
+        ?.takeIf { it.startsWith("folder:") }
+        ?.removePrefix("folder:")
+        ?.trim()
+        ?.ifBlank { null }
+    val initialTags = direction?.thread?.key
+        ?.takeIf { it.startsWith("tag:") }
+        ?.removePrefix("tag:")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::listOf)
+        .orEmpty()
+    val topic = if (cleanTitle.isNotBlank()) "$cleanTitle · 补材料" else "补材料"
+    return CaptureSeed(
+        initialTopic = topic,
+        initialContent = buildString {
+            appendLine("围绕这条缺口补一条新材料：")
+            if (cleanTitle.isNotBlank()) {
+                appendLine("- 相关线程：$cleanTitle")
+            }
+            appendLine("- 当前缺口：$line")
+            support.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 这一口该喂什么：$it")
+            }
+            direction?.whyNow?.takeIf { it.isNotBlank() }?.let {
+                appendLine("- 为什么现在值得继续养：$it")
+            }
+            appendLine("- 我补到的新材料：")
+            appendLine("- 这条材料支持了什么：")
+            appendLine("- 它又带出了什么新问题：")
+        },
+        initialFolderKey = initialFolderKey,
+        initialTags = initialTags,
+        initialKnowledgeTrust = KnowledgeTrust.HYPOTHESIS,
     )
 }
 

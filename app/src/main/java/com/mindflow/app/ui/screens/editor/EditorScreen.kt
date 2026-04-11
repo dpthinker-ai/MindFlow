@@ -380,6 +380,7 @@ private fun EditorScreen(
     ) { mutableStateOf(false) }
     var isEditingContent by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(uiState.isNew) }
     var aiToolsExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
+    var metadataExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(!uiState.isNew) }
     var extraInfoExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
     var recordInfoExpanded by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     val editorScrollState = rememberScrollState()
@@ -457,11 +458,11 @@ private fun EditorScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = if (uiState.isNew) "新建记录" else "编辑记录",
+                        text = if (uiState.isNew) "快速记录" else "编辑记录",
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
-                        text = if (uiState.isNew) "先写下来，再决定要不要整理。" else "先改正文，再决定要不要交给 AI 整理。",
+                        text = if (uiState.isNew) "先把火花存住；状态、标签和分类都可以之后再补。" else "先改正文，再决定要不要交给 AI 整理。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -476,7 +477,7 @@ private fun EditorScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 PanelCard {
-                    SectionHeader(title = if (uiState.isNew) "新记录" else "编辑")
+                    SectionHeader(title = if (uiState.isNew) "快速记录" else "编辑")
 
                     if (!uiState.isNew) {
                         Text("主题", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -653,7 +654,11 @@ private fun EditorScreen(
                 }
 
                 ActionButton(
-                    text = if (uiState.isSaving) "保存中..." else "保存记录",
+                    text = when {
+                        uiState.isSaving -> "保存中..."
+                        uiState.isNew -> "先存下这颗火花"
+                        else -> "保存记录"
+                    },
                     onClick = onSave,
                     enabled = !uiState.isSaving && uiState.content.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
@@ -663,67 +668,115 @@ private fun EditorScreen(
                 PanelCard {
                     SectionHeader(
                         title = "补充信息",
-                        headline = "${uiState.status.label} · ${uiState.horizon.label}",
+                        headline = if (uiState.isNew && !metadataExpanded) {
+                            "默认先轻记"
+                        } else {
+                            "${uiState.status.label} · ${uiState.horizon.label}"
+                        },
                     )
 
-                    Text("进展状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { metadataExpanded = !metadataExpanded },
+                        color = WhiteGlass.copy(alpha = 0.9f),
+                        shape = MaterialTheme.shapes.medium,
+                        border = BorderStroke(1.dp, BorderSoft),
                     ) {
-                        NoteStatus.entries.forEach { status ->
-                            FilterChip(
-                                selected = uiState.status == status,
-                                onClick = { onStatusChange(status) },
-                                label = { Text(status.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
-                                    selectedLabelColor = noteStatusAccent(status),
-                                ),
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = if (uiState.isNew) "先快速记，再补结构" else "状态、研究判断和分类",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = if (uiState.isNew && !metadataExpanded) {
+                                        "默认保持 ${uiState.status.label} · ${uiState.horizon.label} · ${uiState.knowledgeTrust.label}。需要时再展开。"
+                                    } else {
+                                        "需要时再补状态、证据强度、时间尺度和分类。"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = if (metadataExpanded) "收起" else "展开",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AccentBlue,
                             )
                         }
                     }
 
-                    Text("研究状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        KnowledgeTrust.entries.forEach { knowledgeTrust ->
-                            val accent = knowledgeTrustColor(knowledgeTrust)
-                            FilterChip(
-                                selected = uiState.knowledgeTrust == knowledgeTrust,
-                                onClick = { onKnowledgeTrustChange(knowledgeTrust) },
-                                label = { Text(knowledgeTrust.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = accent.copy(alpha = 0.14f),
-                                    selectedLabelColor = accent,
-                                ),
-                            )
+                    if (metadataExpanded) {
+                        Text("进展状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            NoteStatus.entries.forEach { status ->
+                                FilterChip(
+                                    selected = uiState.status == status,
+                                    onClick = { onStatusChange(status) },
+                                    label = { Text(status.label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
+                                        selectedLabelColor = noteStatusAccent(status),
+                                    ),
+                                )
+                            }
                         }
-                    }
-                    Text(
-                        text = "只有这条记录承载研究判断时再标记，系统会优先采用你的判断，而不是只靠内容猜测。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
 
-                    Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        NoteHorizon.entries.forEach { horizon ->
-                            val accent = horizonColor(horizon)
-                            FilterChip(
-                                selected = uiState.horizon == horizon,
-                                onClick = { onHorizonChange(horizon) },
-                                label = { Text("${horizon.label} · ${horizon.windowLabel}") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = accent.copy(alpha = 0.14f),
-                                    selectedLabelColor = accent,
-                                ),
-                            )
+                        Text("研究状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            KnowledgeTrust.entries.forEach { knowledgeTrust ->
+                                val accent = knowledgeTrustColor(knowledgeTrust)
+                                FilterChip(
+                                    selected = uiState.knowledgeTrust == knowledgeTrust,
+                                    onClick = { onKnowledgeTrustChange(knowledgeTrust) },
+                                    label = { Text(knowledgeTrust.label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.14f),
+                                        selectedLabelColor = accent,
+                                    ),
+                                )
+                            }
+                        }
+                        Text(
+                            text = "只有这条记录承载研究判断时再标记，系统会优先采用你的判断，而不是只靠内容猜测。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            NoteHorizon.entries.forEach { horizon ->
+                                val accent = horizonColor(horizon)
+                                FilterChip(
+                                    selected = uiState.horizon == horizon,
+                                    onClick = { onHorizonChange(horizon) },
+                                    label = { Text("${horizon.label} · ${horizon.windowLabel}") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.14f),
+                                        selectedLabelColor = accent,
+                                    ),
+                                )
+                            }
                         }
                     }
 
@@ -769,7 +822,7 @@ private fun EditorScreen(
                         }
                     }
 
-                    if (extraInfoExpanded) {
+                    if (metadataExpanded && extraInfoExpanded) {
                         Text(
                             text = "先判断这条记录是短期推进、中期验证，还是长期经营；分类和标签按需要再补，不必一开始就填满。",
                             style = MaterialTheme.typography.bodySmall,

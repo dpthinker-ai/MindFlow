@@ -635,7 +635,7 @@ private fun LocalModelSettingsScreen(
                 SectionHeader(title = "当前状态", headline = statusHeadline)
                 Text(
                     text = when {
-                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 会优先用本地模型生成今日押注、已成立和新连接。"
+                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 的五段孵化卡会优先走本地模型，本地维护也会继续常驻整理知识层。"
                         uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，进度会自动保存，断开后可以继续下载。"
                         uiState.localModelStatus == OnDeviceModelStatus.ERROR && uiState.localModelDownloadedBytes > 0L -> uiState.localModelLastMessage.ifBlank { "下载已中断，当前进度已保留，可以继续下载。" }
                         uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
@@ -730,7 +730,7 @@ private fun LocalModelSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("本地优先", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "本地模型就绪后，Flow 三张卡会优先走端侧，再回退云端和规则。",
+                                text = "本地模型就绪后，Flow 的五段卡会优先走端侧；没有本地结果时才回退到云端升级或规则整理。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1191,7 +1191,7 @@ private fun AiSettingsScreen(
 
     DetailScreenFrame(
         title = "AI 能力",
-        subtitle = if (uiState.aiEnabled) "AI 整理 / 今日聚焦 / 方向判断" else "当前只用本地规则",
+        subtitle = if (uiState.aiEnabled) "云端升级 / 编辑整理 / 方向判断" else "当前只用本地与规则",
         onBack = onBack,
     ) {
         item {
@@ -1218,7 +1218,7 @@ private fun AiSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "编辑页的 AI 整理、Flow 的今日聚焦、线程页的方向判断都会优先使用这里的模型。",
+                description = "这里的模型只在显式云端升级动作里使用，不会静默替本地维护跑云端；所有结果仍会回写到本地知识层。",
             ) {
                 ProviderPresetSelector(
                     selectedPreset = uiState.aiProviderPreset,
@@ -1238,7 +1238,7 @@ private fun AiSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("启用 AI", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = if (uiState.aiEnabled) "会优先用于整理记录、今日聚焦和方向判断" else "关闭后只用本地规则",
+                                text = if (uiState.aiEnabled) "会用于显式的云端升级、编辑整理和方向判断；不会静默上传本地维护任务" else "关闭后只用本地模型和规则整理",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

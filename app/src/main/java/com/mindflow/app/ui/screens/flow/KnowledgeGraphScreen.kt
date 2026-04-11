@@ -63,6 +63,15 @@ private data class GraphNodeUi(
     val accent: Color = AccentBlue,
 )
 
+private data class GraphDecisionCard(
+    val title: String,
+    val headline: String,
+    val line: String,
+    val support: String,
+    val threadKey: String? = null,
+    val noteId: Long? = null,
+)
+
 @androidx.compose.runtime.Composable
 fun KnowledgeGraphRoute(
     directionWikiCoordinator: DirectionWikiCoordinator,
@@ -91,6 +100,7 @@ private fun KnowledgeGraphScreen(
     onOpenNote: (Long) -> Unit,
 ) {
     val graphNodes = buildGraphNodes(snapshot)
+    val decisionCards = rememberGraphDecisionCards(snapshot, maintainerSnapshot)
     ScreenBackground {
         Column(
             modifier = Modifier
@@ -110,12 +120,12 @@ private fun KnowledgeGraphScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "变化图谱",
+                            text = "图谱",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "先看当前知识已经长成什么样，再决定继续往哪里补材料。",
+                            text = "先看哪里最密、哪里最孤、该补哪条边，再打开整张图。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
@@ -131,89 +141,21 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "当前知识长相",
-                            headline = maintainerSnapshot.knowledgeInventoryLine.ifBlank {
-                                if (maintainerSnapshot.hasContent) {
-                                    "${maintainerSnapshot.graphPulse.newSourceCount} 条新材料 · ${maintainerSnapshot.graphPulse.newNodeCount} 个活跃节点"
-                                } else {
-                                    "先让本地维护跑出一轮结果"
-                                }
-                            },
+                            title = "现在最值得看",
+                            headline = if (decisionCards.isEmpty()) "等第一轮维护结果" else "先做判断，再看画布",
                         )
-                        if (!maintainerSnapshot.hasContent) {
+                        if (decisionCards.isEmpty()) {
                             Text(
-                                text = "等本地维护跑完之后，这里会告诉你当前知识主要围绕什么、已经包含哪些点、今天新长了什么节点和连接。",
+                                text = "先让本地维护跑出一轮结果，这里会先回答当前枢纽、最孤的点和最缺的一条边。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSoft,
                             )
                         } else {
-                            maintainerSnapshot.knowledgeShape.line.takeIf { it.isNotBlank() }?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = TextMain,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            maintainerSnapshot.knowledgeShape.support.takeIf { it.isNotBlank() }?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            if (maintainerSnapshot.knowledgePointLabels.isNotEmpty()) {
-                                Text(
-                                    text = "包含：${maintainerSnapshot.knowledgePointLabels.take(5).joinToString("、")}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "今天图谱变化",
-                            headline = if (maintainerSnapshot.hasContent) {
-                                "${maintainerSnapshot.graphPulse.newSourceCount} 条新材料 · ${maintainerSnapshot.graphPulse.newNodeCount} 个活跃节点"
-                            } else {
-                                "先让本地维护跑出一轮结果"
-                            },
-                        )
-                        if (!maintainerSnapshot.hasContent) {
-                            Text(
-                                text = "等本地维护跑完之后，这里会告诉你今天新长了什么节点、哪条线最活跃、哪处连接最该补。",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
-                            )
-                        } else {
-                            Text(
-                                text = maintainerSnapshot.currentJudgement.line,
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = TextMain,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "活跃枢纽：${maintainerSnapshot.graphPulse.activeHubLabel.ifBlank { maintainerSnapshot.updatedDirectionTitle.ifBlank { "还没形成稳定枢纽" } }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                            )
-                            maintainerSnapshot.graphPulse.missingLinkLabel.takeIf { it.isNotBlank() }?.let {
-                                Text(
-                                    text = "待补连接：$it",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                            decisionCards.forEach { card ->
+                                GraphDecisionSummaryCard(
+                                    card = card,
+                                    onOpenThread = onOpenThread,
+                                    onOpenNote = onOpenNote,
                                 )
                             }
                         }
@@ -228,11 +170,22 @@ private fun KnowledgeGraphScreen(
                         )
                         if (graphNodes.isEmpty()) {
                             Text(
-                                text = "先让 Flow 继续维护一段时间，这里才会长出可看的方向、概念、结论和证据网络。",
+                                text = "先让 Flow 继续维护一段时间，这里才会长出可读的方向、概念、结论和证据网络。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSoft,
                             )
                         } else {
+                            Text(
+                                text = maintainerSnapshot.knowledgeShape.line.ifBlank {
+                                    maintainerSnapshot.knowledgeInventoryLine.ifBlank {
+                                        "当前图谱已经有 ${snapshot.directions.size} 条主题线和 ${snapshot.knowledgeItems.size} 个知识对象。"
+                                    }
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             KnowledgeGraphCanvas(
                                 nodes = graphNodes,
                                 onOpenThread = onOpenThread,
@@ -245,33 +198,7 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "今天维护结果",
-                            headline = "${snapshot.directions.size} 条方向 · ${snapshot.knowledgeItems.size} 个知识对象",
-                        )
-                        if (maintainerSnapshot.hasContent) {
-                            SummaryLineCard(
-                                title = "今天新吸收",
-                                line = maintainerSnapshot.recentAbsorption.line,
-                                support = maintainerSnapshot.recentAbsorption.support,
-                            )
-                            SummaryLineCard(
-                                title = "当前成立",
-                                line = maintainerSnapshot.currentJudgement.line,
-                                support = maintainerSnapshot.currentJudgement.support,
-                            )
-                            SummaryLineCard(
-                                title = "今天新连接",
-                                line = maintainerSnapshot.newConnection.line,
-                                support = maintainerSnapshot.newConnection.support,
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "方向骨架",
+                            title = "可继续打开的线",
                             headline = "${snapshot.directions.size} 条方向 · ${snapshot.knowledgeItems.size} 个知识对象",
                         )
                         snapshot.directions.values
@@ -318,6 +245,58 @@ private fun KnowledgeGraphScreen(
                             }
                     }
                 }
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun GraphDecisionSummaryCard(
+    card: GraphDecisionCard,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                card.noteId?.let(onOpenNote) ?: card.threadKey?.let(onOpenThread)
+            },
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = card.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = AccentBlue,
+            )
+            Text(
+                text = card.headline,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = card.line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMain,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            card.support.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -428,48 +407,6 @@ private fun KnowledgeGraphCanvas(
     }
 }
 
-@androidx.compose.runtime.Composable
-private fun SummaryLineCard(
-    title: String,
-    line: String,
-    support: String,
-) {
-    if (line.isBlank()) return
-    Surface(
-        color = WhiteGlass.copy(alpha = 0.78f),
-        shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = AccentBlue,
-            )
-            Text(
-                text = line,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            support.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
 private fun Int.dpToPx(density: Density): Float = with(density) { this@dpToPx.dp.toPx() }
 
 @androidx.compose.runtime.Composable
@@ -561,3 +498,89 @@ private fun graphTypePriority(type: KnowledgeLayerSearchType): Int =
         KnowledgeLayerSearchType.EXPERIMENT -> 5
         KnowledgeLayerSearchType.DIRECTION -> 6
     }
+
+private fun rememberGraphDecisionCards(
+    snapshot: DirectionWikiSnapshot,
+    maintainerSnapshot: LocalKnowledgeMaintenanceSnapshot,
+): List<GraphDecisionCard> {
+    val countsByThread = snapshot.knowledgeItems
+        .filter { it.threadKey.isNotBlank() }
+        .groupingBy { it.threadKey }
+        .eachCount()
+    val directions = snapshot.directions.values.sortedByDescending { it.updatedAt }
+    val hubDirection = directions.maxByOrNull { direction ->
+        countsByThread.getOrDefault(direction.threadKey, 0) +
+            if (direction.title == maintainerSnapshot.graphPulse.activeHubLabel || direction.title == maintainerSnapshot.updatedDirectionTitle) 4 else 0
+    }
+    val denseDirection = directions.maxByOrNull { direction ->
+        countsByThread.getOrDefault(direction.threadKey, 0)
+    }
+    val isolatedDirection = directions.minByOrNull { direction ->
+        countsByThread.getOrDefault(direction.threadKey, 0)
+    }
+    val missingEdgeCard = GraphDecisionCard(
+        title = "最缺的一条边",
+        headline = maintainerSnapshot.graphPulse.missingLinkLabel.ifBlank { "还没形成明确缺口" },
+        line = maintainerSnapshot.openQuestion.line.ifBlank {
+            maintainerSnapshot.newConnection.line.ifBlank {
+                "等更多记录进入之后，这里会优先提示最值得补的连接。"
+            }
+        },
+        support = maintainerSnapshot.openQuestion.support.ifBlank {
+            maintainerSnapshot.newConnection.support
+        },
+        threadKey = maintainerSnapshot.openQuestion.threadKey.takeIf { it.isNotBlank() },
+        noteId = maintainerSnapshot.openQuestion.noteId,
+    )
+    return buildList {
+        hubDirection?.let { direction ->
+            add(
+                GraphDecisionCard(
+                    title = "当前枢纽",
+                    headline = direction.title,
+                    line = direction.conclusionLine
+                        .ifBlank { direction.assetSummary }
+                        .ifBlank { direction.healthLine }
+                        .ifBlank { "${countsByThread.getOrDefault(direction.threadKey, 0)} 个知识对象围绕这条线聚集。" },
+                    support = direction.trustLine
+                        .ifBlank { direction.groundingLine }
+                        .ifBlank { direction.maintenanceLine },
+                    threadKey = direction.threadKey,
+                ),
+            )
+        }
+        denseDirection
+            ?.takeIf { it.threadKey != hubDirection?.threadKey }
+            ?.let { direction ->
+                add(
+                    GraphDecisionCard(
+                        title = "最密的一团",
+                        headline = "${direction.title} · ${countsByThread.getOrDefault(direction.threadKey, 0)} 个对象",
+                        line = direction.knowledgeObjectLine
+                            .ifBlank { direction.assetSummary }
+                            .ifBlank { "这条线已经积累了最多知识对象，适合继续压成稳定资产。" },
+                        support = direction.continuityLine
+                            .ifBlank { direction.trajectoryLine }
+                            .ifBlank { direction.healthLine },
+                        threadKey = direction.threadKey,
+                    ),
+                )
+            }
+        isolatedDirection?.let { direction ->
+            add(
+                GraphDecisionCard(
+                    title = "最孤的一点",
+                    headline = direction.title,
+                    line = direction.openQuestions.firstOrNull()
+                        ?: direction.maintenanceLine
+                            .ifBlank { "${countsByThread.getOrDefault(direction.threadKey, 0)} 个对象，还没连出稳定网络。" },
+                    support = direction.maintenanceTargetLine
+                        .ifBlank { direction.maintenanceSourceLine }
+                        .ifBlank { direction.maintenanceDimensionLine },
+                    threadKey = direction.threadKey,
+                ),
+            )
+        }
+        add(missingEdgeCard)
+    }.take(4)
+}

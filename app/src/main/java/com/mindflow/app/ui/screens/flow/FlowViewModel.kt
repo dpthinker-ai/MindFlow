@@ -36,6 +36,8 @@ import com.mindflow.app.data.review.items
 import com.mindflow.app.data.review.statsLine
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
+import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -99,6 +101,18 @@ private data class FolderSlice(
     val anchorLabel: String,
     val line: String,
     val support: String,
+)
+
+private data class KnowledgeSlice(
+    val id: String,
+    val type: KnowledgeLayerSearchType,
+    val title: String,
+    val line: String,
+    val support: String,
+    val anchorLabel: String,
+    val bucketKey: String,
+    val threadKey: String?,
+    val noteId: Long?,
 )
 
 enum class FlowCardFeedback {
@@ -170,6 +184,7 @@ class FlowViewModel(
     private data class DirectionState(
         val followedDirections: List<FollowedDirectionSummary> = emptyList(),
         val themeThreads: List<ThemeThread> = emptyList(),
+        val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
     )
 
     private data class FlowPrimaryInputs(
@@ -387,6 +402,7 @@ class FlowViewModel(
                         themeThreads = analyzedThreads.filterNot { candidate ->
                             followedDirections.any { it.thread.key == candidate.key }
                         },
+                        knowledgeItems = wikiSnapshot.knowledgeItems,
                     )
                 }
         }
@@ -476,6 +492,9 @@ class FlowViewModel(
         gapFeedback: FlowCardFeedback?,
     ): FlowCompressionInput {
         val primaryDirection = directions.followedDirections.firstOrNull()
+        val anchoredCurrentJudgement = maintainerSnapshot.currentJudgement.takeIf {
+            it.threadKey.isNotBlank() || it.noteId != null
+        }
         val mainlineCandidates = buildMainlineCandidates(
             primary = primary,
             directions = directions.followedDirections,
@@ -486,6 +505,39 @@ class FlowViewModel(
         val directionFolderKeys = directions.followedDirections.associate { direction ->
             direction.thread.key to directionFolderKey(direction, primary.activeNotes)
         }
+        val noteFolderKeys = primary.activeNotes.associate { note ->
+            note.id to (MindFolderCatalog.normalizedKey(note.folderKey) ?: "uncategorized")
+        }
+        val knowledgeSlices = buildKnowledgeSlices(
+            items = directions.knowledgeItems,
+            noteFolderKeys = noteFolderKeys,
+            threadFolderKeys = directionFolderKeys,
+        )
+        val settledKnowledge = selectKnowledgeSlice(
+            slices = knowledgeSlices,
+            excludedIds = setOfNotNull(selectedMainlineCandidate?.noteId?.let { "note:$it" }),
+            preferredDifferentBucketFrom = setOfNotNull(selectedMainlineFolderKey),
+            predicate = {
+                it.type == KnowledgeLayerSearchType.CONCLUSION ||
+                    it.type == KnowledgeLayerSearchType.EVIDENCE ||
+                    it.type == KnowledgeLayerSearchType.METHOD ||
+                    it.type == KnowledgeLayerSearchType.EXPERIMENT
+            },
+        )
+        val gapKnowledge = selectKnowledgeSlice(
+            slices = knowledgeSlices,
+            excludedIds = setOfNotNull(settledKnowledge?.id),
+            preferredDifferentBucketFrom = setOfNotNull(
+                selectedMainlineFolderKey,
+                settledKnowledge?.bucketKey?.folderKeyFromBucket(),
+            ),
+            predicate = {
+                it.type == KnowledgeLayerSearchType.QUESTION ||
+                    it.type == KnowledgeLayerSearchType.CONCEPT ||
+                    it.type == KnowledgeLayerSearchType.EXPERIMENT ||
+                    it.type == KnowledgeLayerSearchType.METHOD
+            },
+        )
         val settledDirection = selectDirectionSummary(
             directions = directions.followedDirections,
             directionFolderKeys = directionFolderKeys,
@@ -521,58 +573,66 @@ class FlowViewModel(
                 settledDirection?.thread?.key?.let(directionFolderKeys::get),
             ),
         )
+        val recurringLine = selectedMainlineCandidate?.summary
+            ?.takeIf { it.isNotBlank() }
+            ?: anchoredCurrentJudgement?.line?.takeIf { it.isNotBlank() }
+            ?: primary.nextActionText.takeIf { it.isNotBlank() }
+            ?: primary.staleBridge.takeIf { it.isNotBlank() }
+            ?: primary.staleNextStep.takeIf { it.isNotBlank() }
+            ?: "先让几条记录开始互相呼应，这里才会长出真正值得继续养的暗线。"
+        val recurringWhyNow = selectedMainlineCandidate?.whyNow
+            ?.takeIf { it.isNotBlank() }
+            ?: anchoredCurrentJudgement?.support?.takeIf { it.isNotBlank() }
+            ?: settledKnowledge?.support?.takeIf { it.isNotBlank() }
+            ?: primary.staleBridge.takeIf { it.isNotBlank() }
+            ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty()
+        val durableSettledLine = settledKnowledge?.line
+            .takeIf { !it.isNullOrBlank() }
+            ?: settledDirection?.wikiValidatedPoint?.takeIf { it.isNotBlank() }
+            ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
+            ?: settledDirection?.wikiConclusionLine?.takeIf { it.isNotBlank() }
+            ?: settledDirection?.assetSummary?.takeIf { it.isNotBlank() }
+            ?: crossFolderSlices.firstOrNull()?.line
+        val durableSettledSupport = settledKnowledge?.support
+            .takeIf { !it.isNullOrBlank() }
+            ?: settledDirection?.wikiGroundingLine?.takeIf { it.isNotBlank() }
+            ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
+            ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
+            ?: crossFolderSlices.firstOrNull()?.support
+        val collisionLine = maintainerSnapshot.newConnection.line.ifBlank {
+            gapKnowledge?.line
+                .takeIf { !it.isNullOrBlank() }
+                ?: breakthroughDirection?.contrarianQuestion?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.externalHypothesis?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.opportunityGap?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiOpenQuestion?.takeIf { it.isNotBlank() }
+                ?: crossFolderSlices.getOrNull(1)?.line
+                ?: fusionState.lines.firstOrNull().orEmpty()
+        }
+        val collisionSupport = maintainerSnapshot.newConnection.support.ifBlank {
+            gapKnowledge?.support
+                .takeIf { !it.isNullOrBlank() }
+                ?: breakthroughDirection?.postValidationAction?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.validationReason?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.outsideAngle?.takeIf { it.isNotBlank() }
+                ?: breakthroughDirection?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
+                ?: crossFolderSlices.getOrNull(1)?.support
+                ?: fusionState.lines.getOrNull(1).orEmpty()
+        }
 
         val fallback = FlowKnowledgeCompressionState(
-            mainline = maintainerSnapshot.currentJudgement.line.ifBlank {
-                selectedMainlineCandidate?.summary
-                    ?.takeIf { it.isNotBlank() }
-                    ?: primary.nextActionText.takeIf { it.isNotBlank() }
-                    ?: primary.staleNextStep.takeIf { it.isNotBlank() }
-                    ?: "先把今天最新进来的材料压成一个当前综合判断。"
-            },
-            whyNow = maintainerSnapshot.currentJudgement.support.ifBlank {
-                selectedMainlineCandidate?.whyNow
-                    ?.takeIf { it.isNotBlank() }
-                    ?: primary.staleBridge.takeIf { it.isNotBlank() }
-                    ?: weeklyReviewState.items.firstOrNull()?.text.orEmpty()
-            },
+            mainline = recurringLine,
+            whyNow = recurringWhyNow,
             mainlineSource = DailyBriefSource.RULE,
-            settledLine = maintainerSnapshot.recentAbsorption.line.ifBlank {
-                settledDirection?.wikiValidatedPoint
-                    ?.takeIf { it.isNotBlank() }
-                    ?: settledDirection?.wikiVerifiedPoint?.takeIf { it.isNotBlank() }
-                    ?: settledDirection?.wikiConclusionLine?.takeIf { it.isNotBlank() }
-                    ?: settledDirection?.assetSummary?.takeIf { it.isNotBlank() }
-                    ?: crossFolderSlices.firstOrNull()?.line
-                    ?: weeklyReviewState.items.firstOrNull { it.label == "主线" }?.text.orEmpty()
-            },
-            settledSupport = maintainerSnapshot.recentAbsorption.support.ifBlank {
-                settledDirection?.wikiGroundingLine
-                    ?.takeIf { it.isNotBlank() }
-                    ?: settledDirection?.wikiTrustLine?.takeIf { it.isNotBlank() }
-                    ?: settledDirection?.wikiKnowledgeObjectLine?.takeIf { it.isNotBlank() }
-                    ?: crossFolderSlices.firstOrNull()?.support
-                    ?: weeklyReviewState.statsLine
-            },
+            settledLine = durableSettledLine
+                ?: maintainerSnapshot.recentAbsorption.line.takeIf { it.isNotBlank() }
+                ?: weeklyReviewState.items.firstOrNull { it.label == "主线" }?.text.orEmpty(),
+            settledSupport = durableSettledSupport
+                ?: maintainerSnapshot.recentAbsorption.support.takeIf { it.isNotBlank() }
+                ?: weeklyReviewState.statsLine,
             settledSource = DailyBriefSource.RULE,
-            gapLine = maintainerSnapshot.newConnection.line.ifBlank {
-                breakthroughDirection?.contrarianQuestion
-                    ?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.externalHypothesis?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.opportunityGap?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.wikiOpenQuestion?.takeIf { it.isNotBlank() }
-                    ?: crossFolderSlices.getOrNull(1)?.line
-                    ?: fusionState.lines.firstOrNull().orEmpty()
-            },
-            gapSupport = maintainerSnapshot.newConnection.support.ifBlank {
-                breakthroughDirection?.postValidationAction
-                    ?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.validationReason?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.outsideAngle?.takeIf { it.isNotBlank() }
-                    ?: breakthroughDirection?.wikiMaintenanceFocusLine?.takeIf { it.isNotBlank() }
-                    ?: crossFolderSlices.getOrNull(1)?.support
-                    ?: fusionState.lines.getOrNull(1).orEmpty()
-            },
+            gapLine = collisionLine,
+            gapSupport = collisionSupport,
             gapSource = DailyBriefSource.RULE,
         )
 
@@ -616,6 +676,18 @@ class FlowViewModel(
                     it.nextStep,
                 ).joinToString("~")
             })
+            append(':')
+            append(directions.knowledgeItems.joinToString("|") {
+                listOf(
+                    it.id,
+                    it.type.name,
+                    it.title,
+                    it.summary,
+                    it.supportLine,
+                    it.threadKey,
+                    it.noteId?.toString().orEmpty(),
+                ).joinToString("~")
+            })
         }
         val todayKey = LocalDate.now().toString()
         val mainlineKey = "$todayKey:mainline:$mainlineNonce"
@@ -623,81 +695,76 @@ class FlowViewModel(
         val gapKey = "$signature:gap:$gapNonce"
 
         val mainlineContextSummary = buildString {
-            appendLine("请像本地知识维护员一样，把今天新进来的材料和已有积累压成一个当前综合判断。不要列候选，不要泛泛鼓励。")
-            appendLine("这是 Flow 第一张主卡，需要像 llm-wiki 已经维护出来的当前综合判断，而不是即时摘要。")
+            appendLine("请像想法孵化器背后的本地知识维护员一样，只指出用户其实一直在反复想什么。")
+            appendLine("这张卡不是今日判断，也不是任务提示。它必须像一条已经反复出现、正在成形的暗线。")
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("当前最值得看的对象：${candidate.title}")
+                appendLine("当前最有复现信号的对象：${candidate.title}")
                 appendLine("主要来自：${candidate.anchorLabel}")
                 candidate.stageLabel.takeIf { it.isNotBlank() }?.let { appendLine("阶段：$it") }
                 candidate.horizonLabel.takeIf { it.isNotBlank() }?.let { appendLine("时间尺度：$it") }
-                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("已知判断：$it") }
-                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("已知为什么现在：$it") }
-                candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("已知最小动作：$it") }
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("这条暗线当前像什么：$it") }
+                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("为什么现在值得继续养：$it") }
+                candidate.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("继续养它的下一口：$it") }
             }
             if (mainlineNonce > 0 && mainlineCandidates.size > 1) {
-                appendLine("用户刚点了“再压一次”，这次必须切到不同项目、文件夹或方向的真实候选，而不是改写同一主题。")
+                appendLine("用户刚点了“换一条线”，这次必须切到不同项目、文件夹或方向的真实暗线，而不是改写同一主题。")
             } else if (mainlineNonce > 0) {
-                appendLine("用户刚点了“再压一次”，候选不多时请至少换一个角度，不要只是同义改写。")
+                appendLine("用户刚点了“换一条线”，候选不多时请至少换一个角度，不要只是同义改写。")
             }
             if (crossFolderSlices.isNotEmpty()) {
-                appendLine("除当前对象外，其他文件夹里还有这些真实材料：")
+                appendLine("除当前对象外，其他文件夹里还有这些真实线索：")
                 crossFolderSlices.take(3).forEach { slice ->
                     appendLine("${slice.anchorLabel}：${slice.line}")
                 }
             }
-            directions.followedDirections.firstOrNull { it.thread.key == selectedMainlineCandidate?.threadKey }?.let { direction ->
-                direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近推进：$it") }
+            if (knowledgeSlices.isNotEmpty()) {
+                appendLine("本地知识层里最近还有这些对象：")
+                knowledgeSlices.take(4).forEach { slice ->
+                    appendLine("${slice.anchorLabel}：${slice.line}")
+                }
             }
-            primary.nextActionText.takeIf { it.isNotBlank() }?.let { appendLine("系统下一步：$it") }
-            primary.staleBridge.takeIf { it.isNotBlank() }?.let { appendLine("重连理由：$it") }
-            primary.staleNextStep.takeIf { it.isNotBlank() }?.let { appendLine("重连动作：$it") }
+            directions.followedDirections.firstOrNull { it.thread.key == selectedMainlineCandidate?.threadKey }?.let { direction ->
+                direction.wikiContinuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
+                direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("正在往哪长：$it") }
+                direction.lastProgressLine.takeIf { it.isNotBlank() }?.let { appendLine("最近动作：$it") }
+            }
+            primary.nextActionText.takeIf { it.isNotBlank() }?.let { appendLine("最近手上动作：$it") }
+            primary.staleBridge.takeIf { it.isNotBlank() }?.let { appendLine("旧线重连理由：$it") }
+            primary.staleNextStep.takeIf { it.isNotBlank() }?.let { appendLine("旧线重连动作：$it") }
             weeklyReviewState.items.firstOrNull { it.label == "推进" }
                 ?.text
                 ?.takeIf { it.isNotBlank() }
-                ?.let { appendLine("本周推进：$it") }
-            appendLine("目标：输出一个当前综合判断，而不是行动号召。")
+                ?.let { appendLine("本周反复推进：$it") }
+            appendLine("目标：输出一条反复回来的暗线，以及为什么它现在值得继续养。")
         }
 
         val settledContextSummary = buildString {
-            appendLine("请像 wiki 维护员一样，只挑一个最近真正被吸收进知识层的结果。不要写计划，不要写鼓励。")
-            appendLine("不要把当前综合判断换一种说法重新写成最近吸收。最近吸收必须更像已被写入知识层的结果、结论或方法。")
+            appendLine("请像 wiki 维护员一样，只挑一个已经开始长成可复用资产的结果、方法或结论。不要写计划，不要写鼓励。")
+            appendLine("不要把那条暗线换一种说法重复出来。这张卡必须更像已经能留下来的资产。")
             when (settledFeedback) {
-                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、带清楚可信基础的判断更有用。")
-                FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛的进步描述和不影响决策的判断。")
+                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、而且带清楚可信基础的资产更有用。")
+                FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛进步描述和还不能复用的判断。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("当前综合判断对象：${candidate.title}")
-                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("综合判断主句：$it") }
-                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("综合判断原因：$it") }
+                appendLine("当前反复出现的暗线：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("暗线主句：$it") }
+                candidate.whyNow.takeIf { it.isNotBlank() }?.let { appendLine("暗线理由：$it") }
             }
-            settledDirection?.let { direction ->
-                appendLine("方向：${direction.thread.title}")
-                appendLine("吸收候选：${direction.wikiValidatedPoint.ifBlank { direction.wikiVerifiedPoint.ifBlank { direction.wikiConclusionLine.ifBlank { direction.assetSummary } } }}")
-                direction.wikiValidatedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已验证：$it") }
-                direction.wikiVerifiedPoint.takeIf { it.isNotBlank() }?.let { appendLine("已查证：$it") }
-                direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
-                direction.wikiGroundingLine.takeIf { it.isNotBlank() }?.let { appendLine("证据基础：$it") }
-                direction.wikiTrustLine.takeIf { it.isNotBlank() }?.let { appendLine("可信边界：$it") }
-                direction.wikiKnowledgeObjectLine.takeIf { it.isNotBlank() }?.let { appendLine("知识对象：$it") }
-                direction.wikiSnapshotStageLine.takeIf { it.isNotBlank() }?.let { appendLine("阶段位置：$it") }
-                direction.wikiContinuityLine.takeIf { it.isNotBlank() }?.let { appendLine("连续性：$it") }
-                direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }?.let { appendLine("走势：$it") }
-                direction.nextStep.takeIf { it.isNotBlank() }?.let { appendLine("它会影响的下一步：$it") }
+            settledKnowledge?.let { item ->
+                appendLine("知识对象：${item.anchorLabel}")
+                appendLine("资产候选：${item.line}")
+                item.support.takeIf { it.isNotBlank() }?.let { appendLine("可信基础：$it") }
             }
-            val corroboratingDirections = directions.followedDirections
-                .filter { it.thread.key != settledDirection?.thread?.key }
-                .mapNotNull { summary ->
-                    summary.wikiValidatedPoint
-                        .ifBlank { summary.wikiVerifiedPoint }
-                        .ifBlank { summary.wikiConclusionLine }
-                        .takeIf { it.isNotBlank() }
-                        ?.let { "${summary.thread.title}：$it" }
+            val corroboratingKnowledge = knowledgeSlices
+                .filter { it.id != settledKnowledge?.id }
+                .mapNotNull { slice ->
+                    slice.line.takeIf { it.isNotBlank() }?.let { "${slice.anchorLabel}：$it" }
                 }
                 .take(2)
-            if (corroboratingDirections.isNotEmpty()) {
-                appendLine("旁证方向：")
-                corroboratingDirections.forEach { appendLine(it) }
+            if (corroboratingKnowledge.isNotEmpty()) {
+                appendLine("旁证积累：")
+                corroboratingKnowledge.forEach { appendLine(it) }
             }
             val repeatedHorizons = directions.followedDirections
                 .groupingBy { it.dominantHorizon.label }
@@ -710,84 +777,66 @@ class FlowViewModel(
                 appendLine("你最近长期在推：$repeatedHorizons")
             }
             if (crossFolderSlices.isNotEmpty()) {
-                appendLine("如果其他项目或文件夹里已经有更成熟的积累，优先从不同文件夹里挑最近真正成立的结果，不要继续围着同一主题改写。")
+                appendLine("如果其他项目或文件夹里已经有更成熟的积累，优先从不同文件夹里挑真正长成的资产，不要继续围着同一主题改写。")
                 crossFolderSlices.take(3).forEach { slice ->
                     appendLine("${slice.anchorLabel}：${slice.line}｜${slice.support}")
                 }
             }
-            appendLine("目标：输出一条最近刚被写进知识层的结果，而不是趋势总结。")
+            appendLine("目标：输出一条已经开始可复用的资产，而不是趋势总结。")
         }
 
         val gapContextSummary = buildString {
-            appendLine("请像 wiki maintainer 一样，只找一个当前最该厘清的张力。不要平均分配，不要列清单。")
-            appendLine("这张卡的职责不是制造灵感，而是指出知识层里最该补的一处张力，以及下一次该摄入什么材料。")
-            appendLine("不要重复当前综合判断，也不要把最近吸收换个词说一遍。")
+            appendLine("请像想法孵化器背后的 maintainer 一样，只找一个现在最值得撞一下的连接。不要平均分配，不要列清单。")
+            appendLine("这张卡的职责不是制造口号，而是指出哪两个点碰一下最可能长出新东西，以及为什么现在值得试。")
+            appendLine("不要重复那条暗线，也不要把已经长成的资产换个词说一遍。")
             when (gapFeedback) {
-                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出张力和下一次摄入对象的结果更有用。")
-                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给显而易见的缺口，要明确指出哪一处知识最薄。")
+                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出碰撞对象和试一下理由的结果更有用。")
+                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给泛泛灵感，要明确指出哪两点碰一下。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
-                appendLine("当前综合判断：${candidate.title}")
-                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("综合判断主句：$it") }
+                appendLine("当前暗线：${candidate.title}")
+                candidate.summary.takeIf { it.isNotBlank() }?.let { appendLine("暗线主句：$it") }
             }
             settledDirection?.let { direction ->
                 direction.wikiValidatedPoint
                     .ifBlank { direction.wikiVerifiedPoint }
                     .ifBlank { direction.wikiConclusionLine }
                     .takeIf { it.isNotBlank() }
-                    ?.let { appendLine("最近吸收：$it") }
+                    ?.let { appendLine("已经长成的资产：$it") }
             }
-            breakthroughDirection?.let { direction ->
-                appendLine("方向：${direction.thread.title}")
-                appendLine("张力候选：${direction.wikiOpenQuestion.ifBlank { direction.wikiMaintenanceLine.ifBlank { direction.blocker } }}")
-                direction.wikiHealthLine.takeIf { it.isNotBlank() }?.let { appendLine("健康状态：$it") }
-                direction.wikiMaintenanceFocusLine.takeIf { it.isNotBlank() }?.let { appendLine("优先对象：$it") }
-                direction.wikiMaintenanceTargetLine.takeIf { it.isNotBlank() }?.let { appendLine("先维护：$it") }
-                direction.wikiMaintenanceSourceLine.takeIf { it.isNotBlank() }?.let { appendLine("先补来源：$it") }
-                direction.wikiMaintenanceDimensionLine.takeIf { it.isNotBlank() }?.let { appendLine("最薄弱：$it") }
-                direction.outsideAngle.takeIf { it.isNotBlank() }?.let { appendLine("外部角度：$it") }
-                direction.opportunityGap.takeIf { it.isNotBlank() }?.let { appendLine("机会缺口：$it") }
-                direction.contrarianQuestion.takeIf { it.isNotBlank() }?.let { appendLine("反常识问题：$it") }
-                direction.externalHypothesis.takeIf { it.isNotBlank() }?.let { appendLine("外部假设：$it") }
-                direction.wikiHypothesisPoint.takeIf { it.isNotBlank() }?.let { appendLine("待验证：$it") }
-                direction.postValidationAction.takeIf { it.isNotBlank() }?.let { appendLine("如果成立下一步：$it") }
+            gapKnowledge?.let { item ->
+                appendLine("碰撞对象：${item.anchorLabel}")
+                appendLine("碰撞候选：${item.line}")
+                item.support.takeIf { it.isNotBlank() }?.let { appendLine("为什么值得试：$it") }
             }
-            val crossDirectionAssets = directions.followedDirections
-                .filter { it.thread.key != breakthroughDirection?.thread?.key }
-                .filter { it.thread.key != selectedMainlineCandidate?.threadKey }
-                .mapNotNull { summary ->
-                    val stablePoint = summary.wikiValidatedPoint
-                        .ifBlank { summary.wikiVerifiedPoint }
-                        .ifBlank { summary.wikiConclusionLine }
-                        .ifBlank { summary.assetSummary }
-                    val openPoint = summary.wikiOpenQuestion
-                        .ifBlank { summary.contrarianQuestion }
-                        .ifBlank { summary.opportunityGap }
-                    val chosen = stablePoint.ifBlank { openPoint }
-                    chosen.takeIf { it.isNotBlank() }?.let { "${summary.thread.title}：$it" }
+            val crossKnowledgeAssets = knowledgeSlices
+                .filter { it.id != gapKnowledge?.id }
+                .filter { it.threadKey != selectedMainlineCandidate?.threadKey }
+                .mapNotNull { slice ->
+                    slice.line.takeIf { it.isNotBlank() }?.let { "${slice.anchorLabel}：$it" }
                 }
                 .distinct()
                 .take(3)
-            if (crossDirectionAssets.isNotEmpty()) {
-                appendLine("其他方向可借来的积累：")
-                crossDirectionAssets.forEach { appendLine(it) }
+            if (crossKnowledgeAssets.isNotEmpty()) {
+                appendLine("其他项目/知识对象可借来的碰撞材料：")
+                crossKnowledgeAssets.forEach { appendLine(it) }
             }
             if (crossFolderSlices.isNotEmpty()) {
-                appendLine("如果有其他项目或文件夹的材料，优先把当前主线和不同文件夹的旧积累连起来，不要继续围着同一方向打转。")
+                appendLine("如果有其他项目或文件夹的材料，优先把当前暗线和不同文件夹的旧积累连起来，不要继续围着同一方向打转。")
                 crossFolderSlices.take(3).forEach { slice ->
                     appendLine("${slice.anchorLabel}：${slice.line}")
                 }
             }
             if (primary.explorationPrompts.isNotEmpty()) {
-                appendLine("待吸收提示：")
+                appendLine("待吸收材料：")
                 primary.explorationPrompts.take(2).forEach { appendLine(it) }
             }
             if (fusionState.lines.isNotEmpty()) {
-                appendLine("潜在张力：")
+                appendLine("潜在碰撞：")
                 fusionState.lines.take(2).forEach { appendLine(it) }
             }
-            appendLine("目标：输出当前最该厘清的张力，以及下一次摄入什么材料。")
+            appendLine("目标：输出一次最值得试的碰撞，以及为什么现在值得撞。")
         }
 
         return FlowCompressionInput(
@@ -838,15 +887,18 @@ class FlowViewModel(
                     anchorLabel = threadFolderName?.let { "$it · ${direction.thread.title}" } ?: direction.thread.title,
                     stageLabel = direction.stage.label,
                     horizonLabel = direction.dominantHorizon.label,
-                    summary = direction.summary,
-                    whyNow = direction.whyNow,
-                    nextStep = direction.nextStep,
+                    summary = buildThreadCandidateSummary(direction, threadNotes, threadFocus),
+                    whyNow = buildThreadCandidateWhyNow(direction, threadNotes, threadFocus),
+                    nextStep = buildThreadCandidateNextStep(direction, threadFocus),
                     bucketKey = threadFolderKey?.let { "folder:$it" } ?: "direction:${direction.thread.key}",
                     threadKey = direction.thread.key,
                     focusNoteId = direction.focusNoteId,
                     noteId = threadFocus?.id ?: direction.focusNoteId,
                 ),
-                score = 100 + direction.thread.noteCount,
+                score = 104 +
+                    direction.thread.noteCount +
+                    if (direction.wikiContinuityLine.isNotBlank() || direction.wikiTrajectoryLine.isNotBlank()) 6 else 0 +
+                    if (direction.lastProgressLine.isNotBlank()) 2 else 0,
             )
         }
         primary.activeNotes
@@ -863,7 +915,7 @@ class FlowViewModel(
                 val seed = MainlineCandidateSeed(
                     candidate = MainlineBetCandidate(
                         key = "folder-note:${folderKey}:${note.id}",
-                        title = note.topic.ifBlank { "$folderName 里最值得推进的一条" },
+                        title = note.topic.ifBlank { "$folderName 里最值得继续养的一条" },
                         anchorLabel = anchorLabel,
                         stageLabel = note.status.label,
                         horizonLabel = note.horizon.label,
@@ -883,7 +935,7 @@ class FlowViewModel(
                 candidates += MainlineCandidateSeed(
                     candidate = MainlineBetCandidate(
                         key = "note:${note.id}",
-                        title = note.topic.ifBlank { "正在推进的记录" },
+                        title = note.topic.ifBlank { "正在长出来的一条想法" },
                         anchorLabel = buildAnchorLabel(note),
                         stageLabel = note.status.label,
                         horizonLabel = note.horizon.label,
@@ -903,7 +955,7 @@ class FlowViewModel(
                 candidates += MainlineCandidateSeed(
                     candidate = MainlineBetCandidate(
                         key = "stale:${note.id}",
-                        title = note.topic.ifBlank { "值得重新接上的记录" },
+                        title = note.topic.ifBlank { "值得重新接回来的旧线" },
                         anchorLabel = buildAnchorLabel(note),
                         stageLabel = note.status.label,
                         horizonLabel = note.horizon.label,
@@ -1026,6 +1078,68 @@ private fun buildFolderSlices(
     }
     .take(4)
 
+private fun buildKnowledgeSlices(
+    items: List<KnowledgeLayerSearchItem>,
+    noteFolderKeys: Map<Long, String>,
+    threadFolderKeys: Map<String, String?>,
+): List<KnowledgeSlice> = items
+    .sortedWith(
+        compareBy<KnowledgeLayerSearchItem> { graphTypePriority(it.type) }
+            .thenByDescending { it.updatedAt },
+    )
+    .mapNotNull { item ->
+        val line = item.summary.takeIf { it.isNotBlank() } ?: item.supportLine.takeIf { it.isNotBlank() }
+        line?.let {
+            val folderKey = item.noteId?.let(noteFolderKeys::get)
+                ?: item.threadKey.takeIf { it.isNotBlank() }?.let(threadFolderKeys::get)
+                ?: "knowledge:${item.type.name.lowercase()}"
+            KnowledgeSlice(
+                id = item.id,
+                type = item.type,
+                title = item.title,
+                line = it,
+                support = item.supportLine,
+                anchorLabel = buildKnowledgeAnchorLabel(item, folderKey),
+                bucketKey = if (folderKey.startsWith("knowledge:")) folderKey else "folder:$folderKey",
+                threadKey = item.threadKey.takeIf { it.isNotBlank() },
+                noteId = item.noteId,
+            )
+        }
+    }
+    .distinctBy { it.id }
+    .take(12)
+
+private fun buildKnowledgeAnchorLabel(
+    item: KnowledgeLayerSearchItem,
+    folderKey: String,
+): String {
+    val folderName = if (folderKey.startsWith("knowledge:")) {
+        null
+    } else {
+        MindFolderCatalog.fromKey(folderKey)?.name
+    }
+    return buildString {
+        folderName?.let {
+            append(it)
+            append(" · ")
+        }
+        append(item.type.label)
+        append(" · ")
+        append(item.title)
+    }
+}
+
+private fun selectKnowledgeSlice(
+    slices: List<KnowledgeSlice>,
+    excludedIds: Set<String>,
+    preferredDifferentBucketFrom: Set<String>,
+    predicate: (KnowledgeSlice) -> Boolean,
+): KnowledgeSlice? {
+    val filtered = slices.filter { predicate(it) && it.id !in excludedIds }
+    return filtered.firstOrNull { slice -> slice.bucketKey !in preferredDifferentBucketFrom }
+        ?: filtered.firstOrNull()
+}
+
 private fun String.folderKeyFromBucket(): String? =
     takeIf { startsWith("folder:") }?.removePrefix("folder:")
 
@@ -1044,35 +1158,46 @@ private fun buildAnchorLabel(note: NoteEntity): String {
 
 private fun buildNoteCandidateSummary(note: NoteEntity): String =
     when (note.status) {
-        NoteStatus.IN_PROGRESS -> "这条线已经在推进里，继续推它最容易长出真实结果。"
+        NoteStatus.IN_PROGRESS -> "这条线已经不是一次性念头了，它最近一直在回到你手里。"
         NoteStatus.IDEA -> when (note.horizon) {
-            NoteHorizon.SHORT -> "这个短期想法如果一周内不压成动作，很容易重新散掉。"
-            NoteHorizon.MEDIUM -> "这条中期想法已经有足够材料，适合现在压成一个明确推进点。"
-            NoteHorizon.LONG -> "这条长期线已经露出轮廓，值得先把它推成一个更稳的阶段目标。"
+            NoteHorizon.SHORT -> "这颗短期火花还很脆，现在不接一下，很容易直接沉下去。"
+            NoteHorizon.MEDIUM -> "这条中期想法已经攒到可以长成一条线，不该继续散在零碎记录里。"
+            NoteHorizon.LONG -> "这条长期问题已经露出轮廓，说明它不是偶然冒出来的一次念头。"
         }
-        NoteStatus.DONE -> "这条线已经有结果，可以沿结果继续放大，而不是从头再想。"
+        NoteStatus.DONE -> "这里已经留下一个结果，值得沿着它继续外扩，而不是从头再起一条线。"
     }
 
 private fun buildNoteCandidateWhyNow(note: NoteEntity): String =
     when {
-        note.status == NoteStatus.IN_PROGRESS -> "它已经在动，今天接着推最省认知切换成本。"
-        note.horizon == NoteHorizon.SHORT -> "它离落地最近，现在推进最容易在短期内看到反馈。"
-        note.folderName() == "项目" -> "项目类方向最怕拖成空想，现在补一刀更容易形成可验证版本。"
-        note.folderName() == "工作" -> "工作类方向的上下文容易过期，趁还记得关键约束先往前压。"
-        note.folderName() == "健康" -> "健康类方向更依赖连续节奏，现在推进更容易形成正反馈。"
-        else -> "它已经累积到值得推进的程度，再拖下去只会重新散开。"
+        note.status == NoteStatus.IN_PROGRESS -> "它已经在动了，顺手再养一口最容易让这条线继续长。"
+        note.horizon == NoteHorizon.SHORT -> "这种近处火花最怕掉地上，现在不接就很容易直接忘掉。"
+        note.folderName() == "项目" -> "项目类想法最怕只停在脑内，现在补一条具体记录更容易长成东西。"
+        note.folderName() == "工作" -> "工作类上下文衰减得快，趁约束还清楚，先把它压回一条活线。"
+        note.folderName() == "健康" -> "健康类线索依赖连续节奏，现在接住更容易形成真实反馈。"
+        else -> "它已经积到值得继续养的程度，再拖下去只会重新散开。"
     }
 
 private fun buildNoteCandidateNextStep(note: NoteEntity): String =
     when (note.status) {
-        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再把它往前拱一小步。"
+        NoteStatus.IN_PROGRESS -> "先补一句最新变化，再看看它应该和哪条旧线连起来。"
         NoteStatus.IDEA -> when (note.folderName()) {
-            "项目" -> "先写一个最小可验证版本，而不是继续摊大方案。"
-            "工作" -> "先把它压成一个最值得验证的问题。"
-            "健康" -> "先把它改成今天就能执行的一次小实验。"
-            else -> "先把它压成一个今天能动手的小动作。"
+            "项目" -> "先写下它真正指向的问题或最小原型，不要继续摊大方案。"
+            "工作" -> "先把它压成一个值得继续追的问题，而不是只留模糊印象。"
+            "健康" -> "先把它改成今天就能观察反馈的一次小实验。"
+            else -> "先补一条更具体的记录，让它从火花开始长成一条线。"
         }
-        NoteStatus.DONE -> "先补一条结果延展记录，说明这条结果还能往哪继续放大。"
+        NoteStatus.DONE -> "先补一条结果延展记录，说明这个结果还能往哪继续放大。"
+    }
+
+private fun graphTypePriority(type: KnowledgeLayerSearchType): Int =
+    when (type) {
+        KnowledgeLayerSearchType.CONCLUSION -> 0
+        KnowledgeLayerSearchType.EVIDENCE -> 1
+        KnowledgeLayerSearchType.METHOD -> 2
+        KnowledgeLayerSearchType.EXPERIMENT -> 3
+        KnowledgeLayerSearchType.CONCEPT -> 4
+        KnowledgeLayerSearchType.QUESTION -> 5
+        KnowledgeLayerSearchType.DIRECTION -> 6
     }
 
 private fun pickContinueNote(notes: List<NoteEntity>): NoteEntity? =
@@ -1160,7 +1285,7 @@ private fun whyNowForThread(
     notes: List<NoteEntity>,
     focusNote: NoteEntity?,
 ): String {
-    focusNote ?: return "这条方向已经形成了连续记录，值得先接着整理成一条主线。"
+    focusNote ?: return "这条线已经形成了连续记录，现在继续养最容易长出更清楚的轮廓。"
     val repeatedTag = notes
         .flatMap { it.tags.distinct() }
         .groupingBy { it }
@@ -1168,11 +1293,11 @@ private fun whyNowForThread(
         .maxByOrNull { it.value }
         ?.key
     return when (focusNote.status) {
-        NoteStatus.IN_PROGRESS -> "这条方向已经在推进里，顺着「${focusNote.topic.ifBlank { thread.title }}」继续最省力。"
+        NoteStatus.IN_PROGRESS -> "这条线已经在动了，顺着「${focusNote.topic.ifBlank { thread.title }}」继续养最省力。"
         NoteStatus.IDEA -> when {
-            repeatedTag != null -> "它和你反复记录的「$repeatedTag」是同一条线，现在最适合压成动作。"
-            notes.size >= 3 -> "这条方向已经连续出现 ${notes.size} 次，再拖下去只会重新散开。"
-            else -> "这条方向刚冒出新线索，趁上下文还热，先把它压成一小步。"
+            repeatedTag != null -> "它和你反复记录的「$repeatedTag」是同一条线，现在最适合继续接住它。"
+            notes.size >= 3 -> "这条线已经连续出现 ${notes.size} 次，再拖下去只会重新散开。"
+            else -> "这条线刚冒出新线索，趁上下文还热，先补一条更具体的记录。"
         }
         NoteStatus.DONE -> "这里已经有做成的结果，可以沿着结果外扩，而不是从头再起一条线。"
     }
@@ -1182,18 +1307,51 @@ private fun nextStepForThread(
     thread: ThemeThread,
     focusNote: NoteEntity?,
 ): String {
-    focusNote ?: return "先补一条更具体的记录，把这个方向重新压回到可推进状态。"
+    focusNote ?: return "先补一条更具体的记录，把这条线重新接回今天。"
     return when (focusNote.status) {
-        NoteStatus.IN_PROGRESS -> "先补一句最新进展，再写一个今天能验证的小动作。"
+        NoteStatus.IN_PROGRESS -> "先补一句最新变化，再看看它现在应该和哪条旧线连起来。"
         NoteStatus.IDEA -> when (focusNote.folderName()) {
-            "工作" -> "先把它压成一个待验证的问题，再补一条更具体的工作记录。"
-            "项目" -> "先写出最小可验证版本，再看要不要继续扩。"
-            "健康" -> "先把它改成今天能执行的一次小实验，再观察反馈。"
-            else -> "先把「${focusNote.topic.ifBlank { thread.title }}」压成一个今天能动手的小动作。"
+            "工作" -> "先把它压成一个值得继续追的问题，再补一条更具体的工作记录。"
+            "项目" -> "先写出最小原型或最小验证，不要继续只停在脑内。"
+            "健康" -> "先把它改成今天能观察反馈的一次小实验。"
+            else -> "先给「${focusNote.topic.ifBlank { thread.title }}」补一条更具体的记录。"
         }
         NoteStatus.DONE -> "先补一条结果延展记录，说明这个结果还能往哪一步继续放大。"
     }
 }
+
+private fun buildThreadCandidateSummary(
+    direction: FollowedDirectionSummary,
+    notes: List<NoteEntity>,
+    focusNote: NoteEntity?,
+): String =
+    direction.wikiContinuityLine.takeIf { it.isNotBlank() }
+        ?: direction.wikiTrajectoryLine.takeIf { it.isNotBlank() }
+        ?: direction.summary.takeIf { it.isNotBlank() }
+        ?: when {
+            notes.size >= 4 -> "这些记录其实在反复咬同一个问题，「${direction.thread.title}」已经开始长成一条线。"
+            focusNote != null -> "你最近总会绕回「${focusNote.topic.ifBlank { direction.thread.title }}」，这已经不是一次性念头。"
+            else -> "「${direction.thread.title}」正在从零散记录里慢慢长出轮廓。"
+        }
+
+private fun buildThreadCandidateWhyNow(
+    direction: FollowedDirectionSummary,
+    notes: List<NoteEntity>,
+    focusNote: NoteEntity?,
+): String =
+    direction.whyNow.takeIf { it.isNotBlank() }
+        ?: direction.wikiSnapshotCadenceLine.takeIf { it.isNotBlank() }
+        ?: direction.rhythmLine.takeIf { it.isNotBlank() }
+        ?: direction.lastProgressLine.takeIf { it.isNotBlank() }
+        ?: whyNowForThread(direction.thread, notes, focusNote)
+
+private fun buildThreadCandidateNextStep(
+    direction: FollowedDirectionSummary,
+    focusNote: NoteEntity?,
+): String =
+    direction.nextStep.takeIf { it.isNotBlank() }
+        ?: direction.nextCheckInLine.takeIf { it.isNotBlank() }
+        ?: nextStepForThread(direction.thread, focusNote)
 
 private fun NoteEntity.folderName(): String? =
     com.mindflow.app.data.model.MindFolderCatalog.fromKey(folderKey)?.name
