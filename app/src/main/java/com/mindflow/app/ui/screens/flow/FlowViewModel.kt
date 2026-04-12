@@ -315,7 +315,6 @@ class FlowViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
 
     init {
-        localKnowledgeMaintenancePlanner.maintainInBackgroundIfNeeded()
         viewModelScope.launch {
             localKnowledgeMaintenancePlanner.snapshot.collect { snapshot ->
                 localMaintainerSnapshotState.value = snapshot

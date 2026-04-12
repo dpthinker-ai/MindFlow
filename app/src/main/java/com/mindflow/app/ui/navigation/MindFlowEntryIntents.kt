@@ -8,6 +8,7 @@ enum class FlowFocus {
     RECONNECT,
     REVIEW,
     DIRECTION,
+    MAINLINE,
 }
 
 data class CaptureSeed(

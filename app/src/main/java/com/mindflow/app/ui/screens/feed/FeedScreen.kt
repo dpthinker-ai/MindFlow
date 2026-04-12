@@ -47,7 +47,6 @@ import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
 import com.mindflow.app.ui.components.GridTwo
 import com.mindflow.app.ui.components.MetricTile
-import com.mindflow.app.ui.components.NeonProgress
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -57,7 +56,6 @@ import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.AccentSuccess
 import com.mindflow.app.ui.theme.PanelBlue
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -153,8 +151,6 @@ private fun FeedScreen(
     onDeleteNote: (NoteEntity) -> Unit,
     onShareNote: (NoteEntity) -> Unit,
 ) {
-    val completionProgress = if (uiState.totalCount == 0) 0f else uiState.doneCount.toFloat() / uiState.totalCount.toFloat()
-    val completionPercent = (completionProgress * 100).toInt()
     val visibleNotes = remember(uiState.notes, hiddenNoteIds) {
         uiState.notes.filterNot { it.id in hiddenNoteIds }
     }
@@ -181,11 +177,15 @@ private fun FeedScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "灵感易逝，及时行动",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                text = "灵感易逝，及时行动",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                         TimeBankBadge(
                             remainingActiveDays = uiState.timeBank.remainingActiveDays,
                         )
@@ -194,55 +194,58 @@ private fun FeedScreen(
 
                 item {
                     PanelCard {
-                        SectionHeader(
-                            title = "想到就记，记下来就做",
-                            headline = "叉手立办",
-                        )
-                        Text(
-                            text = "别等好的时机，先把念头抓住，再把它一点点推进成真正发生的事。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom,
+                        ) {
+                            Text(
+                                text = "想到就记，记下就做",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "叉手立办",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         PanelCard {
                             SectionHeader(
-                                title = "总览",
-                                headline = "$completionPercent% 已实现",
-                            )
-                            NeonProgress(
-                                progress = completionProgress,
-                                startColor = AccentSuccess,
-                                endColor = AccentSuccess,
+                                title = "当前状态",
+                                headline = "${formatCount(uiState.totalCount)} 条记录",
                             )
                             GridTwo {
                                 MetricTile(
-                                    label = "想法",
-                                    value = uiState.ideaCount.toString(),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
-                                    accent = noteStatusAccent(NoteStatus.IDEA),
-                                )
-                                MetricTile(
-                                    label = "进行中",
-                                    value = uiState.inProgressCount.toString(),
+                                    label = "现在手上",
+                                    value = formatCount(uiState.inProgressCount),
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { onOpenStatusFilter(NoteStatus.IN_PROGRESS, false) },
                                     accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
                                 )
+                                MetricTile(
+                                    label = "先记下",
+                                    value = formatCount(uiState.ideaCount),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
+                                    accent = noteStatusAccent(NoteStatus.IDEA),
+                                )
                             }
                             GridTwo {
                                 MetricTile(
-                                    label = "已实现",
-                                    value = uiState.doneCount.toString(),
+                                    label = "已经做完",
+                                    value = formatCount(uiState.doneCount),
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { onOpenStatusFilter(NoteStatus.DONE, false) },
                                     accent = noteStatusAccent(NoteStatus.DONE),
                                 )
                                 MetricTile(
-                                    label = "已归档",
-                                    value = uiState.archivedCount.toString(),
+                                    label = "先放着",
+                                    value = formatCount(uiState.archivedCount),
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { onOpenStatusFilter(null, true) },
@@ -260,10 +263,21 @@ private fun FeedScreen(
                 }
 
                 item {
-                    SectionHeader(
-                        title = "记录",
-                        headline = "${visibleNotes.size} 条",
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "记录",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "${formatCount(visibleNotes.size)} 条",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 if (visibleNotes.isEmpty()) {
@@ -306,7 +320,7 @@ private fun TimeBankBadge(
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
     ) {
         Text(
-            text = "${formatDays(remainingActiveDays)} 天",
+            text = "${formatCount(remainingActiveDays)} 天",
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             style = MaterialTheme.typography.titleSmall,
             color = AccentBlue,
@@ -316,4 +330,4 @@ private fun TimeBankBadge(
     }
 }
 
-private fun formatDays(days: Int): String = NumberFormat.getIntegerInstance(Locale.CHINA).format(days)
+private fun formatCount(value: Int): String = NumberFormat.getIntegerInstance(Locale.CHINA).format(value)

@@ -44,6 +44,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
@@ -70,11 +71,13 @@ import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
+import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.FlowRoute
+import com.mindflow.app.ui.screens.flow.FlowViewModel
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
@@ -126,6 +129,22 @@ fun MindFlowApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val captureSeeds = remember { mutableStateMapOf<Long, CaptureSeed>() }
+    val sharedFlowViewModel: FlowViewModel = viewModel(
+        factory = FlowViewModel.factory(
+            noteRepository = noteRepository,
+            threadPreferencesRepository = threadPreferencesRepository,
+            dailyBriefPlanner = dailyBriefPlanner,
+            nextActionPlanner = nextActionPlanner,
+            weeklyReviewPlanner = weeklyReviewPlanner,
+            fusionSuggestionPlanner = fusionSuggestionPlanner,
+            flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
+            staleReconnectPlanner = staleReconnectPlanner,
+            threadExecutionPlanner = threadExecutionPlanner,
+            externalResearchPlanner = externalResearchPlanner,
+            directionWikiCoordinator = directionWikiCoordinator,
+            localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+        ),
+    )
 
     fun openCapture(seed: CaptureSeed = CaptureSeed()) {
         captureSeeds[seed.requestId] = seed
@@ -180,24 +199,26 @@ fun MindFlowApp(
 
     val topLevelDestinations = listOf(
         TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.SpaceDashboard),
-        TopLevelDestination(MindFlowDestinations.FLOW_BASE, "Flow", Icons.Outlined.AutoAwesome),
-        TopLevelDestination(MindFlowDestinations.SEARCH_BASE, "查询", Icons.Outlined.Search),
+        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.AutoAwesome),
+        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.Search),
         TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.QueryStats),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
     )
 
     val normalizedRoute = when {
         currentRoute == null -> null
-        currentRoute.startsWith(MindFlowDestinations.FLOW_GRAPH) -> MindFlowDestinations.FLOW_GRAPH
-        currentRoute.startsWith(MindFlowDestinations.FLOW_BASE) -> MindFlowDestinations.FLOW_BASE
-        currentRoute.startsWith(MindFlowDestinations.SEARCH_BASE) -> MindFlowDestinations.SEARCH_BASE
+        currentRoute == MindFlowDestinations.FLOW_GRAPH -> MindFlowDestinations.FLOW_GRAPH
+        currentRoute == MindFlowDestinations.FLOW_TODAY -> MindFlowDestinations.FLOW_TODAY
+        currentRoute == MindFlowDestinations.FLOW_REVIEW -> MindFlowDestinations.FLOW_REVIEW
+        currentRoute == MindFlowDestinations.SETTINGS -> MindFlowDestinations.SETTINGS
+        currentRoute == MindFlowDestinations.SEARCH -> MindFlowDestinations.SEARCH_BASE
         else -> currentRoute
     }
 
     val showBottomBar = normalizedRoute in setOf(
         MindFlowDestinations.FEED,
-        MindFlowDestinations.FLOW_BASE,
-        MindFlowDestinations.SEARCH_BASE,
+        MindFlowDestinations.FLOW_TODAY,
+        MindFlowDestinations.FLOW_REVIEW,
         MindFlowDestinations.FLOW_GRAPH,
         MindFlowDestinations.SETTINGS,
     )
@@ -225,38 +246,25 @@ fun MindFlowApp(
                 )
             }
 
-            composable(
-                route = MindFlowDestinations.FLOW,
-                arguments = listOf(
-                    navArgument(MindFlowDestinations.FLOW_FOCUS_ARG) {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                ),
-            ) { backStackEntry ->
-                val focus = backStackEntry.arguments?.getString(MindFlowDestinations.FLOW_FOCUS_ARG)
-                    ?.let { raw ->
-                        com.mindflow.app.ui.navigation.FlowFocus.entries.firstOrNull { it.name == raw }
-                    }
+            composable(MindFlowDestinations.FLOW_TODAY) {
                 FlowRoute(
-                    noteRepository = noteRepository,
-                    threadPreferencesRepository = threadPreferencesRepository,
-                    dailyBriefPlanner = dailyBriefPlanner,
-                    nextActionPlanner = nextActionPlanner,
-                    weeklyReviewPlanner = weeklyReviewPlanner,
-                    fusionSuggestionPlanner = fusionSuggestionPlanner,
-                    flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
-                    staleReconnectPlanner = staleReconnectPlanner,
-                    threadExecutionPlanner = threadExecutionPlanner,
-                    externalResearchPlanner = externalResearchPlanner,
-                    directionWikiCoordinator = directionWikiCoordinator,
-                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
-                    initialFocus = focus,
+                    viewModel = sharedFlowViewModel,
+                    initialFocus = FlowFocus.TODAY,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
-                    onOpenGraph = { navController.navigate(MindFlowDestinations.graphRoute()) },
+                    onOpenSearch = { navController.navigate(MindFlowDestinations.SEARCH_BASE) },
+                )
+            }
+
+            composable(MindFlowDestinations.FLOW_REVIEW) {
+                FlowRoute(
+                    viewModel = sharedFlowViewModel,
+                    initialFocus = FlowFocus.REVIEW,
+                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
+                    onOpenNote = openNoteSafely,
+                    onCreateCapture = ::openCapture,
+                    onOpenSearch = { navController.navigate(MindFlowDestinations.SEARCH_BASE) },
                 )
             }
 
@@ -264,8 +272,6 @@ fun MindFlowApp(
                 KnowledgeGraphRoute(
                     noteRepository = noteRepository,
                     directionWikiCoordinator = directionWikiCoordinator,
-                    localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
-                    onBack = { navController.popBackStack() },
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                 )

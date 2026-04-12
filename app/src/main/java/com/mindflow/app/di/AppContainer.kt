@@ -1,7 +1,6 @@
 package com.mindflow.app.di
 
 import android.content.Context
-import androidx.room.Room
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.backup.PreferencesCloudBackupIndexRepository
@@ -21,13 +20,12 @@ import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
-import com.mindflow.app.data.local.MindFlowDatabase
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
+import com.mindflow.app.data.repository.MarkdownNoteRepository
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.repository.OfflineFirstNoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
@@ -56,20 +54,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class AppContainer(context: Context) {
-    private val database = Room.databaseBuilder(
-        context.applicationContext,
-        MindFlowDatabase::class.java,
-        "mindflow.db",
-    ).addMigrations(
-        MindFlowDatabase.MIGRATION_1_2,
-        MindFlowDatabase.MIGRATION_2_3,
-        MindFlowDatabase.MIGRATION_3_4,
-        MindFlowDatabase.MIGRATION_4_5,
-        MindFlowDatabase.MIGRATION_5_6,
-    )
-        .build()
-
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val cloudNoteDocumentCodec = CloudNoteDocumentCodec()
 
     val aiSettingsRepository: AiSettingsRepository = PreferencesAiSettingsRepository(
         context = context.applicationContext,
@@ -146,16 +132,14 @@ class AppContainer(context: Context) {
         ruleBasedFolderClassifier = RuleBasedFolderClassifier(),
     )
 
-    val noteRepository: NoteRepository = OfflineFirstNoteRepository(
+    val noteRepository: NoteRepository = MarkdownNoteRepository(
         appContext = context.applicationContext,
-        database = database,
-        noteDao = database.noteDao(),
-        historyDao = database.noteStatusHistoryDao(),
         topicExtractor = topicExtractor,
         folderClassifier = folderClassifier,
         tagExtractor = tagExtractor,
         markdownExporter = MarkdownExporter(),
         markdownImportParser = MarkdownImportParser(),
+        cloudNoteDocumentCodec = cloudNoteDocumentCodec,
         applicationScope = applicationScope,
     )
 
@@ -164,10 +148,7 @@ class AppContainer(context: Context) {
         cloudBackupSettingsRepository = cloudBackupSettingsRepository,
         cloudBackupIndexRepository = cloudBackupIndexRepository,
         webDavBackupClient = WebDavBackupClient(),
-        cloudNoteDocumentCodec = CloudNoteDocumentCodec(),
-        database = database,
-        noteDao = database.noteDao(),
-        historyDao = database.noteStatusHistoryDao(),
+        cloudNoteDocumentCodec = cloudNoteDocumentCodec,
         applicationScope = applicationScope,
     ).also { it.startAutoBackup() }
 

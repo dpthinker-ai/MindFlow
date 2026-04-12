@@ -42,12 +42,13 @@ class FeedViewModel(
         noteRepository.observeAllNotes(),
         timeBankSettingsRepository.settings,
     ) { feedNotes, allNotes, timeBankSettings ->
+        val activeNotes = allNotes.filter { !it.isArchived }
         FeedUiState(
             notes = feedNotes,
             totalCount = allNotes.size,
-            ideaCount = allNotes.count { it.status == NoteStatus.IDEA },
-            inProgressCount = allNotes.count { it.status == NoteStatus.IN_PROGRESS },
-            doneCount = allNotes.count { it.status == NoteStatus.DONE },
+            ideaCount = activeNotes.count { it.status == NoteStatus.IDEA },
+            inProgressCount = activeNotes.count { it.status == NoteStatus.IN_PROGRESS },
+            doneCount = activeNotes.count { it.status == NoteStatus.DONE },
             archivedCount = allNotes.count { it.isArchived },
             timeBank = timeBankSettings,
         )

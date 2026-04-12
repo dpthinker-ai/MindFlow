@@ -5,9 +5,8 @@ import com.mindflow.app.data.model.NoteStatus
 
 object MindFlowDestinations {
     const val FEED = "feed"
-    const val FLOW_BASE = "flow"
-    const val FLOW = "flow?focus={focus}"
-    const val FLOW_FOCUS_ARG = "focus"
+    const val FLOW_TODAY = "flow/today"
+    const val FLOW_REVIEW = "flow/review"
     const val FLOW_GRAPH = "flow/graph"
     const val THREAD = "flow/thread/{threadKey}"
     const val THREAD_ARG = "threadKey"
@@ -30,7 +29,14 @@ object MindFlowDestinations {
     fun graphRoute(): String = FLOW_GRAPH
     fun captureRoute(seedId: Long): String = "capture/$seedId"
     fun flowRoute(focus: FlowFocus? = null): String =
-        if (focus == null) FLOW_BASE else "$FLOW_BASE?$FLOW_FOCUS_ARG=${focus.name}"
+        when (focus) {
+            FlowFocus.REVIEW,
+            FlowFocus.RECONNECT -> FLOW_REVIEW
+            FlowFocus.MAINLINE,
+            FlowFocus.DIRECTION -> FLOW_TODAY
+            FlowFocus.TODAY,
+            null -> FLOW_TODAY
+        }
     fun searchRoute(
         status: NoteStatus? = null,
         archivedOnly: Boolean = false,

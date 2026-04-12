@@ -2,19 +2,12 @@ package com.mindflow.app.data.backup
 
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ImportResult
-import com.mindflow.app.data.local.MindFlowDatabase
-import com.mindflow.app.data.local.dao.NoteDao
-import com.mindflow.app.data.local.dao.NoteStatusHistoryDao
+import com.mindflow.app.data.model.CloudBackupNoteSnapshot
 import com.mindflow.app.data.local.entity.NoteEntity
-import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
-import com.mindflow.app.data.model.FolderSource
-import com.mindflow.app.data.model.TagSource
-import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
-import androidx.room.withTransaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
@@ -28,9 +21,6 @@ class CloudBackupCoordinator(
     private val cloudBackupIndexRepository: CloudBackupIndexRepository,
     private val webDavBackupClient: WebDavBackupClient,
     private val cloudNoteDocumentCodec: CloudNoteDocumentCodec,
-    private val database: MindFlowDatabase,
-    private val noteDao: NoteDao,
-    private val historyDao: NoteStatusHistoryDao,
     private val applicationScope: CoroutineScope,
 ) {
     private val syncMutex = Mutex()
@@ -92,42 +82,39 @@ class CloudBackupCoordinator(
         val restoredNotes = remoteDocuments.map { (fileName, markdown) ->
             cloudNoteDocumentCodec.decode(fileName, markdown)
         }
-
-        database.withTransaction {
-            historyDao.deleteAll()
-            noteDao.deleteAll()
-
-            restoredNotes.forEach { restored ->
-                noteDao.insertNote(
-                    NoteEntity(
-                        id = restored.noteId,
-                        content = restored.note.content,
-                        topic = restored.note.topic.ifBlank { "未命名想法" },
-                        topicSource = TopicSource.MANUAL,
-                        folderKey = restored.note.folderKey,
-                        folderSource = FolderSource.MANUAL,
-                        tags = restored.note.tags,
-                        tagSource = TagSource.MANUAL,
-                        status = restored.note.status,
-                        horizon = restored.note.horizon,
-                        isArchived = restored.note.isArchived,
-                        createdAt = restored.note.createdAt,
-                        updatedAt = restored.note.updatedAt,
+        val restoreResult = noteRepository.replaceAllFromCloudBackup(
+            com.mindflow.app.data.model.CloudBackupSnapshot(
+                notes = restoredNotes.map { restored ->
+                    CloudBackupNoteSnapshot(
+                        note = NoteEntity(
+                            id = restored.noteId,
+                            content = restored.note.content,
+                            topic = restored.note.topic.ifBlank { "未命名想法" },
+                            topicSource = com.mindflow.app.data.model.TopicSource.MANUAL,
+                            folderKey = restored.note.folderKey,
+                            folderSource = com.mindflow.app.data.model.FolderSource.MANUAL,
+                            tags = restored.note.tags,
+                            tagSource = com.mindflow.app.data.model.TagSource.MANUAL,
+                            status = restored.note.status,
+                            horizon = restored.note.horizon,
+                            knowledgeTrust = restored.note.knowledgeTrust,
+                            isArchived = restored.note.isArchived,
+                            createdAt = restored.note.createdAt,
+                            updatedAt = restored.note.updatedAt,
+                        ),
+                        history = restored.note.history.mapIndexed { index, entry ->
+                            com.mindflow.app.data.local.entity.NoteStatusHistoryEntity(
+                                id = index.toLong() + 1L,
+                                noteId = restored.noteId,
+                                fromStatus = entry.fromStatus,
+                                toStatus = entry.toStatus,
+                                changedAt = entry.changedAt,
+                            )
+                        },
                     )
-                )
-
-                historyDao.insertEntries(
-                    restored.note.history.map { entry ->
-                        NoteStatusHistoryEntity(
-                            noteId = restored.noteId,
-                            fromStatus = entry.fromStatus,
-                            toStatus = entry.toStatus,
-                            changedAt = entry.changedAt,
-                        )
-                    }
-                )
-            }
-        }
+                },
+            )
+        )
 
         cloudBackupIndexRepository.save(
             CloudBackupIndex(
@@ -144,10 +131,7 @@ class CloudBackupCoordinator(
             errorMessage = "",
         )
         hasPendingChanges = false
-        return ImportResult(
-            noteCount = restoredNotes.size,
-            historyCount = restoredNotes.sumOf { it.note.history.size },
-        )
+        return restoreResult
     }
 
     private fun requireConfigured(settings: CloudBackupSettings) {

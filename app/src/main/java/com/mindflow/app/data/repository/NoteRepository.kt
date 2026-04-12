@@ -61,6 +61,7 @@ interface NoteRepository {
     suspend fun retriggerTagExtraction(noteId: Long): TagRefreshResult
     suspend fun exportAllNotes(): ExportPayload
     suspend fun exportCloudBackupSnapshot(): CloudBackupSnapshot
+    suspend fun replaceAllFromCloudBackup(snapshot: CloudBackupSnapshot): ImportResult
     suspend fun importNotes(markdown: String): ImportResult
     suspend fun replaceAllNotes(markdown: String): ImportResult
 }

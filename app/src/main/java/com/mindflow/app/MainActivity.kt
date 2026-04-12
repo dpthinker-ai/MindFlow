@@ -127,7 +127,6 @@ class MainActivity : ComponentActivity() {
             appContainer.backgroundFolderOrganizer.organizeInBackgroundIfNeeded()
             appContainer.cloudBackupCoordinator.syncInBackgroundIfNeeded()
             appContainer.directionWikiCoordinator.refreshInBackgroundIfNeeded()
-            appContainer.localKnowledgeMaintenancePlanner.maintainInBackgroundIfNeeded()
         }
     }
 }

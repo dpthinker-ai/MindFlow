@@ -635,7 +635,7 @@ private fun LocalModelSettingsScreen(
                 SectionHeader(title = "当前状态", headline = statusHeadline)
                 Text(
                     text = when {
-                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好，Flow 的五段孵化卡会优先走本地模型，本地维护也会继续常驻整理知识层。"
+                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好。本地模型只会在你显式触发测试、编辑召回或手动维护知识层时使用。"
                         uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，进度会自动保存，断开后可以继续下载。"
                         uiState.localModelStatus == OnDeviceModelStatus.ERROR && uiState.localModelDownloadedBytes > 0L -> uiState.localModelLastMessage.ifBlank { "下载已中断，当前进度已保留，可以继续下载。" }
                         uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
@@ -730,7 +730,7 @@ private fun LocalModelSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("本地优先", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "本地模型就绪后，Flow 的五段卡会优先走端侧；没有本地结果时才回退到云端升级或规则整理。",
+                                text = "打开后，显式的本地模型能力会优先走端侧；首页和 Flow 导航不会再静默拉起本地模型。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

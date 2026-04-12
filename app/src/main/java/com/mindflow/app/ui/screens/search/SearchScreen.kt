@@ -260,12 +260,12 @@ private fun SearchScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "查询",
+                            text = "搜索记录",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "先决定想对想法做什么，再选对象。关键词搜索放到后面。",
+                            text = "先决定这次要做什么，再从现有记录里找到合适入口。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
@@ -275,7 +275,7 @@ private fun SearchScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "这次想怎么问",
+                            title = "这次要做什么",
                             headline = uiState.selectedAction.title,
                         )
                         Text(
@@ -310,7 +310,7 @@ private fun SearchScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "推荐对象",
+                            title = "先从这里开始",
                             headline = if (uiState.suggestions.isEmpty()) "先从空白页开始" else "${uiState.suggestions.size} 个入口",
                         )
                         if (uiState.suggestions.isEmpty()) {

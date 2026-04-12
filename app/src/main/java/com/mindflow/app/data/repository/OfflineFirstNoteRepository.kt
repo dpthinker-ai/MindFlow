@@ -300,6 +300,41 @@ class OfflineFirstNoteRepository(
         )
     }
 
+    override suspend fun replaceAllFromCloudBackup(snapshot: CloudBackupSnapshot): ImportResult {
+        var restoredHistoryCount = 0
+
+        database.withTransaction {
+            historyDao.deleteAll()
+            noteDao.deleteAll()
+
+            snapshot.notes.forEach { restored ->
+                noteDao.insertNote(
+                    restored.note.copy(
+                        topicSource = TopicSource.MANUAL,
+                        folderSource = FolderSource.MANUAL,
+                        tagSource = TagSource.MANUAL,
+                    )
+                )
+
+                val mappedHistory = restored.history.map { entry ->
+                    NoteStatusHistoryEntity(
+                        noteId = restored.note.id,
+                        fromStatus = entry.fromStatus,
+                        toStatus = entry.toStatus,
+                        changedAt = entry.changedAt,
+                    )
+                }
+                historyDao.insertEntries(mappedHistory)
+                restoredHistoryCount += mappedHistory.size
+            }
+        }
+
+        return ImportResult(
+            noteCount = snapshot.notes.size,
+            historyCount = restoredHistoryCount,
+        )
+    }
+
     override suspend fun importNotes(markdown: String): ImportResult {
         val parsedNotes = markdownImportParser.parse(markdown)
         return storeImportedNotes(parsedNotes, replaceExisting = false)
