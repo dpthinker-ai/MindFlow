@@ -262,6 +262,7 @@ fun MindFlowApp(
 
             composable(MindFlowDestinations.FLOW_GRAPH) {
                 KnowledgeGraphRoute(
+                    noteRepository = noteRepository,
                     directionWikiCoordinator = directionWikiCoordinator,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
                     onBack = { navController.popBackStack() },

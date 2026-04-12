@@ -42,6 +42,7 @@ class DirectionWikiCoordinator(
     private val legacyRootDir = File(context.filesDir, "direction-wiki")
     private val rootDir = File(context.filesDir, "knowledge-layer")
     private val refreshIntervalMs = 18L * 60L * 60L * 1000L
+    private val maxGeneratedDirections = 12
     private val _snapshot = MutableStateFlow(run {
         migrateLegacyRootIfNeeded()
         loadSnapshotFromDisk()
@@ -49,10 +50,16 @@ class DirectionWikiCoordinator(
     val snapshot: StateFlow<DirectionWikiSnapshot> = _snapshot
 
     fun refreshInBackgroundIfNeeded() {
-        val now = System.currentTimeMillis()
-        val current = _snapshot.value
-        if (current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs) return
         applicationScope.launch {
+            val now = System.currentTimeMillis()
+            val current = _snapshot.value
+            val allNotes = noteRepository.observeAllNotes().first()
+            val activeNotes = allNotes.filter { !it.isArchived }
+            val followed = threadPreferencesRepository.getCurrent().followedThreadKeys.sorted()
+            val candidateThreadKeys = buildCandidateThreadKeys(activeNotes, followed)
+            val isFreshEnough = current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs
+            val hasCandidateCoverage = candidateThreadKeys.all { it in current.directions.keys }
+            if (isFreshEnough && hasCandidateCoverage) return@launch
             runCatching { refreshNow() }
         }
     }
@@ -64,7 +71,8 @@ class DirectionWikiCoordinator(
         ensureDirectories()
 
         val generatedAt = System.currentTimeMillis()
-        val summaries = followed.mapNotNull { threadKey ->
+        val candidateThreadKeys = buildCandidateThreadKeys(activeNotes, followed)
+        val summaries = candidateThreadKeys.mapNotNull { threadKey ->
             buildDirectionSummary(
                 threadKey = threadKey,
                 notes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes),
@@ -78,6 +86,19 @@ class DirectionWikiCoordinator(
             generatedDirectionCount = summaries.size,
             generatedAt = generatedAt,
         )
+    }
+
+    private fun buildCandidateThreadKeys(
+        activeNotes: List<NoteEntity>,
+        followed: List<String>,
+    ): List<String> {
+        val discovered = NoteConnectionAnalyzer.buildThemeThreads(
+            notes = activeNotes,
+            limit = maxGeneratedDirections,
+        ).map { it.key }
+        return (followed + discovered)
+            .distinct()
+            .take(maxGeneratedDirections)
     }
 
     private suspend fun buildDirectionSummary(

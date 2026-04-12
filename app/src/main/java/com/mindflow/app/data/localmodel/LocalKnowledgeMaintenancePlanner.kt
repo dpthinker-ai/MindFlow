@@ -99,10 +99,15 @@ class LocalKnowledgeMaintenancePlanner(
     val maintenanceStatus: StateFlow<LocalKnowledgeMaintenanceStatus> = _maintenanceStatus
 
     fun maintainInBackgroundIfNeeded() {
-        val latest = File(rootDir, "latest.md")
-        val now = System.currentTimeMillis()
-        if (latest.exists() && now - latest.lastModified() < refreshIntervalMs) return
         applicationScope.launch {
+            val latest = File(rootDir, "latest.md")
+            val now = System.currentTimeMillis()
+            val currentSnapshot = _snapshot.value
+            val wikiSnapshot = directionWikiCoordinator.snapshot.value
+            val isFreshEnough = latest.exists() && now - latest.lastModified() < refreshIntervalMs
+            val isAlignedWithWiki = currentSnapshot.generatedAt >= wikiSnapshot.lastGeneratedAt &&
+                currentSnapshot.activeDirectionCount >= wikiSnapshot.directions.size
+            if (isFreshEnough && isAlignedWithWiki) return@launch
             runCatching { refreshNow() }
         }
     }
@@ -468,6 +473,7 @@ class LocalKnowledgeMaintenancePlanner(
     private fun buildCurrentJudgementContext(corpus: MaintainerCorpus): String = buildString {
         appendLine("你在做本地 llm-wiki 的 maintainer pass。请基于最近 source、结论页、概念页、方法页、实验页和日志，压出一个当前综合判断。")
         appendLine("不要做即时摘要，要像已经维护过 wiki 之后读出来的当前结论。")
+        appendLine("不要因为最近最活跃的是同一个项目，就默认围着它写；如果其他主题里有更通用的结论或方法，优先把它提出来。")
         appendLine("知识库存量：${corpus.inventoryLine}")
         if (corpus.wikiIndexEntries.isNotEmpty()) {
             appendLine("wiki index：")
@@ -490,6 +496,7 @@ class LocalKnowledgeMaintenancePlanner(
 
     private fun buildRecentAbsorptionContext(corpus: MaintainerCorpus): String = buildString {
         appendLine("请挑出最近真正被吸收进本地知识层的一条结果。它应该像被写进 wiki 的结论、方法或稳定判断。")
+        appendLine("不要默认选择最近最热的项目记录；如果其他主题刚长出更可复用的结果，优先选那个。")
         appendLine("知识库存量：${corpus.inventoryLine}")
         if (corpus.rawIndexEntries.isNotEmpty()) {
             appendLine("raw index：")
@@ -512,6 +519,7 @@ class LocalKnowledgeMaintenancePlanner(
     private fun buildNewConnectionContext(corpus: MaintainerCorpus): String = buildString {
         appendLine("请像本地 llm-wiki 维护员一样，找出今天知识层里最值得长出来的一条新连接。")
         appendLine("不要复述当前判断，要优先连接不同方向、不同概念、不同方法或不同经验。")
+        appendLine("如果某个项目最近特别活跃，不要继续在它内部兜圈，优先寻找跨主题、跨文件夹的连接。")
         appendLine("知识库存量：${corpus.inventoryLine}")
         if (corpus.wikiIndexEntries.isNotEmpty()) {
             appendLine("wiki index：")

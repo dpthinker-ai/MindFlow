@@ -3,7 +3,9 @@ package com.mindflow.app.ui.screens.flow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,12 +17,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -31,6 +47,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mindflow.app.data.model.NoteStats
+import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
@@ -49,6 +67,9 @@ import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -74,6 +95,7 @@ private data class GraphDecisionCard(
 
 @androidx.compose.runtime.Composable
 fun KnowledgeGraphRoute(
+    noteRepository: NoteRepository,
     directionWikiCoordinator: DirectionWikiCoordinator,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
     onBack: () -> Unit,
@@ -82,9 +104,11 @@ fun KnowledgeGraphRoute(
 ) {
     val snapshot = directionWikiCoordinator.snapshot.collectAsStateWithLifecycle().value
     val maintainerSnapshot = localKnowledgeMaintenancePlanner.snapshot.collectAsStateWithLifecycle().value
+    val noteStats = noteRepository.observeNoteStats().collectAsStateWithLifecycle(initialValue = NoteStats()).value
     KnowledgeGraphScreen(
         snapshot = snapshot,
         maintainerSnapshot = maintainerSnapshot,
+        noteStats = noteStats,
         onBack = onBack,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
@@ -95,12 +119,23 @@ fun KnowledgeGraphRoute(
 private fun KnowledgeGraphScreen(
     snapshot: DirectionWikiSnapshot,
     maintainerSnapshot: LocalKnowledgeMaintenanceSnapshot,
+    noteStats: NoteStats,
     onBack: () -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
     val graphNodes = buildGraphNodes(snapshot)
     val decisionCards = rememberGraphDecisionCards(snapshot, maintainerSnapshot)
+    val today = remember { LocalDate.now() }
+    val availableYears = remember(noteStats.availableYears, today) {
+        (noteStats.availableYears + today.year).distinct().sortedDescending()
+    }
+    var selectedYear by rememberSaveable { mutableIntStateOf(availableYears.firstOrNull() ?: today.year) }
+    var selectedDateKey by rememberSaveable { mutableStateOf<String?>(today.toString()) }
+    val activityByDate = remember(noteStats.activityDays) {
+        noteStats.activityDays.associate { it.date to it.count }
+    }
+    val selectedDate = selectedDateKey?.let(LocalDate::parse)
     ScreenBackground {
         Column(
             modifier = Modifier
@@ -165,8 +200,71 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "当前骨架",
-                            headline = if (graphNodes.isNotEmpty()) "${graphNodes.size} 个关键节点" else "还没有足够节点",
+                            title = "记录热力",
+                            headline = "${selectedYear} · ${noteStats.yearSummary(selectedYear)?.totalCount ?: 0} 条记录",
+                        )
+                        if (availableYears.size > 1) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                availableYears.forEach { year ->
+                                    FilterChip(
+                                        selected = selectedYear == year,
+                                        onClick = {
+                                            selectedYear = year
+                                            if (selectedDate?.year != year) {
+                                                selectedDateKey = null
+                                            }
+                                        },
+                                        label = { Text(year.toString(), maxLines = 1) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Accent.copy(alpha = 0.16f),
+                                            selectedLabelColor = Accent,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                        Surface(
+                            color = WhiteGlass.copy(alpha = 0.92f),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, BorderSoft),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                ContributionHeatmap(
+                                    year = selectedYear,
+                                    activityByDate = activityByDate,
+                                    peakCount = noteStats.yearSummary(selectedYear)?.peakCount ?: 0,
+                                    selectedDate = selectedDate,
+                                    onSelectDate = { date ->
+                                        selectedDateKey = date.toString()
+                                    },
+                                )
+                                Text(
+                                    text = if (selectedDate != null) {
+                                        "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · ${noteStats.activityCountOn(selectedDate)} 条记录"
+                                    } else {
+                                        "点某一天，回看当时你在高频记录什么。"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    PanelCard {
+                        SectionHeader(
+                            title = "完整图谱",
+                            headline = if (graphNodes.isNotEmpty()) "${graphNodes.size} 个节点" else "还没有足够节点",
                         )
                         if (graphNodes.isEmpty()) {
                             Text(
@@ -312,26 +410,34 @@ private fun KnowledgeGraphCanvas(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(320.dp)
+            .height(560.dp)
             .background(Color.Transparent),
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
         val centerX = widthPx / 2f
         val centerY = heightPx / 2f
-        val directionNodes = nodes.take(4)
-        val outerNodes = nodes.drop(4).take(8)
+        val ringBase = widthPx.coerceAtMost(heightPx)
+        val innerNodes = nodes.take(8)
+        val middleNodes = nodes.drop(innerNodes.size).take(16)
+        val outerNodes = nodes.drop(innerNodes.size + middleNodes.size).take(24)
 
-        val directionPositions = directionNodes.mapIndexed { index, node ->
-            val angle = (2 * PI * index / directionNodes.size.coerceAtLeast(1)).toFloat()
-            val x = centerX + cos(angle) * widthPx.coerceAtMost(heightPx) * 0.22f
-            val y = centerY + sin(angle) * widthPx.coerceAtMost(heightPx) * 0.18f
+        val innerPositions = innerNodes.mapIndexed { index, node ->
+            val angle = (2 * PI * index / innerNodes.size.coerceAtLeast(1)).toFloat()
+            val x = centerX + cos(angle) * ringBase * 0.20f
+            val y = centerY + sin(angle) * ringBase * 0.18f
+            node to Pair(x, y)
+        }
+        val middlePositions = middleNodes.mapIndexed { index, node ->
+            val angle = (2 * PI * index / middleNodes.size.coerceAtLeast(1)).toFloat()
+            val x = centerX + cos(angle) * ringBase * 0.34f
+            val y = centerY + sin(angle) * ringBase * 0.31f
             node to Pair(x, y)
         }
         val outerPositions = outerNodes.mapIndexed { index, node ->
             val angle = (2 * PI * index / outerNodes.size.coerceAtLeast(1)).toFloat()
-            val x = centerX + cos(angle) * widthPx.coerceAtMost(heightPx) * 0.38f
-            val y = centerY + sin(angle) * widthPx.coerceAtMost(heightPx) * 0.32f
+            val x = centerX + cos(angle) * ringBase * 0.47f
+            val y = centerY + sin(angle) * ringBase * 0.43f
             node to Pair(x, y)
         }
 
@@ -342,7 +448,19 @@ private fun KnowledgeGraphCanvas(
                 center = androidx.compose.ui.geometry.Offset(centerX, centerY),
                 style = Stroke(width = 3f),
             )
-            directionPositions.forEach { (_, pos) ->
+            drawCircle(
+                color = AccentBlue.copy(alpha = 0.12f),
+                radius = size.minDimension * 0.26f,
+                center = androidx.compose.ui.geometry.Offset(centerX, centerY),
+                style = Stroke(width = 2f),
+            )
+            drawCircle(
+                color = Accent.copy(alpha = 0.10f),
+                radius = size.minDimension * 0.39f,
+                center = androidx.compose.ui.geometry.Offset(centerX, centerY),
+                style = Stroke(width = 2f),
+            )
+            innerPositions.forEach { (_, pos) ->
                 drawLine(
                     color = AccentBlue.copy(alpha = 0.28f),
                     start = androidx.compose.ui.geometry.Offset(centerX, centerY),
@@ -350,14 +468,25 @@ private fun KnowledgeGraphCanvas(
                     strokeWidth = 2.5f,
                 )
             }
-            outerPositions.forEachIndexed { index, (_, pos) ->
-                val parent = directionPositions.getOrNull(index % directionPositions.size.coerceAtLeast(1))?.second
+            middlePositions.forEachIndexed { index, (_, pos) ->
+                val parent = innerPositions.getOrNull(index % innerPositions.size.coerceAtLeast(1))?.second
                     ?: Pair(centerX, centerY)
                 drawLine(
                     color = Accent.copy(alpha = 0.22f),
                     start = androidx.compose.ui.geometry.Offset(parent.first, parent.second),
                     end = androidx.compose.ui.geometry.Offset(pos.first, pos.second),
                     strokeWidth = 2f,
+                )
+            }
+            outerPositions.forEachIndexed { index, (_, pos) ->
+                val parent = middlePositions.getOrNull(index % middlePositions.size.coerceAtLeast(1))?.second
+                    ?: innerPositions.getOrNull(index % innerPositions.size.coerceAtLeast(1))?.second
+                    ?: Pair(centerX, centerY)
+                drawLine(
+                    color = AccentBlue.copy(alpha = 0.16f),
+                    start = androidx.compose.ui.geometry.Offset(parent.first, parent.second),
+                    end = androidx.compose.ui.geometry.Offset(pos.first, pos.second),
+                    strokeWidth = 1.6f,
                 )
             }
         }
@@ -372,12 +501,12 @@ private fun KnowledgeGraphCanvas(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("当前知识", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextMain)
-                Text("方向 / 结论 / 概念 / 证据", style = MaterialTheme.typography.labelSmall, color = TextSoft)
+                Text("知识图谱", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextMain)
+                Text("${nodes.size} 个节点", style = MaterialTheme.typography.labelSmall, color = TextSoft)
             }
         }
 
-        directionPositions.forEach { (node, pos) ->
+        innerPositions.forEach { (node, pos) ->
             GraphNodeBubble(
                 node = node,
                 modifier = Modifier.offset {
@@ -390,13 +519,27 @@ private fun KnowledgeGraphCanvas(
                 onOpenNote = onOpenNote,
             )
         }
-        outerPositions.forEach { (node, pos) ->
+        middlePositions.forEach { (node, pos) ->
             GraphNodeBubble(
                 node = node,
                 modifier = Modifier.offset {
                     IntOffset(
                         x = (pos.first - widthPx * 0.08f).roundToInt(),
                         y = (pos.second - 22.dpToPx(density)).roundToInt(),
+                    )
+                },
+                onOpenThread = onOpenThread,
+                onOpenNote = onOpenNote,
+                compact = true,
+            )
+        }
+        outerPositions.forEach { (node, pos) ->
+            GraphNodeBubble(
+                node = node,
+                modifier = Modifier.offset {
+                    IntOffset(
+                        x = (pos.first - widthPx * 0.07f).roundToInt(),
+                        y = (pos.second - 18.dpToPx(density)).roundToInt(),
                     )
                 },
                 onOpenThread = onOpenThread,
@@ -450,7 +593,7 @@ private fun GraphNodeBubble(
 private fun buildGraphNodes(snapshot: DirectionWikiSnapshot): List<GraphNodeUi> {
     val directions = snapshot.directions.values
         .sortedByDescending { it.updatedAt }
-        .take(4)
+        .take(12)
     if (directions.isEmpty()) return emptyList()
 
     val nodes = mutableListOf<GraphNodeUi>()
@@ -469,7 +612,7 @@ private fun buildGraphNodes(snapshot: DirectionWikiSnapshot): List<GraphNodeUi> 
                 compareBy<KnowledgeLayerSearchItem> { graphTypePriority(it.type) }
                     .thenByDescending { it.updatedAt },
             )
-            .take(2)
+            .take(3)
             .forEach { item ->
                 nodes += GraphNodeUi(
                     id = item.id,
@@ -485,7 +628,31 @@ private fun buildGraphNodes(snapshot: DirectionWikiSnapshot): List<GraphNodeUi> 
                 )
             }
     }
-    return nodes.distinctBy { it.id }
+    snapshot.knowledgeItems
+        .filter { item ->
+            item.type != KnowledgeLayerSearchType.DIRECTION &&
+                nodes.none { existing -> existing.id == item.id }
+        }
+        .sortedWith(
+            compareBy<KnowledgeLayerSearchItem> { graphTypePriority(it.type) }
+                .thenByDescending { it.updatedAt },
+        )
+        .take(12)
+        .forEach { item ->
+            nodes += GraphNodeUi(
+                id = item.id,
+                label = item.title,
+                subLabel = item.type.label,
+                threadKey = item.threadKey.takeIf { it.isNotBlank() },
+                noteId = item.noteId,
+                accent = when (item.type) {
+                    KnowledgeLayerSearchType.CONCLUSION -> Accent
+                    KnowledgeLayerSearchType.EVIDENCE -> AccentBlue
+                    else -> Accent.copy(alpha = 0.9f)
+                },
+            )
+        }
+    return nodes.distinctBy { it.id }.take(48)
 }
 
 private fun graphTypePriority(type: KnowledgeLayerSearchType): Int =
@@ -584,3 +751,168 @@ private fun rememberGraphDecisionCards(
         add(missingEdgeCard)
     }.take(4)
 }
+
+@Composable
+private fun ContributionHeatmap(
+    year: Int,
+    activityByDate: Map<LocalDate, Int>,
+    peakCount: Int,
+    selectedDate: LocalDate?,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    val start = remember(year) {
+        LocalDate.of(year, 1, 1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    }
+    val end = remember(year) {
+        LocalDate.of(year, 12, 31).with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
+    }
+    val weeks = remember(start, end) {
+        buildList<List<LocalDate>> {
+            var current = start
+            while (!current.isAfter(end)) {
+                add(List(7) { index -> current.plusDays(index.toLong()) })
+                current = current.plusWeeks(1)
+            }
+        }
+    }
+    val scrollState = rememberScrollState()
+    val cellGap = 4.dp
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState),
+        horizontalArrangement = Arrangement.spacedBy(cellGap),
+    ) {
+        weeks.forEach { week ->
+            Column(verticalArrangement = Arrangement.spacedBy(cellGap)) {
+                week.forEach { date ->
+                    val visible = date.year == year
+                    ContributionCell(
+                        visible = visible,
+                        count = if (visible) activityByDate[date] ?: 0 else 0,
+                        peakCount = peakCount,
+                        selected = selectedDate == date,
+                        onClick = { if (visible) onSelectDate(date) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContributionCell(
+    visible: Boolean,
+    count: Int,
+    peakCount: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val tone = if (visible) activityTone(count, peakCount) else null
+    val selectedAccent = Color(0xFF3B82F6)
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .then(
+                if (tone == null) {
+                    Modifier.background(Color.Transparent)
+                } else {
+                    Modifier.background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                tone.glowOuter,
+                                tone.glowInner,
+                                Color.Transparent,
+                            ),
+                        ),
+                    )
+                }
+            )
+            .then(
+                if (visible) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .then(
+                    if (tone == null) {
+                        Modifier.background(Color.Transparent)
+                    } else {
+                        Modifier.background(tone.base)
+                    }
+                )
+                .then(
+                    if (selected) {
+                        Modifier.border(1.dp, selectedAccent, RoundedCornerShape(3.dp))
+                    } else if (tone != null) {
+                        Modifier.border(1.dp, tone.border, RoundedCornerShape(3.dp))
+                    } else {
+                        Modifier
+                    }
+                ),
+        )
+    }
+}
+
+private fun activityTone(
+    count: Int,
+    peakCount: Int,
+): HeatTone {
+    if (count <= 0 || peakCount <= 0) {
+        return HeatTone(
+            base = Color(0xFFF0F7FF),
+            glowInner = Color(0xFFF9FCFF),
+            glowOuter = Color(0x00FFFFFF),
+            border = Color(0xFFD8EAFD),
+        )
+    }
+    val progress = (count.toFloat() / peakCount.toFloat()).coerceIn(0f, 1f)
+    return when {
+        progress <= 0.2f -> HeatTone(
+            base = Color(0xFFDDEEFF),
+            glowInner = Color(0xFFF4FAFF),
+            glowOuter = Color(0x6679C6FF),
+            border = Color(0xFFC5E2FF),
+        )
+        progress <= 0.4f -> HeatTone(
+            base = Color(0xFFB8DCFF),
+            glowInner = Color(0xFFE7F4FF),
+            glowOuter = Color(0x888AD6FF),
+            border = Color(0xFFA1CCFF),
+        )
+        progress <= 0.65f -> HeatTone(
+            base = Color(0xFF84C4FF),
+            glowInner = Color(0xFFCFEAFF),
+            glowOuter = Color(0xB39EE4FF),
+            border = Color(0xFF69B2FF),
+        )
+        progress <= 0.85f -> HeatTone(
+            base = Color(0xFF4FA7FF),
+            glowInner = Color(0xFFADE0FF),
+            glowOuter = Color(0xE0A9ECFF),
+            border = Color(0xFF3794F3),
+        )
+        else -> HeatTone(
+            base = Color(0xFF2E8FFF),
+            glowInner = Color(0xFF8BD7FF),
+            glowOuter = Color(0xFFBDF5FF),
+            border = Color(0xFF1F7DEB),
+        )
+    }
+}
+
+private data class HeatTone(
+    val base: Color,
+    val glowInner: Color,
+    val glowOuter: Color,
+    val border: Color,
+)

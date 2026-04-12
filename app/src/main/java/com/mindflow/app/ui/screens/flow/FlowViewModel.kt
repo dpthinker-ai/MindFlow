@@ -329,8 +329,10 @@ class FlowViewModel(
             ) { notes, prefs, wikiSnapshot -> Triple(notes, prefs, wikiSnapshot) }
                 .collectLatest { (allNotes, threadPreferences, wikiSnapshot) ->
                     val activeNotes = allNotes.filter { !it.isArchived }
-                    val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 6)
-                    val followedDirections = threadPreferences.followedThreadKeys
+                    val analyzedThreads = NoteConnectionAnalyzer.buildThemeThreads(activeNotes, limit = 12)
+                    val candidateThreadKeys = (threadPreferences.followedThreadKeys + analyzedThreads.map { it.key })
+                        .distinct()
+                    val activeDirections = candidateThreadKeys
                         .mapNotNull { threadKey ->
                             val threadNotes = NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
                             if (threadNotes.isEmpty()) {
@@ -394,13 +396,15 @@ class FlowViewModel(
                             }
                         }
                         .sortedWith(
-                            compareByDescending<FollowedDirectionSummary> { it.thread.noteCount }
+                            compareByDescending<FollowedDirectionSummary> { it.thread.key in threadPreferences.followedThreadKeys }
+                                .thenByDescending { it.thread.noteCount }
                                 .thenBy { it.thread.title },
                         )
+                        .take(10)
                     directionState.value = DirectionState(
-                        followedDirections = followedDirections,
+                        followedDirections = activeDirections,
                         themeThreads = analyzedThreads.filterNot { candidate ->
-                            followedDirections.any { it.thread.key == candidate.key }
+                            activeDirections.any { it.thread.key == candidate.key }
                         },
                         knowledgeItems = wikiSnapshot.knowledgeItems,
                     )
@@ -697,6 +701,7 @@ class FlowViewModel(
         val mainlineContextSummary = buildString {
             appendLine("请像想法孵化器背后的本地知识维护员一样，只指出用户其实一直在反复想什么。")
             appendLine("这张卡不是今日判断，也不是任务提示。它必须像一条已经反复出现、正在成形的暗线。")
+            appendLine("不要因为最近最活跃的是同一个项目或应用，就默认继续围着它改写；如果其他文件夹或主题里也有真实势能，优先选更能拉开视野的那条线。")
             selectedMainlineCandidate?.let { candidate ->
                 appendLine("当前最有复现信号的对象：${candidate.title}")
                 appendLine("主要来自：${candidate.anchorLabel}")
@@ -741,6 +746,7 @@ class FlowViewModel(
         val settledContextSummary = buildString {
             appendLine("请像 wiki 维护员一样，只挑一个已经开始长成可复用资产的结果、方法或结论。不要写计划，不要写鼓励。")
             appendLine("不要把那条暗线换一种说法重复出来。这张卡必须更像已经能留下来的资产。")
+            appendLine("不要默认复述当前最活跃项目里的结果；如果其他主题里已经长出更通用、更可迁移的资产，优先选那个。")
             when (settledFeedback) {
                 FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、而且带清楚可信基础的资产更有用。")
                 FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛进步描述和还不能复用的判断。")
@@ -789,6 +795,7 @@ class FlowViewModel(
             appendLine("请像想法孵化器背后的 maintainer 一样，只找一个现在最值得撞一下的连接。不要平均分配，不要列清单。")
             appendLine("这张卡的职责不是制造口号，而是指出哪两个点碰一下最可能长出新东西，以及为什么现在值得试。")
             appendLine("不要重复那条暗线，也不要把已经长成的资产换个词说一遍。")
+            appendLine("如果最近最热的是同一个项目，先向外找不同文件夹、不同主题或不同知识对象之间的连接，不要继续在同一条线内部打转。")
             when (gapFeedback) {
                 FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出碰撞对象和试一下理由的结果更有用。")
                 FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给泛泛灵感，要明确指出哪两点碰一下。")
@@ -895,7 +902,7 @@ class FlowViewModel(
                     focusNoteId = direction.focusNoteId,
                     noteId = threadFocus?.id ?: direction.focusNoteId,
                 ),
-                score = 104 +
+                score = 76 +
                     direction.thread.noteCount +
                     if (direction.wikiContinuityLine.isNotBlank() || direction.wikiTrajectoryLine.isNotBlank()) 6 else 0 +
                     if (direction.lastProgressLine.isNotBlank()) 2 else 0,
