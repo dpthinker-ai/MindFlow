@@ -67,15 +67,16 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.KnowledgeTrust
+import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallResult
 import com.mindflow.app.data.settings.AiSettingsRepository
@@ -94,8 +95,25 @@ import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
+
+private data class EditorDraftAnalysisInput(
+    val isLoading: Boolean,
+    val noteId: Long?,
+    val topic: String,
+    val content: String,
+    val folderKey: String?,
+    val tags: List<String>,
+    val allNotes: List<NoteEntity>,
+)
+
+private data class EditorDraftAnalysis(
+    val relatedNotes: List<NoteEntity> = emptyList(),
+    val suggestedThread: ThemeThread? = null,
+)
 
 @Composable
 fun EditorRoute(
@@ -136,6 +154,40 @@ fun EditorRoute(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allNotes by noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList())
+    val analysisInput = remember(
+        uiState.isLoading,
+        uiState.noteId,
+        uiState.topic,
+        uiState.content,
+        uiState.folderKey,
+        uiState.tags,
+        allNotes,
+    ) {
+        EditorDraftAnalysisInput(
+            isLoading = uiState.isLoading,
+            noteId = uiState.noteId,
+            topic = uiState.topic,
+            content = uiState.content,
+            folderKey = uiState.folderKey,
+            tags = uiState.tags,
+            allNotes = allNotes,
+        )
+    }
+    val draftAnalysis by produceState(
+        initialValue = EditorDraftAnalysis(),
+        analysisInput,
+    ) {
+        if (analysisInput.isLoading) {
+            value = EditorDraftAnalysis()
+            return@produceState
+        }
+        delay(320)
+        value = withContext(Dispatchers.Default) {
+            buildEditorDraftAnalysis(analysisInput)
+        }
+    }
+    val relatedNotes = draftAnalysis.relatedNotes
+    val suggestedThread = draftAnalysis.suggestedThread
     val context = LocalContext.current
     var autoVoiceStarted by rememberSaveable(captureSessionKey ?: -1L) { mutableStateOf(false) }
     val speechInputLauncher = rememberLauncherForActivityResult(
@@ -175,69 +227,22 @@ fun EditorRoute(
                 }
         }
     }
-    val relatedNotes = remember(
-        uiState.isLoading,
-        uiState.noteId,
-        uiState.topic,
-        uiState.content,
-        uiState.folderKey,
-        uiState.tags,
-        allNotes,
-    ) {
-        if (uiState.isLoading || uiState.noteId == null) {
-            emptyList()
-        } else {
-            NoteConnectionAnalyzer.buildRelatedNotes(
-                currentNoteId = uiState.noteId,
-                topic = uiState.topic,
-                content = uiState.content,
-                folderKey = uiState.folderKey,
-                tags = uiState.tags,
-                notes = allNotes,
-            )
-        }
-    }
-    val suggestedThread = remember(
-        uiState.isLoading,
-        uiState.noteId,
-        uiState.topic,
-        uiState.content,
-        uiState.folderKey,
-        uiState.tags,
-        allNotes,
-    ) {
-        if (uiState.isLoading) {
-            null
-        } else {
-            NoteConnectionAnalyzer.bestThreadForDraft(
-                currentNoteId = uiState.noteId,
-                topic = uiState.topic,
-                content = uiState.content,
-                folderKey = uiState.folderKey,
-                tags = uiState.tags,
-                notes = allNotes,
-            )
-        }
-    }
     val knowledgeRecall by produceState<EditorKnowledgeRecallResult?>(
         initialValue = null,
-        uiState.isLoading,
-        uiState.noteId,
-        uiState.topic,
-        uiState.content,
-        uiState.folderKey,
-        uiState.tags,
+        analysisInput.isLoading,
+        analysisInput.topic,
+        analysisInput.content,
         suggestedThread?.key,
         relatedNotes.map { it.id to it.updatedAt },
     ) {
-        if (uiState.isLoading) {
+        if (analysisInput.isLoading) {
             value = null
             return@produceState
         }
-        delay(180)
+        delay(700)
         value = editorKnowledgeRecallPlanner.summarize(
-            draftTopic = uiState.topic,
-            draftContent = uiState.content,
+            draftTopic = analysisInput.topic,
+            draftContent = analysisInput.content,
             suggestedThreadTitle = suggestedThread?.title,
             relatedNotes = relatedNotes,
         )
@@ -290,6 +295,33 @@ fun EditorRoute(
         knowledgeRecall = knowledgeRecall,
         relatedNotes = relatedNotes,
         onOpenRelatedNote = onOpenNote,
+    )
+}
+
+private fun buildEditorDraftAnalysis(input: EditorDraftAnalysisInput): EditorDraftAnalysis {
+    val relatedNotes = if (input.noteId == null) {
+        emptyList()
+    } else {
+        NoteConnectionAnalyzer.buildRelatedNotes(
+            currentNoteId = input.noteId,
+            topic = input.topic,
+            content = input.content,
+            folderKey = input.folderKey,
+            tags = input.tags,
+            notes = input.allNotes,
+        )
+    }
+    val suggestedThread = NoteConnectionAnalyzer.bestThreadForDraft(
+        currentNoteId = input.noteId,
+        topic = input.topic,
+        content = input.content,
+        folderKey = input.folderKey,
+        tags = input.tags,
+        notes = input.allNotes,
+    )
+    return EditorDraftAnalysis(
+        relatedNotes = relatedNotes,
+        suggestedThread = suggestedThread,
     )
 }
 

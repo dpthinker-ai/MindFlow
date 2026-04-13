@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,12 +48,14 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
+import com.mindflow.app.data.wiki.DirectionWikiGraphNode
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
-import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
-import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.PanelCard
@@ -83,27 +84,69 @@ import kotlin.math.sin
 private data class GraphNodeUi(
     val id: String,
     val label: String,
-    val threadKey: String? = null,
-    val noteId: Long? = null,
+    val summaryLine: String,
+    val gapLine: String,
+    val threadKey: String,
     val accent: Color = AccentBlue,
+    val noteCount: Int = 0,
+    val relationCount: Int = 0,
+    val priority: Int = 3,
 )
 
-private data class GraphClusterUi(
-    val direction: GraphNodeUi,
-    val children: List<GraphNodeUi>,
+private data class GraphEdgeUi(
+    val fromId: String,
+    val toId: String,
+    val weight: Int,
 )
 
 private data class GraphOverviewUi(
     val totalNodeCount: Int,
     val visibleNodeCount: Int,
-    val clusters: List<GraphClusterUi>,
+    val nodes: List<GraphNodeUi>,
+    val edges: List<GraphEdgeUi>,
 )
 
-private data class GraphClusterLayout(
-    val cluster: GraphClusterUi,
-    val directionPosition: Pair<Float, Float>,
-    val childPositions: List<Pair<GraphNodeUi, Pair<Float, Float>>>,
+private data class GraphNodeLayout(
+    val node: GraphNodeUi,
+    val position: Pair<Float, Float>,
 )
+
+private enum class GraphDomainBucket(
+    val label: String,
+    val accent: Color,
+    val keywords: List<String>,
+) {
+    WORK(
+        label = "工作",
+        accent = AccentBlue,
+        keywords = listOf("工作", "项目", "产品", "设计", "开发", "交付", "任务", "客户", "团队", "ai", "模型"),
+    ),
+    HEALTH(
+        label = "健康",
+        accent = Accent.copy(alpha = 0.92f),
+        keywords = listOf("健康", "身体", "睡眠", "运动", "饮食", "体重", "恢复"),
+    ),
+    LIFE(
+        label = "生活",
+        accent = Color(0xFF0F766E),
+        keywords = listOf("生活", "家庭", "日常", "家务", "居住", "出行", "习惯", "情绪"),
+    ),
+    LEARNING(
+        label = "学习",
+        accent = Color(0xFF7C3AED),
+        keywords = listOf("学习", "阅读", "写作", "研究", "知识", "思考", "复盘"),
+    ),
+    RELATION(
+        label = "关系",
+        accent = Color(0xFFDB2777),
+        keywords = listOf("关系", "沟通", "朋友", "家人", "社交", "协作"),
+    ),
+    OTHER(
+        label = "其他",
+        accent = Color(0xFF64748B),
+        keywords = emptyList(),
+    ),
+}
 
 @androidx.compose.runtime.Composable
 fun KnowledgeGraphRoute(
@@ -129,10 +172,30 @@ private fun KnowledgeGraphScreen(
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
-    val graphOverview = remember(snapshot) { buildGraphOverview(snapshot) }
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember(zoneId) { LocalDate.now(zoneId) }
     val activeNotes = remember(notes) { notes.filterNot { it.isArchived } }
+    val graphOverview = remember(snapshot, activeNotes) { buildGraphOverview(snapshot, activeNotes) }
+    var selectedNodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(graphOverview.nodes) {
+        if (selectedNodeId !in graphOverview.nodes.map { it.id }.toSet()) {
+            selectedNodeId = graphOverview.nodes.firstOrNull()?.id
+        }
+    }
+    val selectedGraphNode = remember(graphOverview, selectedNodeId) {
+        graphOverview.nodes.firstOrNull { it.id == selectedNodeId } ?: graphOverview.nodes.firstOrNull()
+    }
+    val relatedGraphNode = remember(graphOverview, selectedGraphNode) {
+        selectedGraphNode?.let { node ->
+            graphOverview.edges
+                .filter { it.fromId == node.id || it.toId == node.id }
+                .maxByOrNull { it.weight }
+                ?.let { edge ->
+                    val relatedId = if (edge.fromId == node.id) edge.toId else edge.fromId
+                    graphOverview.nodes.firstOrNull { it.id == relatedId }
+                }
+        }
+    }
     val activityByDate = remember(activeNotes, zoneId) {
         activeNotes
             .groupingBy { note ->
@@ -205,7 +268,7 @@ private fun KnowledgeGraphScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "先看热度，再看它们怎么连。",
+                            text = "先看记录热度，再看信息图谱。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
@@ -215,7 +278,7 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "记忆记录热力",
+                            title = "记录热度",
                             headline = "${selectedYear} · ${selectedYearActivity.values.sum()} 次变动",
                         )
                         if (availableYears.size > 1) {
@@ -301,30 +364,44 @@ private fun KnowledgeGraphScreen(
                 item {
                     PanelCard {
                         SectionHeader(
-                            title = "完整图谱",
-                            headline = if (graphOverview.clusters.isNotEmpty()) {
-                                "先看 ${graphOverview.visibleNodeCount} 个关键词"
+                            title = "信息图谱",
+                            headline = if (graphOverview.nodes.isNotEmpty()) {
+                                buildString {
+                                    append("${graphOverview.visibleNodeCount} 个主题")
+                                    if (graphOverview.edges.isNotEmpty()) {
+                                        append(" · ${graphOverview.edges.size} 条关系")
+                                    }
+                                }
                             } else {
-                                "还没有足够节点"
+                                "还没有足够结构"
                             },
                         )
-                        if (graphOverview.clusters.isEmpty()) {
+                        if (graphOverview.nodes.isEmpty()) {
                             Text(
-                                text = "先让 Flow 继续维护一段时间，这里才会长出可读的方向、概念、结论和证据网络。",
+                                text = "先让记录继续积累，这里会慢慢长出你的信息图谱。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSoft,
                             )
                         } else {
                             KnowledgeGraphCanvas(
                                 overview = graphOverview,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
+                                selectedNodeId = selectedGraphNode?.id,
+                                onSelectNode = { selectedNodeId = it },
                             )
-                            Text(
-                                text = "点一个关键词，继续看对应记录或主题。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
-                            )
+                            selectedGraphNode?.let { node ->
+                                GraphFocusCard(
+                                    node = node,
+                                    relatedNode = relatedGraphNode,
+                                    onOpenThread = onOpenThread,
+                                )
+                            }
+                            if (graphOverview.edges.isEmpty()) {
+                                Text(
+                                    text = "这些主题已经出现，但彼此关系还不够清楚，先继续记录，关系会慢慢长出来。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSoft,
+                                )
+                            }
                         }
                     }
                 }
@@ -388,164 +465,93 @@ private fun GraphActivityNoteCard(
 @androidx.compose.runtime.Composable
 private fun KnowledgeGraphCanvas(
     overview: GraphOverviewUi,
-    onOpenThread: (String) -> Unit,
-    onOpenNote: (Long) -> Unit,
+    selectedNodeId: String?,
+    onSelectNode: (String) -> Unit,
 ) {
-    val clusters = overview.clusters
+    val nodes = overview.nodes
     val density = LocalDensity.current
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(560.dp)
+            .height(340.dp)
             .background(Color.Transparent),
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val centerX = widthPx / 2f
-        val centerY = heightPx * 0.48f
-        val ringBase = widthPx.coerceAtMost(heightPx)
-        val directionRadius = ringBase * 0.24f
-        val childRadius = ringBase * 0.40f
-        val horizontalPadding = with(density) { 56.dp.toPx() }
-        val verticalPadding = with(density) { 64.dp.toPx() }
-        val layouts = clusters.mapIndexed { index, cluster ->
-            val sectorSize = (2 * PI) / clusters.size.coerceAtLeast(1)
-            val angle = (-PI / 2.0) + (sectorSize * index)
-            val directionX = clamp(
-                centerX + cos(angle).toFloat() * directionRadius,
-                horizontalPadding,
-                widthPx - horizontalPadding,
-            )
-            val directionY = clamp(
-                centerY + sin(angle).toFloat() * directionRadius,
-                verticalPadding,
-                heightPx - verticalPadding,
-            )
-            val childPositions = cluster.children.mapIndexed { childIndex, child ->
-                val childSpread = when (cluster.children.size) {
-                    0, 1 -> 0.0
-                    else -> min(sectorSize * 0.36, 0.72)
-                }
-                val childAngle = if (cluster.children.size <= 1) {
-                    angle
-                } else {
-                    angle - (childSpread / 2.0) +
-                        (childSpread * childIndex / (cluster.children.size - 1).coerceAtLeast(1))
-                }
-                val childX = clamp(
-                    centerX + cos(childAngle).toFloat() * childRadius,
-                    horizontalPadding,
-                    widthPx - horizontalPadding,
-                )
-                val childY = clamp(
-                    centerY + sin(childAngle).toFloat() * childRadius,
-                    verticalPadding,
-                    heightPx - verticalPadding,
-                )
-                child to Pair(childX, childY)
-            }
-            GraphClusterLayout(
-                cluster = cluster,
-                directionPosition = Pair(directionX, directionY),
-                childPositions = childPositions,
-            )
-        }
+        val layouts = buildGraphNodeLayouts(
+            nodes = nodes,
+            widthPx = widthPx,
+            heightPx = heightPx,
+        )
+        val positionById = layouts.associate { it.node.id to it.position }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(
-                color = Accent.copy(alpha = 0.16f),
-                radius = size.minDimension * 0.24f,
-                center = androidx.compose.ui.geometry.Offset(centerX, centerY),
-                style = Stroke(width = 2.4f),
-            )
-            drawCircle(
-                color = AccentBlue.copy(alpha = 0.12f),
-                radius = size.minDimension * 0.40f,
-                center = androidx.compose.ui.geometry.Offset(centerX, centerY),
-                style = Stroke(width = 2f),
-            )
-            layouts.forEach { layout ->
-                layout.childPositions.forEach { (_, childPos) ->
-                    drawLine(
-                        color = layout.cluster.direction.accent.copy(alpha = 0.24f),
-                        start = androidx.compose.ui.geometry.Offset(
-                            layout.directionPosition.first,
-                            layout.directionPosition.second,
-                        ),
-                        end = androidx.compose.ui.geometry.Offset(childPos.first, childPos.second),
-                        strokeWidth = 1.8f,
-                    )
-                }
+            overview.edges.forEach { edge ->
+                val from = positionById[edge.fromId] ?: return@forEach
+                val to = positionById[edge.toId] ?: return@forEach
+                val highlighted = selectedNodeId != null && (edge.fromId == selectedNodeId || edge.toId == selectedNodeId)
+                val edgeColor = if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft.copy(alpha = 0.72f)
+                drawLine(
+                    color = edgeColor,
+                    start = androidx.compose.ui.geometry.Offset(from.first, from.second),
+                    end = androidx.compose.ui.geometry.Offset(to.first, to.second),
+                    strokeWidth = if (highlighted) 4f else (1.6f + edge.weight.coerceAtMost(6) * 0.35f),
+                )
             }
         }
 
         layouts.forEach { layout ->
             GraphNodeBubble(
-                node = layout.cluster.direction,
+                node = layout.node,
                 modifier = Modifier.offset {
+                    val nodeWidth = graphNodeWidth(layout.node, selectedNodeId == layout.node.id)
                     IntOffset(
-                        x = (layout.directionPosition.first - 56.dpToPx(density)).roundToInt(),
-                        y = (layout.directionPosition.second - 22.dpToPx(density)).roundToInt(),
+                        x = (layout.position.first - (nodeWidth.toPx(density) / 2f)).roundToInt(),
+                        y = (layout.position.second - 22.dpToPx(density)).roundToInt(),
                     )
                 },
-                onOpenThread = onOpenThread,
-                onOpenNote = onOpenNote,
-                width = 112.dp,
+                selected = selectedNodeId == layout.node.id,
+                onClick = { onSelectNode(layout.node.id) },
+                width = graphNodeWidth(layout.node, selectedNodeId == layout.node.id),
             )
-            layout.childPositions.forEach { (node, pos) ->
-                GraphNodeBubble(
-                    node = node,
-                    modifier = Modifier.offset {
-                        IntOffset(
-                            x = (pos.first - 44.dpToPx(density)).roundToInt(),
-                            y = (pos.second - 20.dpToPx(density)).roundToInt(),
-                        )
-                    },
-                    onOpenThread = onOpenThread,
-                    onOpenNote = onOpenNote,
-                    compact = true,
-                    width = 88.dp,
-                )
-            }
         }
     }
 }
 
 private fun Int.dpToPx(density: Density): Float = with(density) { this@dpToPx.dp.toPx() }
 
+private fun androidx.compose.ui.unit.Dp.toPx(density: Density): Float = with(density) { this@toPx.toPx() }
+
 @androidx.compose.runtime.Composable
 private fun GraphNodeBubble(
     node: GraphNodeUi,
     modifier: Modifier,
-    onOpenThread: (String) -> Unit,
-    onOpenNote: (Long) -> Unit,
-    compact: Boolean = false,
+    selected: Boolean,
+    onClick: () -> Unit,
     width: androidx.compose.ui.unit.Dp,
 ) {
     Surface(
-        modifier = modifier.clickable {
-            node.noteId?.let(onOpenNote) ?: node.threadKey?.let(onOpenThread)
-        },
-        color = WhiteGlass.copy(alpha = if (compact) 0.86f else 0.92f),
+        modifier = modifier.clickable(onClick = onClick),
+        color = if (selected) node.accent.copy(alpha = 0.14f) else WhiteGlass.copy(alpha = 0.92f),
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, node.accent.copy(alpha = 0.35f)),
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, node.accent.copy(alpha = if (selected) 0.72f else 0.35f)),
     ) {
         Row(
             modifier = Modifier
                 .width(width)
-                .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(if (compact) 8.dp else 10.dp)
+                    .size(if (selected) 10.dp else 9.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(node.accent.copy(alpha = 0.88f)),
             )
             Text(
                 text = node.label,
-                style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TextMain,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -554,75 +560,185 @@ private fun GraphNodeBubble(
     }
 }
 
-private fun buildGraphOverview(snapshot: DirectionWikiSnapshot): GraphOverviewUi {
+@Composable
+private fun GraphFocusCard(
+    node: GraphNodeUi,
+    relatedNode: GraphNodeUi?,
+    onOpenThread: (String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenThread(node.threadKey) },
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = node.label,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            Text(
+                text = node.summaryLine,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = relatedNode?.let { "最相关：${it.label}" } ?: "这条主题目前还比较独立。",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "下一步：${node.gapLine}",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "打开这条主题",
+                style = MaterialTheme.typography.labelLarge,
+                color = AccentBlue,
+            )
+        }
+    }
+}
+
+private fun buildGraphOverview(
+    snapshot: DirectionWikiSnapshot,
+    notes: List<NoteEntity>,
+): GraphOverviewUi {
+    if (snapshot.graph.nodes.isNotEmpty()) {
+        return buildAiGraphOverview(snapshot, notes)
+    }
     val directions = snapshot.directions.values
         .sortedByDescending { it.updatedAt }
-        .take(4)
+        .take(6)
     if (directions.isEmpty()) return GraphOverviewUi(
         totalNodeCount = 0,
         visibleNodeCount = 0,
-        clusters = emptyList(),
+        nodes = emptyList(),
+        edges = emptyList(),
     )
-
-    val allDistinctNodeCount = snapshot.directions.size +
-        snapshot.knowledgeItems
-            .filter { it.type != KnowledgeLayerSearchType.DIRECTION }
-            .distinctBy { it.id }
-            .size
-    val clusters = mutableListOf<GraphClusterUi>()
-    var visibleNodeCount = 0
-    directions.forEach { direction ->
-        val children = snapshot.knowledgeItems
-            .filter { it.threadKey == direction.threadKey }
-            .filter { it.type != KnowledgeLayerSearchType.DIRECTION }
-            .sortedWith(
-                compareBy<KnowledgeLayerSearchItem> { graphTypePriority(it.type) }
-                    .thenByDescending { it.updatedAt },
-            )
-            .take(3)
-            .map { item ->
-                GraphNodeUi(
-                    id = item.id,
-                    label = compactGraphLabel(item.title.ifBlank { item.summary }),
-                    threadKey = item.threadKey.takeIf { it.isNotBlank() },
-                    noteId = item.noteId,
-                    accent = when (item.type) {
-                        KnowledgeLayerSearchType.CONCLUSION -> Accent
-                        KnowledgeLayerSearchType.EVIDENCE -> AccentBlue
-                        else -> Accent.copy(alpha = 0.9f)
-                    },
-                )
-            }
-        clusters += GraphClusterUi(
-            direction = GraphNodeUi(
-                id = "direction:${direction.threadKey}",
-                label = compactGraphLabel(direction.title),
-                threadKey = direction.threadKey,
-                accent = AccentBlue,
-            ),
-            children = children,
-        )
-        visibleNodeCount += 1 + children.size
+    val notesByThread = directions.associate { direction ->
+        direction.threadKey to NoteConnectionAnalyzer.notesForThread(direction.threadKey, notes)
     }
+    val edges = buildGraphEdges(
+        directions = directions,
+        notesByThread = notesByThread,
+    )
+    val relationCountByThread = buildMap {
+        edges.forEach { edge ->
+            put(edge.fromId, getOrDefault(edge.fromId, 0) + 1)
+            put(edge.toId, getOrDefault(edge.toId, 0) + 1)
+        }
+    }
+    val nodes = directions
+        .map { direction ->
+            val threadNotes = notesByThread[direction.threadKey].orEmpty()
+            GraphNodeUi(
+                id = direction.threadKey,
+                label = compactDirectionLabel(direction.title),
+                summaryLine = graphSummaryLine(direction),
+                gapLine = graphGapLine(direction),
+                threadKey = direction.threadKey,
+                accent = graphDirectionAccent(direction, threadNotes),
+                noteCount = threadNotes.size,
+                relationCount = relationCountByThread[direction.threadKey] ?: 0,
+                priority = ((relationCountByThread[direction.threadKey] ?: 0) + threadNotes.size.coerceAtMost(4)).coerceIn(1, 5),
+            )
+        }
+        .sortedWith(
+            compareByDescending<GraphNodeUi> { it.priority }
+                .thenByDescending { it.relationCount }
+                .thenByDescending { it.noteCount }
+                .thenBy { it.label.length },
+        )
     return GraphOverviewUi(
-        totalNodeCount = allDistinctNodeCount,
-        visibleNodeCount = visibleNodeCount,
-        clusters = clusters,
+        totalNodeCount = snapshot.directions.size,
+        visibleNodeCount = nodes.size,
+        nodes = nodes,
+        edges = edges,
     )
 }
 
-private fun graphTypePriority(type: KnowledgeLayerSearchType): Int =
-    when (type) {
-        KnowledgeLayerSearchType.CONCLUSION -> 0
-        KnowledgeLayerSearchType.EVIDENCE -> 1
-        KnowledgeLayerSearchType.CONCEPT -> 2
-        KnowledgeLayerSearchType.QUESTION -> 3
-        KnowledgeLayerSearchType.METHOD -> 4
-        KnowledgeLayerSearchType.EXPERIMENT -> 5
-        KnowledgeLayerSearchType.DIRECTION -> 6
+private fun buildAiGraphOverview(
+    snapshot: DirectionWikiSnapshot,
+    notes: List<NoteEntity>,
+): GraphOverviewUi {
+    val summariesByThread = snapshot.directions
+    val graphNodes = snapshot.graph.nodes
+        .distinctBy { it.threadKey }
+        .take(6)
+    if (graphNodes.isEmpty()) {
+        return GraphOverviewUi(
+            totalNodeCount = 0,
+            visibleNodeCount = 0,
+            nodes = emptyList(),
+            edges = emptyList(),
+        )
     }
+    val relationCountByThread = buildMap {
+        snapshot.graph.edges.forEach { edge ->
+            put(edge.fromThreadKey, getOrDefault(edge.fromThreadKey, 0) + 1)
+            put(edge.toThreadKey, getOrDefault(edge.toThreadKey, 0) + 1)
+        }
+    }
+    val nodes = graphNodes
+        .map { node ->
+            val direction = summariesByThread[node.threadKey]
+            val threadNotes = NoteConnectionAnalyzer.notesForThread(node.threadKey, notes)
+            GraphNodeUi(
+                id = node.threadKey,
+                label = node.label,
+                summaryLine = node.summaryLine.ifBlank {
+                    direction?.let(::graphSummaryLine).orEmpty()
+                }.ifBlank { "这条主题正在继续长。"},
+                gapLine = node.gapLine.ifBlank {
+                    direction?.let(::graphGapLine).orEmpty()
+                }.ifBlank { "继续补一条更硬的新材料。"},
+                threadKey = node.threadKey,
+                accent = direction?.let { graphDirectionAccent(it, threadNotes) }
+                    ?: graphNodeAccent(node, threadNotes),
+                noteCount = threadNotes.size,
+                relationCount = relationCountByThread[node.threadKey] ?: 0,
+                priority = node.priority.coerceIn(1, 5),
+            )
+        }
+        .sortedWith(
+            compareByDescending<GraphNodeUi> { it.priority }
+                .thenByDescending { it.relationCount }
+                .thenByDescending { it.noteCount }
+                .thenBy { it.label.length },
+        )
+    val visibleIds = nodes.map { it.id }.toSet()
+    val edges = snapshot.graph.edges
+        .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+        .map { edge ->
+            GraphEdgeUi(
+                fromId = edge.fromThreadKey,
+                toId = edge.toThreadKey,
+                weight = edge.strength.coerceIn(1, 5),
+            )
+        }
+    return GraphOverviewUi(
+        totalNodeCount = snapshot.graph.nodes.size,
+        visibleNodeCount = nodes.size,
+        nodes = nodes,
+        edges = edges,
+    )
+}
 
-private fun compactGraphLabel(raw: String): String {
+private fun compactDirectionLabel(raw: String): String {
     val cleaned = raw
         .lineSequence()
         .firstOrNull { it.isNotBlank() }
@@ -643,6 +759,187 @@ private fun compactGraphLabel(raw: String): String {
         withoutPrefix.take(8)
     }
 }
+
+private fun classifyGraphBucket(texts: List<String>): GraphDomainBucket {
+    val haystack = texts.joinToString(" ").lowercase()
+    val scoredBuckets = GraphDomainBucket.values()
+        .filter { it != GraphDomainBucket.OTHER }
+        .associateWith { bucket ->
+            bucket.keywords.count { keyword -> haystack.contains(keyword.lowercase()) }
+        }
+    val bestMatch = scoredBuckets.maxByOrNull { it.value }
+    return if (bestMatch != null && bestMatch.value > 0) bestMatch.key else GraphDomainBucket.OTHER
+}
+
+private fun buildGraphEdges(
+    directions: List<DirectionWikiDirectionSummary>,
+    notesByThread: Map<String, List<NoteEntity>>,
+): List<GraphEdgeUi> {
+    val edgeWeights = mutableMapOf<Pair<String, String>, Int>()
+    directions.forEachIndexed { index, left ->
+        directions.drop(index + 1).forEach { right ->
+            val score = scoreGraphRelation(
+                leftNotes = notesByThread[left.threadKey].orEmpty(),
+                rightNotes = notesByThread[right.threadKey].orEmpty(),
+            )
+            if (score > 0) {
+                edgeWeights[left.threadKey to right.threadKey] = score
+            }
+        }
+    }
+    return edgeWeights.entries
+        .sortedByDescending { it.value }
+        .take(8)
+        .map { (key, score) ->
+            GraphEdgeUi(
+                fromId = key.first,
+                toId = key.second,
+                weight = score,
+            )
+        }
+}
+
+private fun scoreGraphRelation(
+    leftNotes: List<NoteEntity>,
+    rightNotes: List<NoteEntity>,
+): Int {
+    if (leftNotes.isEmpty() || rightNotes.isEmpty()) return 0
+    val leftTags = leftNotes.flatMap { it.tags }.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+    val rightTags = rightNotes.flatMap { it.tags }.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+    val sharedTags = leftTags.intersect(rightTags).size
+
+    val leftTokens = leftNotes
+        .flatMap { note -> graphTokens(note.topic) + graphTokens(note.content.take(160)) }
+        .toSet()
+    val rightTokens = rightNotes
+        .flatMap { note -> graphTokens(note.topic) + graphTokens(note.content.take(160)) }
+        .toSet()
+    val sharedTokens = leftTokens.intersect(rightTokens)
+        .filterNot { token -> token.length <= 1 || token in graphStopTokens }
+        .size
+
+    return (sharedTags * 4) + sharedTokens.coerceAtMost(5)
+}
+
+private fun graphTokens(raw: String): Set<String> =
+    Regex("[\\p{IsHan}]{2,}|[a-z0-9]{3,}")
+        .findAll(raw.lowercase())
+        .map { it.value.trim() }
+        .filter { it.isNotBlank() }
+        .toSet()
+
+private fun graphSummaryLine(direction: DirectionWikiDirectionSummary): String =
+    direction.conclusionLine
+        .ifBlank { direction.assetSummary }
+        .ifBlank { direction.continuityLine }
+        .ifBlank { direction.healthLine }
+        .ifBlank { "这条主题还在慢慢成形。" }
+
+private fun graphGapLine(direction: DirectionWikiDirectionSummary): String =
+    direction.openQuestions.firstOrNull()
+        .orEmpty()
+        .ifBlank { direction.maintenanceFocusLine }
+        .ifBlank { direction.maintenanceTargetLine }
+        .ifBlank { "再补一条新记录，让这条主题继续长。" }
+
+private fun graphDirectionAccent(
+    direction: DirectionWikiDirectionSummary,
+    threadNotes: List<NoteEntity>,
+): Color {
+    val folderAccent = direction.threadKey
+        .takeIf { it.startsWith("folder:") }
+        ?.removePrefix("folder:")
+        ?.trim()
+        ?.let(MindFolderCatalog::fromKey)
+        ?.let { Color(android.graphics.Color.parseColor(it.colorHex)) }
+    if (folderAccent != null) return folderAccent
+    return classifyGraphBucket(
+        listOf(
+            direction.title,
+            direction.assetSummary,
+            direction.conclusionLine,
+            direction.knowledgeObjectLine,
+        ) + threadNotes.flatMap { note -> listOf(note.topic, note.content.take(140)) },
+    ).accent
+}
+
+private fun graphNodeAccent(
+    node: DirectionWikiGraphNode,
+    threadNotes: List<NoteEntity>,
+): Color = classifyGraphBucket(
+    listOf(node.label, node.summaryLine, node.gapLine) + threadNotes.flatMap { note -> listOf(note.topic, note.content.take(140)) },
+).accent
+
+private fun graphNodeWidth(
+    node: GraphNodeUi,
+    selected: Boolean,
+): androidx.compose.ui.unit.Dp =
+    when {
+        selected -> 116.dp
+        node.priority >= 4 -> 104.dp
+        node.relationCount >= 2 || node.noteCount >= 5 -> 100.dp
+        else -> 88.dp
+    }
+
+private fun buildGraphNodeLayouts(
+    nodes: List<GraphNodeUi>,
+    widthPx: Float,
+    heightPx: Float,
+): List<GraphNodeLayout> {
+    if (nodes.isEmpty()) return emptyList()
+    val ordered = nodes.sortedWith(
+        compareByDescending<GraphNodeUi> { it.priority }
+            .thenByDescending { it.relationCount }
+            .thenByDescending { it.noteCount }
+            .thenBy { it.label },
+    )
+    val centerX = widthPx / 2f
+    val centerY = heightPx / 2f
+    if (ordered.size == 1) {
+        return listOf(GraphNodeLayout(ordered.first(), centerX to centerY))
+    }
+    if (ordered.size == 2) {
+        val spread = min(widthPx, heightPx) * 0.22f
+        return listOf(
+            GraphNodeLayout(ordered[0], (centerX - spread) to centerY),
+            GraphNodeLayout(ordered[1], (centerX + spread) to centerY),
+        )
+    }
+
+    val layouts = mutableListOf<GraphNodeLayout>()
+    val centerNode = ordered.first()
+    layouts += GraphNodeLayout(centerNode, centerX to centerY)
+    val outerNodes = ordered.drop(1)
+    val baseRadius = min(widthPx, heightPx) * 0.34f
+    outerNodes.forEachIndexed { index, node ->
+        val angle = (-PI / 2.0) + (2 * PI * index / outerNodes.size.coerceAtLeast(1))
+        val inwardBias = (node.priority.coerceAtMost(5) * 8f) + (node.relationCount.coerceAtMost(3) * 10f)
+        val radiusX = baseRadius - inwardBias
+        val radiusY = (baseRadius * 0.78f) - inwardBias
+        val x = clamp(centerX + cos(angle).toFloat() * radiusX, 48f, widthPx - 48f)
+        val y = clamp(centerY + sin(angle).toFloat() * radiusY, 42f, heightPx - 42f)
+        layouts += GraphNodeLayout(node, x to y)
+    }
+    return layouts
+}
+
+private val graphStopTokens = setOf(
+    "这个",
+    "那个",
+    "因为",
+    "所以",
+    "我们",
+    "自己",
+    "已经",
+    "现在",
+    "需要",
+    "继续",
+    "主题",
+    "记录",
+    "问题",
+    "方法",
+    "实验",
+)
 
 @Composable
 private fun ContributionHeatmap(

@@ -37,6 +37,7 @@ class DirectionWikiCoordinator(
     private val threadPreferencesRepository: ThreadPreferencesRepository,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
+    private val knowledgeGraphPlanner: KnowledgeGraphPlanner,
     private val applicationScope: CoroutineScope,
 ) {
     private val legacyRootDir = File(context.filesDir, "direction-wiki")
@@ -424,14 +425,27 @@ class DirectionWikiCoordinator(
             },
         )
 
+        val knowledgeItems = buildKnowledgeSearchItems(
+            summaries = summaries,
+            conceptBuckets = conceptBuckets,
+            candidates = objectCandidates,
+        )
+        val graphSnapshot = knowledgeGraphPlanner.summarize(
+            summaries = summaries,
+            knowledgeItems = knowledgeItems,
+        )
+        File(rootDir, "wiki/graph.md").writeText(
+            buildGraphMarkdown(
+                generatedAt = generatedAt,
+                graph = graphSnapshot,
+            ),
+        )
+
         writeExport(
             generatedAt = generatedAt,
             summaries = summaries,
-            knowledgeItems = buildKnowledgeSearchItems(
-                summaries = summaries,
-                conceptBuckets = conceptBuckets,
-                candidates = objectCandidates,
-            ),
+            knowledgeItems = knowledgeItems,
+            graph = graphSnapshot,
         )
     }
 
@@ -1161,7 +1175,41 @@ class DirectionWikiCoordinator(
                 .sortedByDescending { it.timestamp }
                 .forEach { entry ->
                     appendLine("- ${displayTime(entry.timestamp)} · ${entry.stage.label}")
-                }
+            }
+        }
+    }
+
+    private fun buildGraphMarkdown(
+        generatedAt: Long,
+        graph: DirectionWikiGraphSnapshot,
+    ): String = buildString {
+        appendLine("# 信息图谱")
+        appendLine()
+        appendLine("更新时间：${displayTime(generatedAt)}")
+        graph.overviewLine.takeIf { it.isNotBlank() }?.let {
+            appendLine()
+            appendLine(it)
+        }
+        appendLine()
+        appendLine("## 主题")
+        if (graph.nodes.isEmpty()) {
+            appendLine("还没有足够稳定的主题结构。")
+        } else {
+            graph.nodes.forEach { node ->
+                appendLine("- ${node.label}")
+                node.summaryLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在在讲：$it") }
+                node.gapLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在最缺：$it") }
+            }
+        }
+        appendLine()
+        appendLine("## 关系")
+        if (graph.edges.isEmpty()) {
+            appendLine("当前还没有足够硬的主题关系。")
+        } else {
+            graph.edges.forEach { edge ->
+                appendLine("- ${edge.fromThreadKey} <-> ${edge.toThreadKey}")
+                edge.reasonLine.takeIf { it.isNotBlank() }?.let { appendLine("  - $it") }
+            }
         }
     }
 
@@ -1169,6 +1217,7 @@ class DirectionWikiCoordinator(
         generatedAt: Long,
         summaries: List<DirectionWikiDirectionSummary>,
         knowledgeItems: List<KnowledgeLayerSearchItem>,
+        graph: DirectionWikiGraphSnapshot,
     ) {
         val root = JSONObject()
             .put("generatedAt", generatedAt)
@@ -1229,6 +1278,42 @@ class DirectionWikiCoordinator(
                         )
                     }
                 },
+            )
+            .put(
+                "graph",
+                JSONObject()
+                    .put("overviewLine", graph.overviewLine)
+                    .put("source", graph.source)
+                    .put("generatedAt", graph.generatedAt)
+                    .put(
+                        "nodes",
+                        JSONArray().apply {
+                            graph.nodes.forEach { node ->
+                                put(
+                                    JSONObject()
+                                        .put("threadKey", node.threadKey)
+                                        .put("label", node.label)
+                                        .put("summaryLine", node.summaryLine)
+                                        .put("gapLine", node.gapLine)
+                                        .put("priority", node.priority),
+                                )
+                            }
+                        },
+                    )
+                    .put(
+                        "edges",
+                        JSONArray().apply {
+                            graph.edges.forEach { edge ->
+                                put(
+                                    JSONObject()
+                                        .put("fromThreadKey", edge.fromThreadKey)
+                                        .put("toThreadKey", edge.toThreadKey)
+                                        .put("strength", edge.strength)
+                                        .put("reasonLine", edge.reasonLine),
+                                )
+                            }
+                        },
+                    ),
             )
         File(rootDir, "wiki/export/direction-assets.json").writeText(root.toString(2))
     }
@@ -1303,11 +1388,55 @@ class DirectionWikiCoordinator(
                     )
                 }
             }
+            val graphObject = json.optJSONObject("graph")
+            val graph = graphObject?.let { graphJson ->
+                DirectionWikiGraphSnapshot(
+                    overviewLine = graphJson.optString("overviewLine"),
+                    source = graphJson.optString("source", "rule"),
+                    generatedAt = graphJson.optLong("generatedAt"),
+                    nodes = buildList {
+                        val nodesArray = graphJson.optJSONArray("nodes") ?: JSONArray()
+                        for (index in 0 until nodesArray.length()) {
+                            val item = nodesArray.optJSONObject(index) ?: continue
+                            val threadKey = item.optString("threadKey")
+                            val label = item.optString("label")
+                            if (threadKey.isBlank() || label.isBlank()) continue
+                            add(
+                                DirectionWikiGraphNode(
+                                    threadKey = threadKey,
+                                    label = label,
+                                    summaryLine = item.optString("summaryLine"),
+                                    gapLine = item.optString("gapLine"),
+                                    priority = item.optInt("priority").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
+                                ),
+                            )
+                        }
+                    },
+                    edges = buildList {
+                        val edgesArray = graphJson.optJSONArray("edges") ?: JSONArray()
+                        for (index in 0 until edgesArray.length()) {
+                            val item = edgesArray.optJSONObject(index) ?: continue
+                            val from = item.optString("fromThreadKey")
+                            val to = item.optString("toThreadKey")
+                            if (from.isBlank() || to.isBlank() || from == to) continue
+                            add(
+                                DirectionWikiGraphEdge(
+                                    fromThreadKey = from,
+                                    toThreadKey = to,
+                                    strength = item.optInt("strength").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
+                                    reasonLine = item.optString("reasonLine"),
+                                ),
+                            )
+                        }
+                    },
+                )
+            } ?: DirectionWikiGraphSnapshot()
             DirectionWikiSnapshot(
                 rootPath = json.optString("rootPath", rootDir.absolutePath),
                 lastGeneratedAt = json.optLong("generatedAt"),
                 directions = directions,
                 knowledgeItems = knowledgeItems,
+                graph = graph,
             )
         }.getOrElse {
             DirectionWikiSnapshot(rootPath = rootDir.absolutePath)

@@ -300,6 +300,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateKnowledgeGraphSnapshot(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(7_500),
+            systemPrompt = "You are maintaining an AI-first information graph for a personal knowledge system. Return JSON only. Build a compact theme graph for a mobile UI, not a backend object dump. Nodes must be user-facing themes chosen only from the provided directions. Edges must be sparse and real, based on shared concepts, shared questions, shared methods or experiments, repeated co-occurrence, or clear dependency. Never create nodes for evidence, conclusions, questions, methods, or experiments. Keep the copy concise, concrete, and readable in Chinese.",
+            maxTokens = 1_100,
+            temperature = 0.42,
+            thinkingEnabled = false,
+        )
+    }
+
     private fun requestChatCompletion(
         settings: AiSettings,
         userPrompt: String,

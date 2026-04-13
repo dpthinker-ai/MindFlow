@@ -33,6 +33,29 @@ data class DirectionWikiDirectionSummary(
     val updatedAt: Long = 0L,
 )
 
+data class DirectionWikiGraphNode(
+    val threadKey: String,
+    val label: String,
+    val summaryLine: String = "",
+    val gapLine: String = "",
+    val priority: Int = 3,
+)
+
+data class DirectionWikiGraphEdge(
+    val fromThreadKey: String,
+    val toThreadKey: String,
+    val strength: Int = 3,
+    val reasonLine: String = "",
+)
+
+data class DirectionWikiGraphSnapshot(
+    val overviewLine: String = "",
+    val nodes: List<DirectionWikiGraphNode> = emptyList(),
+    val edges: List<DirectionWikiGraphEdge> = emptyList(),
+    val source: String = "rule",
+    val generatedAt: Long = 0L,
+)
+
 enum class KnowledgeLayerSearchType(
     val label: String,
 ) {
@@ -62,6 +85,7 @@ data class DirectionWikiSnapshot(
     val lastGeneratedAt: Long = 0L,
     val directions: Map<String, DirectionWikiDirectionSummary> = emptyMap(),
     val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
+    val graph: DirectionWikiGraphSnapshot = DirectionWikiGraphSnapshot(),
 )
 
 data class DirectionWikiRefreshResult(
