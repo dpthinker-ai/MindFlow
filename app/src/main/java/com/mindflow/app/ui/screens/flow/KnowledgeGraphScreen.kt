@@ -48,13 +48,13 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mindflow.app.data.connect.NoteConnectionAnalyzer
+import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
-import com.mindflow.app.data.wiki.DirectionWikiGraphNode
+import com.mindflow.app.data.wiki.DirectionWikiGraphMaturity
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
@@ -88,6 +88,8 @@ private data class GraphNodeUi(
     val gapLine: String,
     val threadKey: String,
     val accent: Color = AccentBlue,
+    val densityScore: Double = 0.0,
+    val maturity: DirectionWikiGraphMaturity = DirectionWikiGraphMaturity.FORMING,
     val noteCount: Int = 0,
     val relationCount: Int = 0,
     val priority: Int = 3,
@@ -97,9 +99,12 @@ private data class GraphEdgeUi(
     val fromId: String,
     val toId: String,
     val weight: Int,
+    val reasonLine: String = "",
 )
 
 private data class GraphOverviewUi(
+    val headline: String,
+    val summaryLine: String,
     val totalNodeCount: Int,
     val visibleNodeCount: Int,
     val nodes: List<GraphNodeUi>,
@@ -185,15 +190,19 @@ private fun KnowledgeGraphScreen(
     val selectedGraphNode = remember(graphOverview, selectedNodeId) {
         graphOverview.nodes.firstOrNull { it.id == selectedNodeId } ?: graphOverview.nodes.firstOrNull()
     }
-    val relatedGraphNode = remember(graphOverview, selectedGraphNode) {
+    val relatedGraphEdge = remember(graphOverview, selectedGraphNode) {
         selectedGraphNode?.let { node ->
             graphOverview.edges
                 .filter { it.fromId == node.id || it.toId == node.id }
                 .maxByOrNull { it.weight }
-                ?.let { edge ->
-                    val relatedId = if (edge.fromId == node.id) edge.toId else edge.fromId
-                    graphOverview.nodes.firstOrNull { it.id == relatedId }
-                }
+        }
+    }
+    val relatedGraphNode = remember(graphOverview, selectedGraphNode, relatedGraphEdge) {
+        selectedGraphNode?.let { node ->
+            relatedGraphEdge?.let { edge ->
+                val relatedId = if (edge.fromId == node.id) edge.toId else edge.fromId
+                graphOverview.nodes.firstOrNull { it.id == relatedId }
+            }
         }
     }
     val activityByDate = remember(activeNotes, zoneId) {
@@ -365,17 +374,15 @@ private fun KnowledgeGraphScreen(
                     PanelCard {
                         SectionHeader(
                             title = "信息图谱",
-                            headline = if (graphOverview.nodes.isNotEmpty()) {
-                                buildString {
-                                    append("${graphOverview.visibleNodeCount} 个主题")
-                                    if (graphOverview.edges.isNotEmpty()) {
-                                        append(" · ${graphOverview.edges.size} 条关系")
-                                    }
-                                }
-                            } else {
-                                "还没有足够结构"
-                            },
+                            headline = graphOverview.headline,
                         )
+                        graphOverview.summaryLine.takeIf { it.isNotBlank() }?.let { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSoft,
+                            )
+                        }
                         if (graphOverview.nodes.isEmpty()) {
                             Text(
                                 text = "先让记录继续积累，这里会慢慢长出你的信息图谱。",
@@ -392,6 +399,7 @@ private fun KnowledgeGraphScreen(
                                 GraphFocusCard(
                                     node = node,
                                     relatedNode = relatedGraphNode,
+                                    relatedReasonLine = relatedGraphEdge?.reasonLine.orEmpty(),
                                     onOpenThread = onOpenThread,
                                 )
                             }
@@ -564,6 +572,7 @@ private fun GraphNodeBubble(
 private fun GraphFocusCard(
     node: GraphNodeUi,
     relatedNode: GraphNodeUi?,
+    relatedReasonLine: String,
     onOpenThread: (String) -> Unit,
 ) {
     Surface(
@@ -591,10 +600,16 @@ private fun GraphFocusCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = relatedNode?.let { "最相关：${it.label}" } ?: "这条主题目前还比较独立。",
+                text = relatedNode?.let {
+                    if (relatedReasonLine.isBlank()) {
+                        "最相关：${it.label}"
+                    } else {
+                        "最相关：${it.label} · ${relatedReasonLine}"
+                    }
+                } ?: "这条主题目前还比较独立。",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSoft,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -617,121 +632,120 @@ private fun buildGraphOverview(
     snapshot: DirectionWikiSnapshot,
     notes: List<NoteEntity>,
 ): GraphOverviewUi {
-    if (snapshot.graph.nodes.isNotEmpty()) {
-        return buildAiGraphOverview(snapshot, notes)
-    }
-    val directions = snapshot.directions.values
-        .sortedByDescending { it.updatedAt }
-        .take(6)
-    if (directions.isEmpty()) return GraphOverviewUi(
-        totalNodeCount = 0,
-        visibleNodeCount = 0,
-        nodes = emptyList(),
-        edges = emptyList(),
-    )
-    val notesByThread = directions.associate { direction ->
-        direction.threadKey to NoteConnectionAnalyzer.notesForThread(direction.threadKey, notes)
-    }
-    val edges = buildGraphEdges(
-        directions = directions,
-        notesByThread = notesByThread,
-    )
-    val relationCountByThread = buildMap {
-        edges.forEach { edge ->
-            put(edge.fromId, getOrDefault(edge.fromId, 0) + 1)
-            put(edge.toId, getOrDefault(edge.toId, 0) + 1)
-        }
-    }
-    val nodes = directions
-        .map { direction ->
-            val threadNotes = notesByThread[direction.threadKey].orEmpty()
-            GraphNodeUi(
-                id = direction.threadKey,
-                label = compactDirectionLabel(direction.title),
-                summaryLine = graphSummaryLine(direction),
-                gapLine = graphGapLine(direction),
-                threadKey = direction.threadKey,
-                accent = graphDirectionAccent(direction, threadNotes),
-                noteCount = threadNotes.size,
-                relationCount = relationCountByThread[direction.threadKey] ?: 0,
-                priority = ((relationCountByThread[direction.threadKey] ?: 0) + threadNotes.size.coerceAtMost(4)).coerceIn(1, 5),
-            )
-        }
-        .sortedWith(
-            compareByDescending<GraphNodeUi> { it.priority }
-                .thenByDescending { it.relationCount }
-                .thenByDescending { it.noteCount }
-                .thenBy { it.label.length },
-        )
-    return GraphOverviewUi(
-        totalNodeCount = snapshot.directions.size,
-        visibleNodeCount = nodes.size,
-        nodes = nodes,
-        edges = edges,
-    )
-}
-
-private fun buildAiGraphOverview(
-    snapshot: DirectionWikiSnapshot,
-    notes: List<NoteEntity>,
-): GraphOverviewUi {
     val summariesByThread = snapshot.directions
-    val graphNodes = snapshot.graph.nodes
-        .distinctBy { it.threadKey }
-        .take(6)
-    if (graphNodes.isEmpty()) {
+    val presentation = snapshot.graph.presentation
+    val visibleNodes = when {
+        presentation.nodes.isNotEmpty() -> presentation.nodes
+        snapshot.graph.nodes.isNotEmpty() -> snapshot.graph.nodes
+            .sortedWith(compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphNode> { it.densityScore }.thenByDescending { it.recencyScore })
+            .take(6)
+            .map { node ->
+                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode(
+                    threadKey = node.threadKey,
+                    label = node.label,
+                    summaryLine = node.summaryLine,
+                    gapLine = node.gapLine,
+                    relationCount = 0,
+                    densityScore = node.densityScore,
+                    maturity = node.maturity,
+                    noteCount = node.noteCount,
+                )
+            }
+        else -> snapshot.directions.values
+            .sortedByDescending { it.updatedAt }
+            .take(6)
+            .map { direction ->
+                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode(
+                    threadKey = direction.threadKey,
+                    label = compactDirectionLabel(direction.title),
+                    summaryLine = graphSummaryLine(direction),
+                    gapLine = graphGapLine(direction),
+                    densityScore = 0.5,
+                    maturity = direction.stage.toGraphMaturity(),
+                    noteCount = 0,
+                )
+            }
+    }
+    if (visibleNodes.isEmpty()) {
         return GraphOverviewUi(
+            headline = "还没有足够结构",
+            summaryLine = "",
             totalNodeCount = 0,
             visibleNodeCount = 0,
             nodes = emptyList(),
             edges = emptyList(),
         )
     }
+    val visibleIds = visibleNodes.map { it.threadKey }.toSet()
+    val visibleEdges = when {
+        presentation.edges.isNotEmpty() -> presentation.edges
+            .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+        else -> snapshot.graph.edges
+            .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+            .sortedWith(compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> { it.strength }.thenByDescending { it.confidence })
+            .take(4)
+            .map { edge ->
+                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationEdge(
+                    fromThreadKey = edge.fromThreadKey,
+                    toThreadKey = edge.toThreadKey,
+                    strength = edge.strength,
+                    reasonLine = edge.reasonLine,
+                )
+            }
+    }
     val relationCountByThread = buildMap {
-        snapshot.graph.edges.forEach { edge ->
+        visibleEdges.forEach { edge ->
             put(edge.fromThreadKey, getOrDefault(edge.fromThreadKey, 0) + 1)
             put(edge.toThreadKey, getOrDefault(edge.toThreadKey, 0) + 1)
         }
     }
-    val nodes = graphNodes
+    val nodes = visibleNodes
         .map { node ->
             val direction = summariesByThread[node.threadKey]
-            val threadNotes = NoteConnectionAnalyzer.notesForThread(node.threadKey, notes)
             GraphNodeUi(
                 id = node.threadKey,
                 label = node.label,
-                summaryLine = node.summaryLine.ifBlank {
-                    direction?.let(::graphSummaryLine).orEmpty()
-                }.ifBlank { "这条主题正在继续长。"},
-                gapLine = node.gapLine.ifBlank {
-                    direction?.let(::graphGapLine).orEmpty()
-                }.ifBlank { "继续补一条更硬的新材料。"},
+                summaryLine = node.summaryLine.ifBlank { direction?.let(::graphSummaryLine).orEmpty() }.ifBlank { "这条主题正在继续长。" },
+                gapLine = node.gapLine.ifBlank { direction?.let(::graphGapLine).orEmpty() }.ifBlank { "继续补一条更硬的新材料。" },
                 threadKey = node.threadKey,
-                accent = direction?.let { graphDirectionAccent(it, threadNotes) }
-                    ?: graphNodeAccent(node, threadNotes),
-                noteCount = threadNotes.size,
+                accent = direction?.let(::graphDirectionAccent)
+                    ?: graphNodeAccent(node.label, node.summaryLine, node.gapLine),
+                densityScore = node.densityScore,
+                maturity = node.maturity,
+                noteCount = node.noteCount,
                 relationCount = relationCountByThread[node.threadKey] ?: 0,
-                priority = node.priority.coerceIn(1, 5),
+                priority = graphNodePriority(
+                    densityScore = node.densityScore,
+                    maturity = node.maturity,
+                    relationCount = relationCountByThread[node.threadKey] ?: 0,
+                ),
             )
         }
         .sortedWith(
             compareByDescending<GraphNodeUi> { it.priority }
                 .thenByDescending { it.relationCount }
-                .thenByDescending { it.noteCount }
+                .thenByDescending { it.densityScore }
                 .thenBy { it.label.length },
         )
-    val visibleIds = nodes.map { it.id }.toSet()
-    val edges = snapshot.graph.edges
-        .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+    val edges = visibleEdges
+        .filter { it.fromThreadKey in nodes.map { node -> node.id }.toSet() && it.toThreadKey in nodes.map { node -> node.id }.toSet() }
         .map { edge ->
             GraphEdgeUi(
                 fromId = edge.fromThreadKey,
                 toId = edge.toThreadKey,
                 weight = edge.strength.coerceIn(1, 5),
+                reasonLine = edge.reasonLine,
             )
         }
     return GraphOverviewUi(
-        totalNodeCount = snapshot.graph.nodes.size,
+        headline = presentation.headline.ifBlank {
+            buildString {
+                append("${nodes.size} 个主题")
+                if (edges.isNotEmpty()) append(" · ${edges.size} 条关系")
+            }
+        },
+        summaryLine = presentation.summaryLine.ifBlank { snapshot.graph.overview.summaryLine },
+        totalNodeCount = snapshot.graph.nodes.size.takeIf { it > 0 } ?: snapshot.directions.size,
         visibleNodeCount = nodes.size,
         nodes = nodes,
         edges = edges,
@@ -771,63 +785,6 @@ private fun classifyGraphBucket(texts: List<String>): GraphDomainBucket {
     return if (bestMatch != null && bestMatch.value > 0) bestMatch.key else GraphDomainBucket.OTHER
 }
 
-private fun buildGraphEdges(
-    directions: List<DirectionWikiDirectionSummary>,
-    notesByThread: Map<String, List<NoteEntity>>,
-): List<GraphEdgeUi> {
-    val edgeWeights = mutableMapOf<Pair<String, String>, Int>()
-    directions.forEachIndexed { index, left ->
-        directions.drop(index + 1).forEach { right ->
-            val score = scoreGraphRelation(
-                leftNotes = notesByThread[left.threadKey].orEmpty(),
-                rightNotes = notesByThread[right.threadKey].orEmpty(),
-            )
-            if (score > 0) {
-                edgeWeights[left.threadKey to right.threadKey] = score
-            }
-        }
-    }
-    return edgeWeights.entries
-        .sortedByDescending { it.value }
-        .take(8)
-        .map { (key, score) ->
-            GraphEdgeUi(
-                fromId = key.first,
-                toId = key.second,
-                weight = score,
-            )
-        }
-}
-
-private fun scoreGraphRelation(
-    leftNotes: List<NoteEntity>,
-    rightNotes: List<NoteEntity>,
-): Int {
-    if (leftNotes.isEmpty() || rightNotes.isEmpty()) return 0
-    val leftTags = leftNotes.flatMap { it.tags }.map { it.trim() }.filter { it.isNotBlank() }.toSet()
-    val rightTags = rightNotes.flatMap { it.tags }.map { it.trim() }.filter { it.isNotBlank() }.toSet()
-    val sharedTags = leftTags.intersect(rightTags).size
-
-    val leftTokens = leftNotes
-        .flatMap { note -> graphTokens(note.topic) + graphTokens(note.content.take(160)) }
-        .toSet()
-    val rightTokens = rightNotes
-        .flatMap { note -> graphTokens(note.topic) + graphTokens(note.content.take(160)) }
-        .toSet()
-    val sharedTokens = leftTokens.intersect(rightTokens)
-        .filterNot { token -> token.length <= 1 || token in graphStopTokens }
-        .size
-
-    return (sharedTags * 4) + sharedTokens.coerceAtMost(5)
-}
-
-private fun graphTokens(raw: String): Set<String> =
-    Regex("[\\p{IsHan}]{2,}|[a-z0-9]{3,}")
-        .findAll(raw.lowercase())
-        .map { it.value.trim() }
-        .filter { it.isNotBlank() }
-        .toSet()
-
 private fun graphSummaryLine(direction: DirectionWikiDirectionSummary): String =
     direction.conclusionLine
         .ifBlank { direction.assetSummary }
@@ -842,9 +799,17 @@ private fun graphGapLine(direction: DirectionWikiDirectionSummary): String =
         .ifBlank { direction.maintenanceTargetLine }
         .ifBlank { "再补一条新记录，让这条主题继续长。" }
 
+private fun DirectionStage.toGraphMaturity(): DirectionWikiGraphMaturity =
+    when (this) {
+        DirectionStage.FORMING -> DirectionWikiGraphMaturity.FORMING
+        DirectionStage.VALIDATING,
+        DirectionStage.ADVANCING,
+        -> DirectionWikiGraphMaturity.STRENGTHENING
+        DirectionStage.SETTLING -> DirectionWikiGraphMaturity.STABLE
+    }
+
 private fun graphDirectionAccent(
     direction: DirectionWikiDirectionSummary,
-    threadNotes: List<NoteEntity>,
 ): Color {
     val folderAccent = direction.threadKey
         .takeIf { it.startsWith("folder:") }
@@ -859,16 +824,35 @@ private fun graphDirectionAccent(
             direction.assetSummary,
             direction.conclusionLine,
             direction.knowledgeObjectLine,
-        ) + threadNotes.flatMap { note -> listOf(note.topic, note.content.take(140)) },
+        ),
     ).accent
 }
 
 private fun graphNodeAccent(
-    node: DirectionWikiGraphNode,
-    threadNotes: List<NoteEntity>,
+    label: String,
+    summaryLine: String,
+    gapLine: String,
 ): Color = classifyGraphBucket(
-    listOf(node.label, node.summaryLine, node.gapLine) + threadNotes.flatMap { note -> listOf(note.topic, note.content.take(140)) },
+    listOf(label, summaryLine, gapLine),
 ).accent
+
+private fun graphNodePriority(
+    densityScore: Double,
+    maturity: DirectionWikiGraphMaturity,
+    relationCount: Int,
+): Int {
+    val maturityScore = when (maturity) {
+        DirectionWikiGraphMaturity.STABLE -> 5
+        DirectionWikiGraphMaturity.STRENGTHENING -> 4
+        DirectionWikiGraphMaturity.FORMING -> 3
+    }
+    val densityBoost = when {
+        densityScore >= 0.8 -> 2
+        densityScore >= 0.55 -> 1
+        else -> 0
+    }
+    return (maturityScore + densityBoost + relationCount.coerceAtMost(2)).coerceIn(1, 5)
+}
 
 private fun graphNodeWidth(
     node: GraphNodeUi,
@@ -922,24 +906,6 @@ private fun buildGraphNodeLayouts(
     }
     return layouts
 }
-
-private val graphStopTokens = setOf(
-    "这个",
-    "那个",
-    "因为",
-    "所以",
-    "我们",
-    "自己",
-    "已经",
-    "现在",
-    "需要",
-    "继续",
-    "主题",
-    "记录",
-    "问题",
-    "方法",
-    "实验",
-)
 
 @Composable
 private fun ContributionHeatmap(

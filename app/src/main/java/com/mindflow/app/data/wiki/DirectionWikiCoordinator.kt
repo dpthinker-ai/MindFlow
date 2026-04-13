@@ -430,9 +430,13 @@ class DirectionWikiCoordinator(
             conceptBuckets = conceptBuckets,
             candidates = objectCandidates,
         )
+        val threadNoteCounts = summaries.associate { summary ->
+            summary.threadKey to NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes).size
+        }
         val graphSnapshot = knowledgeGraphPlanner.summarize(
             summaries = summaries,
             knowledgeItems = knowledgeItems,
+            threadNoteCounts = threadNoteCounts,
         )
         File(rootDir, "wiki/graph.md").writeText(
             buildGraphMarkdown(
@@ -1186,9 +1190,19 @@ class DirectionWikiCoordinator(
         appendLine("# 信息图谱")
         appendLine()
         appendLine("更新时间：${displayTime(generatedAt)}")
-        graph.overviewLine.takeIf { it.isNotBlank() }?.let {
+        graph.overview.summaryLine.takeIf { it.isNotBlank() }?.let {
             appendLine()
             appendLine(it)
+        }
+        if (graph.overview.hubThreadKeys.isNotEmpty()) {
+            appendLine()
+            appendLine("结构中心：${graph.overview.hubThreadKeys.joinToString(" / ")}")
+        }
+        if (graph.overview.isolatedThreadKeys.isNotEmpty()) {
+            appendLine("孤立主题：${graph.overview.isolatedThreadKeys.joinToString(" / ")}")
+        }
+        if (graph.overview.missingLinkCandidates.isNotEmpty()) {
+            appendLine("待补边：${graph.overview.missingLinkCandidates.joinToString(" / ")}")
         }
         appendLine()
         appendLine("## 主题")
@@ -1197,6 +1211,7 @@ class DirectionWikiCoordinator(
         } else {
             graph.nodes.forEach { node ->
                 appendLine("- ${node.label}")
+                appendLine("  - 成熟度：${node.maturity.toDisplayLabel()} · 记录 ${node.noteCount} 条")
                 node.summaryLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在在讲：$it") }
                 node.gapLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在最缺：$it") }
             }
@@ -1207,8 +1222,17 @@ class DirectionWikiCoordinator(
             appendLine("当前还没有足够硬的主题关系。")
         } else {
             graph.edges.forEach { edge ->
-                appendLine("- ${edge.fromThreadKey} <-> ${edge.toThreadKey}")
+                appendLine("- ${edge.fromThreadKey} <-> ${edge.toThreadKey} · ${edge.relationType.wireName} · 强度 ${edge.strength}")
                 edge.reasonLine.takeIf { it.isNotBlank() }?.let { appendLine("  - $it") }
+            }
+        }
+        if (graph.presentation.nodes.isNotEmpty()) {
+            appendLine()
+            appendLine("## 前台压缩")
+            graph.presentation.headline.takeIf { it.isNotBlank() }?.let { appendLine(it) }
+            graph.presentation.summaryLine.takeIf { it.isNotBlank() }?.let { appendLine(it) }
+            graph.presentation.nodes.forEach { node ->
+                appendLine("- ${node.label}")
             }
         }
     }
@@ -1282,9 +1306,18 @@ class DirectionWikiCoordinator(
             .put(
                 "graph",
                 JSONObject()
-                    .put("overviewLine", graph.overviewLine)
+                    .put("version", graph.version)
                     .put("source", graph.source)
                     .put("generatedAt", graph.generatedAt)
+                    .put(
+                        "overview",
+                        JSONObject()
+                            .put("summaryLine", graph.overview.summaryLine)
+                            .put("hubThreadKeys", JSONArray(graph.overview.hubThreadKeys))
+                            .put("isolatedThreadKeys", JSONArray(graph.overview.isolatedThreadKeys))
+                            .put("densifyingThreadKeys", JSONArray(graph.overview.densifyingThreadKeys))
+                            .put("missingLinkCandidates", JSONArray(graph.overview.missingLinkCandidates)),
+                    )
                     .put(
                         "nodes",
                         JSONArray().apply {
@@ -1295,7 +1328,12 @@ class DirectionWikiCoordinator(
                                         .put("label", node.label)
                                         .put("summaryLine", node.summaryLine)
                                         .put("gapLine", node.gapLine)
-                                        .put("priority", node.priority),
+                                        .put("maturity", node.maturity.wireName)
+                                        .put("recencyScore", node.recencyScore)
+                                        .put("densityScore", node.densityScore)
+                                        .put("supportIds", JSONArray(node.supportIds))
+                                        .put("noteCount", node.noteCount)
+                                        .put("updatedAt", node.updatedAt),
                                 )
                             }
                         },
@@ -1308,11 +1346,67 @@ class DirectionWikiCoordinator(
                                     JSONObject()
                                         .put("fromThreadKey", edge.fromThreadKey)
                                         .put("toThreadKey", edge.toThreadKey)
+                                        .put("relationType", edge.relationType.wireName)
                                         .put("strength", edge.strength)
-                                        .put("reasonLine", edge.reasonLine),
+                                        .put("reasonLine", edge.reasonLine)
+                                        .put("supportIds", JSONArray(edge.supportIds))
+                                        .put("firstSeenAt", edge.firstSeenAt)
+                                        .put("lastSeenAt", edge.lastSeenAt)
+                                        .put("confidence", edge.confidence),
                                 )
                             }
                         },
+                    )
+                    .put(
+                        "presentation",
+                        JSONObject()
+                            .put("title", graph.presentation.title)
+                            .put("headline", graph.presentation.headline)
+                            .put("summaryLine", graph.presentation.summaryLine)
+                            .put(
+                                "nodes",
+                                JSONArray().apply {
+                                    graph.presentation.nodes.forEach { node ->
+                                        put(
+                                            JSONObject()
+                                                .put("threadKey", node.threadKey)
+                                                .put("label", node.label)
+                                                .put("summaryLine", node.summaryLine)
+                                                .put("gapLine", node.gapLine)
+                                                .put("relationCount", node.relationCount)
+                                                .put("densityScore", node.densityScore)
+                                                .put("maturity", node.maturity.wireName)
+                                                .put("noteCount", node.noteCount),
+                                        )
+                                    }
+                                },
+                            )
+                            .put(
+                                "edges",
+                                JSONArray().apply {
+                                    graph.presentation.edges.forEach { edge ->
+                                        put(
+                                            JSONObject()
+                                                .put("fromThreadKey", edge.fromThreadKey)
+                                                .put("toThreadKey", edge.toThreadKey)
+                                                .put("strength", edge.strength)
+                                                .put("reasonLine", edge.reasonLine),
+                                        )
+                                    }
+                                },
+                            )
+                            .put(
+                                "focus",
+                                graph.presentation.focus?.let { focus ->
+                                    JSONObject()
+                                        .put("threadKey", focus.threadKey)
+                                        .put("label", focus.label)
+                                        .put("summaryLine", focus.summaryLine)
+                                        .put("gapLine", focus.gapLine)
+                                        .put("relatedThreadKey", focus.relatedThreadKey)
+                                        .put("relatedReasonLine", focus.relatedReasonLine)
+                                } ?: JSONObject.NULL,
+                            ),
                     ),
             )
         File(rootDir, "wiki/export/direction-assets.json").writeText(root.toString(2))
@@ -1390,8 +1484,17 @@ class DirectionWikiCoordinator(
             }
             val graphObject = json.optJSONObject("graph")
             val graph = graphObject?.let { graphJson ->
+                val overviewObject = graphJson.optJSONObject("overview")
                 DirectionWikiGraphSnapshot(
-                    overviewLine = graphJson.optString("overviewLine"),
+                    version = graphJson.optInt("version").takeIf { it > 0 } ?: 1,
+                    overview = DirectionWikiGraphOverview(
+                        summaryLine = overviewObject?.optString("summaryLine")
+                            ?: graphJson.optString("overviewLine"),
+                        hubThreadKeys = overviewObject?.optJSONArray("hubThreadKeys").toStringList(),
+                        isolatedThreadKeys = overviewObject?.optJSONArray("isolatedThreadKeys").toStringList(),
+                        densifyingThreadKeys = overviewObject?.optJSONArray("densifyingThreadKeys").toStringList(),
+                        missingLinkCandidates = overviewObject?.optJSONArray("missingLinkCandidates").toStringList(),
+                    ),
                     source = graphJson.optString("source", "rule"),
                     generatedAt = graphJson.optLong("generatedAt"),
                     nodes = buildList {
@@ -1407,7 +1510,12 @@ class DirectionWikiCoordinator(
                                     label = label,
                                     summaryLine = item.optString("summaryLine"),
                                     gapLine = item.optString("gapLine"),
-                                    priority = item.optInt("priority").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
+                                    maturity = item.optString("maturity").toGraphMaturity(),
+                                    recencyScore = item.optDouble("recencyScore").takeIf { !it.isNaN() } ?: 0.0,
+                                    densityScore = item.optDouble("densityScore").takeIf { !it.isNaN() } ?: 0.0,
+                                    supportIds = item.optJSONArray("supportIds").toStringList(),
+                                    noteCount = item.optInt("noteCount").coerceAtLeast(0),
+                                    updatedAt = item.optLong("updatedAt"),
                                 ),
                             )
                         }
@@ -1423,12 +1531,18 @@ class DirectionWikiCoordinator(
                                 DirectionWikiGraphEdge(
                                     fromThreadKey = from,
                                     toThreadKey = to,
+                                    relationType = item.optString("relationType").toGraphRelationType(),
                                     strength = item.optInt("strength").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
                                     reasonLine = item.optString("reasonLine"),
+                                    supportIds = item.optJSONArray("supportIds").toStringList(),
+                                    firstSeenAt = item.optLong("firstSeenAt"),
+                                    lastSeenAt = item.optLong("lastSeenAt"),
+                                    confidence = item.optDouble("confidence").takeIf { !it.isNaN() } ?: 0.0,
                                 ),
                             )
                         }
                     },
+                    presentation = graphJson.optJSONObject("presentation").toGraphPresentation(),
                 )
             } ?: DirectionWikiGraphSnapshot()
             DirectionWikiSnapshot(
@@ -1824,6 +1938,85 @@ class DirectionWikiCoordinator(
                     }
                 }
             },
+        )
+    }
+
+    private fun DirectionWikiGraphMaturity.toDisplayLabel(): String =
+        when (this) {
+            DirectionWikiGraphMaturity.FORMING -> "形成中"
+            DirectionWikiGraphMaturity.STRENGTHENING -> "增强中"
+            DirectionWikiGraphMaturity.STABLE -> "稳定"
+        }
+
+    private fun String.toGraphMaturity(): DirectionWikiGraphMaturity =
+        DirectionWikiGraphMaturity.entries.firstOrNull { it.wireName == trim().lowercase() }
+            ?: DirectionWikiGraphMaturity.FORMING
+
+    private fun String.toGraphRelationType(): DirectionWikiGraphRelationType =
+        DirectionWikiGraphRelationType.entries.firstOrNull { it.wireName == trim().lowercase() }
+            ?: DirectionWikiGraphRelationType.CO_OCCURRENCE
+
+    private fun JSONObject?.toGraphPresentation(): DirectionWikiGraphPresentationSnapshot {
+        if (this == null) return DirectionWikiGraphPresentationSnapshot()
+        val nodes = buildList {
+            val array = optJSONArray("nodes") ?: JSONArray()
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val threadKey = item.optString("threadKey")
+                val label = item.optString("label")
+                if (threadKey.isBlank() || label.isBlank()) continue
+                add(
+                    DirectionWikiGraphPresentationNode(
+                        threadKey = threadKey,
+                        label = label,
+                        summaryLine = item.optString("summaryLine"),
+                        gapLine = item.optString("gapLine"),
+                        relationCount = item.optInt("relationCount").coerceAtLeast(0),
+                        densityScore = item.optDouble("densityScore").takeIf { !it.isNaN() } ?: 0.0,
+                        maturity = item.optString("maturity").toGraphMaturity(),
+                        noteCount = item.optInt("noteCount").coerceAtLeast(0),
+                    ),
+                )
+            }
+        }
+        val edges = buildList {
+            val array = optJSONArray("edges") ?: JSONArray()
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val from = item.optString("fromThreadKey")
+                val to = item.optString("toThreadKey")
+                if (from.isBlank() || to.isBlank() || from == to) continue
+                add(
+                    DirectionWikiGraphPresentationEdge(
+                        fromThreadKey = from,
+                        toThreadKey = to,
+                        strength = item.optInt("strength").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
+                        reasonLine = item.optString("reasonLine"),
+                    ),
+                )
+            }
+        }
+        val focus = optJSONObject("focus")?.let { focusObject ->
+            focusObject.optString("threadKey")
+                .takeIf { it.isNotBlank() }
+                ?.let { threadKey ->
+                    DirectionWikiGraphPresentationFocus(
+                        threadKey = threadKey,
+                        label = focusObject.optString("label"),
+                        summaryLine = focusObject.optString("summaryLine"),
+                        gapLine = focusObject.optString("gapLine"),
+                        relatedThreadKey = focusObject.optString("relatedThreadKey"),
+                        relatedReasonLine = focusObject.optString("relatedReasonLine"),
+                    )
+                }
+        }
+        return DirectionWikiGraphPresentationSnapshot(
+            title = optString("title").ifBlank { "信息图谱" },
+            headline = optString("headline"),
+            summaryLine = optString("summaryLine"),
+            nodes = nodes,
+            edges = edges,
+            focus = focus,
         )
     }
 

@@ -307,7 +307,7 @@ class AiServiceClient {
         requestChatCompletion(
             settings = settings,
             userPrompt = contextSummary.take(7_500),
-            systemPrompt = "You are maintaining an AI-first information graph for a personal knowledge system. Return JSON only. Build a compact theme graph for a mobile UI, not a backend object dump. Nodes must be user-facing themes chosen only from the provided directions. Edges must be sparse and real, based on shared concepts, shared questions, shared methods or experiments, repeated co-occurrence, or clear dependency. Never create nodes for evidence, conclusions, questions, methods, or experiments. Keep the copy concise, concrete, and readable in Chinese.",
+            systemPrompt = "You are compressing a canonical information graph into a mobile presentation snapshot for a personal knowledge system. Return JSON only. Use only the provided canonical themes and canonical edges. Do not invent new nodes, edges, or backend object types. Keep the copy concise, concrete, and readable in Chinese.",
             maxTokens = 1_100,
             temperature = 0.42,
             thinkingEnabled = false,
