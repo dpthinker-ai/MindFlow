@@ -7,9 +7,12 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
@@ -55,11 +58,31 @@ class KnowledgeGraphScreenInstrumentedTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.StateDescription,
-                    "中心，已选中",
+                    "中心",
                 ),
             )
+        assertThat(composeRule.onAllNodesWithTag(KnowledgeGraphInfoPanelTag).fetchSemanticsNodes()).isEmpty()
+    }
+
+    @Test
+    fun selectingNodeShowsRelationLabelAndInfoPanel() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = graphSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("folder:work")).performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("folder:work")).assertIsSelected()
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag)
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription))
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("方法共享")
+        assertThat(composeRule.onAllNodesWithText("方法共享").fetchSemanticsNodes().isNotEmpty()).isTrue()
     }
 
     @Test

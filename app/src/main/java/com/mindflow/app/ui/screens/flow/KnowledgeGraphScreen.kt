@@ -85,6 +85,7 @@ import java.time.temporal.TemporalAdjusters
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 internal const val KnowledgeGraphCanvasTag = "knowledge-graph-canvas"
 internal const val KnowledgeGraphInfoPanelTag = "knowledge-graph-info-panel"
@@ -140,6 +141,19 @@ internal data class GraphOverviewUi(
 private data class GraphNodeLayout(
     val node: GraphNodeUi,
     val position: Pair<Float, Float>,
+)
+
+private data class GraphEdgeLabelLayout(
+    val edge: GraphDisplayEdgeUi,
+    val label: String,
+    val position: Pair<Float, Float>,
+)
+
+private data class GraphRelationUi(
+    val relatedNode: GraphNodeUi,
+    val label: String,
+    val reasonLine: String,
+    val weight: Int,
 )
 
 internal data class SelectedGraphNode(
@@ -481,16 +495,16 @@ private fun KnowledgeGraphPanel(
     var selectedNodeId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(overview.nodes) {
         val visibleIds = overview.nodes.map { it.id }.toSet()
-        if (selectedNodeId !in visibleIds) {
-            selectedNodeId = overview.nodes.firstOrNull()?.id
+        if (selectedNodeId != null && selectedNodeId !in visibleIds) {
+            selectedNodeId = null
         }
     }
     val selectedGraphNode = remember(overview, selectedNodeId) {
-        overview.nodes.firstOrNull { it.id == selectedNodeId } ?: overview.nodes.firstOrNull()
+        overview.nodes.firstOrNull { it.id == selectedNodeId }
     }
-    val relatedGraphNodes = remember(overview, selectedGraphNode) {
+    val graphRelations = remember(overview, selectedGraphNode) {
         selectedGraphNode?.let { node ->
-            relatedNodesFor(overview, node.id)
+            graphRelationsFor(overview, node.id)
         }.orEmpty()
     }
 
@@ -519,7 +533,14 @@ private fun KnowledgeGraphPanel(
             selectedGraphNode?.let { node ->
                 GraphInfoCard(
                     node = node,
-                    relatedNodes = relatedGraphNodes,
+                    relations = graphRelations,
+                )
+            }
+            if (selectedGraphNode == null) {
+                Text(
+                    text = "点一个主题，看它和哪些主题真正连着，关系为什么成立。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
                 )
             }
             if (overview.edges.isEmpty()) {
@@ -645,6 +666,12 @@ private fun KnowledgeGraphCanvas(
             selectedNodeId = selectedNodeId,
         )
     }
+    val focusedNodeIds = remember(overview.edges, selectedNodeId) {
+        buildFocusedGraphNodeIds(
+            edges = overview.edges,
+            selectedNodeId = selectedNodeId,
+        )
+    }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -665,6 +692,14 @@ private fun KnowledgeGraphCanvas(
             )
         }
         val positionById = remember(layouts) { layouts.associate { it.node.id to it.position } }
+        val edgeLabels = remember(displayEdges, positionById, selectedNodeId, widthPx, heightPx) {
+            buildGraphEdgeLabelLayouts(
+                displayEdges = displayEdges,
+                positionById = positionById,
+                widthPx = widthPx,
+                heightPx = heightPx,
+            )
+        }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
             displayEdges.forEach { edge ->
@@ -672,7 +707,11 @@ private fun KnowledgeGraphCanvas(
                 val to = positionById[edge.toId] ?: return@forEach
                 val edgeColor = when (edge.emphasis) {
                     GraphEdgeEmphasis.FOCUS -> AccentBlue.copy(alpha = 0.38f)
-                    GraphEdgeEmphasis.BACKBONE -> BorderSoft.copy(alpha = 0.72f)
+                    GraphEdgeEmphasis.BACKBONE -> if (selectedNodeId == null) {
+                        BorderSoft.copy(alpha = 0.72f)
+                    } else {
+                        BorderSoft.copy(alpha = 0.22f)
+                    }
                 }
                 drawLine(
                     color = edgeColor,
@@ -680,10 +719,26 @@ private fun KnowledgeGraphCanvas(
                     end = androidx.compose.ui.geometry.Offset(to.first, to.second),
                     strokeWidth = when (edge.emphasis) {
                         GraphEdgeEmphasis.FOCUS -> 3.8f
-                        GraphEdgeEmphasis.BACKBONE -> 1.8f + edge.weight.coerceAtMost(6) * 0.3f
+                        GraphEdgeEmphasis.BACKBONE -> if (selectedNodeId == null) {
+                            1.8f + edge.weight.coerceAtMost(6) * 0.3f
+                        } else {
+                            1.2f + edge.weight.coerceAtMost(6) * 0.18f
+                        }
                     },
                 )
             }
+        }
+
+        edgeLabels.forEach { label ->
+            GraphEdgeLabelBubble(
+                label = label.label,
+                modifier = Modifier.offset {
+                    IntOffset(
+                        x = (label.position.first - 34.dp.toPx(density)).roundToInt(),
+                        y = (label.position.second - 13.dp.toPx(density)).roundToInt(),
+                    )
+                },
+            )
         }
 
         layouts.forEachIndexed { index, layout ->
@@ -697,6 +752,7 @@ private fun KnowledgeGraphCanvas(
                     )
                 },
                 selected = selectedNodeId == layout.node.id,
+                emphasized = selectedNodeId == null || layout.node.id in focusedNodeIds,
                 onClick = { onSelectNode(layout.node.id) },
                 width = graphNodeWidth(layout.node, selectedNodeId == layout.node.id),
                 traversalOrder = index.toFloat(),
@@ -714,6 +770,7 @@ private fun GraphNodeBubble(
     node: GraphNodeUi,
     modifier: Modifier,
     selected: Boolean,
+    emphasized: Boolean,
     onClick: () -> Unit,
     width: androidx.compose.ui.unit.Dp,
     traversalOrder: Float,
@@ -736,6 +793,7 @@ private fun GraphNodeBubble(
             .clickable(onClick = onClick),
         color = when {
             selected -> node.accent.copy(alpha = 0.16f)
+            !emphasized -> WhiteGlass.copy(alpha = 0.48f)
             node.structureStatus == GraphStructureStatus.HUB -> WhiteGlass.copy(alpha = 0.96f)
             node.structureStatus == GraphStructureStatus.ISOLATED -> WhiteGlass.copy(alpha = 0.72f)
             else -> WhiteGlass.copy(alpha = 0.92f)
@@ -746,6 +804,7 @@ private fun GraphNodeBubble(
             node.accent.copy(
                 alpha = when {
                     selected -> 0.72f
+                    !emphasized -> 0.16f
                     node.structureStatus == GraphStructureStatus.HUB -> 0.46f
                     node.structureStatus == GraphStructureStatus.ISOLATED -> 0.22f
                     else -> 0.35f
@@ -764,12 +823,12 @@ private fun GraphNodeBubble(
                 modifier = Modifier
                     .size(if (selected) 10.dp else 9.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(node.accent.copy(alpha = 0.88f)),
+                    .background(node.accent.copy(alpha = if (emphasized || selected) 0.88f else 0.34f)),
             )
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.labelLarge,
-                color = TextMain,
+                color = if (emphasized || selected) TextMain else TextSoft,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -778,9 +837,32 @@ private fun GraphNodeBubble(
 }
 
 @Composable
+private fun GraphEdgeLabelBubble(
+    label: String,
+    modifier: Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.22f)),
+        shadowElevation = 2.dp,
+    ) {
+        Text(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextMain,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun GraphInfoCard(
     node: GraphNodeUi,
-    relatedNodes: List<GraphNodeUi>,
+    relations: List<GraphRelationUi>,
 ) {
     Surface(
         modifier = Modifier
@@ -835,7 +917,7 @@ private fun GraphInfoCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (relatedNodes.isEmpty()) {
+            if (relations.isEmpty()) {
                 Text(
                     text = "这条主题暂时还比较独立。",
                     style = MaterialTheme.typography.bodySmall,
@@ -844,37 +926,66 @@ private fun GraphInfoCard(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "直接相关",
+                        text = "直接关系",
                         style = MaterialTheme.typography.labelMedium,
                         color = TextSoft,
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        relatedNodes
-                            .map { it.label }
-                            .distinct()
-                            .take(3)
-                            .forEach { label ->
-                                Surface(
-                                    color = WhiteGlass.copy(alpha = 0.56f),
-                                    shape = RoundedCornerShape(999.dp),
-                                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.56f)),
-                                ) {
-                                    Text(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        text = label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = TextMain,
-                                    )
-                                }
-                            }
+                    relations.take(3).forEach { relation ->
+                        GraphRelationRow(relation = relation)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun GraphRelationRow(
+    relation: GraphRelationUi,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.56f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    color = relation.relatedNode.accent.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, relation.relatedNode.accent.copy(alpha = 0.24f)),
+                ) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        text = relation.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMain,
+                    )
+                }
+                Text(
+                    text = relation.relatedNode.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextMain,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = relation.reasonLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -892,10 +1003,10 @@ private fun graphStructureLine(node: GraphNodeUi): String =
         )
     }
 
-private fun relatedNodesFor(
+private fun graphRelationsFor(
     overview: GraphOverviewUi,
     nodeId: String,
-): List<GraphNodeUi> {
+): List<GraphRelationUi> {
     if (overview.edges.isEmpty()) return emptyList()
     val nodeById = overview.nodes.associateBy { it.id }
     return overview.edges
@@ -903,9 +1014,18 @@ private fun relatedNodesFor(
         .sortedByDescending { it.weight }
         .mapNotNull { edge ->
             val relatedId = if (edge.fromId == nodeId) edge.toId else edge.fromId
-            nodeById[relatedId]
+            nodeById[relatedId]?.let { relatedNode ->
+                GraphRelationUi(
+                    relatedNode = relatedNode,
+                    label = compactGraphRelationLabel(edge.reasonLine),
+                    reasonLine = edge.reasonLine.ifBlank {
+                        "${relatedNode.label} 和当前主题正在形成联系。"
+                    },
+                    weight = edge.weight,
+                )
+            }
         }
-        .distinctBy { it.id }
+        .distinctBy { it.relatedNode.id }
 }
 
 internal fun selectVisibleGraph(
@@ -1405,6 +1525,85 @@ internal fun buildDisplayedGraphEdges(
             }
     }
     return displayEdges.values.toList()
+}
+
+internal fun buildFocusedGraphNodeIds(
+    edges: List<GraphEdgeUi>,
+    selectedNodeId: String?,
+): Set<String> {
+    if (selectedNodeId == null) return emptySet()
+    return buildSet {
+        add(selectedNodeId)
+        edges.forEach { edge ->
+            when (selectedNodeId) {
+                edge.fromId -> add(edge.toId)
+                edge.toId -> add(edge.fromId)
+            }
+        }
+    }
+}
+
+private fun buildGraphEdgeLabelLayouts(
+    displayEdges: List<GraphDisplayEdgeUi>,
+    positionById: Map<String, Pair<Float, Float>>,
+    widthPx: Float,
+    heightPx: Float,
+): List<GraphEdgeLabelLayout> =
+    displayEdges
+        .filter { it.emphasis == GraphEdgeEmphasis.FOCUS }
+        .sortedWith(compareByDescending<GraphDisplayEdgeUi> { it.weight }.thenBy { "${it.fromId}|${it.toId}" })
+        .mapNotNull { edge ->
+            val label = edge.reasonLine.takeIf { it.isNotBlank() }?.let(::compactGraphRelationLabel).orEmpty()
+            if (label.isBlank()) return@mapNotNull null
+            val from = positionById[edge.fromId] ?: return@mapNotNull null
+            val to = positionById[edge.toId] ?: return@mapNotNull null
+            Triple(edge, label, from to to)
+        }
+        .take(3)
+        .mapIndexed { index, (edge, label, endpoints) ->
+            val from = endpoints.first
+            val to = endpoints.second
+            val midX = (from.first + to.first) / 2f
+            val midY = (from.second + to.second) / 2f
+            val deltaX = to.first - from.first
+            val deltaY = to.second - from.second
+            val length = sqrt(deltaX * deltaX + deltaY * deltaY).coerceAtLeast(1f)
+            val perpendicularX = -deltaY / length
+            val perpendicularY = deltaX / length
+            val offset = when (index) {
+                0 -> 0f
+                1 -> 18f
+                else -> -18f
+            }
+            GraphEdgeLabelLayout(
+                edge = edge,
+                label = label,
+                position = clamp(midX + perpendicularX * offset, 54f, widthPx - 54f) to
+                    clamp(midY + perpendicularY * offset, 28f, heightPx - 28f),
+            )
+        }
+
+internal fun compactGraphRelationLabel(
+    reasonLine: String,
+): String {
+    val clause = reasonLine
+        .replace('：', ' ')
+        .replace(':', ' ')
+        .split('。', '，', ',', '、', ';', '；', '\n')
+        .firstOrNull { it.isNotBlank() }
+        ?.trim()
+        .orEmpty()
+    if (clause.isBlank()) return "相关"
+    val normalized = clause
+        .replace(Regex("^(因为|说明|表示|意味着|显示|它们|两者|这条关系|关系是|联系在于)"), "")
+        .trim()
+    if (normalized.isBlank()) return "相关"
+    val compact = if (normalized.any { it.isWhitespace() }) {
+        normalized.split(Regex("\\s+")).take(2).joinToString(" ")
+    } else {
+        normalized.take(8)
+    }
+    return compact.ifBlank { "相关" }
 }
 
 private fun canonicalGraphEdgeKey(edge: GraphEdgeUi): String =

@@ -252,6 +252,29 @@ class KnowledgeGraphScreenTest {
         ).isEqualTo(GraphEdgeEmphasis.FOCUS)
     }
 
+    @Test
+    fun `buildFocusedGraphNodeIds returns selected node and its direct neighbors`() {
+        val edges = listOf(
+            GraphEdgeUi(fromId = "folder:work", toId = "tag:learning", weight = 5),
+            GraphEdgeUi(fromId = "tag:learning", toId = "tag:writing", weight = 4),
+            GraphEdgeUi(fromId = "folder:work", toId = "tag:health", weight = 2),
+        )
+
+        val focused = buildFocusedGraphNodeIds(
+            edges = edges,
+            selectedNodeId = "folder:work",
+        )
+
+        assertThat(focused).containsExactly("folder:work", "tag:learning", "tag:health")
+    }
+
+    @Test
+    fun `compactGraphRelationLabel keeps first clause short and readable`() {
+        assertThat(compactGraphRelationLabel("方法共享。两条线已经开始互相借力。")).isEqualTo("方法共享")
+        assertThat(compactGraphRelationLabel("因为这个主题和长期恢复有关，所以会反复出现。")).isEqualTo("这个主题和长期恢")
+        assertThat(compactGraphRelationLabel("")).isEqualTo("相关")
+    }
+
     private fun graphNode(
         id: String,
         label: String,
