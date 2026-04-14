@@ -21,6 +21,7 @@ data class KnowledgeObjectCandidate(
     val summary: String,
     val noteId: Long,
     val updatedAt: Long,
+    val threadKey: String,
     val threadTitle: String,
     val relatedConcepts: List<String> = emptyList(),
     val evidenceType: ResearchEvidenceType,
@@ -28,7 +29,11 @@ data class KnowledgeObjectCandidate(
 )
 
 object KnowledgeObjectClassifier {
-    fun classify(note: NoteEntity, threadTitle: String): List<KnowledgeObjectCandidate> {
+    fun classify(
+        note: NoteEntity,
+        threadKey: String,
+        threadTitle: String,
+    ): List<KnowledgeObjectCandidate> {
         val summary = NoteInsightSummaryExtractor.extract(note).ifBlank {
             note.content.trim().lineSequence().firstOrNull().orEmpty()
         }.trim()
@@ -45,6 +50,7 @@ object KnowledgeObjectClassifier {
                 title = title,
                 summary = summary,
                 note = note,
+                threadKey = threadKey,
                 threadTitle = threadTitle,
             )
         }
@@ -55,6 +61,7 @@ object KnowledgeObjectClassifier {
                 title = title,
                 summary = summary,
                 note = note,
+                threadKey = threadKey,
                 threadTitle = threadTitle,
             )
         }
@@ -65,6 +72,7 @@ object KnowledgeObjectClassifier {
                 title = title,
                 summary = summary,
                 note = note,
+                threadKey = threadKey,
                 threadTitle = threadTitle,
             )
         }
@@ -77,6 +85,7 @@ object KnowledgeObjectClassifier {
         title: String,
         summary: String,
         note: NoteEntity,
+        threadKey: String,
         threadTitle: String,
     ) = KnowledgeObjectCandidate(
         type = type,
@@ -84,6 +93,7 @@ object KnowledgeObjectClassifier {
         summary = summary,
         noteId = note.id,
         updatedAt = note.updatedAt,
+        threadKey = threadKey,
         threadTitle = threadTitle,
         relatedConcepts = note.tags
             .map { it.trim() }

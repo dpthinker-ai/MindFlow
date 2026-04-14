@@ -31,6 +31,78 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
+internal fun buildGraphConceptSearchItems(
+    conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+): List<KnowledgeLayerSearchItem> =
+    conceptBuckets
+        .flatMap { (tag, pairs) ->
+            val directionCount = pairs.map { it.first.threadKey }.distinct().size
+            pairs
+                .groupBy { it.first.threadKey }
+                .mapNotNull { (threadKey, threadPairs) ->
+                    val latestPair = threadPairs.maxByOrNull { it.second.updatedAt } ?: return@mapNotNull null
+                    KnowledgeLayerSearchItem(
+                        id = "concept:${threadKey}:${graphSearchItemSlug(tag)}",
+                        type = KnowledgeLayerSearchType.CONCEPT,
+                        title = tag,
+                        summary = NoteInsightSummaryExtractor.extract(latestPair.second).ifBlank {
+                            latestPair.second.content.trim().take(90)
+                        },
+                        supportLine = "${threadPairs.size} 条记录 · ${directionCount} 条方向",
+                        trustLabel = ResearchEvidenceAnalyzer.classify(latestPair.second).label,
+                        threadKey = threadKey,
+                        noteId = latestPair.second.id,
+                        updatedAt = latestPair.second.updatedAt,
+                    )
+                }
+        }
+        .distinctBy { it.id }
+        .sortedByDescending { it.updatedAt }
+
+internal fun buildGraphObjectSearchItems(
+    candidates: List<KnowledgeObjectCandidate>,
+): List<KnowledgeLayerSearchItem> =
+    candidates
+        .groupBy { it.type to it.title.trim() }
+        .flatMap { (_, titleBucket) ->
+            val directionCount = titleBucket.map { it.threadKey }.distinct().size
+            titleBucket
+                .groupBy { it.threadKey }
+                .mapNotNull { (threadKey, threadBucket) ->
+                    val first = threadBucket.maxByOrNull { it.updatedAt } ?: return@mapNotNull null
+                    KnowledgeLayerSearchItem(
+                        id = "${first.type.folderName}:${threadKey}:${graphSearchItemSlug(first.title)}",
+                        type = first.type.toKnowledgeSearchType(),
+                        title = first.title,
+                        summary = first.summary,
+                        supportLine = "${threadBucket.size} 条来源 · ${directionCount} 条方向",
+                        trustLabel = first.evidenceType.label,
+                        threadKey = threadKey,
+                        noteId = first.noteId,
+                        updatedAt = first.updatedAt,
+                    )
+                }
+        }
+        .distinctBy { it.id }
+        .sortedByDescending { it.updatedAt }
+
+private fun graphSearchItemSlug(
+    title: String,
+): String {
+    val base = title
+        .lowercase()
+        .replace("#", "")
+        .replace(Regex("[^a-z0-9\\u4e00-\\u9fa5]+"), "-")
+        .trim('-')
+    return if (base.isNotBlank()) base else "item"
+}
+
+private fun KnowledgeObjectType.toKnowledgeSearchType(): KnowledgeLayerSearchType = when (this) {
+    KnowledgeObjectType.QUESTION -> KnowledgeLayerSearchType.QUESTION
+    KnowledgeObjectType.METHOD -> KnowledgeLayerSearchType.METHOD
+    KnowledgeObjectType.EXPERIMENT -> KnowledgeLayerSearchType.EXPERIMENT
+}
+
 class DirectionWikiCoordinator(
     context: Context,
     private val noteRepository: NoteRepository,
@@ -116,7 +188,13 @@ class DirectionWikiCoordinator(
         val continuity = DirectionContinuityAnalyzer.summarize(notes)
         val grounding = ResearchEvidenceAnalyzer.buildGrounding(notes)
         val weeklyReview = ThreadWeeklyReviewAnalyzer.build(notes)
-        val knowledgeObjects = notes.flatMap { note -> KnowledgeObjectClassifier.classify(note, thread.title) }
+        val knowledgeObjects = notes.flatMap { note ->
+            KnowledgeObjectClassifier.classify(
+                note = note,
+                threadKey = threadKey,
+                threadTitle = thread.title,
+            )
+        }
         val questionCount = knowledgeObjects.count { it.type == KnowledgeObjectType.QUESTION }
         val methodCount = knowledgeObjects.count { it.type == KnowledgeObjectType.METHOD }
         val experimentCount = knowledgeObjects.count { it.type == KnowledgeObjectType.EXPERIMENT }
@@ -283,7 +361,13 @@ class DirectionWikiCoordinator(
             val relatedConcepts = buildDirectionRelatedConcepts(notes)
             val directionObjectCandidates = buildList {
                 notes.forEach { note ->
-                    addAll(KnowledgeObjectClassifier.classify(note, summary.title))
+                    addAll(
+                        KnowledgeObjectClassifier.classify(
+                            note = note,
+                            threadKey = summary.threadKey,
+                            threadTitle = summary.title,
+                        ),
+                    )
                 }
                 addAll(
                     buildSynthesizedKnowledgeObjects(
@@ -1609,43 +1693,8 @@ class DirectionWikiCoordinator(
                 updatedAt = summary.updatedAt,
             )
         }
-        val conceptItems = conceptBuckets.mapNotNull { (tag, pairs) ->
-            val latestPair = pairs.maxByOrNull { it.second.updatedAt } ?: return@mapNotNull null
-            val directionCount = pairs.map { it.first.threadKey }.distinct().size
-            KnowledgeLayerSearchItem(
-                id = "concept:$tag",
-                type = KnowledgeLayerSearchType.CONCEPT,
-                title = tag,
-                summary = NoteInsightSummaryExtractor.extract(latestPair.second).ifBlank {
-                    latestPair.second.content.trim().take(90)
-                },
-                supportLine = "${pairs.size} 条记录 · ${directionCount} 条方向",
-                trustLabel = ResearchEvidenceAnalyzer.classify(latestPair.second).label,
-                threadKey = latestPair.first.threadKey,
-                noteId = latestPair.second.id,
-                updatedAt = latestPair.second.updatedAt,
-            )
-        }
-        val objectItems = candidates
-            .groupBy { "${it.type}:${slugFor(it.title, "${it.type.folderName}-${it.noteId}")}" }
-            .mapNotNull { (_, bucket) ->
-                val first = bucket.maxByOrNull { it.updatedAt } ?: return@mapNotNull null
-                val objectType = when (first.type) {
-                    KnowledgeObjectType.QUESTION -> KnowledgeLayerSearchType.QUESTION
-                    KnowledgeObjectType.METHOD -> KnowledgeLayerSearchType.METHOD
-                    KnowledgeObjectType.EXPERIMENT -> KnowledgeLayerSearchType.EXPERIMENT
-                }
-                KnowledgeLayerSearchItem(
-                    id = "${first.type.folderName}:${slugFor(first.title, "${first.type.folderName}-${first.noteId}")}",
-                    type = objectType,
-                    title = first.title,
-                    summary = first.summary,
-                    supportLine = "${bucket.size} 条来源 · ${bucket.map { it.threadTitle }.distinct().size} 条方向",
-                    trustLabel = first.evidenceType.label,
-                    noteId = first.noteId,
-                    updatedAt = first.updatedAt,
-                )
-            }
+        val conceptItems = buildGraphConceptSearchItems(conceptBuckets)
+        val objectItems = buildGraphObjectSearchItems(candidates)
         val conclusionItems = summaries
             .filter { it.conclusionLine.isNotBlank() || it.assetSummary.isNotBlank() }
             .map { summary ->
@@ -1766,6 +1815,7 @@ class DirectionWikiCoordinator(
                     summary = question,
                     noteId = baseId,
                     updatedAt = summary.updatedAt,
+                    threadKey = summary.threadKey,
                     threadTitle = summary.title,
                     relatedConcepts = relatedConcepts,
                     evidenceType = ResearchEvidenceType.HYPOTHESIS,
@@ -1779,6 +1829,7 @@ class DirectionWikiCoordinator(
                 summary = question,
                 noteId = baseId - 10,
                 updatedAt = summary.updatedAt,
+                threadKey = summary.threadKey,
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.SIGNAL,
@@ -1792,6 +1843,7 @@ class DirectionWikiCoordinator(
                 summary = validation,
                 noteId = baseId - 1,
                 updatedAt = summary.updatedAt,
+                threadKey = summary.threadKey,
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.HYPOTHESIS,
@@ -1805,6 +1857,7 @@ class DirectionWikiCoordinator(
                 summary = hypothesis,
                 noteId = baseId - 11,
                 updatedAt = summary.updatedAt,
+                threadKey = summary.threadKey,
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.HYPOTHESIS,
@@ -1818,6 +1871,7 @@ class DirectionWikiCoordinator(
                 summary = nextShift,
                 noteId = baseId - 2,
                 updatedAt = summary.updatedAt,
+                threadKey = summary.threadKey,
                 threadTitle = summary.title,
                 relatedConcepts = relatedConcepts,
                 evidenceType = ResearchEvidenceType.VERIFIED,
