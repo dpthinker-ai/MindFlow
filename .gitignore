@@ -10,3 +10,7 @@
 /keystore/
 *:Zone.Identifier
 PUBLISH.local.md
+/.codex
+/.gradle-local/
+/pics/
+/refs/

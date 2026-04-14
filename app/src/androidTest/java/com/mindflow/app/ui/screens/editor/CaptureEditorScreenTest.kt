@@ -30,11 +30,16 @@ class CaptureEditorScreenTest {
         }
 
         composeRule.onNodeWithTag(CaptureContentFieldTestTag).assertExists()
-        composeRule.onNodeWithText("语音输入").assertExists()
-        composeRule.onNodeWithText("先存下这颗火花").assertExists()
+        composeRule.onNodeWithText("快速记录").assertExists()
+        composeRule.onNodeWithText("语音").assertExists()
+        composeRule.onNodeWithText("保存").assertExists()
         composeRule.onNodeWithText("AI 整理").assertDoesNotExist()
         composeRule.onNodeWithText("补充信息").assertDoesNotExist()
         composeRule.onNodeWithText("方向提示").assertDoesNotExist()
         composeRule.onNodeWithText("旧知识召回").assertDoesNotExist()
+        composeRule.onNodeWithText("输入时只做输入，整理和归类放到保存后。").assertDoesNotExist()
+        composeRule.onNodeWithText("写下想法").assertDoesNotExist()
+        composeRule.onNodeWithText("这里不做方向判断，不做旧知识召回，也不要求你先补结构。").assertDoesNotExist()
+        composeRule.onNodeWithText("先记下来，别让整理动作打断输入。").assertDoesNotExist()
     }
 }

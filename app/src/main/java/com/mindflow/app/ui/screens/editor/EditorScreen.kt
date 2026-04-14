@@ -410,28 +410,18 @@ internal fun CaptureEditorScreen(
                 .statusBarsPadding()
                 .imePadding()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             EditorTopBar(
                 title = "快速记录",
-                subtitle = "输入时只做输入，整理和归类放到保存后。",
                 onBack = ::requestBack,
             )
 
             PanelCard(modifier = Modifier.weight(1f)) {
-                SectionHeader(
-                    title = "写下想法",
-                    headline = if (uiState.content.isBlank()) "保持心流" else "先存住这颗火花",
-                )
-                Text(
-                    text = "这里不做方向判断，不做旧知识召回，也不要求你先补结构。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 PaperField(
                     value = uiState.content,
                     onValueChange = onContentChange,
-                    placeholder = "比如一个想法、要试的事、要观察的问题",
+                    placeholder = "记点什么",
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -439,15 +429,6 @@ internal fun CaptureEditorScreen(
                     minLines = 12,
                     textStyle = MaterialTheme.typography.bodyLarge,
                     expandToContainer = true,
-                )
-                Text(
-                    text = if (uiState.content.isBlank()) {
-                        "先记下来，别让整理动作打断输入。"
-                    } else {
-                        "已写 ${uiState.content.length} 字，先存住，再回来看结构。"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -457,12 +438,12 @@ internal fun CaptureEditorScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 GhostActionButton(
-                    text = "语音输入",
+                    text = "语音",
                     onClick = onVoiceCapture,
                     modifier = Modifier.weight(1f),
                 )
                 ActionButton(
-                    text = if (uiState.isSaving) "保存中..." else "先存下这颗火花",
+                    text = if (uiState.isSaving) "保存中..." else "保存",
                     onClick = onSave,
                     enabled = !uiState.isSaving && uiState.content.isNotBlank(),
                     modifier = Modifier.weight(1f),
@@ -476,7 +457,7 @@ internal fun CaptureEditorScreen(
 @Composable
 private fun EditorTopBar(
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     onBack: () -> Unit,
 ) {
     Row(
@@ -497,11 +478,13 @@ private fun EditorTopBar(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -514,16 +497,16 @@ private fun UnsavedChangesExitDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("先保存记录") },
-        text = { Text("记录修改后还没有保存，请保存后再退出") },
+        title = { Text("退出前保存？") },
+        text = { Text("这条记录还没保存。") },
         confirmButton = {
             TextButton(onClick = onSaveAndExit) {
-                Text("保存记录")
+                Text("保存并退出")
             }
         },
         dismissButton = {
             TextButton(onClick = onLeaveWithoutSaving) {
-                Text("继续退出")
+                Text("直接退出")
             }
         },
     )

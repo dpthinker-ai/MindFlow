@@ -1032,7 +1032,7 @@ internal fun selectVisibleGraph(
     snapshot: DirectionWikiSnapshot,
 ): SelectedGraphData {
     val presentation = snapshot.graph.presentation
-    val selectedNodes = when {
+    val initialSelectedNodes = when {
         presentation.nodes.isNotEmpty() -> presentation.nodes.map { node ->
             SelectedGraphNode(
                 threadKey = node.threadKey,
@@ -1070,7 +1070,7 @@ internal fun selectVisibleGraph(
                 )
             }
     }
-    if (selectedNodes.isEmpty()) {
+    if (initialSelectedNodes.isEmpty()) {
         return SelectedGraphData(
             headline = "还没有足够结构",
             summaryLine = "",
@@ -1081,7 +1081,52 @@ internal fun selectVisibleGraph(
         )
     }
 
+    var selectedNodes = initialSelectedNodes
+    var selectedEdges = selectVisibleGraphEdges(
+        presentation = presentation,
+        canonicalEdges = snapshot.graph.edges,
+        visibleIds = selectedNodes.map { it.threadKey }.toSet(),
+    )
+    val recoveredNodes = recoverConnectedVisibleNodes(
+        snapshot = snapshot,
+        initialNodes = initialSelectedNodes,
+        currentEdges = selectedEdges,
+    )
+    val usedCanonicalNodeRecovery =
+        recoveredNodes.map { it.threadKey } != initialSelectedNodes.map { it.threadKey }
+    if (usedCanonicalNodeRecovery) {
+        selectedNodes = recoveredNodes
+        selectedEdges = selectVisibleGraphEdges(
+            presentation = presentation,
+            canonicalEdges = snapshot.graph.edges,
+            visibleIds = selectedNodes.map { it.threadKey }.toSet(),
+        )
+    }
+
     val visibleIds = selectedNodes.map { it.threadKey }.toSet()
+
+    return SelectedGraphData(
+        headline = if (!usedCanonicalNodeRecovery && presentation.headline.isNotBlank()) {
+            presentation.headline
+        } else {
+            buildString {
+                append("${selectedNodes.size} 个主题")
+                if (selectedEdges.isNotEmpty()) append(" · ${selectedEdges.size} 条关系")
+            }
+        },
+        summaryLine = presentation.summaryLine.ifBlank { snapshot.graph.overview.summaryLine },
+        hubNodeIds = snapshot.graph.overview.hubThreadKeys.filter { it in visibleIds }.toSet(),
+        isolatedNodeIds = snapshot.graph.overview.isolatedThreadKeys.filter { it in visibleIds }.toSet(),
+        nodes = selectedNodes,
+        edges = selectedEdges,
+    )
+}
+
+private fun selectVisibleGraphEdges(
+    presentation: com.mindflow.app.data.wiki.DirectionWikiGraphPresentationSnapshot,
+    canonicalEdges: List<com.mindflow.app.data.wiki.DirectionWikiGraphEdge>,
+    visibleIds: Set<String>,
+): List<SelectedGraphEdge> {
     val presentationEdges = presentation.edges
         .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
         .map { edge ->
@@ -1092,7 +1137,7 @@ internal fun selectVisibleGraph(
                 reasonLine = edge.reasonLine,
             )
         }
-    val canonicalEdges = snapshot.graph.edges
+    val visibleCanonicalEdges = canonicalEdges
         .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
         .sortedWith(
             compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> { it.strength }
@@ -1109,23 +1154,94 @@ internal fun selectVisibleGraph(
     val selectedEdges = mergeVisibleGraphEdges(
         visibleIds = visibleIds,
         presentationEdges = presentationEdges,
-        canonicalEdges = canonicalEdges,
+        canonicalEdges = visibleCanonicalEdges,
+    )
+    return selectedEdges
+}
+
+private fun recoverConnectedVisibleNodes(
+    snapshot: DirectionWikiSnapshot,
+    initialNodes: List<SelectedGraphNode>,
+    currentEdges: List<SelectedGraphEdge>,
+): List<SelectedGraphNode> {
+    if (initialNodes.isEmpty() || currentEdges.isNotEmpty() || snapshot.graph.edges.isEmpty()) {
+        return initialNodes
+    }
+
+    val targetSize = initialNodes.size.coerceAtLeast(2)
+    val initialIds = initialNodes.map { it.threadKey }.toSet()
+    val chosenIds = linkedSetOf<String>()
+    snapshot.graph.edges
+        .filter { it.fromThreadKey != it.toThreadKey }
+        .sortedWith(
+            compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> {
+                listOf(it.fromThreadKey, it.toThreadKey).count { threadKey -> threadKey in initialIds }
+            }
+                .thenByDescending { it.strength }
+                .thenByDescending { it.confidence }
+                .thenBy { normalizedVisibleGraphEdgeKey(it.fromThreadKey, it.toThreadKey) },
+        )
+        .forEach { edge ->
+            val edgeIds = listOf(edge.fromThreadKey, edge.toThreadKey)
+            val newlyAdded = edgeIds.count { it !in chosenIds }
+            if (chosenIds.isEmpty() || chosenIds.size + newlyAdded <= targetSize) {
+                edgeIds.forEach { chosenIds.add(it) }
+            }
+        }
+    if (chosenIds.isEmpty()) {
+        return initialNodes
+    }
+
+    initialNodes.map { it.threadKey }.forEach { threadKey ->
+        if (chosenIds.size < targetSize) chosenIds.add(threadKey)
+    }
+    snapshot.graph.nodes
+        .sortedWith(
+            compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphNode> { it.densityScore }
+                .thenByDescending { it.recencyScore }
+                .thenByDescending { it.noteCount }
+                .thenBy { it.label },
+        )
+        .map { it.threadKey }
+        .forEach { threadKey ->
+            if (chosenIds.size < targetSize) chosenIds.add(threadKey)
+        }
+
+    val initialNodesByThread = initialNodes.associateBy { it.threadKey }
+    val canonicalNodesByThread = snapshot.graph.nodes.associateBy { it.threadKey }
+    return chosenIds
+        .take(targetSize)
+        .mapNotNull { threadKey ->
+            initialNodesByThread[threadKey]
+                ?: canonicalNodesByThread[threadKey]?.let(::selectedGraphNodeFromCanonical)
+                ?: snapshot.directions[threadKey]?.let(::selectedGraphNodeFromDirection)
+        }
+        .ifEmpty { initialNodes }
+}
+
+private fun selectedGraphNodeFromCanonical(
+    node: com.mindflow.app.data.wiki.DirectionWikiGraphNode,
+): SelectedGraphNode =
+    SelectedGraphNode(
+        threadKey = node.threadKey,
+        label = node.label,
+        summaryLine = node.summaryLine,
+        densityScore = node.densityScore,
+        maturity = node.maturity,
+        noteCount = node.noteCount,
     )
 
-    return SelectedGraphData(
-        headline = presentation.headline.ifBlank {
-            buildString {
-                append("${selectedNodes.size} 个主题")
-                if (selectedEdges.isNotEmpty()) append(" · ${selectedEdges.size} 条关系")
-            }
-        },
-        summaryLine = presentation.summaryLine.ifBlank { snapshot.graph.overview.summaryLine },
-        hubNodeIds = snapshot.graph.overview.hubThreadKeys.filter { it in visibleIds }.toSet(),
-        isolatedNodeIds = snapshot.graph.overview.isolatedThreadKeys.filter { it in visibleIds }.toSet(),
-        nodes = selectedNodes,
-        edges = selectedEdges,
+private fun selectedGraphNodeFromDirection(
+    direction: DirectionWikiDirectionSummary,
+): SelectedGraphNode =
+    SelectedGraphNode(
+        threadKey = direction.threadKey,
+        label = compactDirectionLabel(direction.title),
+        summaryLine = graphSummaryLine(direction),
+        densityScore = 0.5,
+        maturity = direction.stage.toGraphMaturity(),
+        noteCount = 0,
     )
-}
 
 private fun mergeVisibleGraphEdges(
     visibleIds: Set<String>,
@@ -1152,7 +1268,12 @@ private fun mergeVisibleGraphEdges(
 }
 
 private fun SelectedGraphEdge.normalizedKey(): String =
-    listOf(fromThreadKey, toThreadKey).sorted().joinToString("::")
+    normalizedVisibleGraphEdgeKey(fromThreadKey, toThreadKey)
+
+private fun normalizedVisibleGraphEdgeKey(
+    left: String,
+    right: String,
+): String = listOf(left, right).sorted().joinToString("::")
 
 internal fun projectPureGraphInfo(
     snapshot: DirectionWikiSnapshot,

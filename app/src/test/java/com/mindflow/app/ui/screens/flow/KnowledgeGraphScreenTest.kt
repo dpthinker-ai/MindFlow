@@ -11,6 +11,7 @@ import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
 import com.mindflow.app.data.wiki.DirectionWikiGraphMaturity
+import com.mindflow.app.data.wiki.DirectionWikiGraphNode
 import com.mindflow.app.data.wiki.DirectionWikiGraphOverview
 import com.mindflow.app.data.wiki.DirectionWikiGraphPresentationEdge
 import com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode
@@ -121,6 +122,46 @@ class KnowledgeGraphScreenTest {
                 setOf("folder:work", "tag:learning"),
                 setOf("tag:learning", "tag:health"),
             )
+    }
+
+    @Test
+    fun `selectVisibleGraph recovers connected canonical nodes when presentation nodes are disconnected`() {
+        val snapshot = DirectionWikiSnapshot(
+            directions = mapOf(
+                "folder:work" to directionSummary("folder:work", "工作"),
+                "tag:writing" to directionSummary("tag:writing", "写作"),
+                "tag:learning" to directionSummary("tag:learning", "学习"),
+                "tag:health" to directionSummary("tag:health", "健康"),
+            ),
+            graph = DirectionWikiGraphSnapshot(
+                overview = DirectionWikiGraphOverview(
+                    hubThreadKeys = listOf("tag:learning"),
+                    isolatedThreadKeys = emptyList(),
+                ),
+                nodes = listOf(
+                    canonicalNode("folder:work", "工作", densityScore = 0.95, recencyScore = 0.8),
+                    canonicalNode("tag:writing", "写作", densityScore = 0.9, recencyScore = 0.7),
+                    canonicalNode("tag:learning", "学习", densityScore = 0.7, recencyScore = 0.6),
+                    canonicalNode("tag:health", "健康", densityScore = 0.65, recencyScore = 0.5),
+                ),
+                edges = listOf(
+                    canonicalEdge("tag:learning", "tag:health", 5, 0.9, "方法共享。"),
+                ),
+                presentation = DirectionWikiGraphPresentationSnapshot(
+                    nodes = listOf(
+                        presentationNode("folder:work", "工作", 0.95),
+                        presentationNode("tag:writing", "写作", 0.9),
+                    ),
+                    edges = emptyList(),
+                ),
+            ),
+        )
+
+        val selection = selectVisibleGraph(snapshot)
+
+        assertThat(selection.nodes.map { it.threadKey }).containsAtLeast("tag:learning", "tag:health")
+        assertThat(selection.edges.map { setOf(it.fromThreadKey, it.toThreadKey) })
+            .containsExactly(setOf("tag:learning", "tag:health"))
     }
 
     @Test
@@ -366,6 +407,22 @@ class KnowledgeGraphScreenTest {
         supportIds = emptyList(),
         firstSeenAt = 1_000L,
         lastSeenAt = 1_000L,
+    )
+
+    private fun canonicalNode(
+        threadKey: String,
+        label: String,
+        densityScore: Double,
+        recencyScore: Double,
+    ) = DirectionWikiGraphNode(
+        threadKey = threadKey,
+        label = label,
+        summaryLine = "$label 正在成形。",
+        densityScore = densityScore,
+        recencyScore = recencyScore,
+        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
+        noteCount = 3,
+        updatedAt = 1_000L,
     )
 
     private fun directionSummary(
