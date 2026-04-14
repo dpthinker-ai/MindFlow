@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -60,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,7 +102,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
-private data class EditorDraftAnalysisInput(
+internal data class EditorDraftAnalysisInput(
     val isLoading: Boolean,
     val noteId: Long?,
     val topic: String,
@@ -110,10 +112,25 @@ private data class EditorDraftAnalysisInput(
     val allNotes: List<NoteEntity>,
 )
 
-private data class EditorDraftAnalysis(
+internal data class EditorDraftAnalysis(
     val relatedNotes: List<NoteEntity> = emptyList(),
     val suggestedThread: ThemeThread? = null,
 )
+
+private data class EditorSupportInsights(
+    val relatedNotes: List<NoteEntity> = emptyList(),
+    val suggestedThread: ThemeThread? = null,
+    val knowledgeRecall: EditorKnowledgeRecallResult? = null,
+)
+
+internal const val CaptureContentFieldTestTag = "capture_content_field"
+
+internal fun shouldComputeEditorInsights(
+    isLoading: Boolean,
+    noteId: Long?,
+    metadataExpanded: Boolean,
+    extraInfoExpanded: Boolean,
+): Boolean = !isLoading && noteId != null && metadataExpanded && extraInfoExpanded
 
 @Composable
 fun EditorRoute(
@@ -153,41 +170,6 @@ fun EditorRoute(
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val allNotes by noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList())
-    val analysisInput = remember(
-        uiState.isLoading,
-        uiState.noteId,
-        uiState.topic,
-        uiState.content,
-        uiState.folderKey,
-        uiState.tags,
-        allNotes,
-    ) {
-        EditorDraftAnalysisInput(
-            isLoading = uiState.isLoading,
-            noteId = uiState.noteId,
-            topic = uiState.topic,
-            content = uiState.content,
-            folderKey = uiState.folderKey,
-            tags = uiState.tags,
-            allNotes = allNotes,
-        )
-    }
-    val draftAnalysis by produceState(
-        initialValue = EditorDraftAnalysis(),
-        analysisInput,
-    ) {
-        if (analysisInput.isLoading) {
-            value = EditorDraftAnalysis()
-            return@produceState
-        }
-        delay(320)
-        value = withContext(Dispatchers.Default) {
-            buildEditorDraftAnalysis(analysisInput)
-        }
-    }
-    val relatedNotes = draftAnalysis.relatedNotes
-    val suggestedThread = draftAnalysis.suggestedThread
     val context = LocalContext.current
     var autoVoiceStarted by rememberSaveable(captureSessionKey ?: -1L) { mutableStateOf(false) }
     val speechInputLauncher = rememberLauncherForActivityResult(
@@ -227,26 +209,6 @@ fun EditorRoute(
                 }
         }
     }
-    val knowledgeRecall by produceState<EditorKnowledgeRecallResult?>(
-        initialValue = null,
-        analysisInput.isLoading,
-        analysisInput.topic,
-        analysisInput.content,
-        suggestedThread?.key,
-        relatedNotes.map { it.id to it.updatedAt },
-    ) {
-        if (analysisInput.isLoading) {
-            value = null
-            return@produceState
-        }
-        delay(700)
-        value = editorKnowledgeRecallPlanner.summarize(
-            draftTopic = analysisInput.topic,
-            draftContent = analysisInput.content,
-            suggestedThreadTitle = suggestedThread?.title,
-            relatedNotes = relatedNotes,
-        )
-    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -269,50 +231,57 @@ fun EditorRoute(
         }
     }
 
-    EditorScreen(
-        uiState = uiState,
-        onBack = onBack,
-        onContentChange = viewModel::onContentChange,
-        onTopicChange = viewModel::onTopicChange,
-        onFolderChange = viewModel::onFolderChange,
-        onAddTag = viewModel::addTag,
-        onRemoveTag = viewModel::removeTag,
-        onStatusChange = viewModel::onStatusChange,
-        onHorizonChange = viewModel::onHorizonChange,
-        onKnowledgeTrustChange = viewModel::onKnowledgeTrustChange,
-        onArchiveChange = viewModel::onArchivedChange,
-        onSave = { viewModel.save(exitAfterSave = false) },
-        onSaveAndExit = { viewModel.save(exitAfterSave = true) },
-        onVoiceCapture = startVoiceCapture,
-        onPolishContent = viewModel::polishContent,
-        onApplyPolishedContent = viewModel::applyPolishedContent,
-        onDiscardPolishedContent = viewModel::discardPolishedContent,
-        onRetriggerFolder = viewModel::retriggerFolderClassification,
-        onRetriggerTopic = viewModel::retriggerTopicExtraction,
-        onRetriggerTag = viewModel::retriggerTagExtraction,
-        suggestedThread = suggestedThread,
-        onOpenSuggestedThread = onOpenThread,
-        knowledgeRecall = knowledgeRecall,
-        relatedNotes = relatedNotes,
-        onOpenRelatedNote = onOpenNote,
-    )
-}
-
-private fun buildEditorDraftAnalysis(input: EditorDraftAnalysisInput): EditorDraftAnalysis {
-    val relatedNotes = if (input.noteId == null) {
-        emptyList()
+    if (uiState.isNew) {
+        CaptureEditorScreen(
+            uiState = uiState,
+            onBack = onBack,
+            onContentChange = viewModel::onContentChange,
+            onSave = { viewModel.save(exitAfterSave = false) },
+            onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+            onVoiceCapture = startVoiceCapture,
+        )
     } else {
-        NoteConnectionAnalyzer.buildRelatedNotes(
-            currentNoteId = input.noteId,
-            topic = input.topic,
-            content = input.content,
-            folderKey = input.folderKey,
-            tags = input.tags,
-            notes = input.allNotes,
+        FullEditorScreen(
+            uiState = uiState,
+            noteRepository = noteRepository,
+            editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
+            onBack = onBack,
+            onContentChange = viewModel::onContentChange,
+            onTopicChange = viewModel::onTopicChange,
+            onFolderChange = viewModel::onFolderChange,
+            onAddTag = viewModel::addTag,
+            onRemoveTag = viewModel::removeTag,
+            onStatusChange = viewModel::onStatusChange,
+            onHorizonChange = viewModel::onHorizonChange,
+            onKnowledgeTrustChange = viewModel::onKnowledgeTrustChange,
+            onArchiveChange = viewModel::onArchivedChange,
+            onSave = { viewModel.save(exitAfterSave = false) },
+            onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+            onVoiceCapture = startVoiceCapture,
+            onPolishContent = viewModel::polishContent,
+            onApplyPolishedContent = viewModel::applyPolishedContent,
+            onDiscardPolishedContent = viewModel::discardPolishedContent,
+            onRetriggerFolder = viewModel::retriggerFolderClassification,
+            onRetriggerTopic = viewModel::retriggerTopicExtraction,
+            onRetriggerTag = viewModel::retriggerTagExtraction,
+            onOpenSuggestedThread = onOpenThread,
+            onOpenRelatedNote = onOpenNote,
         )
     }
+}
+
+internal fun buildEditorDraftAnalysis(input: EditorDraftAnalysisInput): EditorDraftAnalysis {
+    val noteId = input.noteId ?: return EditorDraftAnalysis()
+    val relatedNotes = NoteConnectionAnalyzer.buildRelatedNotes(
+        currentNoteId = noteId,
+        topic = input.topic,
+        content = input.content,
+        folderKey = input.folderKey,
+        tags = input.tags,
+        notes = input.allNotes,
+    )
     val suggestedThread = NoteConnectionAnalyzer.bestThreadForDraft(
-        currentNoteId = input.noteId,
+        currentNoteId = noteId,
         topic = input.topic,
         content = input.content,
         folderKey = input.folderKey,
@@ -325,14 +294,251 @@ private fun buildEditorDraftAnalysis(input: EditorDraftAnalysisInput): EditorDra
     )
 }
 
+@Composable
+private fun rememberEditorSupportInsights(
+    shouldCompute: Boolean,
+    uiState: NoteEditorUiState,
+    noteRepository: NoteRepository,
+    editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
+): EditorSupportInsights {
+    if (!shouldCompute) {
+        return EditorSupportInsights()
+    }
+
+    val allNotes = noteRepository.observeAllNotes().collectAsStateWithLifecycle(initialValue = emptyList()).value
+    val analysisInput = remember(
+        uiState.isLoading,
+        uiState.noteId,
+        uiState.topic,
+        uiState.content,
+        uiState.folderKey,
+        uiState.tags,
+        allNotes,
+    ) {
+        EditorDraftAnalysisInput(
+            isLoading = uiState.isLoading,
+            noteId = uiState.noteId,
+            topic = uiState.topic,
+            content = uiState.content,
+            folderKey = uiState.folderKey,
+            tags = uiState.tags,
+            allNotes = allNotes,
+        )
+    }
+    val draftAnalysis by produceState(
+        initialValue = EditorDraftAnalysis(),
+        analysisInput,
+    ) {
+        if (analysisInput.isLoading) {
+            value = EditorDraftAnalysis()
+            return@produceState
+        }
+        delay(320)
+        value = withContext(Dispatchers.Default) {
+            buildEditorDraftAnalysis(analysisInput)
+        }
+    }
+    val knowledgeRecall by produceState<EditorKnowledgeRecallResult?>(
+        initialValue = null,
+        analysisInput.isLoading,
+        analysisInput.topic,
+        analysisInput.content,
+        draftAnalysis.suggestedThread?.key,
+        draftAnalysis.relatedNotes.map { it.id to it.updatedAt },
+    ) {
+        if (analysisInput.isLoading) {
+            value = null
+            return@produceState
+        }
+        delay(700)
+        value = editorKnowledgeRecallPlanner.summarize(
+            draftTopic = analysisInput.topic,
+            draftContent = analysisInput.content,
+            suggestedThreadTitle = draftAnalysis.suggestedThread?.title,
+            relatedNotes = draftAnalysis.relatedNotes,
+        )
+    }
+
+    return EditorSupportInsights(
+        relatedNotes = draftAnalysis.relatedNotes,
+        suggestedThread = draftAnalysis.suggestedThread,
+        knowledgeRecall = knowledgeRecall,
+    )
+}
+
+@Composable
+internal fun CaptureEditorScreen(
+    uiState: NoteEditorUiState,
+    onBack: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndExit: () -> Unit,
+    onVoiceCapture: () -> Unit,
+) {
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+
+    fun requestBack() {
+        if (uiState.hasUnsavedChanges) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
+
+    if (showExitDialog) {
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
+            },
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                onBack()
+            },
+        )
+    }
+
+    ScreenBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            EditorTopBar(
+                title = "快速记录",
+                subtitle = "输入时只做输入，整理和归类放到保存后。",
+                onBack = ::requestBack,
+            )
+
+            PanelCard(modifier = Modifier.weight(1f)) {
+                SectionHeader(
+                    title = "写下想法",
+                    headline = if (uiState.content.isBlank()) "保持心流" else "先存住这颗火花",
+                )
+                Text(
+                    text = "这里不做方向判断，不做旧知识召回，也不要求你先补结构。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PaperField(
+                    value = uiState.content,
+                    onValueChange = onContentChange,
+                    placeholder = "比如一个想法、要试的事、要观察的问题",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag(CaptureContentFieldTestTag),
+                    minLines = 12,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    expandToContainer = true,
+                )
+                Text(
+                    text = if (uiState.content.isBlank()) {
+                        "先记下来，别让整理动作打断输入。"
+                    } else {
+                        "已写 ${uiState.content.length} 字，先存住，再回来看结构。"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GhostActionButton(
+                    text = "语音输入",
+                    onClick = onVoiceCapture,
+                    modifier = Modifier.weight(1f),
+                )
+                ActionButton(
+                    text = if (uiState.isSaving) "保存中..." else "先存下这颗火花",
+                    onClick = onSave,
+                    enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Save,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorTopBar(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconPillButton(
+            icon = Icons.AutoMirrored.Outlined.ArrowBack,
+            contentDescription = "返回",
+            onClick = onBack,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnsavedChangesExitDialog(
+    onDismiss: () -> Unit,
+    onSaveAndExit: () -> Unit,
+    onLeaveWithoutSaving: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("先保存记录") },
+        text = { Text("记录修改后还没有保存，请保存后再退出") },
+        confirmButton = {
+            TextButton(onClick = onSaveAndExit) {
+                Text("保存记录")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onLeaveWithoutSaving) {
+                Text("继续退出")
+            }
+        },
+    )
+}
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalLayoutApi::class,
     ExperimentalFoundationApi::class,
 )
 @Composable
-private fun EditorScreen(
+private fun FullEditorScreen(
     uiState: NoteEditorUiState,
+    noteRepository: NoteRepository,
+    editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     onBack: () -> Unit,
     onContentChange: (String) -> Unit,
     onTopicChange: (String) -> Unit,
@@ -352,10 +558,7 @@ private fun EditorScreen(
     onRetriggerFolder: () -> Unit,
     onRetriggerTopic: () -> Unit,
     onRetriggerTag: () -> Unit,
-    suggestedThread: com.mindflow.app.data.connect.ThemeThread?,
     onOpenSuggestedThread: (String) -> Unit,
-    knowledgeRecall: EditorKnowledgeRecallResult?,
-    relatedNotes: List<NoteEntity>,
     onOpenRelatedNote: (Long) -> Unit,
 ) {
     if (uiState.isLoading) {
@@ -367,31 +570,11 @@ private fun EditorScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconPillButton(
-                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "返回",
-                        onClick = onBack,
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = "编辑记录",
-                            style = MaterialTheme.typography.headlineSmall,
-                        )
-                        Text(
-                            text = "正在加载内容…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                EditorTopBar(
+                    title = "编辑记录",
+                    subtitle = "正在加载内容…",
+                    onBack = onBack,
+                )
                 PanelCard {
                     Text(
                         text = "正在打开这条记录，请稍等。",
@@ -432,34 +615,32 @@ private fun EditorScreen(
     }
 
     if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDialog = false },
-            title = { Text("先保存记录") },
-            text = { Text("记录修改后还没有保存，请保存后再退出") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showExitDialog = false
-                        onSaveAndExit()
-                    },
-                ) {
-                    Text("保存记录")
-                }
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
             },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showExitDialog = false
-                        onBack()
-                    },
-                ) {
-                    Text("继续退出")
-                }
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                onBack()
             },
         )
     }
 
-    LaunchedEffect(isContentFieldFocused, uiState.content) {
+    val insights = rememberEditorSupportInsights(
+        shouldCompute = shouldComputeEditorInsights(
+            isLoading = uiState.isLoading,
+            noteId = uiState.noteId,
+            metadataExpanded = metadataExpanded,
+            extraInfoExpanded = extraInfoExpanded,
+        ),
+        uiState = uiState,
+        noteRepository = noteRepository,
+        editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
+    )
+
+    LaunchedEffect(isContentFieldFocused) {
         if (isContentFieldFocused) {
             delay(160)
             contentBringIntoViewRequester.bringIntoView()
@@ -475,31 +656,11 @@ private fun EditorScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconPillButton(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "返回",
-                    onClick = ::requestBack,
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = if (uiState.isNew) "快速记录" else "编辑记录",
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    Text(
-                        text = if (uiState.isNew) "先把火花存住；状态、标签和分类都可以之后再补。" else "先改正文，再决定要不要交给 AI 整理。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            EditorTopBar(
+                title = "编辑记录",
+                subtitle = "先改正文，再决定要不要交给 AI 整理。",
+                onBack = ::requestBack,
+            )
 
             Column(
                 modifier = Modifier
@@ -509,23 +670,21 @@ private fun EditorScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 PanelCard {
-                    SectionHeader(title = if (uiState.isNew) "快速记录" else "编辑")
+                    SectionHeader(title = "编辑")
 
-                    if (!uiState.isNew) {
-                        Text("主题", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        PaperField(
-                            value = uiState.topic,
-                            onValueChange = onTopicChange,
-                            placeholder = "一个短一点、能快速认出的主题",
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.titleLarge,
-                        )
-                        Text(
-                            text = topicSourceLabel(uiState.topicSource),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text("主题", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    PaperField(
+                        value = uiState.topic,
+                        onValueChange = onTopicChange,
+                        placeholder = "一个短一点、能快速认出的主题",
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        text = topicSourceLabel(uiState.topicSource),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     Text("内容", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
@@ -861,7 +1020,7 @@ private fun EditorScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        if (suggestedThread != null) {
+                        insights.suggestedThread?.let { suggestedThread ->
                             Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Surface(
                                 color = WhiteGlass.copy(alpha = 0.9f),
@@ -902,7 +1061,7 @@ private fun EditorScreen(
                             }
                         }
 
-                        knowledgeRecall?.let { recall ->
+                        insights.knowledgeRecall?.let { recall ->
                             Text("旧知识召回", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Surface(
                                 color = WhiteGlass.copy(alpha = 0.9f),
@@ -1137,10 +1296,10 @@ private fun EditorScreen(
                         }
                     }
 
-                    if (relatedNotes.isNotEmpty()) {
+                    if (insights.relatedNotes.isNotEmpty()) {
                         PanelCard {
-                            SectionHeader(title = "相关记录", headline = "${relatedNotes.size} 条")
-                            relatedNotes.forEach { note ->
+                            SectionHeader(title = "相关记录", headline = "${insights.relatedNotes.size} 条")
+                            insights.relatedNotes.forEach { note ->
                                 val cardModifier = if (uiState.hasUnsavedChanges) {
                                     Modifier.fillMaxWidth()
                                 } else {
@@ -1194,6 +1353,7 @@ private fun PaperField(
     minLines: Int = 1,
     textStyle: TextStyle = MaterialTheme.typography.bodyLarge,
     onFocusChanged: (Boolean) -> Unit = {},
+    expandToContainer: Boolean = false,
 ) {
     Surface(
         modifier = modifier,
@@ -1204,7 +1364,15 @@ private fun PaperField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier
-                .fillMaxWidth()
+                .then(
+                    if (expandToContainer) {
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                )
                 .onFocusChanged { onFocusChanged(it.isFocused) },
             singleLine = singleLine,
             minLines = minLines,

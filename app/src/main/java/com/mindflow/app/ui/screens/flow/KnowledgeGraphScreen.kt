@@ -42,6 +42,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -74,19 +82,24 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
-private data class GraphNodeUi(
+internal const val KnowledgeGraphCanvasTag = "knowledge-graph-canvas"
+internal const val KnowledgeGraphInfoPanelTag = "knowledge-graph-info-panel"
+
+internal fun graphNodeTestTag(nodeId: String): String =
+    "graph-node-" + nodeId.replace(Regex("[^A-Za-z0-9_-]"), "_")
+
+internal fun heatmapDayTestTag(date: LocalDate): String = "heatmap-day-$date"
+
+internal data class GraphNodeUi(
     val id: String,
     val label: String,
     val summaryLine: String,
-    val gapLine: String,
     val threadKey: String,
+    val structureStatus: GraphStructureStatus,
     val accent: Color = AccentBlue,
     val densityScore: Double = 0.0,
     val maturity: DirectionWikiGraphMaturity = DirectionWikiGraphMaturity.FORMING,
@@ -95,18 +108,18 @@ private data class GraphNodeUi(
     val priority: Int = 3,
 )
 
-private data class GraphEdgeUi(
+internal data class GraphEdgeUi(
     val fromId: String,
     val toId: String,
     val weight: Int,
     val reasonLine: String = "",
 )
 
-private data class GraphOverviewUi(
+internal data class GraphOverviewUi(
     val headline: String,
-    val summaryLine: String,
-    val totalNodeCount: Int,
-    val visibleNodeCount: Int,
+    val verdictLine: String,
+    val hubNodeIds: Set<String>,
+    val isolatedNodeIds: Set<String>,
     val nodes: List<GraphNodeUi>,
     val edges: List<GraphEdgeUi>,
 )
@@ -115,6 +128,66 @@ private data class GraphNodeLayout(
     val node: GraphNodeUi,
     val position: Pair<Float, Float>,
 )
+
+internal data class SelectedGraphNode(
+    val threadKey: String,
+    val label: String,
+    val summaryLine: String,
+    val densityScore: Double,
+    val maturity: DirectionWikiGraphMaturity,
+    val noteCount: Int,
+)
+
+internal data class SelectedGraphEdge(
+    val fromThreadKey: String,
+    val toThreadKey: String,
+    val strength: Int,
+    val reasonLine: String,
+)
+
+internal data class SelectedGraphData(
+    val headline: String,
+    val summaryLine: String,
+    val hubNodeIds: Set<String>,
+    val isolatedNodeIds: Set<String>,
+    val nodes: List<SelectedGraphNode>,
+    val edges: List<SelectedGraphEdge>,
+)
+
+internal data class GraphProjectionNode(
+    val threadKey: String,
+    val label: String,
+    val summaryLine: String,
+    val densityScore: Double,
+    val maturity: DirectionWikiGraphMaturity,
+    val noteCount: Int,
+    val relationCount: Int,
+)
+
+internal data class GraphProjectionEdge(
+    val fromThreadKey: String,
+    val toThreadKey: String,
+    val strength: Int,
+    val reasonLine: String,
+)
+
+internal data class GraphProjection(
+    val headline: String,
+    val summaryLine: String,
+    val hubNodeIds: Set<String>,
+    val isolatedNodeIds: Set<String>,
+    val nodes: List<GraphProjectionNode>,
+    val edges: List<GraphProjectionEdge>,
+)
+
+internal enum class GraphStructureStatus(
+    val label: String,
+) {
+    HUB("中心"),
+    LINKED("成形中"),
+    ISOLATED("独立"),
+    EMERGING("持续出现"),
+}
 
 private enum class GraphDomainBucket(
     val label: String,
@@ -165,93 +238,21 @@ fun KnowledgeGraphRoute(
     KnowledgeGraphScreen(
         snapshot = snapshot,
         notes = notes,
-        onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
     )
 }
 
 @androidx.compose.runtime.Composable
-private fun KnowledgeGraphScreen(
+internal fun KnowledgeGraphScreen(
     snapshot: DirectionWikiSnapshot,
     notes: List<NoteEntity>,
-    onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
 ) {
-    val zoneId = remember { ZoneId.systemDefault() }
-    val today = remember(zoneId) { LocalDate.now(zoneId) }
-    val activeNotes = remember(notes) { notes.filterNot { it.isArchived } }
-    val graphOverview = remember(snapshot, activeNotes) { buildGraphOverview(snapshot, activeNotes) }
-    var selectedNodeId by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(graphOverview.nodes) {
-        if (selectedNodeId !in graphOverview.nodes.map { it.id }.toSet()) {
-            selectedNodeId = graphOverview.nodes.firstOrNull()?.id
-        }
-    }
-    val selectedGraphNode = remember(graphOverview, selectedNodeId) {
-        graphOverview.nodes.firstOrNull { it.id == selectedNodeId } ?: graphOverview.nodes.firstOrNull()
-    }
-    val relatedGraphEdge = remember(graphOverview, selectedGraphNode) {
-        selectedGraphNode?.let { node ->
-            graphOverview.edges
-                .filter { it.fromId == node.id || it.toId == node.id }
-                .maxByOrNull { it.weight }
-        }
-    }
-    val relatedGraphNode = remember(graphOverview, selectedGraphNode, relatedGraphEdge) {
-        selectedGraphNode?.let { node ->
-            relatedGraphEdge?.let { edge ->
-                val relatedId = if (edge.fromId == node.id) edge.toId else edge.fromId
-                graphOverview.nodes.firstOrNull { it.id == relatedId }
-            }
-        }
-    }
-    val activityByDate = remember(activeNotes, zoneId) {
-        activeNotes
-            .groupingBy { note ->
-                Instant.ofEpochMilli(note.updatedAt.coerceAtLeast(note.createdAt))
-                    .atZone(zoneId)
-                    .toLocalDate()
-            }
-            .eachCount()
-            .toSortedMap()
-    }
-    val availableYears = remember(activityByDate, today) {
-        (activityByDate.keys.map { it.year } + today.year).distinct().sortedDescending()
-    }
-    val defaultSelectedYear = remember(availableYears, today) {
-        if (today.year in availableYears) today.year else availableYears.firstOrNull() ?: today.year
-    }
-    var selectedYear by rememberSaveable { mutableIntStateOf(defaultSelectedYear) }
-    var selectedDateKey by rememberSaveable { mutableStateOf<String?>(today.toString()) }
-    val selectedDate = selectedDateKey?.let(LocalDate::parse)
-    LaunchedEffect(availableYears, defaultSelectedYear) {
-        if (selectedYear !in availableYears) {
-            selectedYear = defaultSelectedYear
-        }
-    }
-    LaunchedEffect(selectedYear, selectedDateKey, today) {
-        val date = selectedDateKey?.let(LocalDate::parse)
-        if (date != null && date.year != selectedYear) {
-            selectedDateKey = null
-        } else if (selectedYear == today.year && date == null) {
-            selectedDateKey = today.toString()
-        }
-    }
-    val selectedYearActivity = remember(activityByDate, selectedYear) {
-        activityByDate.filterKeys { it.year == selectedYear }
-    }
-    val selectedDateNotes = remember(activeNotes, selectedDate, zoneId) {
-        if (selectedDate == null) {
-            emptyList()
-        } else {
-            activeNotes
-                .filter { note ->
-                    Instant.ofEpochMilli(note.updatedAt.coerceAtLeast(note.createdAt))
-                        .atZone(zoneId)
-                        .toLocalDate() == selectedDate
-                }
-                .sortedByDescending { it.updatedAt }
-        }
+    val graphOverview = remember(snapshot) {
+        buildGraphVisualState(
+            directions = snapshot.directions,
+            projection = projectPureGraphInfo(snapshot, selectVisibleGraph(snapshot)),
+        )
     }
     ScreenBackground {
         Column(
@@ -285,134 +286,235 @@ private fun KnowledgeGraphScreen(
                 }
 
                 item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "记录热度",
-                            headline = "${selectedYear} · ${selectedYearActivity.values.sum()} 次变动",
-                        )
-                        if (availableYears.size > 1) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                availableYears.forEach { year ->
-                                    FilterChip(
-                                        selected = selectedYear == year,
-                                        onClick = {
-                                            selectedYear = year
-                                            if (selectedDate?.year != year) {
-                                                selectedDateKey = null
-                                            }
-                                        },
-                                        label = { Text(year.toString(), maxLines = 1) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Accent.copy(alpha = 0.16f),
-                                            selectedLabelColor = Accent,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                        Surface(
-                            color = WhiteGlass.copy(alpha = 0.92f),
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, BorderSoft),
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                ContributionHeatmap(
-                                    year = selectedYear,
-                                    activityByDate = activityByDate,
-                                    peakCount = selectedYearActivity.values.maxOrNull() ?: 0,
-                                    selectedDate = selectedDate,
-                                    onSelectDate = { date ->
-                                        selectedDateKey = date.toString()
-                                    },
-                                )
-                                Text(
-                                    text = if (selectedDate != null) {
-                                        "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · ${selectedDateNotes.size} 条记录有变动"
-                                    } else {
-                                        "点某一天，回看当天真正有变化的记录。"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                )
-                                if (selectedDate != null) {
-                                    if (selectedDateNotes.isEmpty()) {
-                                        Text(
-                                            text = "这一天没有记录变动。",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSoft,
-                                        )
-                                    } else {
-                                        selectedDateNotes.take(4).forEach { note ->
-                                            GraphActivityNoteCard(
-                                                note = note,
-                                                onOpenNote = onOpenNote,
-                                            )
-                                        }
-                                        if (selectedDateNotes.size > 4) {
-                                            Text(
-                                                text = "还有 ${selectedDateNotes.size - 4} 条，先打开其中一条继续看。",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSoft,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    RecordsHeatmapPanel(
+                        notes = notes,
+                        graphNodes = graphOverview.nodes,
+                        onOpenNote = onOpenNote,
+                    )
                 }
 
                 item {
-                    PanelCard {
-                        SectionHeader(
-                            title = "信息图谱",
-                            headline = graphOverview.headline,
+                    KnowledgeGraphPanel(overview = graphOverview)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordsHeatmapPanel(
+    notes: List<NoteEntity>,
+    graphNodes: List<GraphNodeUi>,
+    onOpenNote: (Long) -> Unit,
+) {
+    val zoneId = remember { ZoneId.systemDefault() }
+    val today = remember(zoneId) { LocalDate.now(zoneId) }
+    val activeNotes = remember(notes) { notes.filterNot { it.isArchived } }
+    val activityByDate = remember(activeNotes, zoneId) {
+        activeNotes
+            .groupingBy { note ->
+                Instant.ofEpochMilli(note.updatedAt.coerceAtLeast(note.createdAt))
+                    .atZone(zoneId)
+                    .toLocalDate()
+            }
+            .eachCount()
+            .toSortedMap()
+    }
+    val availableYears = remember(activityByDate, today) {
+        (activityByDate.keys.map { it.year } + today.year).distinct().sortedDescending()
+    }
+    val defaultSelectedYear = remember(availableYears, today) {
+        if (today.year in availableYears) today.year else availableYears.firstOrNull() ?: today.year
+    }
+    var selectedYear by rememberSaveable { mutableIntStateOf(defaultSelectedYear) }
+    var selectedDateKey by rememberSaveable { mutableStateOf<String?>(today.toString()) }
+    val selectedDate = selectedDateKey?.let(LocalDate::parse)
+    val selectedDateNotes = remember(activeNotes, selectedDate, zoneId) {
+        if (selectedDate == null) {
+            emptyList()
+        } else {
+            activeNotes
+                .filter { note ->
+                    Instant.ofEpochMilli(note.updatedAt.coerceAtLeast(note.createdAt))
+                        .atZone(zoneId)
+                        .toLocalDate() == selectedDate
+                }
+                .sortedByDescending { it.updatedAt }
+        }
+    }
+    val activatedNodes = remember(selectedDateNotes, graphNodes) {
+        buildActivatedGraphNodes(
+            notes = selectedDateNotes,
+            graphNodes = graphNodes,
+        )
+    }
+    LaunchedEffect(availableYears, defaultSelectedYear) {
+        if (selectedYear !in availableYears) {
+            selectedYear = defaultSelectedYear
+        }
+    }
+    LaunchedEffect(selectedYear, selectedDateKey, today) {
+        val date = selectedDateKey?.let(LocalDate::parse)
+        if (date != null && date.year != selectedYear) {
+            selectedDateKey = null
+        } else if (selectedYear == today.year && date == null) {
+            selectedDateKey = today.toString()
+        }
+    }
+    val selectedYearActivity = remember(activityByDate, selectedYear) {
+        activityByDate.filterKeys { it.year == selectedYear }
+    }
+
+    PanelCard {
+        SectionHeader(
+            title = "记录热度",
+            headline = "${selectedYear} · ${selectedYearActivity.values.sum()} 次变动",
+        )
+        if (availableYears.size > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                availableYears.forEach { year ->
+                    FilterChip(
+                        selected = selectedYear == year,
+                        onClick = {
+                            selectedYear = year
+                            if (selectedDate?.year != year) {
+                                selectedDateKey = null
+                            }
+                        },
+                        label = { Text(year.toString(), maxLines = 1) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Accent.copy(alpha = 0.16f),
+                            selectedLabelColor = Accent,
+                        ),
+                    )
+                }
+            }
+        }
+        Surface(
+            color = WhiteGlass.copy(alpha = 0.92f),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, BorderSoft),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ContributionHeatmap(
+                    year = selectedYear,
+                    activityByDate = activityByDate,
+                    peakCount = selectedYearActivity.values.maxOrNull() ?: 0,
+                    selectedDate = selectedDate,
+                    onSelectDate = { date ->
+                        selectedDateKey = date.toString()
+                    },
+                )
+                Text(
+                    text = if (selectedDate != null) {
+                        "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · ${selectedDateNotes.size} 条记录有变动"
+                    } else {
+                        "点某一天，看看它把哪些主题点亮了。"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+                if (selectedDate != null) {
+                    if (activatedNodes.isEmpty()) {
+                        Text(
+                            text = "这一天有记录变化，但还没有点亮稳定主题。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
                         )
-                        graphOverview.summaryLine.takeIf { it.isNotBlank() }?.let { line ->
+                    } else {
+                        ActivatedThreadStrip(nodes = activatedNodes)
+                    }
+                }
+                if (selectedDate != null) {
+                    if (selectedDateNotes.isEmpty()) {
+                        Text(
+                            text = "这一天没有记录变动。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
+                    } else {
+                        selectedDateNotes.take(4).forEach { note ->
+                            GraphActivityNoteCard(
+                                note = note,
+                                onOpenNote = onOpenNote,
+                            )
+                        }
+                        if (selectedDateNotes.size > 4) {
                             Text(
-                                text = line,
+                                text = "还有 ${selectedDateNotes.size - 4} 条，先打开其中一条继续看。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSoft,
                             )
                         }
-                        if (graphOverview.nodes.isEmpty()) {
-                            Text(
-                                text = "先让记录继续积累，这里会慢慢长出你的信息图谱。",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
-                            )
-                        } else {
-                            KnowledgeGraphCanvas(
-                                overview = graphOverview,
-                                selectedNodeId = selectedGraphNode?.id,
-                                onSelectNode = { selectedNodeId = it },
-                            )
-                            selectedGraphNode?.let { node ->
-                                GraphFocusCard(
-                                    node = node,
-                                    relatedNode = relatedGraphNode,
-                                    relatedReasonLine = relatedGraphEdge?.reasonLine.orEmpty(),
-                                    onOpenThread = onOpenThread,
-                                )
-                            }
-                            if (graphOverview.edges.isEmpty()) {
-                                Text(
-                                    text = "这些主题已经出现，但彼此关系还不够清楚，先继续记录，关系会慢慢长出来。",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
-                                )
-                            }
-                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeGraphPanel(
+    overview: GraphOverviewUi,
+) {
+    var selectedNodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(overview.nodes) {
+        val visibleIds = overview.nodes.map { it.id }.toSet()
+        if (selectedNodeId !in visibleIds) {
+            selectedNodeId = overview.nodes.firstOrNull()?.id
+        }
+    }
+    val selectedGraphNode = remember(overview, selectedNodeId) {
+        overview.nodes.firstOrNull { it.id == selectedNodeId } ?: overview.nodes.firstOrNull()
+    }
+    val relatedGraphNodes = remember(overview, selectedGraphNode) {
+        selectedGraphNode?.let { node ->
+            relatedNodesFor(overview, node.id)
+        }.orEmpty()
+    }
+
+    PanelCard {
+        SectionHeader(
+            title = "信息图谱",
+            headline = overview.headline,
+        )
+        Text(
+            text = overview.verdictLine,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMain,
+        )
+        if (overview.nodes.isEmpty()) {
+            Text(
+                text = "先让记录继续积累，这里会慢慢长出你的信息图谱。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSoft,
+            )
+        } else {
+            KnowledgeGraphCanvas(
+                overview = overview,
+                selectedNodeId = selectedGraphNode?.id,
+                onSelectNode = { selectedNodeId = it },
+            )
+            selectedGraphNode?.let { node ->
+                GraphInfoCard(
+                    node = node,
+                    relatedNodes = relatedGraphNodes,
+                )
+            }
+            if (overview.edges.isEmpty()) {
+                Text(
+                    text = "这些主题已经出现，但彼此关系还不够清楚，先继续记录，关系会慢慢长出来。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
             }
         }
     }
@@ -470,6 +572,45 @@ private fun GraphActivityNoteCard(
     }
 }
 
+@Composable
+private fun ActivatedThreadStrip(
+    nodes: List<GraphNodeUi>,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        nodes.forEach { node ->
+            Surface(
+                color = node.accent.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, node.accent.copy(alpha = 0.3f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(node.accent),
+                    )
+                    Text(
+                        text = node.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextMain,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @androidx.compose.runtime.Composable
 private fun KnowledgeGraphCanvas(
     overview: GraphOverviewUi,
@@ -482,33 +623,42 @@ private fun KnowledgeGraphCanvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(340.dp)
+            .testTag(KnowledgeGraphCanvasTag)
             .background(Color.Transparent),
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val layouts = buildGraphNodeLayouts(
-            nodes = nodes,
-            widthPx = widthPx,
-            heightPx = heightPx,
-        )
-        val positionById = layouts.associate { it.node.id to it.position }
+        val layouts = remember(nodes, overview.edges, overview.hubNodeIds, overview.isolatedNodeIds, widthPx, heightPx) {
+            buildGraphNodeLayouts(
+                nodes = nodes,
+                edges = overview.edges,
+                hubNodeIds = overview.hubNodeIds,
+                isolatedNodeIds = overview.isolatedNodeIds,
+                widthPx = widthPx,
+                heightPx = heightPx,
+            )
+        }
+        val positionById = remember(layouts) { layouts.associate { it.node.id to it.position } }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
             overview.edges.forEach { edge ->
                 val from = positionById[edge.fromId] ?: return@forEach
                 val to = positionById[edge.toId] ?: return@forEach
-                val highlighted = selectedNodeId != null && (edge.fromId == selectedNodeId || edge.toId == selectedNodeId)
-                val edgeColor = if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft.copy(alpha = 0.72f)
+                val selected = selectedNodeId != null && (edge.fromId == selectedNodeId || edge.toId == selectedNodeId)
+                val edgeColor = when {
+                    selected -> AccentBlue.copy(alpha = 0.4f)
+                    else -> BorderSoft.copy(alpha = 0.72f)
+                }
                 drawLine(
                     color = edgeColor,
                     start = androidx.compose.ui.geometry.Offset(from.first, from.second),
                     end = androidx.compose.ui.geometry.Offset(to.first, to.second),
-                    strokeWidth = if (highlighted) 4f else (1.6f + edge.weight.coerceAtMost(6) * 0.35f),
+                    strokeWidth = if (selected) 4f else (1.6f + edge.weight.coerceAtMost(6) * 0.35f),
                 )
             }
         }
 
-        layouts.forEach { layout ->
+        layouts.forEachIndexed { index, layout ->
             GraphNodeBubble(
                 node = layout.node,
                 modifier = Modifier.offset {
@@ -521,6 +671,7 @@ private fun KnowledgeGraphCanvas(
                 selected = selectedNodeId == layout.node.id,
                 onClick = { onSelectNode(layout.node.id) },
                 width = graphNodeWidth(layout.node, selectedNodeId == layout.node.id),
+                traversalOrder = index.toFloat(),
             )
         }
     }
@@ -537,12 +688,42 @@ private fun GraphNodeBubble(
     selected: Boolean,
     onClick: () -> Unit,
     width: androidx.compose.ui.unit.Dp,
+    traversalOrder: Float,
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        color = if (selected) node.accent.copy(alpha = 0.14f) else WhiteGlass.copy(alpha = 0.92f),
+        modifier = modifier
+            .testTag(graphNodeTestTag(node.id))
+            .semantics(mergeDescendants = true) {
+                contentDescription = "主题 ${node.label}"
+                stateDescription = buildString {
+                    append(node.structureStatus.label)
+                    if (selected) {
+                        append("，已选中")
+                    }
+                }
+                this.selected = selected
+                role = Role.Button
+                traversalIndex = traversalOrder
+            }
+            .clickable(onClick = onClick),
+        color = when {
+            selected -> node.accent.copy(alpha = 0.16f)
+            node.structureStatus == GraphStructureStatus.HUB -> WhiteGlass.copy(alpha = 0.96f)
+            node.structureStatus == GraphStructureStatus.ISOLATED -> WhiteGlass.copy(alpha = 0.72f)
+            else -> WhiteGlass.copy(alpha = 0.92f)
+        },
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, node.accent.copy(alpha = if (selected) 0.72f else 0.35f)),
+        border = BorderStroke(
+            if (selected) 1.5.dp else 1.dp,
+            node.accent.copy(
+                alpha = when {
+                    selected -> 0.72f
+                    node.structureStatus == GraphStructureStatus.HUB -> 0.46f
+                    node.structureStatus == GraphStructureStatus.ISOLATED -> 0.22f
+                    else -> 0.35f
+                },
+            ),
+        ),
     ) {
         Row(
             modifier = Modifier
@@ -569,83 +750,124 @@ private fun GraphNodeBubble(
 }
 
 @Composable
-private fun GraphFocusCard(
+private fun GraphInfoCard(
     node: GraphNodeUi,
-    relatedNode: GraphNodeUi?,
-    relatedReasonLine: String,
-    onOpenThread: (String) -> Unit,
+    relatedNodes: List<GraphNodeUi>,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenThread(node.threadKey) },
+            .testTag(KnowledgeGraphInfoPanelTag)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "主题信息 ${node.label}"
+                stateDescription = "结构状态 ${node.structureStatus.label}"
+            },
         color = WhiteGlass.copy(alpha = 0.78f),
         shape = CardShape,
         border = BorderStroke(1.dp, BorderSoft),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Text(
+                text = "主题信息",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSoft,
+            )
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = TextMain,
             )
-            Text(
-                text = node.summaryLine,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextMain,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            FocusLine(label = "一句概述", value = node.summaryLine)
+            FocusLine(
+                label = "相关主题",
+                value = relatedNodes
+                    .map { it.label }
+                    .distinct()
+                    .take(3)
+                    .joinToString(" / ")
+                    .ifBlank { "这条主题暂时还比较独立。" },
             )
-            Text(
-                text = relatedNode?.let {
-                    if (relatedReasonLine.isBlank()) {
-                        "最相关：${it.label}"
-                    } else {
-                        "最相关：${it.label} · ${relatedReasonLine}"
-                    }
-                } ?: "这条主题目前还比较独立。",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "下一步：${node.gapLine}",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "打开这条主题",
-                style = MaterialTheme.typography.labelLarge,
-                color = AccentBlue,
-            )
+            FocusLine(label = "结构状态", value = graphStructureLine(node))
         }
     }
 }
 
-private fun buildGraphOverview(
+@Composable
+private fun FocusLine(
+    label: String,
+    value: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSoft,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMain,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun graphStructureLine(node: GraphNodeUi): String =
+    buildString {
+        append(node.structureStatus.label)
+        append(" · ")
+        append(
+            when (node.maturity) {
+                DirectionWikiGraphMaturity.STABLE -> "结构稳定"
+                DirectionWikiGraphMaturity.STRENGTHENING -> "关系在变清楚"
+                DirectionWikiGraphMaturity.FORMING -> "还在慢慢成形"
+            },
+        )
+    }
+
+private fun relatedNodesFor(
+    overview: GraphOverviewUi,
+    nodeId: String,
+): List<GraphNodeUi> {
+    if (overview.edges.isEmpty()) return emptyList()
+    val nodeById = overview.nodes.associateBy { it.id }
+    return overview.edges
+        .filter { it.fromId == nodeId || it.toId == nodeId }
+        .sortedByDescending { it.weight }
+        .mapNotNull { edge ->
+            val relatedId = if (edge.fromId == nodeId) edge.toId else edge.fromId
+            nodeById[relatedId]
+        }
+        .distinctBy { it.id }
+}
+
+internal fun selectVisibleGraph(
     snapshot: DirectionWikiSnapshot,
-    notes: List<NoteEntity>,
-): GraphOverviewUi {
-    val summariesByThread = snapshot.directions
+): SelectedGraphData {
     val presentation = snapshot.graph.presentation
-    val visibleNodes = when {
-        presentation.nodes.isNotEmpty() -> presentation.nodes
+    val selectedNodes = when {
+        presentation.nodes.isNotEmpty() -> presentation.nodes.map { node ->
+            SelectedGraphNode(
+                threadKey = node.threadKey,
+                label = node.label,
+                summaryLine = node.summaryLine,
+                densityScore = node.densityScore,
+                maturity = node.maturity,
+                noteCount = node.noteCount,
+            )
+        }
         snapshot.graph.nodes.isNotEmpty() -> snapshot.graph.nodes
             .sortedWith(compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphNode> { it.densityScore }.thenByDescending { it.recencyScore })
             .take(6)
             .map { node ->
-                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode(
+                SelectedGraphNode(
                     threadKey = node.threadKey,
                     label = node.label,
                     summaryLine = node.summaryLine,
-                    gapLine = node.gapLine,
-                    relationCount = 0,
                     densityScore = node.densityScore,
                     maturity = node.maturity,
                     noteCount = node.noteCount,
@@ -655,37 +877,45 @@ private fun buildGraphOverview(
             .sortedByDescending { it.updatedAt }
             .take(6)
             .map { direction ->
-                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode(
+                SelectedGraphNode(
                     threadKey = direction.threadKey,
                     label = compactDirectionLabel(direction.title),
                     summaryLine = graphSummaryLine(direction),
-                    gapLine = graphGapLine(direction),
                     densityScore = 0.5,
                     maturity = direction.stage.toGraphMaturity(),
                     noteCount = 0,
                 )
             }
     }
-    if (visibleNodes.isEmpty()) {
-        return GraphOverviewUi(
+    if (selectedNodes.isEmpty()) {
+        return SelectedGraphData(
             headline = "还没有足够结构",
             summaryLine = "",
-            totalNodeCount = 0,
-            visibleNodeCount = 0,
+            hubNodeIds = emptySet(),
+            isolatedNodeIds = emptySet(),
             nodes = emptyList(),
             edges = emptyList(),
         )
     }
-    val visibleIds = visibleNodes.map { it.threadKey }.toSet()
-    val visibleEdges = when {
+
+    val visibleIds = selectedNodes.map { it.threadKey }.toSet()
+    val selectedEdges = when {
         presentation.edges.isNotEmpty() -> presentation.edges
             .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+            .map { edge ->
+                SelectedGraphEdge(
+                    fromThreadKey = edge.fromThreadKey,
+                    toThreadKey = edge.toThreadKey,
+                    strength = edge.strength,
+                    reasonLine = edge.reasonLine,
+                )
+            }
         else -> snapshot.graph.edges
             .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
             .sortedWith(compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> { it.strength }.thenByDescending { it.confidence })
             .take(4)
             .map { edge ->
-                com.mindflow.app.data.wiki.DirectionWikiGraphPresentationEdge(
+                SelectedGraphEdge(
                     fromThreadKey = edge.fromThreadKey,
                     toThreadKey = edge.toThreadKey,
                     strength = edge.strength,
@@ -693,31 +923,125 @@ private fun buildGraphOverview(
                 )
             }
     }
+
+    return SelectedGraphData(
+        headline = presentation.headline.ifBlank {
+            buildString {
+                append("${selectedNodes.size} 个主题")
+                if (selectedEdges.isNotEmpty()) append(" · ${selectedEdges.size} 条关系")
+            }
+        },
+        summaryLine = presentation.summaryLine.ifBlank { snapshot.graph.overview.summaryLine },
+        hubNodeIds = snapshot.graph.overview.hubThreadKeys.filter { it in visibleIds }.toSet(),
+        isolatedNodeIds = snapshot.graph.overview.isolatedThreadKeys.filter { it in visibleIds }.toSet(),
+        nodes = selectedNodes,
+        edges = selectedEdges,
+    )
+}
+
+internal fun projectPureGraphInfo(
+    snapshot: DirectionWikiSnapshot,
+    selection: SelectedGraphData,
+): GraphProjection {
+    if (selection.nodes.isEmpty()) {
+        return GraphProjection(
+            headline = selection.headline,
+            summaryLine = selection.summaryLine,
+            hubNodeIds = emptySet(),
+            isolatedNodeIds = emptySet(),
+            nodes = emptyList(),
+            edges = emptyList(),
+        )
+    }
+
     val relationCountByThread = buildMap {
-        visibleEdges.forEach { edge ->
+        selection.edges.forEach { edge ->
             put(edge.fromThreadKey, getOrDefault(edge.fromThreadKey, 0) + 1)
             put(edge.toThreadKey, getOrDefault(edge.toThreadKey, 0) + 1)
         }
     }
-    val nodes = visibleNodes
+    val projectionNodes = selection.nodes
         .map { node ->
-            val direction = summariesByThread[node.threadKey]
-            GraphNodeUi(
-                id = node.threadKey,
-                label = node.label,
-                summaryLine = node.summaryLine.ifBlank { direction?.let(::graphSummaryLine).orEmpty() }.ifBlank { "这条主题正在继续长。" },
-                gapLine = node.gapLine.ifBlank { direction?.let(::graphGapLine).orEmpty() }.ifBlank { "继续补一条更硬的新材料。" },
+            val direction = snapshot.directions[node.threadKey]
+            GraphProjectionNode(
                 threadKey = node.threadKey,
-                accent = direction?.let(::graphDirectionAccent)
-                    ?: graphNodeAccent(node.label, node.summaryLine, node.gapLine),
+                label = node.label,
+                summaryLine = node.summaryLine
+                    .ifBlank { direction?.let(::graphSummaryLine).orEmpty() }
+                    .ifBlank { "这条主题正在继续长。" },
                 densityScore = node.densityScore,
                 maturity = node.maturity,
                 noteCount = node.noteCount,
                 relationCount = relationCountByThread[node.threadKey] ?: 0,
+            )
+        }
+        .sortedWith(
+            compareByDescending<GraphProjectionNode> { it.relationCount }
+                .thenByDescending { it.densityScore }
+                .thenBy { it.label.length },
+        )
+    val nodeIds = projectionNodes.map { it.threadKey }.toSet()
+    val projectionEdges = selection.edges
+        .filter { it.fromThreadKey in nodeIds && it.toThreadKey in nodeIds }
+        .map { edge ->
+            GraphProjectionEdge(
+                fromThreadKey = edge.fromThreadKey,
+                toThreadKey = edge.toThreadKey,
+                strength = edge.strength.coerceIn(1, 5),
+                reasonLine = edge.reasonLine,
+            )
+        }
+
+    return GraphProjection(
+        headline = selection.headline,
+        summaryLine = selection.summaryLine,
+        hubNodeIds = selection.hubNodeIds.filter { it in nodeIds }.toSet(),
+        isolatedNodeIds = selection.isolatedNodeIds.filter { it in nodeIds }.toSet(),
+        nodes = projectionNodes,
+        edges = projectionEdges,
+    )
+}
+
+internal fun buildGraphVisualState(
+    directions: Map<String, DirectionWikiDirectionSummary>,
+    projection: GraphProjection,
+): GraphOverviewUi {
+    if (projection.nodes.isEmpty()) {
+        return GraphOverviewUi(
+            headline = "还没有足够结构",
+            verdictLine = "",
+            hubNodeIds = emptySet(),
+            isolatedNodeIds = emptySet(),
+            nodes = emptyList(),
+            edges = emptyList(),
+        )
+    }
+
+    val nodes = projection.nodes
+        .map { node ->
+            val direction = directions[node.threadKey]
+            val structureStatus = graphStructureStatus(
+                threadKey = node.threadKey,
+                relationCount = node.relationCount,
+                hubNodeIds = projection.hubNodeIds,
+                isolatedNodeIds = projection.isolatedNodeIds,
+            )
+            GraphNodeUi(
+                id = node.threadKey,
+                label = node.label,
+                summaryLine = node.summaryLine,
+                threadKey = node.threadKey,
+                structureStatus = structureStatus,
+                accent = direction?.let(::graphDirectionAccent)
+                    ?: graphNodeAccent(node.label, node.summaryLine),
+                densityScore = node.densityScore,
+                maturity = node.maturity,
+                noteCount = node.noteCount,
+                relationCount = node.relationCount,
                 priority = graphNodePriority(
                     densityScore = node.densityScore,
                     maturity = node.maturity,
-                    relationCount = relationCountByThread[node.threadKey] ?: 0,
+                    relationCount = node.relationCount,
                 ),
             )
         }
@@ -727,29 +1051,113 @@ private fun buildGraphOverview(
                 .thenByDescending { it.densityScore }
                 .thenBy { it.label.length },
         )
-    val edges = visibleEdges
-        .filter { it.fromThreadKey in nodes.map { node -> node.id }.toSet() && it.toThreadKey in nodes.map { node -> node.id }.toSet() }
+    val nodeIds = nodes.map { it.id }.toSet()
+    val edges = projection.edges
+        .filter { it.fromThreadKey in nodeIds && it.toThreadKey in nodeIds }
         .map { edge ->
             GraphEdgeUi(
                 fromId = edge.fromThreadKey,
                 toId = edge.toThreadKey,
-                weight = edge.strength.coerceIn(1, 5),
+                weight = edge.strength,
                 reasonLine = edge.reasonLine,
             )
         }
+    val verdictLine = buildGraphVerdict(
+        nodes = nodes,
+        edges = edges,
+        hubNodeIds = projection.hubNodeIds,
+        isolatedNodeIds = projection.isolatedNodeIds,
+    ).ifBlank {
+        projection.summaryLine.ifBlank { "几条主题正在慢慢长出结构。" }
+    }
+
     return GraphOverviewUi(
-        headline = presentation.headline.ifBlank {
-            buildString {
-                append("${nodes.size} 个主题")
-                if (edges.isNotEmpty()) append(" · ${edges.size} 条关系")
-            }
-        },
-        summaryLine = presentation.summaryLine.ifBlank { snapshot.graph.overview.summaryLine },
-        totalNodeCount = snapshot.graph.nodes.size.takeIf { it > 0 } ?: snapshot.directions.size,
-        visibleNodeCount = nodes.size,
+        headline = projection.headline,
+        verdictLine = verdictLine,
+        hubNodeIds = projection.hubNodeIds,
+        isolatedNodeIds = projection.isolatedNodeIds,
         nodes = nodes,
         edges = edges,
     )
+}
+
+private fun graphStructureStatus(
+    threadKey: String,
+    relationCount: Int,
+    hubNodeIds: Set<String>,
+    isolatedNodeIds: Set<String>,
+): GraphStructureStatus =
+    when {
+        threadKey in hubNodeIds -> GraphStructureStatus.HUB
+        threadKey in isolatedNodeIds -> GraphStructureStatus.ISOLATED
+        relationCount > 0 -> GraphStructureStatus.LINKED
+        else -> GraphStructureStatus.EMERGING
+    }
+
+internal fun buildActivatedGraphNodes(
+    notes: List<NoteEntity>,
+    graphNodes: List<GraphNodeUi>,
+): List<GraphNodeUi> {
+    if (notes.isEmpty() || graphNodes.isEmpty()) return emptyList()
+    val nodeById = graphNodes.associateBy { it.id }
+    val counts = linkedMapOf<String, Int>()
+    notes.forEach { note ->
+        note.folderKey
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { key ->
+                counts["folder:$key"] = counts.getOrDefault("folder:$key", 0) + 1
+            }
+        note.tags
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { tag ->
+                val threadKey = "tag:$tag"
+                counts[threadKey] = counts.getOrDefault(threadKey, 0) + 1
+            }
+    }
+    val directMatches = counts.entries
+        .mapNotNull { (threadKey, count) ->
+            nodeById[threadKey]?.let { node -> node to count }
+        }
+        .sortedWith(compareByDescending<Pair<GraphNodeUi, Int>> { it.second }.thenByDescending { it.first.relationCount })
+        .map { it.first }
+        .distinctBy { it.id }
+    return directMatches.take(3)
+}
+
+internal fun buildGraphVerdict(
+    nodes: List<GraphNodeUi>,
+    edges: List<GraphEdgeUi>,
+    hubNodeIds: Set<String>,
+    isolatedNodeIds: Set<String>,
+): String {
+    if (nodes.isEmpty()) return ""
+    val nodeById = nodes.associateBy { it.id }
+    val hubLabel = hubNodeIds.firstNotNullOfOrNull { nodeById[it]?.label }
+    val strongestEdge = edges.maxByOrNull { it.weight }
+    val connectedLine = strongestEdge?.let { edge ->
+        val left = nodeById[edge.fromId]?.label.orEmpty()
+        val right = nodeById[edge.toId]?.label.orEmpty()
+        if (left.isBlank() || right.isBlank()) null else "$left 和 $right 已经连起来了"
+    }
+    val isolatedLabel = isolatedNodeIds.firstNotNullOfOrNull { nodeById[it]?.label }
+
+    return listOfNotNull(
+        hubLabel?.let { "$it 正在成为中心" },
+        connectedLine,
+        isolatedLabel?.let { "$it 还比较孤" },
+    ).joinToString("，").ifBlank {
+        edges.firstOrNull()?.let { edge ->
+            val left = nodeById[edge.fromId]?.label.orEmpty()
+            val right = nodeById[edge.toId]?.label.orEmpty()
+            if (left.isNotBlank() && right.isNotBlank()) {
+                "$left 和 $right 正在慢慢连起来。"
+            } else {
+                "几条主题正在慢慢长出结构。"
+            }
+        } ?: "几条主题正在慢慢长出结构。"
+    } + "。"
 }
 
 private fun compactDirectionLabel(raw: String): String {
@@ -792,13 +1200,6 @@ private fun graphSummaryLine(direction: DirectionWikiDirectionSummary): String =
         .ifBlank { direction.healthLine }
         .ifBlank { "这条主题还在慢慢成形。" }
 
-private fun graphGapLine(direction: DirectionWikiDirectionSummary): String =
-    direction.openQuestions.firstOrNull()
-        .orEmpty()
-        .ifBlank { direction.maintenanceFocusLine }
-        .ifBlank { direction.maintenanceTargetLine }
-        .ifBlank { "再补一条新记录，让这条主题继续长。" }
-
 private fun DirectionStage.toGraphMaturity(): DirectionWikiGraphMaturity =
     when (this) {
         DirectionStage.FORMING -> DirectionWikiGraphMaturity.FORMING
@@ -831,9 +1232,8 @@ private fun graphDirectionAccent(
 private fun graphNodeAccent(
     label: String,
     summaryLine: String,
-    gapLine: String,
 ): Color = classifyGraphBucket(
-    listOf(label, summaryLine, gapLine),
+    listOf(label, summaryLine),
 ).accent
 
 private fun graphNodePriority(
@@ -867,6 +1267,9 @@ private fun graphNodeWidth(
 
 private fun buildGraphNodeLayouts(
     nodes: List<GraphNodeUi>,
+    edges: List<GraphEdgeUi>,
+    hubNodeIds: Set<String>,
+    isolatedNodeIds: Set<String>,
     widthPx: Float,
     heightPx: Float,
 ): List<GraphNodeLayout> {
@@ -877,34 +1280,91 @@ private fun buildGraphNodeLayouts(
             .thenByDescending { it.noteCount }
             .thenBy { it.label },
     )
+    val degreeByNode = buildMap {
+        edges.forEach { edge ->
+            put(edge.fromId, getOrDefault(edge.fromId, 0) + 1)
+            put(edge.toId, getOrDefault(edge.toId, 0) + 1)
+        }
+    }
     val centerX = widthPx / 2f
     val centerY = heightPx / 2f
     if (ordered.size == 1) {
         return listOf(GraphNodeLayout(ordered.first(), centerX to centerY))
     }
-    if (ordered.size == 2) {
-        val spread = min(widthPx, heightPx) * 0.22f
-        return listOf(
-            GraphNodeLayout(ordered[0], (centerX - spread) to centerY),
-            GraphNodeLayout(ordered[1], (centerX + spread) to centerY),
-        )
+    val primaryHub = ordered
+        .firstOrNull { it.id in hubNodeIds }
+        ?: ordered.firstOrNull { (degreeByNode[it.id] ?: 0) > 0 }
+        ?: ordered.first()
+    val strongestEdge = edges.maxByOrNull { it.weight }
+    val secondaryHub = ordered.firstOrNull { node ->
+        node.id != primaryHub.id && (
+            node.id in hubNodeIds ||
+                node.id == strongestEdge?.fromId ||
+                node.id == strongestEdge?.toId
+            )
     }
 
-    val layouts = mutableListOf<GraphNodeLayout>()
-    val centerNode = ordered.first()
-    layouts += GraphNodeLayout(centerNode, centerX to centerY)
-    val outerNodes = ordered.drop(1)
-    val baseRadius = min(widthPx, heightPx) * 0.34f
-    outerNodes.forEachIndexed { index, node ->
-        val angle = (-PI / 2.0) + (2 * PI * index / outerNodes.size.coerceAtLeast(1))
-        val inwardBias = (node.priority.coerceAtMost(5) * 8f) + (node.relationCount.coerceAtMost(3) * 10f)
-        val radiusX = baseRadius - inwardBias
-        val radiusY = (baseRadius * 0.78f) - inwardBias
-        val x = clamp(centerX + cos(angle).toFloat() * radiusX, 48f, widthPx - 48f)
-        val y = clamp(centerY + sin(angle).toFloat() * radiusY, 42f, heightPx - 42f)
-        layouts += GraphNodeLayout(node, x to y)
+    val positions = linkedMapOf<String, Pair<Float, Float>>()
+    val centerGap = min(widthPx, heightPx) * 0.16f
+    val primaryPosition = if (secondaryHub != null) (centerX - centerGap) to centerY else centerX to centerY
+    positions[primaryHub.id] = primaryPosition
+    secondaryHub?.let {
+        positions[it.id] = (centerX + centerGap) to (centerY - 8f)
     }
-    return layouts
+
+    val isolated = ordered.filter { it.id in isolatedNodeIds && it.id !in positions.keys }
+    val connected = ordered.filter { it.id !in positions.keys && it.id !in isolated.map { item -> item.id }.toSet() }
+
+    val leftOffsets = listOf(
+        (-138f to -84f),
+        (-132f to 82f),
+    )
+    val rightOffsets = listOf(
+        (138f to -74f),
+        (132f to 88f),
+    )
+    val centerOffsets = listOf(
+        (0f to -128f),
+        (0f to 128f),
+    )
+
+    fun anchorFor(node: GraphNodeUi): Pair<Float, Float> {
+        if (secondaryHub == null) return primaryPosition
+        val leftStrength = edges.firstOrNull {
+            (it.fromId == primaryHub.id && it.toId == node.id) || (it.toId == primaryHub.id && it.fromId == node.id)
+        }?.weight ?: 0
+        val rightStrength = edges.firstOrNull {
+            (it.fromId == secondaryHub.id && it.toId == node.id) || (it.toId == secondaryHub.id && it.fromId == node.id)
+        }?.weight ?: 0
+        return if (leftStrength >= rightStrength) primaryPosition else positions[secondaryHub.id] ?: primaryPosition
+    }
+
+    connected.forEachIndexed { index, node ->
+        val anchor = anchorFor(node)
+        val offset = when {
+            secondaryHub == null -> centerOffsets.getOrElse(index % centerOffsets.size) { 0f to 0f }
+            anchor == primaryPosition -> leftOffsets.getOrElse(index % leftOffsets.size) { -126f to 0f }
+            else -> rightOffsets.getOrElse(index % rightOffsets.size) { 126f to 0f }
+        }
+        positions[node.id] = clamp(anchor.first + offset.first, 54f, widthPx - 54f) to
+            clamp(anchor.second + offset.second, 48f, heightPx - 48f)
+    }
+
+    val isolatedOffsets = listOf(
+        (0f to -144f),
+        (0f to 144f),
+        (-156f to 0f),
+        (156f to 0f),
+    )
+    isolated.forEachIndexed { index, node ->
+        val offset = isolatedOffsets.getOrElse(index % isolatedOffsets.size) { 0f to 0f }
+        positions[node.id] = clamp(centerX + offset.first, 54f, widthPx - 54f) to
+            clamp(centerY + offset.second, 48f, heightPx - 48f)
+    }
+
+    return ordered.map { node ->
+        GraphNodeLayout(node, positions[node.id] ?: (centerX to centerY))
+    }
 }
 
 @Composable
@@ -962,6 +1422,7 @@ private fun ContributionHeatmap(
                 week.forEach { date ->
                     val visible = date.year == year
                     ContributionCell(
+                        date = date,
                         visible = visible,
                         count = if (visible) activityByDate[date] ?: 0 else 0,
                         peakCount = peakCount,
@@ -982,6 +1443,7 @@ private fun clamp(
 
 @Composable
 private fun ContributionCell(
+    date: LocalDate,
     visible: Boolean,
     count: Int,
     peakCount: Int,
@@ -993,6 +1455,16 @@ private fun ContributionCell(
     Box(
         modifier = Modifier
             .size(16.dp)
+            .testTag(heatmapDayTestTag(date))
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${date.monthValue}月${date.dayOfMonth}日"
+                stateDescription = when {
+                    !visible -> "不可用"
+                    selected -> "已选中，$count 条记录"
+                    count > 0 -> "$count 条记录"
+                    else -> "无记录"
+                }
+            }
             .clip(RoundedCornerShape(4.dp))
             .then(
                 if (tone == null) {
