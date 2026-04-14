@@ -115,6 +115,19 @@ internal data class GraphEdgeUi(
     val reasonLine: String = "",
 )
 
+internal enum class GraphEdgeEmphasis {
+    BACKBONE,
+    FOCUS,
+}
+
+internal data class GraphDisplayEdgeUi(
+    val fromId: String,
+    val toId: String,
+    val weight: Int,
+    val reasonLine: String = "",
+    val emphasis: GraphEdgeEmphasis,
+)
+
 internal data class GraphOverviewUi(
     val headline: String,
     val verdictLine: String,
@@ -619,6 +632,19 @@ private fun KnowledgeGraphCanvas(
 ) {
     val nodes = overview.nodes
     val density = LocalDensity.current
+    val backboneEdges = remember(nodes, overview.edges) {
+        buildBackboneGraphEdges(
+            nodes = nodes,
+            edges = overview.edges,
+        )
+    }
+    val displayEdges = remember(nodes, overview.edges, selectedNodeId) {
+        buildDisplayedGraphEdges(
+            nodes = nodes,
+            edges = overview.edges,
+            selectedNodeId = selectedNodeId,
+        )
+    }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -628,10 +654,10 @@ private fun KnowledgeGraphCanvas(
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val layouts = remember(nodes, overview.edges, overview.hubNodeIds, overview.isolatedNodeIds, widthPx, heightPx) {
+        val layouts = remember(nodes, backboneEdges, overview.hubNodeIds, overview.isolatedNodeIds, widthPx, heightPx) {
             buildGraphNodeLayouts(
                 nodes = nodes,
-                edges = overview.edges,
+                edges = backboneEdges,
                 hubNodeIds = overview.hubNodeIds,
                 isolatedNodeIds = overview.isolatedNodeIds,
                 widthPx = widthPx,
@@ -641,19 +667,21 @@ private fun KnowledgeGraphCanvas(
         val positionById = remember(layouts) { layouts.associate { it.node.id to it.position } }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            overview.edges.forEach { edge ->
+            displayEdges.forEach { edge ->
                 val from = positionById[edge.fromId] ?: return@forEach
                 val to = positionById[edge.toId] ?: return@forEach
-                val selected = selectedNodeId != null && (edge.fromId == selectedNodeId || edge.toId == selectedNodeId)
-                val edgeColor = when {
-                    selected -> AccentBlue.copy(alpha = 0.4f)
-                    else -> BorderSoft.copy(alpha = 0.72f)
+                val edgeColor = when (edge.emphasis) {
+                    GraphEdgeEmphasis.FOCUS -> AccentBlue.copy(alpha = 0.38f)
+                    GraphEdgeEmphasis.BACKBONE -> BorderSoft.copy(alpha = 0.72f)
                 }
                 drawLine(
                     color = edgeColor,
                     start = androidx.compose.ui.geometry.Offset(from.first, from.second),
                     end = androidx.compose.ui.geometry.Offset(to.first, to.second),
-                    strokeWidth = if (selected) 4f else (1.6f + edge.weight.coerceAtMost(6) * 0.35f),
+                    strokeWidth = when (edge.emphasis) {
+                        GraphEdgeEmphasis.FOCUS -> 3.8f
+                        GraphEdgeEmphasis.BACKBONE -> 1.8f + edge.weight.coerceAtMost(6) * 0.3f
+                    },
                 )
             }
         }
@@ -762,57 +790,92 @@ private fun GraphInfoCard(
                 contentDescription = "主题信息 ${node.label}"
                 stateDescription = "结构状态 ${node.structureStatus.label}"
             },
-        color = WhiteGlass.copy(alpha = 0.78f),
+        color = WhiteGlass.copy(alpha = 0.68f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = node.label,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = TextMain,
+                    )
+                    Text(
+                        text = graphStructureLine(node),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSoft,
+                    )
+                }
+                Surface(
+                    color = node.accent.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, node.accent.copy(alpha = 0.24f)),
+                ) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        text = node.structureStatus.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = node.accent,
+                    )
+                }
+            }
             Text(
-                text = "主题信息",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSoft,
-            )
-            Text(
-                text = node.label,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                text = node.summaryLine,
+                style = MaterialTheme.typography.bodyMedium,
                 color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            FocusLine(label = "一句概述", value = node.summaryLine)
-            FocusLine(
-                label = "相关主题",
-                value = relatedNodes
-                    .map { it.label }
-                    .distinct()
-                    .take(3)
-                    .joinToString(" / ")
-                    .ifBlank { "这条主题暂时还比较独立。" },
-            )
-            FocusLine(label = "结构状态", value = graphStructureLine(node))
+            if (relatedNodes.isEmpty()) {
+                Text(
+                    text = "这条主题暂时还比较独立。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "直接相关",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSoft,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        relatedNodes
+                            .map { it.label }
+                            .distinct()
+                            .take(3)
+                            .forEach { label ->
+                                Surface(
+                                    color = WhiteGlass.copy(alpha = 0.56f),
+                                    shape = RoundedCornerShape(999.dp),
+                                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.56f)),
+                                ) {
+                                    Text(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = TextMain,
+                                    )
+                                }
+                            }
+                    }
+                }
+            }
         }
-    }
-}
-
-@Composable
-private fun FocusLine(
-    label: String,
-    value: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = TextSoft,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextMain,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -1259,11 +1322,261 @@ private fun graphNodeWidth(
     selected: Boolean,
 ): androidx.compose.ui.unit.Dp =
     when {
-        selected -> 116.dp
-        node.priority >= 4 -> 104.dp
-        node.relationCount >= 2 || node.noteCount >= 5 -> 100.dp
-        else -> 88.dp
+        selected -> 120.dp
+        node.structureStatus == GraphStructureStatus.HUB || node.priority >= 5 -> 112.dp
+        node.relationCount >= 2 || node.noteCount >= 5 -> 102.dp
+        node.structureStatus == GraphStructureStatus.ISOLATED -> 84.dp
+        else -> 94.dp
     }
+
+internal fun buildBackboneGraphEdges(
+    nodes: List<GraphNodeUi>,
+    edges: List<GraphEdgeUi>,
+): List<GraphEdgeUi> {
+    if (nodes.isEmpty() || edges.isEmpty()) return emptyList()
+    val nodeIds = nodes.map { it.id }.toSet()
+    val priorityByNode = nodes.associate { it.id to it.priority }
+    val parent = nodeIds.associateWith { it }.toMutableMap()
+
+    fun find(id: String): String {
+        val currentParent = parent[id] ?: id
+        if (currentParent == id) return id
+        return find(currentParent).also { root -> parent[id] = root }
+    }
+
+    fun union(left: String, right: String) {
+        val leftRoot = find(left)
+        val rightRoot = find(right)
+        if (leftRoot != rightRoot) {
+            parent[rightRoot] = leftRoot
+        }
+    }
+
+    return edges
+        .filter { it.fromId in nodeIds && it.toId in nodeIds }
+        .sortedWith(
+            compareByDescending<GraphEdgeUi> { it.weight }
+                .thenByDescending {
+                    (priorityByNode[it.fromId] ?: 0) + (priorityByNode[it.toId] ?: 0)
+                }
+                .thenBy { canonicalGraphEdgeKey(it) },
+        )
+        .filter { edge ->
+            val leftRoot = find(edge.fromId)
+            val rightRoot = find(edge.toId)
+            if (leftRoot == rightRoot) {
+                false
+            } else {
+                union(edge.fromId, edge.toId)
+                true
+            }
+        }
+}
+
+internal fun buildDisplayedGraphEdges(
+    nodes: List<GraphNodeUi>,
+    edges: List<GraphEdgeUi>,
+    selectedNodeId: String?,
+): List<GraphDisplayEdgeUi> {
+    if (nodes.isEmpty() || edges.isEmpty()) return emptyList()
+    val backboneEdges = buildBackboneGraphEdges(nodes, edges)
+    val displayEdges = linkedMapOf<String, GraphDisplayEdgeUi>()
+    backboneEdges.forEach { edge ->
+        displayEdges[canonicalGraphEdgeKey(edge)] = GraphDisplayEdgeUi(
+            fromId = edge.fromId,
+            toId = edge.toId,
+            weight = edge.weight,
+            reasonLine = edge.reasonLine,
+            emphasis = GraphEdgeEmphasis.BACKBONE,
+        )
+    }
+    if (selectedNodeId != null) {
+        edges
+            .filter { it.fromId == selectedNodeId || it.toId == selectedNodeId }
+            .sortedWith(compareByDescending<GraphEdgeUi> { it.weight }.thenBy { canonicalGraphEdgeKey(it) })
+            .forEach { edge ->
+                displayEdges[canonicalGraphEdgeKey(edge)] = GraphDisplayEdgeUi(
+                    fromId = edge.fromId,
+                    toId = edge.toId,
+                    weight = edge.weight,
+                    reasonLine = edge.reasonLine,
+                    emphasis = GraphEdgeEmphasis.FOCUS,
+                )
+            }
+    }
+    return displayEdges.values.toList()
+}
+
+private fun canonicalGraphEdgeKey(edge: GraphEdgeUi): String =
+    listOf(edge.fromId, edge.toId).sorted().joinToString("|")
+
+private fun graphAdjacency(
+    edges: List<GraphEdgeUi>,
+): Map<String, List<GraphEdgeUi>> =
+    buildMap {
+        edges.forEach { edge ->
+            put(edge.fromId, getOrDefault(edge.fromId, emptyList()) + edge)
+            put(edge.toId, getOrDefault(edge.toId, emptyList()) + edge)
+        }
+    }
+
+private fun connectedGraphComponents(
+    nodeIds: Set<String>,
+    adjacency: Map<String, List<GraphEdgeUi>>,
+): List<Set<String>> {
+    if (nodeIds.isEmpty()) return emptyList()
+    val visited = mutableSetOf<String>()
+    val components = mutableListOf<Set<String>>()
+    nodeIds.forEach { startId ->
+        if (!visited.add(startId)) return@forEach
+        val queue = ArrayDeque<String>()
+        val component = linkedSetOf<String>()
+        queue.add(startId)
+        component.add(startId)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            adjacency[current]
+                .orEmpty()
+                .map { edge -> if (edge.fromId == current) edge.toId else edge.fromId }
+                .forEach { neighbor ->
+                    if (neighbor in nodeIds && visited.add(neighbor)) {
+                        queue.add(neighbor)
+                        component.add(neighbor)
+                    }
+                }
+        }
+        components += component
+    }
+    return components
+}
+
+private data class GraphBranchPlacement(
+    val nodeId: String,
+    val anchorId: String,
+    val depth: Int,
+)
+
+private fun buildGraphBranchPlacements(
+    componentIds: Set<String>,
+    trunkIds: List<String>,
+    adjacency: Map<String, List<GraphEdgeUi>>,
+): Map<String, List<GraphBranchPlacement>> {
+    val trunkSet = trunkIds.toSet()
+    if (componentIds.isEmpty() || trunkIds.isEmpty()) return emptyMap()
+    val queue = ArrayDeque<GraphBranchPlacement>()
+    val visited = trunkSet.toMutableSet()
+    val placements = linkedMapOf<String, MutableList<GraphBranchPlacement>>()
+
+    trunkIds.forEach { trunkId ->
+        adjacency[trunkId]
+            .orEmpty()
+            .map { edge -> if (edge.fromId == trunkId) edge.toId else edge.fromId }
+            .filter { it in componentIds && it !in trunkSet }
+            .sorted()
+            .forEach { branchId ->
+                if (visited.add(branchId)) {
+                    queue.add(GraphBranchPlacement(branchId, trunkId, 1))
+                }
+            }
+    }
+
+    while (queue.isNotEmpty()) {
+        val placement = queue.removeFirst()
+        placements.getOrPut(placement.anchorId) { mutableListOf() } += placement
+        adjacency[placement.nodeId]
+            .orEmpty()
+            .map { edge -> if (edge.fromId == placement.nodeId) edge.toId else edge.fromId }
+            .filter { it in componentIds && it !in visited }
+            .sorted()
+            .forEach { childId ->
+                if (visited.add(childId)) {
+                    queue.add(GraphBranchPlacement(childId, placement.anchorId, placement.depth + 1))
+                }
+            }
+    }
+
+    return placements
+}
+
+private fun buildComponentTrunk(
+    componentIds: Set<String>,
+    adjacency: Map<String, List<GraphEdgeUi>>,
+    preferredRootId: String?,
+): List<String> {
+    if (componentIds.isEmpty()) return emptyList()
+    if (componentIds.size == 1) return listOf(componentIds.first())
+    val startId = preferredRootId?.takeIf { it in componentIds } ?: componentIds.first()
+    val first = farthestGraphNode(startId, componentIds, adjacency)
+    val second = farthestGraphNode(first.nodeId, componentIds, adjacency)
+    return restoreGraphPath(second.nodeId, first.nodeId, second.parents)
+}
+
+private data class FarthestGraphNodeResult(
+    val nodeId: String,
+    val distance: Int,
+    val parents: Map<String, String?>,
+)
+
+private fun farthestGraphNode(
+    startId: String,
+    componentIds: Set<String>,
+    adjacency: Map<String, List<GraphEdgeUi>>,
+): FarthestGraphNodeResult {
+    val queue = ArrayDeque<String>()
+    val distances = mutableMapOf(startId to 0)
+    val parents = mutableMapOf<String, String?>(startId to null)
+    queue.add(startId)
+    while (queue.isNotEmpty()) {
+        val current = queue.removeFirst()
+        adjacency[current]
+            .orEmpty()
+            .map { edge -> if (edge.fromId == current) edge.toId else edge.fromId }
+            .filter { it in componentIds && it !in distances }
+            .forEach { neighbor ->
+                distances[neighbor] = (distances[current] ?: 0) + 1
+                parents[neighbor] = current
+                queue.add(neighbor)
+            }
+    }
+    val farthest = distances.entries.maxWithOrNull(compareBy<Map.Entry<String, Int>> { it.value }.thenBy { it.key })!!
+    return FarthestGraphNodeResult(
+        nodeId = farthest.key,
+        distance = farthest.value,
+        parents = parents,
+    )
+}
+
+private fun restoreGraphPath(
+    targetId: String,
+    startId: String,
+    parents: Map<String, String?>,
+): List<String> {
+    val path = mutableListOf<String>()
+    var current: String? = targetId
+    while (current != null) {
+        path += current
+        if (current == startId) break
+        current = parents[current]
+    }
+    return path.reversed()
+}
+
+private fun positionForGraphComponent(
+    componentIndex: Int,
+    totalComponents: Int,
+    centerX: Float,
+    centerY: Float,
+    widthPx: Float,
+    heightPx: Float,
+): Pair<Float, Float> {
+    if (componentIndex == 0 || totalComponents <= 1) return centerX to centerY
+    val anchors = listOf(
+        clamp(centerX - widthPx * 0.24f, 74f, widthPx - 74f) to clamp(centerY - heightPx * 0.18f, 68f, heightPx - 68f),
+        clamp(centerX + widthPx * 0.24f, 74f, widthPx - 74f) to clamp(centerY + heightPx * 0.14f, 68f, heightPx - 68f),
+        clamp(centerX - widthPx * 0.2f, 74f, widthPx - 74f) to clamp(centerY + heightPx * 0.2f, 68f, heightPx - 68f),
+    )
+    return anchors.getOrElse((componentIndex - 1) % anchors.size) { centerX to centerY }
+}
 
 private fun buildGraphNodeLayouts(
     nodes: List<GraphNodeUi>,
@@ -1280,86 +1593,104 @@ private fun buildGraphNodeLayouts(
             .thenByDescending { it.noteCount }
             .thenBy { it.label },
     )
-    val degreeByNode = buildMap {
-        edges.forEach { edge ->
-            put(edge.fromId, getOrDefault(edge.fromId, 0) + 1)
-            put(edge.toId, getOrDefault(edge.toId, 0) + 1)
-        }
-    }
     val centerX = widthPx / 2f
     val centerY = heightPx / 2f
     if (ordered.size == 1) {
         return listOf(GraphNodeLayout(ordered.first(), centerX to centerY))
     }
-    val primaryHub = ordered
-        .firstOrNull { it.id in hubNodeIds }
-        ?: ordered.firstOrNull { (degreeByNode[it.id] ?: 0) > 0 }
-        ?: ordered.first()
-    val strongestEdge = edges.maxByOrNull { it.weight }
-    val secondaryHub = ordered.firstOrNull { node ->
-        node.id != primaryHub.id && (
-            node.id in hubNodeIds ||
-                node.id == strongestEdge?.fromId ||
-                node.id == strongestEdge?.toId
-            )
-    }
-
     val positions = linkedMapOf<String, Pair<Float, Float>>()
-    val centerGap = min(widthPx, heightPx) * 0.16f
-    val primaryPosition = if (secondaryHub != null) (centerX - centerGap) to centerY else centerX to centerY
-    positions[primaryHub.id] = primaryPosition
-    secondaryHub?.let {
-        positions[it.id] = (centerX + centerGap) to (centerY - 8f)
+    val adjacency = graphAdjacency(edges)
+    val connectedNodeIds = ordered
+        .map { it.id }
+        .filter { adjacency[it].orEmpty().isNotEmpty() && it !in isolatedNodeIds }
+        .toSet()
+    val preferredRootId = ordered.firstOrNull { it.id in hubNodeIds }?.id
+        ?: ordered.firstOrNull { it.id in connectedNodeIds }?.id
+
+    val components = connectedGraphComponents(connectedNodeIds, adjacency)
+        .sortedWith(
+            compareByDescending<Set<String>> { component ->
+                component.size
+            }.thenByDescending { component ->
+                edges.filter { it.fromId in component && it.toId in component }.sumOf { it.weight }
+            }.thenBy { component ->
+                component.sorted().joinToString("|")
+            },
+        )
+    val mainComponentIndex = components.indexOfFirst { preferredRootId != null && preferredRootId in it }
+    val orderedComponents = when {
+        components.isEmpty() -> emptyList()
+        mainComponentIndex <= 0 -> components
+        else -> listOf(components[mainComponentIndex]) + components.filterIndexed { index, _ -> index != mainComponentIndex }
     }
 
-    val isolated = ordered.filter { it.id in isolatedNodeIds && it.id !in positions.keys }
-    val connected = ordered.filter { it.id !in positions.keys && it.id !in isolated.map { item -> item.id }.toSet() }
-
-    val leftOffsets = listOf(
-        (-138f to -84f),
-        (-132f to 82f),
-    )
-    val rightOffsets = listOf(
-        (138f to -74f),
-        (132f to 88f),
-    )
-    val centerOffsets = listOf(
-        (0f to -128f),
-        (0f to 128f),
-    )
-
-    fun anchorFor(node: GraphNodeUi): Pair<Float, Float> {
-        if (secondaryHub == null) return primaryPosition
-        val leftStrength = edges.firstOrNull {
-            (it.fromId == primaryHub.id && it.toId == node.id) || (it.toId == primaryHub.id && it.fromId == node.id)
-        }?.weight ?: 0
-        val rightStrength = edges.firstOrNull {
-            (it.fromId == secondaryHub.id && it.toId == node.id) || (it.toId == secondaryHub.id && it.fromId == node.id)
-        }?.weight ?: 0
-        return if (leftStrength >= rightStrength) primaryPosition else positions[secondaryHub.id] ?: primaryPosition
-    }
-
-    connected.forEachIndexed { index, node ->
-        val anchor = anchorFor(node)
-        val offset = when {
-            secondaryHub == null -> centerOffsets.getOrElse(index % centerOffsets.size) { 0f to 0f }
-            anchor == primaryPosition -> leftOffsets.getOrElse(index % leftOffsets.size) { -126f to 0f }
-            else -> rightOffsets.getOrElse(index % rightOffsets.size) { 126f to 0f }
+    orderedComponents.forEachIndexed { componentIndex, componentIds ->
+        val componentCenter = positionForGraphComponent(
+            componentIndex = componentIndex,
+            totalComponents = orderedComponents.size,
+            centerX = centerX,
+            centerY = centerY,
+            widthPx = widthPx,
+            heightPx = heightPx,
+        )
+        val trunkIds = buildComponentTrunk(
+            componentIds = componentIds,
+            adjacency = adjacency,
+            preferredRootId = preferredRootId,
+        )
+        if (trunkIds.isEmpty()) return@forEachIndexed
+        val trunkSpacing = min(
+            if (componentIndex == 0) 132f else 108f,
+            widthPx * if (componentIndex == 0) 0.22f else 0.16f,
+        )
+        val trunkStartX = componentCenter.first - ((trunkIds.size - 1) * trunkSpacing) / 2f
+        trunkIds.forEachIndexed { index, nodeId ->
+            positions[nodeId] = clamp(trunkStartX + index * trunkSpacing, 62f, widthPx - 62f) to
+                clamp(componentCenter.second, 56f, heightPx - 56f)
         }
-        positions[node.id] = clamp(anchor.first + offset.first, 54f, widthPx - 54f) to
-            clamp(anchor.second + offset.second, 48f, heightPx - 48f)
+
+        val branchPlacements = buildGraphBranchPlacements(
+            componentIds = componentIds,
+            trunkIds = trunkIds,
+            adjacency = adjacency,
+        )
+        val branchCountByAnchor = mutableMapOf<String, Int>()
+        trunkIds.forEach { anchorId ->
+            branchPlacements[anchorId]
+                .orEmpty()
+                .sortedWith(compareBy<GraphBranchPlacement> { it.depth }.thenBy { it.nodeId })
+                .forEach { placement ->
+                    val anchorPosition = positions[anchorId] ?: return@forEach
+                    val ordinal = branchCountByAnchor.getOrDefault(anchorId, 0)
+                    branchCountByAnchor[anchorId] = ordinal + 1
+                    val verticalDirection = if (ordinal % 2 == 0) -1 else 1
+                    val horizontalOffset = when (placement.depth) {
+                        1 -> (ordinal / 2) * 18f
+                        else -> placement.depth * 28f
+                    }
+                    positions[placement.nodeId] = clamp(
+                        anchorPosition.first + horizontalOffset,
+                        58f,
+                        widthPx - 58f,
+                    ) to clamp(
+                        anchorPosition.second + verticalDirection * (92f + (placement.depth - 1) * 62f),
+                        52f,
+                        heightPx - 52f,
+                    )
+                }
+        }
     }
 
-    val isolatedOffsets = listOf(
-        (0f to -144f),
-        (0f to 144f),
-        (-156f to 0f),
-        (156f to 0f),
-    )
-    isolated.forEachIndexed { index, node ->
-        val offset = isolatedOffsets.getOrElse(index % isolatedOffsets.size) { 0f to 0f }
-        positions[node.id] = clamp(centerX + offset.first, 54f, widthPx - 54f) to
-            clamp(centerY + offset.second, 48f, heightPx - 48f)
+    val orbitNodes = ordered.filter { it.id !in positions.keys }
+    val orbitRadiusX = widthPx * 0.34f
+    val orbitRadiusY = heightPx * 0.32f
+    orbitNodes.forEachIndexed { index, node ->
+        val angle = when (orbitNodes.size) {
+            1 -> -Math.PI / 2
+            else -> (-Math.PI / 2) + (index.toDouble() * (2 * Math.PI / orbitNodes.size))
+        }
+        positions[node.id] = clamp((centerX + kotlin.math.cos(angle).toFloat() * orbitRadiusX).toFloat(), 60f, widthPx - 60f) to
+            clamp((centerY + kotlin.math.sin(angle).toFloat() * orbitRadiusY).toFloat(), 52f, heightPx - 52f)
     }
 
     return ordered.map { node ->

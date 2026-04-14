@@ -214,6 +214,62 @@ class KnowledgeGraphScreenTest {
         assertThat(exactMatch.map { it.id }).containsExactly("folder:work")
     }
 
+    @Test
+    fun `buildDisplayedGraphEdges keeps backbone and expands local relations for selected node`() {
+        val nodes = listOf(
+            graphNode(id = "folder:work", label = "工作", priority = 5, relationCount = 2),
+            graphNode(id = "tag:learning", label = "学习", priority = 4, relationCount = 2),
+            graphNode(id = "tag:writing", label = "写作", priority = 3, relationCount = 2),
+        )
+        val edges = listOf(
+            GraphEdgeUi(fromId = "folder:work", toId = "tag:learning", weight = 5, reasonLine = "方法共享。"),
+            GraphEdgeUi(fromId = "tag:learning", toId = "tag:writing", weight = 4, reasonLine = "表达互相支撑。"),
+            GraphEdgeUi(fromId = "folder:work", toId = "tag:writing", weight = 2, reasonLine = "零散相关。"),
+        )
+
+        val defaultEdges = buildDisplayedGraphEdges(
+            nodes = nodes,
+            edges = edges,
+            selectedNodeId = null,
+        )
+        val focusedEdges = buildDisplayedGraphEdges(
+            nodes = nodes,
+            edges = edges,
+            selectedNodeId = "folder:work",
+        )
+
+        assertThat(defaultEdges.map { setOf(it.fromId, it.toId) })
+            .containsExactly(setOf("folder:work", "tag:learning"), setOf("tag:learning", "tag:writing"))
+        assertThat(defaultEdges.all { it.emphasis == GraphEdgeEmphasis.BACKBONE }).isTrue()
+        assertThat(focusedEdges.map { setOf(it.fromId, it.toId) })
+            .containsExactly(
+                setOf("folder:work", "tag:learning"),
+                setOf("tag:learning", "tag:writing"),
+                setOf("folder:work", "tag:writing"),
+            )
+        assertThat(
+            focusedEdges.first { setOf(it.fromId, it.toId) == setOf("folder:work", "tag:writing") }.emphasis,
+        ).isEqualTo(GraphEdgeEmphasis.FOCUS)
+    }
+
+    private fun graphNode(
+        id: String,
+        label: String,
+        priority: Int,
+        relationCount: Int,
+    ) = GraphNodeUi(
+        id = id,
+        label = label,
+        summaryLine = "$label 正在成形。",
+        threadKey = id,
+        structureStatus = GraphStructureStatus.LINKED,
+        densityScore = 0.5,
+        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
+        noteCount = 3,
+        relationCount = relationCount,
+        priority = priority,
+    )
+
     private fun directionSummary(
         threadKey: String,
         title: String,
