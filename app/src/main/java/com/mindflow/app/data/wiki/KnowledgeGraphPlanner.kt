@@ -210,7 +210,7 @@ class KnowledgeGraphPlanner(
                     .thenByDescending { it.lastSeenAt }
                     .thenBy { it.fromThreadKey + it.toThreadKey },
             )
-            .take(10)
+            .take(MaxCanonicalGraphEdges)
     }
 
     private fun buildGraphOverview(
@@ -293,7 +293,7 @@ class KnowledgeGraphPlanner(
                     .thenByDescending { it.noteCount }
                     .thenBy { it.label },
             )
-            .take(6)
+            .take(MaxPresentationNodes)
         if (visibleNodes.isEmpty()) return DirectionWikiGraphPresentationSnapshot()
 
         val visibleIds = visibleNodes.map { it.threadKey }.toSet()
@@ -304,7 +304,7 @@ class KnowledgeGraphPlanner(
                     .thenByDescending { it.confidence }
                     .thenByDescending { it.lastSeenAt },
             )
-            .take(4)
+            .take(MaxPresentationEdges)
         val relationCountByThread = buildMap {
             visibleEdges.forEach { edge ->
                 put(edge.fromThreadKey, getOrDefault(edge.fromThreadKey, 0) + 1)
@@ -387,8 +387,8 @@ class KnowledgeGraphPlanner(
         appendLine("规则：")
         appendLine("- 节点只能从提供的 canonical nodes 里选。")
         appendLine("- 边只能从提供的 canonical edges 里选，绝对不要创造新边。")
-        appendLine("- 节点数量 4 到 6 个。")
-        appendLine("- 边数量 0 到 4 条。")
+        appendLine("- 节点数量 4 到 $MaxPresentationNodes 个。")
+        appendLine("- 边数量 0 到 $MaxPresentationEdges 条。")
         appendLine("- 文案必须是用户能看懂的话，不能出现维护、证据对象、结论对象等后台术语。")
         appendLine("- 如果关系不够硬，宁可不画边。")
         appendLine("- focus 必须指向 nodes 里的一个主题。")
@@ -457,7 +457,7 @@ class KnowledgeGraphPlanner(
                         ),
                     )
                 }
-            }.distinctBy { it.threadKey }.take(6)
+            }.distinctBy { it.threadKey }.take(MaxPresentationNodes)
             if (nodes.isEmpty()) return null
 
             val visibleIds = nodes.map { it.threadKey }.toSet()
@@ -478,7 +478,7 @@ class KnowledgeGraphPlanner(
                         ),
                     )
                 }
-            }.distinctBy { normalizedEdgeKey(it.fromThreadKey, it.toThreadKey) }.take(4)
+            }.distinctBy { normalizedEdgeKey(it.fromThreadKey, it.toThreadKey) }.take(MaxPresentationEdges)
 
             val relationCountByThread = buildMap {
                 edges.forEach { edge ->
@@ -725,6 +725,10 @@ class KnowledgeGraphPlanner(
         DirectionWikiGraphMaturity.entries.firstOrNull { it.wireName == this.trim().lowercase() } ?: fallback
 
     private companion object {
+        const val MaxCanonicalGraphEdges = 18
+        const val MaxPresentationNodes = 6
+        const val MaxPresentationEdges = 8
+
         val graphRelevantTypes = setOf(
             KnowledgeLayerSearchType.CONCEPT,
             KnowledgeLayerSearchType.QUESTION,

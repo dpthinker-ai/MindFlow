@@ -80,6 +80,50 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
+    fun `selectVisibleGraph supplements sparse presentation edges with canonical edges`() {
+        val snapshot = DirectionWikiSnapshot(
+            directions = mapOf(
+                "folder:work" to directionSummary("folder:work", "工作"),
+                "tag:learning" to directionSummary("tag:learning", "学习"),
+                "tag:health" to directionSummary("tag:health", "健康"),
+            ),
+            graph = DirectionWikiGraphSnapshot(
+                overview = DirectionWikiGraphOverview(
+                    hubThreadKeys = listOf("folder:work"),
+                    isolatedThreadKeys = emptyList(),
+                ),
+                edges = listOf(
+                    canonicalEdge("folder:work", "tag:learning", 5, 0.9, "方法共享。"),
+                    canonicalEdge("tag:learning", "tag:health", 4, 0.8, "主题互相支撑。"),
+                ),
+                presentation = DirectionWikiGraphPresentationSnapshot(
+                    nodes = listOf(
+                        presentationNode("folder:work", "工作", 0.9),
+                        presentationNode("tag:learning", "学习", 0.7),
+                        presentationNode("tag:health", "健康", 0.5),
+                    ),
+                    edges = listOf(
+                        DirectionWikiGraphPresentationEdge(
+                            fromThreadKey = "folder:work",
+                            toThreadKey = "tag:learning",
+                            strength = 5,
+                            reasonLine = "方法共享。",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val selection = selectVisibleGraph(snapshot)
+
+        assertThat(selection.edges.map { setOf(it.fromThreadKey, it.toThreadKey) })
+            .containsExactly(
+                setOf("folder:work", "tag:learning"),
+                setOf("tag:learning", "tag:health"),
+            )
+    }
+
+    @Test
     fun `projectPureGraphInfo fills blank summaries from direction snapshot`() {
         val snapshot = DirectionWikiSnapshot(
             directions = mapOf(
@@ -291,6 +335,37 @@ class KnowledgeGraphScreenTest {
         noteCount = 3,
         relationCount = relationCount,
         priority = priority,
+    )
+
+    private fun presentationNode(
+        threadKey: String,
+        label: String,
+        densityScore: Double,
+    ) = DirectionWikiGraphPresentationNode(
+        threadKey = threadKey,
+        label = label,
+        summaryLine = "$label 正在成形。",
+        densityScore = densityScore,
+        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
+        noteCount = 3,
+    )
+
+    private fun canonicalEdge(
+        from: String,
+        to: String,
+        strength: Int,
+        confidence: Double,
+        reasonLine: String,
+    ) = com.mindflow.app.data.wiki.DirectionWikiGraphEdge(
+        fromThreadKey = from,
+        toThreadKey = to,
+        relationType = com.mindflow.app.data.wiki.DirectionWikiGraphRelationType.CO_OCCURRENCE,
+        strength = strength,
+        confidence = confidence,
+        reasonLine = reasonLine,
+        supportIds = emptyList(),
+        firstSeenAt = 1_000L,
+        lastSeenAt = 1_000L,
     )
 
     private fun directionSummary(

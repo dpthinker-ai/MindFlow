@@ -1082,30 +1082,35 @@ internal fun selectVisibleGraph(
     }
 
     val visibleIds = selectedNodes.map { it.threadKey }.toSet()
-    val selectedEdges = when {
-        presentation.edges.isNotEmpty() -> presentation.edges
-            .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
-            .map { edge ->
-                SelectedGraphEdge(
-                    fromThreadKey = edge.fromThreadKey,
-                    toThreadKey = edge.toThreadKey,
-                    strength = edge.strength,
-                    reasonLine = edge.reasonLine,
-                )
-            }
-        else -> snapshot.graph.edges
-            .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
-            .sortedWith(compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> { it.strength }.thenByDescending { it.confidence })
-            .take(4)
-            .map { edge ->
-                SelectedGraphEdge(
-                    fromThreadKey = edge.fromThreadKey,
-                    toThreadKey = edge.toThreadKey,
-                    strength = edge.strength,
-                    reasonLine = edge.reasonLine,
-                )
-            }
-    }
+    val presentationEdges = presentation.edges
+        .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+        .map { edge ->
+            SelectedGraphEdge(
+                fromThreadKey = edge.fromThreadKey,
+                toThreadKey = edge.toThreadKey,
+                strength = edge.strength,
+                reasonLine = edge.reasonLine,
+            )
+        }
+    val canonicalEdges = snapshot.graph.edges
+        .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+        .sortedWith(
+            compareByDescending<com.mindflow.app.data.wiki.DirectionWikiGraphEdge> { it.strength }
+                .thenByDescending { it.confidence },
+        )
+        .map { edge ->
+            SelectedGraphEdge(
+                fromThreadKey = edge.fromThreadKey,
+                toThreadKey = edge.toThreadKey,
+                strength = edge.strength,
+                reasonLine = edge.reasonLine,
+            )
+        }
+    val selectedEdges = mergeVisibleGraphEdges(
+        visibleIds = visibleIds,
+        presentationEdges = presentationEdges,
+        canonicalEdges = canonicalEdges,
+    )
 
     return SelectedGraphData(
         headline = presentation.headline.ifBlank {
@@ -1121,6 +1126,33 @@ internal fun selectVisibleGraph(
         edges = selectedEdges,
     )
 }
+
+private fun mergeVisibleGraphEdges(
+    visibleIds: Set<String>,
+    presentationEdges: List<SelectedGraphEdge>,
+    canonicalEdges: List<SelectedGraphEdge>,
+): List<SelectedGraphEdge> {
+    val merged = linkedMapOf<String, SelectedGraphEdge>()
+    presentationEdges.forEach { edge ->
+        merged[edge.normalizedKey()] = edge
+    }
+    canonicalEdges.forEach { edge ->
+        val key = edge.normalizedKey()
+        if (key !in merged) {
+            merged[key] = edge
+        }
+    }
+    return merged.values
+        .filter { it.fromThreadKey in visibleIds && it.toThreadKey in visibleIds }
+        .sortedWith(
+            compareByDescending<SelectedGraphEdge> { it.strength }
+                .thenByDescending { it.reasonLine.isNotBlank() }
+                .thenBy { it.normalizedKey() },
+        )
+}
+
+private fun SelectedGraphEdge.normalizedKey(): String =
+    listOf(fromThreadKey, toThreadKey).sorted().joinToString("::")
 
 internal fun projectPureGraphInfo(
     snapshot: DirectionWikiSnapshot,
