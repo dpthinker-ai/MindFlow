@@ -217,6 +217,7 @@ data class DirectionWikiSnapshot(
     val lastGeneratedAt: Long = 0L,
     val directions: Map<String, DirectionWikiDirectionSummary> = emptyMap(),
     val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
+    val conceptGraph: ConceptGraphSnapshot = ConceptGraphSnapshot(),
     val graph: DirectionWikiGraphSnapshot = DirectionWikiGraphSnapshot(),
 )
 

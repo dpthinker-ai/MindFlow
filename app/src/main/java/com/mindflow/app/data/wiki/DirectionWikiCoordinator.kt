@@ -86,6 +86,484 @@ internal fun buildGraphObjectSearchItems(
         .distinctBy { it.id }
         .sortedByDescending { it.updatedAt }
 
+internal fun buildConceptGraphCandidates(
+    conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+    objectCandidates: List<KnowledgeObjectCandidate>,
+): List<ConceptGraphCandidate> {
+    val merged = linkedMapOf<String, MutableConceptGraphCandidate>()
+
+    fun mergeCandidate(
+        title: String,
+        summary: String,
+        updatedAt: Long,
+        sourceIds: List<String>,
+        hotnessContribution: Double,
+    ) {
+        val normalizedTitle = title.trim()
+        if (normalizedTitle.isBlank()) return
+        val conceptId = "concept:${graphSearchItemSlug(normalizedTitle)}"
+        val existing = merged[conceptId]
+        if (existing == null) {
+            merged[conceptId] = MutableConceptGraphCandidate(
+                conceptId = conceptId,
+                title = normalizedTitle,
+                summary = summary.trim(),
+                hotnessScore = hotnessContribution,
+                updatedAt = updatedAt,
+                sourceIds = linkedSetOf<String>().apply { addAll(sourceIds) },
+            )
+            return
+        }
+
+        existing.aliases += normalizedTitle
+        existing.sourceIds += sourceIds
+        existing.hotnessScore += hotnessContribution
+        if (
+            updatedAt > existing.updatedAt ||
+            (updatedAt == existing.updatedAt && existing.summary.isBlank() && summary.isNotBlank())
+        ) {
+            existing.title = normalizedTitle
+            existing.summary = summary.trim()
+            existing.updatedAt = updatedAt
+        }
+    }
+
+    conceptBuckets.forEach { (concept, pairs) ->
+        val latest = pairs.maxByOrNull { it.second.updatedAt } ?: return@forEach
+        val directionCount = pairs.map { it.first.threadKey }.distinct().size
+        mergeCandidate(
+            title = concept,
+            summary = NoteInsightSummaryExtractor.extract(latest.second).ifBlank {
+                latest.second.content.trim().take(90)
+            },
+            updatedAt = latest.second.updatedAt,
+            sourceIds = pairs.map { "note:${it.second.id}" }.distinct(),
+            hotnessContribution = pairs.size.toDouble() + directionCount.toDouble(),
+        )
+    }
+
+    objectCandidates.forEach { candidate ->
+        candidate.relatedConcepts
+            .asSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+            .forEach { concept ->
+                mergeCandidate(
+                    title = concept,
+                    summary = candidate.summary,
+                    updatedAt = candidate.updatedAt,
+                    sourceIds = listOf("${candidate.type.folderName}:${candidate.noteId}"),
+                    hotnessContribution = 1.0,
+                )
+            }
+    }
+
+    return merged.values
+        .map { candidate ->
+            ConceptGraphCandidate(
+                conceptId = candidate.conceptId,
+                title = candidate.title,
+                aliases = candidate.aliases
+                    .filter { it != candidate.title }
+                    .distinct()
+                    .sorted(),
+                summary = candidate.summary,
+                hotnessScore = candidate.hotnessScore,
+                updatedAt = candidate.updatedAt,
+                sourceIds = candidate.sourceIds.toList(),
+            )
+        }
+        .sortedWith(
+            compareByDescending<ConceptGraphCandidate> { it.hotnessScore }
+                .thenByDescending { it.updatedAt }
+                .thenBy { it.title },
+        )
+}
+
+internal fun ConceptGraphSnapshot.toConceptGraphJsonString(): String =
+    renderConceptGraphJsonObject(
+        linkedMapOf(
+            "version" to version,
+            "defaultCenterNodeId" to defaultCenterNodeId,
+            "source" to source,
+            "generatedAt" to generatedAt,
+            "nodes" to nodes.map { node ->
+                linkedMapOf(
+                    "conceptId" to node.conceptId,
+                    "label" to node.label,
+                    "aliases" to node.aliases,
+                    "summary" to node.summary,
+                    "hotnessScore" to node.hotnessScore,
+                    "updatedAt" to node.updatedAt,
+                    "sourceIds" to node.sourceIds,
+                )
+            },
+            "edges" to edges.map { edge ->
+                linkedMapOf(
+                    "fromConceptId" to edge.fromConceptId,
+                    "toConceptId" to edge.toConceptId,
+                    "relationType" to edge.relationType.wireName,
+                    "reasonLine" to edge.reasonLine,
+                    "supportIds" to edge.supportIds,
+                    "confidence" to edge.confidence,
+                )
+            },
+        ),
+    )
+
+internal fun String.toConceptGraphSnapshot(): ConceptGraphSnapshot {
+    val root = ConceptGraphMiniJsonParser(this).parseObject()
+    val nodes = buildList {
+        root.objectList("nodes").forEach { item ->
+            val conceptId = item.string("conceptId")
+            val label = item.string("label")
+            if (conceptId.isBlank() || label.isBlank()) return@forEach
+            add(
+                ConceptGraphNode(
+                    conceptId = conceptId,
+                    label = label,
+                    aliases = item.stringList("aliases"),
+                    summary = item.string("summary"),
+                    hotnessScore = item.double("hotnessScore") ?: 0.0,
+                    updatedAt = item.long("updatedAt") ?: 0L,
+                    sourceIds = item.stringList("sourceIds"),
+                ),
+            )
+        }
+    }
+    val nodeIds = nodes.map { it.conceptId }.toSet()
+    val edges = buildList {
+        root.objectList("edges").forEach { item ->
+            val fromConceptId = item.string("fromConceptId")
+            val toConceptId = item.string("toConceptId")
+            if (
+                fromConceptId.isBlank() ||
+                toConceptId.isBlank() ||
+                fromConceptId == toConceptId ||
+                fromConceptId !in nodeIds ||
+                toConceptId !in nodeIds
+            ) {
+                return@forEach
+            }
+            add(
+                ConceptGraphEdge(
+                    fromConceptId = fromConceptId,
+                    toConceptId = toConceptId,
+                    relationType = ConceptGraphRelationType.fromWireName(item.string("relationType"))
+                        ?: ConceptGraphRelationType.REFERENCES,
+                    reasonLine = item.string("reasonLine"),
+                    supportIds = item.stringList("supportIds"),
+                    confidence = item.double("confidence") ?: 0.0,
+                ),
+            )
+        }
+    }
+
+    return ConceptGraphSnapshot(
+        version = root.int("version")?.takeIf { it > 0 } ?: 1,
+        defaultCenterNodeId = root.string("defaultCenterNodeId"),
+        nodes = nodes,
+        edges = edges,
+        source = root.string("source").ifBlank { "rule" },
+        generatedAt = root.long("generatedAt") ?: 0L,
+    )
+}
+
+private data class MutableConceptGraphCandidate(
+    val conceptId: String,
+    var title: String,
+    val aliases: MutableSet<String> = linkedSetOf(),
+    var summary: String,
+    var hotnessScore: Double,
+    var updatedAt: Long,
+    val sourceIds: MutableSet<String>,
+)
+
+private fun JSONArray?.toStringList(): List<String> {
+    if (this == null) return emptyList()
+    return buildList {
+        for (index in 0 until length()) {
+            optString(index).takeIf { it.isNotBlank() }?.let(::add)
+        }
+    }
+}
+
+private fun renderConceptGraphJsonObject(
+    fields: Map<String, Any?>,
+): String = fields.entries.joinToString(
+    prefix = "{",
+    postfix = "}",
+) { (key, value) ->
+    "${renderConceptGraphJsonString(key)}:${renderConceptGraphJsonValue(value)}"
+}
+
+private fun renderConceptGraphJsonArray(
+    values: List<*>,
+): String = values.joinToString(
+    prefix = "[",
+    postfix = "]",
+) { value ->
+    renderConceptGraphJsonValue(value)
+}
+
+private fun renderConceptGraphJsonValue(
+    value: Any?,
+): String = when (value) {
+    null -> "null"
+    is String -> renderConceptGraphJsonString(value)
+    is Number -> value.toString()
+    is Boolean -> value.toString()
+    is List<*> -> renderConceptGraphJsonArray(value)
+    is Map<*, *> -> renderConceptGraphJsonObject(
+        value.entries.associate { (key, nestedValue) ->
+            key.toString() to nestedValue
+        },
+    )
+    else -> renderConceptGraphJsonString(value.toString())
+}
+
+private fun renderConceptGraphJsonString(
+    value: String,
+): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> if (character.code < 0x20) {
+                append("\\u%04x".format(character.code))
+            } else {
+                append(character)
+            }
+        }
+    }
+    append('"')
+}
+
+private data class ConceptGraphJsonFields(
+    val values: Map<String, ConceptGraphJsonValue>,
+) {
+    fun string(key: String): String =
+        (values[key] as? ConceptGraphJsonValue.JsonString)?.value?.trim().orEmpty()
+
+    fun stringList(key: String): List<String> =
+        (values[key] as? ConceptGraphJsonValue.JsonArray)
+            ?.items
+            ?.mapNotNull { (it as? ConceptGraphJsonValue.JsonString)?.value?.trim() }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    fun objectList(key: String): List<ConceptGraphJsonFields> =
+        (values[key] as? ConceptGraphJsonValue.JsonArray)
+            ?.items
+            ?.mapNotNull { (it as? ConceptGraphJsonValue.JsonObject)?.toFields() }
+            .orEmpty()
+
+    fun double(key: String): Double? =
+        (values[key] as? ConceptGraphJsonValue.JsonNumber)?.value
+
+    fun long(key: String): Long? =
+        double(key)?.toLong()
+
+    fun int(key: String): Int? =
+        double(key)?.toInt()
+}
+
+private sealed interface ConceptGraphJsonValue {
+    data class JsonObject(val values: Map<String, ConceptGraphJsonValue>) : ConceptGraphJsonValue {
+        fun toFields(): ConceptGraphJsonFields = ConceptGraphJsonFields(values)
+    }
+
+    data class JsonArray(val items: List<ConceptGraphJsonValue>) : ConceptGraphJsonValue
+
+    data class JsonString(val value: String) : ConceptGraphJsonValue
+
+    data class JsonNumber(val value: Double) : ConceptGraphJsonValue
+
+    data class JsonBoolean(val value: Boolean) : ConceptGraphJsonValue
+
+    data object JsonNull : ConceptGraphJsonValue
+}
+
+private class ConceptGraphMiniJsonParser(
+    private val raw: String,
+) {
+    private var index = 0
+
+    fun parseObject(): ConceptGraphJsonFields {
+        skipWhitespace()
+        val value = parseValue()
+        skipWhitespace()
+        require(index == raw.length) { "Unexpected trailing JSON content." }
+        val jsonObject = value as? ConceptGraphJsonValue.JsonObject
+            ?: throw IllegalArgumentException("Root JSON value must be an object.")
+        return jsonObject.toFields()
+    }
+
+    private fun parseValue(): ConceptGraphJsonValue {
+        skipWhitespace()
+        return when (val current = currentChar()) {
+            '{' -> parseObjectValue()
+            '[' -> parseArrayValue()
+            '"' -> ConceptGraphJsonValue.JsonString(parseString())
+            't' -> {
+                consumeLiteral("true")
+                ConceptGraphJsonValue.JsonBoolean(true)
+            }
+            'f' -> {
+                consumeLiteral("false")
+                ConceptGraphJsonValue.JsonBoolean(false)
+            }
+            'n' -> {
+                consumeLiteral("null")
+                ConceptGraphJsonValue.JsonNull
+            }
+            '-', in '0'..'9' -> ConceptGraphJsonValue.JsonNumber(parseNumber())
+            else -> throw IllegalArgumentException("Unexpected JSON token '$current' at index $index.")
+        }
+    }
+
+    private fun parseObjectValue(): ConceptGraphJsonValue.JsonObject {
+        expect('{')
+        skipWhitespace()
+        if (peekChar() == '}') {
+            index++
+            return ConceptGraphJsonValue.JsonObject(emptyMap())
+        }
+        val values = linkedMapOf<String, ConceptGraphJsonValue>()
+        while (true) {
+            skipWhitespace()
+            val key = parseString()
+            skipWhitespace()
+            expect(':')
+            val value = parseValue()
+            values[key] = value
+            skipWhitespace()
+            when (peekChar()) {
+                ',' -> index++
+                '}' -> {
+                    index++
+                    break
+                }
+                else -> throw IllegalArgumentException("Expected ',' or '}' at index $index.")
+            }
+        }
+        return ConceptGraphJsonValue.JsonObject(values)
+    }
+
+    private fun parseArrayValue(): ConceptGraphJsonValue.JsonArray {
+        expect('[')
+        skipWhitespace()
+        if (peekChar() == ']') {
+            index++
+            return ConceptGraphJsonValue.JsonArray(emptyList())
+        }
+        val items = mutableListOf<ConceptGraphJsonValue>()
+        while (true) {
+            items += parseValue()
+            skipWhitespace()
+            when (peekChar()) {
+                ',' -> index++
+                ']' -> {
+                    index++
+                    break
+                }
+                else -> throw IllegalArgumentException("Expected ',' or ']' at index $index.")
+            }
+        }
+        return ConceptGraphJsonValue.JsonArray(items)
+    }
+
+    private fun parseString(): String {
+        expect('"')
+        val builder = StringBuilder()
+        while (true) {
+            require(index < raw.length) { "Unterminated JSON string." }
+            when (val current = raw[index++]) {
+                '"' -> return builder.toString()
+                '\\' -> builder.append(parseEscape())
+                else -> builder.append(current)
+            }
+        }
+    }
+
+    private fun parseEscape(): Char {
+        require(index < raw.length) { "Unterminated JSON escape." }
+        return when (val current = raw[index++]) {
+            '"', '\\', '/' -> current
+            'b' -> '\b'
+            'f' -> '\u000C'
+            'n' -> '\n'
+            'r' -> '\r'
+            't' -> '\t'
+            'u' -> {
+                require(index + 4 <= raw.length) { "Invalid unicode escape." }
+                val hex = raw.substring(index, index + 4)
+                index += 4
+                hex.toInt(16).toChar()
+            }
+            else -> throw IllegalArgumentException("Unsupported escape '$current' at index $index.")
+        }
+    }
+
+    private fun parseNumber(): Double {
+        val start = index
+        if (peekChar() == '-') index++
+        consumeDigits()
+        if (peekChar() == '.') {
+            index++
+            consumeDigits()
+        }
+        if (peekChar() == 'e' || peekChar() == 'E') {
+            index++
+            if (peekChar() == '+' || peekChar() == '-') index++
+            consumeDigits()
+        }
+        return raw.substring(start, index).toDouble()
+    }
+
+    private fun consumeDigits() {
+        require(peekChar().isDigit()) { "Expected digit at index $index." }
+        while (peekChar().isDigit()) {
+            index++
+        }
+    }
+
+    private fun consumeLiteral(
+        literal: String,
+    ) {
+        require(raw.startsWith(literal, index)) { "Expected '$literal' at index $index." }
+        index += literal.length
+    }
+
+    private fun expect(
+        expected: Char,
+    ) {
+        require(currentChar() == expected) { "Expected '$expected' at index $index." }
+        index++
+    }
+
+    private fun currentChar(): Char {
+        require(index < raw.length) { "Unexpected end of JSON input." }
+        return raw[index]
+    }
+
+    private fun peekChar(): Char =
+        raw.getOrNull(index) ?: '\u0000'
+
+    private fun skipWhitespace() {
+        while (index < raw.length && raw[index].isWhitespace()) {
+            index++
+        }
+    }
+}
+
 private fun graphSearchItemSlug(
     title: String,
 ): String {
@@ -110,6 +588,7 @@ class DirectionWikiCoordinator(
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
     private val knowledgeGraphPlanner: KnowledgeGraphPlanner,
+    private val conceptGraphPlanner: ConceptGraphPlanner,
     private val applicationScope: CoroutineScope,
 ) {
     private val legacyRootDir = File(context.filesDir, "direction-wiki")
@@ -517,6 +996,12 @@ class DirectionWikiCoordinator(
         val threadNoteCounts = summaries.associate { summary ->
             summary.threadKey to NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes).size
         }
+        val conceptGraph = conceptGraphPlanner.summarize(
+            candidates = buildConceptGraphCandidates(
+                conceptBuckets = conceptBuckets,
+                objectCandidates = objectCandidates,
+            ),
+        )
         val graphSnapshot = knowledgeGraphPlanner.summarize(
             summaries = summaries,
             knowledgeItems = knowledgeItems,
@@ -533,6 +1018,7 @@ class DirectionWikiCoordinator(
             generatedAt = generatedAt,
             summaries = summaries,
             knowledgeItems = knowledgeItems,
+            conceptGraph = conceptGraph,
             graph = graphSnapshot,
         )
     }
@@ -1325,6 +1811,7 @@ class DirectionWikiCoordinator(
         generatedAt: Long,
         summaries: List<DirectionWikiDirectionSummary>,
         knowledgeItems: List<KnowledgeLayerSearchItem>,
+        conceptGraph: ConceptGraphSnapshot,
         graph: DirectionWikiGraphSnapshot,
     ) {
         val root = JSONObject()
@@ -1387,6 +1874,7 @@ class DirectionWikiCoordinator(
                     }
                 },
             )
+            .put("conceptGraph", JSONObject(conceptGraph.toConceptGraphJsonString()))
             .put(
                 "graph",
                 JSONObject()
@@ -1566,6 +2054,11 @@ class DirectionWikiCoordinator(
                     )
                 }
             }
+            val conceptGraph = when (val rawConceptGraph = json.opt("conceptGraph")) {
+                is JSONObject -> rawConceptGraph.toString().toConceptGraphSnapshot()
+                is String -> rawConceptGraph.toConceptGraphSnapshot()
+                else -> ConceptGraphSnapshot()
+            }
             val graphObject = json.optJSONObject("graph")
             val graph = graphObject?.let { graphJson ->
                 val overviewObject = graphJson.optJSONObject("overview")
@@ -1634,6 +2127,7 @@ class DirectionWikiCoordinator(
                 lastGeneratedAt = json.optLong("generatedAt"),
                 directions = directions,
                 knowledgeItems = knowledgeItems,
+                conceptGraph = conceptGraph,
                 graph = graph,
             )
         }.getOrElse {
@@ -2074,12 +2568,4 @@ class DirectionWikiCoordinator(
         )
     }
 
-    private fun JSONArray?.toStringList(): List<String> {
-        if (this == null) return emptyList()
-        return buildList {
-            for (index in 0 until length()) {
-                optString(index).takeIf { it.isNotBlank() }?.let(::add)
-            }
-        }
-    }
 }
