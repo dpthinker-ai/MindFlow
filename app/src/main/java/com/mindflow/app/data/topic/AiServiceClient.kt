@@ -300,20 +300,6 @@ class AiServiceClient {
         )
     }
 
-    suspend fun generateKnowledgeGraphSnapshot(
-        settings: AiSettings,
-        contextSummary: String,
-    ): AiChatResult = withContext(Dispatchers.IO) {
-        requestChatCompletion(
-            settings = settings,
-            userPrompt = contextSummary.take(7_500),
-            systemPrompt = "You are compressing a canonical information graph into a mobile presentation snapshot for a personal knowledge system. Return JSON only. Use only the provided canonical themes and canonical edges. Do not invent new nodes, edges, or backend object types. Keep the copy concise, concrete, and readable in Chinese.",
-            maxTokens = 1_100,
-            temperature = 0.42,
-            thinkingEnabled = false,
-        )
-    }
-
     suspend fun generateConceptGraphSnapshot(
         settings: AiSettings,
         contextSummary: String,

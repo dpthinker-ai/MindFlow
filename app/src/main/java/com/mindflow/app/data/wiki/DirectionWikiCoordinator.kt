@@ -609,7 +609,6 @@ class DirectionWikiCoordinator(
     private val threadPreferencesRepository: ThreadPreferencesRepository,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
-    private val knowledgeGraphPlanner: KnowledgeGraphPlanner,
     private val conceptGraphPlanner: ConceptGraphPlanner,
     private val applicationScope: CoroutineScope,
 ) {
@@ -1015,24 +1014,16 @@ class DirectionWikiCoordinator(
             conceptBuckets = conceptBuckets,
             candidates = objectCandidates,
         )
-        val threadNoteCounts = summaries.associate { summary ->
-            summary.threadKey to NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes).size
-        }
         val conceptGraph = conceptGraphPlanner.summarize(
             candidates = buildConceptGraphCandidates(
                 conceptBuckets = conceptBuckets,
                 objectCandidates = objectCandidates,
             ),
         )
-        val graphSnapshot = knowledgeGraphPlanner.summarize(
-            summaries = summaries,
-            knowledgeItems = knowledgeItems,
-            threadNoteCounts = threadNoteCounts,
-        )
         File(rootDir, "wiki/graph.md").writeText(
-            buildGraphMarkdown(
+            buildConceptGraphMarkdown(
                 generatedAt = generatedAt,
-                graph = graphSnapshot,
+                conceptGraph = conceptGraph,
             ),
         )
 
@@ -1041,7 +1032,6 @@ class DirectionWikiCoordinator(
             summaries = summaries,
             knowledgeItems = knowledgeItems,
             conceptGraph = conceptGraph,
-            graph = graphSnapshot,
         )
     }
 
@@ -1775,234 +1765,19 @@ class DirectionWikiCoordinator(
         }
     }
 
-    private fun buildGraphMarkdown(
-        generatedAt: Long,
-        graph: DirectionWikiGraphSnapshot,
-    ): String = buildString {
-        appendLine("# 信息图谱")
-        appendLine()
-        appendLine("更新时间：${displayTime(generatedAt)}")
-        graph.overview.summaryLine.takeIf { it.isNotBlank() }?.let {
-            appendLine()
-            appendLine(it)
-        }
-        if (graph.overview.hubThreadKeys.isNotEmpty()) {
-            appendLine()
-            appendLine("结构中心：${graph.overview.hubThreadKeys.joinToString(" / ")}")
-        }
-        if (graph.overview.isolatedThreadKeys.isNotEmpty()) {
-            appendLine("孤立主题：${graph.overview.isolatedThreadKeys.joinToString(" / ")}")
-        }
-        if (graph.overview.missingLinkCandidates.isNotEmpty()) {
-            appendLine("待补边：${graph.overview.missingLinkCandidates.joinToString(" / ")}")
-        }
-        appendLine()
-        appendLine("## 主题")
-        if (graph.nodes.isEmpty()) {
-            appendLine("还没有足够稳定的主题结构。")
-        } else {
-            graph.nodes.forEach { node ->
-                appendLine("- ${node.label}")
-                appendLine("  - 成熟度：${node.maturity.toDisplayLabel()} · 记录 ${node.noteCount} 条")
-                node.summaryLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在在讲：$it") }
-                node.gapLine.takeIf { it.isNotBlank() }?.let { appendLine("  - 现在最缺：$it") }
-            }
-        }
-        appendLine()
-        appendLine("## 关系")
-        if (graph.edges.isEmpty()) {
-            appendLine("当前还没有足够硬的主题关系。")
-        } else {
-            graph.edges.forEach { edge ->
-                appendLine("- ${edge.fromThreadKey} <-> ${edge.toThreadKey} · ${edge.relationType.wireName} · 强度 ${edge.strength}")
-                edge.reasonLine.takeIf { it.isNotBlank() }?.let { appendLine("  - $it") }
-            }
-        }
-        if (graph.presentation.nodes.isNotEmpty()) {
-            appendLine()
-            appendLine("## 前台压缩")
-            graph.presentation.headline.takeIf { it.isNotBlank() }?.let { appendLine(it) }
-            graph.presentation.summaryLine.takeIf { it.isNotBlank() }?.let { appendLine(it) }
-            graph.presentation.nodes.forEach { node ->
-                appendLine("- ${node.label}")
-            }
-        }
-    }
-
     private fun writeExport(
         generatedAt: Long,
         summaries: List<DirectionWikiDirectionSummary>,
         knowledgeItems: List<KnowledgeLayerSearchItem>,
         conceptGraph: ConceptGraphSnapshot,
-        graph: DirectionWikiGraphSnapshot,
     ) {
-        val root = JSONObject()
-            .put("generatedAt", generatedAt)
-            .put("rootPath", rootDir.absolutePath)
-            .put(
-                "directions",
-                JSONArray().apply {
-                    summaries.forEach { summary ->
-                        put(
-                            JSONObject()
-                                .put("threadKey", summary.threadKey)
-                                .put("slug", summary.slug)
-                                .put("title", summary.title)
-                                .put("stage", summary.stage.name)
-                                .put("assetSummary", summary.assetSummary)
-                                .put("conclusionLine", summary.conclusionLine)
-                                .put("nextShiftLine", summary.nextShiftLine)
-                                .put("groundingLine", summary.groundingLine)
-                                .put("trustLine", summary.trustLine)
-                                .put("knowledgeObjectLine", summary.knowledgeObjectLine)
-                                .put("healthLine", summary.healthLine)
-                                .put("maintenanceLine", summary.maintenanceLine)
-                                .put("maintenanceTargetLine", summary.maintenanceTargetLine)
-                                .put("maintenanceSourceLine", summary.maintenanceSourceLine)
-                                .put("maintenanceDimensionLine", summary.maintenanceDimensionLine)
-                                .put("maintenanceFocusLine", summary.maintenanceFocusLine)
-                                .put("continuityLine", summary.continuityLine)
-                                .put("trajectoryLine", summary.trajectoryLine)
-                                .put("stageHistorySummary", summary.stageHistorySummary)
-                                .put("snapshotStageLine", summary.snapshotStageLine)
-                                .put("snapshotCadenceLine", summary.snapshotCadenceLine)
-                                .put("updatedAt", summary.updatedAt)
-                                .put("signalPoints", JSONArray(summary.signalPoints))
-                                .put("hypothesisPoints", JSONArray(summary.hypothesisPoints))
-                                .put("verifiedPoints", JSONArray(summary.verifiedPoints))
-                                .put("validatedPoints", JSONArray(summary.validatedPoints))
-                                .put("lintIssues", JSONArray(summary.lintIssues))
-                                .put("openQuestions", JSONArray(summary.openQuestions)),
-                        )
-                    }
-                },
-            )
-            .put(
-                "knowledgeItems",
-                JSONArray().apply {
-                    knowledgeItems.forEach { item ->
-                        put(
-                            JSONObject()
-                                .put("id", item.id)
-                                .put("type", item.type.name)
-                                .put("title", item.title)
-                                .put("summary", item.summary)
-                                .put("supportLine", item.supportLine)
-                                .put("trustLabel", item.trustLabel)
-                                .put("threadKey", item.threadKey)
-                                .put("noteId", item.noteId ?: JSONObject.NULL)
-                                .put("updatedAt", item.updatedAt),
-                        )
-                    }
-                },
-            )
-            .put("conceptGraph", JSONObject(conceptGraph.toConceptGraphJsonString()))
-            .put(
-                "graph",
-                JSONObject()
-                    .put("version", graph.version)
-                    .put("source", graph.source)
-                    .put("generatedAt", graph.generatedAt)
-                    .put(
-                        "overview",
-                        JSONObject()
-                            .put("summaryLine", graph.overview.summaryLine)
-                            .put("hubThreadKeys", JSONArray(graph.overview.hubThreadKeys))
-                            .put("isolatedThreadKeys", JSONArray(graph.overview.isolatedThreadKeys))
-                            .put("densifyingThreadKeys", JSONArray(graph.overview.densifyingThreadKeys))
-                            .put("missingLinkCandidates", JSONArray(graph.overview.missingLinkCandidates)),
-                    )
-                    .put(
-                        "nodes",
-                        JSONArray().apply {
-                            graph.nodes.forEach { node ->
-                                put(
-                                    JSONObject()
-                                        .put("threadKey", node.threadKey)
-                                        .put("label", node.label)
-                                        .put("summaryLine", node.summaryLine)
-                                        .put("gapLine", node.gapLine)
-                                        .put("maturity", node.maturity.wireName)
-                                        .put("recencyScore", node.recencyScore)
-                                        .put("densityScore", node.densityScore)
-                                        .put("supportIds", JSONArray(node.supportIds))
-                                        .put("noteCount", node.noteCount)
-                                        .put("updatedAt", node.updatedAt),
-                                )
-                            }
-                        },
-                    )
-                    .put(
-                        "edges",
-                        JSONArray().apply {
-                            graph.edges.forEach { edge ->
-                                put(
-                                    JSONObject()
-                                        .put("fromThreadKey", edge.fromThreadKey)
-                                        .put("toThreadKey", edge.toThreadKey)
-                                        .put("relationType", edge.relationType.wireName)
-                                        .put("strength", edge.strength)
-                                        .put("reasonLine", edge.reasonLine)
-                                        .put("supportIds", JSONArray(edge.supportIds))
-                                        .put("firstSeenAt", edge.firstSeenAt)
-                                        .put("lastSeenAt", edge.lastSeenAt)
-                                        .put("confidence", edge.confidence),
-                                )
-                            }
-                        },
-                    )
-                    .put(
-                        "presentation",
-                        JSONObject()
-                            .put("title", graph.presentation.title)
-                            .put("headline", graph.presentation.headline)
-                            .put("summaryLine", graph.presentation.summaryLine)
-                            .put(
-                                "nodes",
-                                JSONArray().apply {
-                                    graph.presentation.nodes.forEach { node ->
-                                        put(
-                                            JSONObject()
-                                                .put("threadKey", node.threadKey)
-                                                .put("label", node.label)
-                                                .put("summaryLine", node.summaryLine)
-                                                .put("gapLine", node.gapLine)
-                                                .put("relationCount", node.relationCount)
-                                                .put("densityScore", node.densityScore)
-                                                .put("maturity", node.maturity.wireName)
-                                                .put("noteCount", node.noteCount),
-                                        )
-                                    }
-                                },
-                            )
-                            .put(
-                                "edges",
-                                JSONArray().apply {
-                                    graph.presentation.edges.forEach { edge ->
-                                        put(
-                                            JSONObject()
-                                                .put("fromThreadKey", edge.fromThreadKey)
-                                                .put("toThreadKey", edge.toThreadKey)
-                                                .put("strength", edge.strength)
-                                                .put("reasonLine", edge.reasonLine),
-                                        )
-                                    }
-                                },
-                            )
-                            .put(
-                                "focus",
-                                graph.presentation.focus?.let { focus ->
-                                    JSONObject()
-                                        .put("threadKey", focus.threadKey)
-                                        .put("label", focus.label)
-                                        .put("summaryLine", focus.summaryLine)
-                                        .put("gapLine", focus.gapLine)
-                                        .put("relatedThreadKey", focus.relatedThreadKey)
-                                        .put("relatedReasonLine", focus.relatedReasonLine)
-                                } ?: JSONObject.NULL,
-                            ),
-                    ),
-            )
+        val root = buildDirectionWikiExportJson(
+            generatedAt = generatedAt,
+            rootPath = rootDir.absolutePath,
+            summaries = summaries,
+            knowledgeItems = knowledgeItems,
+            conceptGraph = conceptGraph,
+        )
         File(rootDir, "wiki/export/direction-assets.json").writeText(root.toString(2))
     }
 
@@ -2011,152 +1786,10 @@ class DirectionWikiCoordinator(
         if (!exportFile.exists()) {
             return DirectionWikiSnapshot(rootPath = rootDir.absolutePath)
         }
-        return runCatching {
-            val json = JSONObject(exportFile.readText())
-            val directionsArray = json.optJSONArray("directions") ?: JSONArray()
-            val directions = buildMap {
-                for (index in 0 until directionsArray.length()) {
-                    val item = directionsArray.optJSONObject(index) ?: continue
-                    val threadKey = item.optString("threadKey")
-                    if (threadKey.isBlank()) continue
-                    put(
-                        threadKey,
-                        DirectionWikiDirectionSummary(
-                            threadKey = threadKey,
-                            slug = item.optString("slug"),
-                            title = item.optString("title"),
-                            stage = item.optString("stage").toDirectionStage(),
-                            assetSummary = item.optString("assetSummary"),
-                            conclusionLine = item.optString("conclusionLine"),
-                            nextShiftLine = item.optString("nextShiftLine"),
-                            groundingLine = item.optString("groundingLine"),
-                            trustLine = item.optString("trustLine"),
-                            knowledgeObjectLine = item.optString("knowledgeObjectLine"),
-                            healthLine = item.optString("healthLine"),
-                            maintenanceLine = item.optString("maintenanceLine"),
-                            maintenanceTargetLine = item.optString("maintenanceTargetLine"),
-                            maintenanceSourceLine = item.optString("maintenanceSourceLine"),
-                            maintenanceDimensionLine = item.optString("maintenanceDimensionLine"),
-                            maintenanceFocusLine = item.optString("maintenanceFocusLine"),
-                            continuityLine = item.optString("continuityLine"),
-                            trajectoryLine = item.optString("trajectoryLine"),
-                            snapshotStageLine = item.optString("snapshotStageLine"),
-                            snapshotCadenceLine = item.optString("snapshotCadenceLine"),
-                            signalPoints = item.optJSONArray("signalPoints").toStringList(),
-                            hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
-                            verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),
-                            validatedPoints = item.optJSONArray("validatedPoints").toStringList(),
-                            lintIssues = item.optJSONArray("lintIssues").toStringList(),
-                            openQuestions = item.optJSONArray("openQuestions").toStringList(),
-                            stageHistorySummary = item.optString("stageHistorySummary"),
-                            updatedAt = item.optLong("updatedAt"),
-                        ),
-                    )
-                }
-            }
-            val knowledgeItemsArray = json.optJSONArray("knowledgeItems") ?: JSONArray()
-            val knowledgeItems = buildList {
-                for (index in 0 until knowledgeItemsArray.length()) {
-                    val item = knowledgeItemsArray.optJSONObject(index) ?: continue
-                    val id = item.optString("id")
-                    val title = item.optString("title")
-                    if (id.isBlank() || title.isBlank()) continue
-                    add(
-                        KnowledgeLayerSearchItem(
-                            id = id,
-                            type = item.optString("type").toKnowledgeSearchType(),
-                            title = title,
-                            summary = item.optString("summary"),
-                            supportLine = item.optString("supportLine"),
-                            trustLabel = item.optString("trustLabel"),
-                            threadKey = item.optString("threadKey"),
-                            noteId = item.takeIf { !it.isNull("noteId") }?.optLong("noteId"),
-                            updatedAt = item.optLong("updatedAt"),
-                        ),
-                    )
-                }
-            }
-            val conceptGraph = parseConceptGraphSnapshotOrDefault(
-                when (val rawConceptGraph = json.opt("conceptGraph")) {
-                    is JSONObject -> rawConceptGraph.toString()
-                    is String -> rawConceptGraph
-                    else -> null
-                },
-            )
-            val graphObject = json.optJSONObject("graph")
-            val graph = graphObject?.let { graphJson ->
-                val overviewObject = graphJson.optJSONObject("overview")
-                DirectionWikiGraphSnapshot(
-                    version = graphJson.optInt("version").takeIf { it > 0 } ?: 1,
-                    overview = DirectionWikiGraphOverview(
-                        summaryLine = overviewObject?.optString("summaryLine")
-                            ?: graphJson.optString("overviewLine"),
-                        hubThreadKeys = overviewObject?.optJSONArray("hubThreadKeys").toStringList(),
-                        isolatedThreadKeys = overviewObject?.optJSONArray("isolatedThreadKeys").toStringList(),
-                        densifyingThreadKeys = overviewObject?.optJSONArray("densifyingThreadKeys").toStringList(),
-                        missingLinkCandidates = overviewObject?.optJSONArray("missingLinkCandidates").toStringList(),
-                    ),
-                    source = graphJson.optString("source", "rule"),
-                    generatedAt = graphJson.optLong("generatedAt"),
-                    nodes = buildList {
-                        val nodesArray = graphJson.optJSONArray("nodes") ?: JSONArray()
-                        for (index in 0 until nodesArray.length()) {
-                            val item = nodesArray.optJSONObject(index) ?: continue
-                            val threadKey = item.optString("threadKey")
-                            val label = item.optString("label")
-                            if (threadKey.isBlank() || label.isBlank()) continue
-                            add(
-                                DirectionWikiGraphNode(
-                                    threadKey = threadKey,
-                                    label = label,
-                                    summaryLine = item.optString("summaryLine"),
-                                    gapLine = item.optString("gapLine"),
-                                    maturity = item.optString("maturity").toGraphMaturity(),
-                                    recencyScore = item.optDouble("recencyScore").takeIf { !it.isNaN() } ?: 0.0,
-                                    densityScore = item.optDouble("densityScore").takeIf { !it.isNaN() } ?: 0.0,
-                                    supportIds = item.optJSONArray("supportIds").toStringList(),
-                                    noteCount = item.optInt("noteCount").coerceAtLeast(0),
-                                    updatedAt = item.optLong("updatedAt"),
-                                ),
-                            )
-                        }
-                    },
-                    edges = buildList {
-                        val edgesArray = graphJson.optJSONArray("edges") ?: JSONArray()
-                        for (index in 0 until edgesArray.length()) {
-                            val item = edgesArray.optJSONObject(index) ?: continue
-                            val from = item.optString("fromThreadKey")
-                            val to = item.optString("toThreadKey")
-                            if (from.isBlank() || to.isBlank() || from == to) continue
-                            add(
-                                DirectionWikiGraphEdge(
-                                    fromThreadKey = from,
-                                    toThreadKey = to,
-                                    relationType = item.optString("relationType").toGraphRelationType(),
-                                    strength = item.optInt("strength").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
-                                    reasonLine = item.optString("reasonLine"),
-                                    supportIds = item.optJSONArray("supportIds").toStringList(),
-                                    firstSeenAt = item.optLong("firstSeenAt"),
-                                    lastSeenAt = item.optLong("lastSeenAt"),
-                                    confidence = item.optDouble("confidence").takeIf { !it.isNaN() } ?: 0.0,
-                                ),
-                            )
-                        }
-                    },
-                    presentation = graphJson.optJSONObject("presentation").toGraphPresentation(),
-                )
-            } ?: DirectionWikiGraphSnapshot()
-            DirectionWikiSnapshot(
-                rootPath = json.optString("rootPath", rootDir.absolutePath),
-                lastGeneratedAt = json.optLong("generatedAt"),
-                directions = directions,
-                knowledgeItems = knowledgeItems,
-                conceptGraph = conceptGraph,
-                graph = graph,
-            )
-        }.getOrElse {
-            DirectionWikiSnapshot(rootPath = rootDir.absolutePath)
-        }
+        return parseDirectionWikiSnapshotOrDefault(
+            raw = exportFile.readText(),
+            defaultRootPath = rootDir.absolutePath,
+        )
     }
 
     private fun ensureDirectories() {
@@ -2513,83 +2146,250 @@ class DirectionWikiCoordinator(
         )
     }
 
-    private fun DirectionWikiGraphMaturity.toDisplayLabel(): String =
-        when (this) {
-            DirectionWikiGraphMaturity.FORMING -> "形成中"
-            DirectionWikiGraphMaturity.STRENGTHENING -> "增强中"
-            DirectionWikiGraphMaturity.STABLE -> "稳定"
-        }
+}
 
-    private fun String.toGraphMaturity(): DirectionWikiGraphMaturity =
-        DirectionWikiGraphMaturity.entries.firstOrNull { it.wireName == trim().lowercase() }
-            ?: DirectionWikiGraphMaturity.FORMING
-
-    private fun String.toGraphRelationType(): DirectionWikiGraphRelationType =
-        DirectionWikiGraphRelationType.entries.firstOrNull { it.wireName == trim().lowercase() }
-            ?: DirectionWikiGraphRelationType.CO_OCCURRENCE
-
-    private fun JSONObject?.toGraphPresentation(): DirectionWikiGraphPresentationSnapshot {
-        if (this == null) return DirectionWikiGraphPresentationSnapshot()
-        val nodes = buildList {
-            val array = optJSONArray("nodes") ?: JSONArray()
-            for (index in 0 until array.length()) {
-                val item = array.optJSONObject(index) ?: continue
-                val threadKey = item.optString("threadKey")
-                val label = item.optString("label")
-                if (threadKey.isBlank() || label.isBlank()) continue
-                add(
-                    DirectionWikiGraphPresentationNode(
-                        threadKey = threadKey,
-                        label = label,
-                        summaryLine = item.optString("summaryLine"),
-                        gapLine = item.optString("gapLine"),
-                        relationCount = item.optInt("relationCount").coerceAtLeast(0),
-                        densityScore = item.optDouble("densityScore").takeIf { !it.isNaN() } ?: 0.0,
-                        maturity = item.optString("maturity").toGraphMaturity(),
-                        noteCount = item.optInt("noteCount").coerceAtLeast(0),
-                    ),
-                )
-            }
-        }
-        val edges = buildList {
-            val array = optJSONArray("edges") ?: JSONArray()
-            for (index in 0 until array.length()) {
-                val item = array.optJSONObject(index) ?: continue
-                val from = item.optString("fromThreadKey")
-                val to = item.optString("toThreadKey")
-                if (from.isBlank() || to.isBlank() || from == to) continue
-                add(
-                    DirectionWikiGraphPresentationEdge(
-                        fromThreadKey = from,
-                        toThreadKey = to,
-                        strength = item.optInt("strength").coerceIn(1, 5).takeIf { it > 0 } ?: 3,
-                        reasonLine = item.optString("reasonLine"),
-                    ),
-                )
-            }
-        }
-        val focus = optJSONObject("focus")?.let { focusObject ->
-            focusObject.optString("threadKey")
-                .takeIf { it.isNotBlank() }
-                ?.let { threadKey ->
-                    DirectionWikiGraphPresentationFocus(
-                        threadKey = threadKey,
-                        label = focusObject.optString("label"),
-                        summaryLine = focusObject.optString("summaryLine"),
-                        gapLine = focusObject.optString("gapLine"),
-                        relatedThreadKey = focusObject.optString("relatedThreadKey"),
-                        relatedReasonLine = focusObject.optString("relatedReasonLine"),
-                    )
-                }
-        }
-        return DirectionWikiGraphPresentationSnapshot(
-            title = optString("title").ifBlank { "信息图谱" },
-            headline = optString("headline"),
-            summaryLine = optString("summaryLine"),
-            nodes = nodes,
-            edges = edges,
-            focus = focus,
+internal fun buildConceptGraphMarkdown(
+    generatedAt: Long,
+    conceptGraph: ConceptGraphSnapshot,
+): String {
+    val nodesById = conceptGraph.nodes.associateBy { it.conceptId }
+    val centerNode = nodesById[conceptGraph.defaultCenterNodeId]
+    val visibleNodes = conceptGraph.nodes
+        .sortedWith(
+            compareByDescending<ConceptGraphNode> { it.hotnessScore }
+                .thenByDescending { it.updatedAt }
+                .thenBy { it.label },
         )
+        .take(8)
+    val visibleEdges = conceptGraph.edges
+        .sortedWith(
+            compareByDescending<ConceptGraphEdge> { it.confidence }
+                .thenByDescending { it.supportIds.size }
+                .thenBy { it.fromConceptId }
+                .thenBy { it.toConceptId },
+        )
+        .take(10)
+
+    return buildString {
+        appendLine("# 概念图谱")
+        appendLine()
+        appendLine("更新时间：${formatDirectionWikiDisplayTime(generatedAt)}")
+        centerNode?.let { node ->
+            appendLine()
+            appendLine("中心概念：${node.label}")
+            node.summary.takeIf { it.isNotBlank() }?.let { appendLine(it) }
+        }
+        appendLine()
+        appendLine("## 概念")
+        if (visibleNodes.isEmpty()) {
+            appendLine("还没有可展示的概念节点。")
+        } else {
+            visibleNodes.forEach { node ->
+                val summaryLine = node.summary.trim().takeIf { it.isNotBlank() }
+                if (summaryLine == null) {
+                    appendLine("- ${node.label}")
+                } else {
+                    appendLine("- ${node.label}：$summaryLine")
+                }
+            }
+        }
+        appendLine()
+        appendLine("## 关系")
+        if (visibleEdges.isEmpty()) {
+            appendLine("当前还没有稳定的概念关系。")
+        } else {
+            visibleEdges.forEach { edge ->
+                val fromLabel = nodesById[edge.fromConceptId]?.label ?: edge.fromConceptId
+                val toLabel = nodesById[edge.toConceptId]?.label ?: edge.toConceptId
+                appendLine("- $fromLabel -> $toLabel · ${edge.relationType.toMarkdownLabel()}")
+                edge.reasonLine.takeIf { it.isNotBlank() }?.let { appendLine("  - $it") }
+            }
+        }
+    }
+}
+
+internal fun buildDirectionWikiExportJson(
+    generatedAt: Long,
+    rootPath: String,
+    summaries: List<DirectionWikiDirectionSummary>,
+    knowledgeItems: List<KnowledgeLayerSearchItem>,
+    conceptGraph: ConceptGraphSnapshot,
+): JSONObject = JSONObject()
+    .put("generatedAt", generatedAt)
+    .put("rootPath", rootPath)
+    .put(
+        "directions",
+        JSONArray().apply {
+            summaries.forEach { summary ->
+                put(
+                    JSONObject()
+                        .put("threadKey", summary.threadKey)
+                        .put("slug", summary.slug)
+                        .put("title", summary.title)
+                        .put("stage", summary.stage.name)
+                        .put("assetSummary", summary.assetSummary)
+                        .put("conclusionLine", summary.conclusionLine)
+                        .put("nextShiftLine", summary.nextShiftLine)
+                        .put("groundingLine", summary.groundingLine)
+                        .put("trustLine", summary.trustLine)
+                        .put("knowledgeObjectLine", summary.knowledgeObjectLine)
+                        .put("healthLine", summary.healthLine)
+                        .put("maintenanceLine", summary.maintenanceLine)
+                        .put("maintenanceTargetLine", summary.maintenanceTargetLine)
+                        .put("maintenanceSourceLine", summary.maintenanceSourceLine)
+                        .put("maintenanceDimensionLine", summary.maintenanceDimensionLine)
+                        .put("maintenanceFocusLine", summary.maintenanceFocusLine)
+                        .put("continuityLine", summary.continuityLine)
+                        .put("trajectoryLine", summary.trajectoryLine)
+                        .put("stageHistorySummary", summary.stageHistorySummary)
+                        .put("snapshotStageLine", summary.snapshotStageLine)
+                        .put("snapshotCadenceLine", summary.snapshotCadenceLine)
+                        .put("updatedAt", summary.updatedAt)
+                        .put("signalPoints", JSONArray(summary.signalPoints))
+                        .put("hypothesisPoints", JSONArray(summary.hypothesisPoints))
+                        .put("verifiedPoints", JSONArray(summary.verifiedPoints))
+                        .put("validatedPoints", JSONArray(summary.validatedPoints))
+                        .put("lintIssues", JSONArray(summary.lintIssues))
+                        .put("openQuestions", JSONArray(summary.openQuestions)),
+                )
+            }
+        },
+    )
+    .put(
+        "knowledgeItems",
+        JSONArray().apply {
+            knowledgeItems.forEach { item ->
+                put(
+                    JSONObject()
+                        .put("id", item.id)
+                        .put("type", item.type.name)
+                        .put("title", item.title)
+                        .put("summary", item.summary)
+                        .put("supportLine", item.supportLine)
+                        .put("trustLabel", item.trustLabel)
+                        .put("threadKey", item.threadKey)
+                        .put("noteId", item.noteId ?: JSONObject.NULL)
+                        .put("updatedAt", item.updatedAt),
+                )
+            }
+        },
+    )
+    .put("conceptGraph", JSONObject(conceptGraph.toConceptGraphJsonString()))
+
+internal fun parseDirectionWikiSnapshotOrDefault(
+    raw: String?,
+    defaultRootPath: String,
+): DirectionWikiSnapshot =
+    raw
+        ?.takeIf { it.isNotBlank() }
+        ?.let { jsonText ->
+            runCatching { JSONObject(jsonText).toDirectionWikiSnapshot(defaultRootPath) }
+                .getOrElse { DirectionWikiSnapshot(rootPath = defaultRootPath) }
+        }
+        ?: DirectionWikiSnapshot(rootPath = defaultRootPath)
+
+private fun JSONObject.toDirectionWikiSnapshot(
+    defaultRootPath: String,
+): DirectionWikiSnapshot {
+    val directionsArray = optJSONArray("directions") ?: JSONArray()
+    val directions = buildMap {
+        for (index in 0 until directionsArray.length()) {
+            val item = directionsArray.optJSONObject(index) ?: continue
+            val threadKey = item.optString("threadKey")
+            val slug = item.optString("slug")
+            val title = item.optString("title")
+            if (threadKey.isBlank() || slug.isBlank() || title.isBlank()) continue
+            put(
+                threadKey,
+                DirectionWikiDirectionSummary(
+                    threadKey = threadKey,
+                    slug = slug,
+                    title = title,
+                    stage = parseDirectionStage(item.optString("stage")),
+                    assetSummary = item.optString("assetSummary"),
+                    conclusionLine = item.optString("conclusionLine"),
+                    nextShiftLine = item.optString("nextShiftLine"),
+                    groundingLine = item.optString("groundingLine"),
+                    trustLine = item.optString("trustLine"),
+                    knowledgeObjectLine = item.optString("knowledgeObjectLine"),
+                    healthLine = item.optString("healthLine"),
+                    maintenanceLine = item.optString("maintenanceLine"),
+                    maintenanceTargetLine = item.optString("maintenanceTargetLine"),
+                    maintenanceSourceLine = item.optString("maintenanceSourceLine"),
+                    maintenanceDimensionLine = item.optString("maintenanceDimensionLine"),
+                    maintenanceFocusLine = item.optString("maintenanceFocusLine"),
+                    continuityLine = item.optString("continuityLine"),
+                    trajectoryLine = item.optString("trajectoryLine"),
+                    stageHistorySummary = item.optString("stageHistorySummary"),
+                    snapshotStageLine = item.optString("snapshotStageLine"),
+                    snapshotCadenceLine = item.optString("snapshotCadenceLine"),
+                    signalPoints = item.optJSONArray("signalPoints").toStringList(),
+                    hypothesisPoints = item.optJSONArray("hypothesisPoints").toStringList(),
+                    verifiedPoints = item.optJSONArray("verifiedPoints").toStringList(),
+                    validatedPoints = item.optJSONArray("validatedPoints").toStringList(),
+                    lintIssues = item.optJSONArray("lintIssues").toStringList(),
+                    openQuestions = item.optJSONArray("openQuestions").toStringList(),
+                    updatedAt = item.optLong("updatedAt"),
+                ),
+            )
+        }
     }
 
+    val knowledgeItemsArray = optJSONArray("knowledgeItems") ?: JSONArray()
+    val knowledgeItems = buildList {
+        for (index in 0 until knowledgeItemsArray.length()) {
+            val item = knowledgeItemsArray.optJSONObject(index) ?: continue
+            val id = item.optString("id")
+            val title = item.optString("title")
+            if (id.isBlank() || title.isBlank()) continue
+            add(
+                KnowledgeLayerSearchItem(
+                    id = id,
+                    type = parseKnowledgeSearchType(item.optString("type")),
+                    title = title,
+                    summary = item.optString("summary"),
+                    supportLine = item.optString("supportLine"),
+                    trustLabel = item.optString("trustLabel"),
+                    threadKey = item.optString("threadKey"),
+                    noteId = item.takeIf { !it.isNull("noteId") }?.optLong("noteId"),
+                    updatedAt = item.optLong("updatedAt"),
+                ),
+            )
+        }
+    }
+
+    val conceptGraph = parseConceptGraphSnapshotOrDefault(
+        when (val rawConceptGraph = opt("conceptGraph")) {
+            is JSONObject -> rawConceptGraph.toString()
+            is String -> rawConceptGraph
+            else -> null
+        },
+    )
+
+    return DirectionWikiSnapshot(
+        rootPath = optString("rootPath", defaultRootPath),
+        lastGeneratedAt = optLong("generatedAt"),
+        directions = directions,
+        knowledgeItems = knowledgeItems,
+        conceptGraph = conceptGraph,
+    )
 }
+
+private fun ConceptGraphRelationType.toMarkdownLabel(): String =
+    when (this) {
+        ConceptGraphRelationType.SUPPORTS -> "支撑"
+        ConceptGraphRelationType.ADVANCES -> "推进"
+        ConceptGraphRelationType.PARALLEL -> "并行"
+        ConceptGraphRelationType.REFERENCES -> "引用"
+        ConceptGraphRelationType.CONTRASTS -> "对照"
+    }
+
+private fun formatDirectionWikiDisplayTime(time: Long): String =
+    Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+
+private fun parseDirectionStage(raw: String): DirectionStage =
+    runCatching { DirectionStage.valueOf(raw) }.getOrDefault(DirectionStage.FORMING)
+
+private fun parseKnowledgeSearchType(raw: String): KnowledgeLayerSearchType =
+    runCatching { KnowledgeLayerSearchType.valueOf(raw) }.getOrDefault(KnowledgeLayerSearchType.DIRECTION)

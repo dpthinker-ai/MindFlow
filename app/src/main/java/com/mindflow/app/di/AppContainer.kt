@@ -50,7 +50,6 @@ import com.mindflow.app.data.topic.RuleBasedFolderClassifier
 import com.mindflow.app.data.topic.RuleBasedTopicExtractor
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.ConceptGraphPlanner
-import com.mindflow.app.data.wiki.KnowledgeGraphPlanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -208,11 +207,6 @@ class AppContainer(context: Context) {
         aiServiceClient = aiServiceClient,
     )
 
-    val knowledgeGraphPlanner = KnowledgeGraphPlanner(
-        aiSettingsRepository = aiSettingsRepository,
-        aiServiceClient = aiServiceClient,
-    )
-
     val conceptGraphPlanner = ConceptGraphPlanner(
         aiSettingsRepository = aiSettingsRepository,
         aiServiceClient = aiServiceClient,
@@ -224,7 +218,6 @@ class AppContainer(context: Context) {
         threadPreferencesRepository = threadPreferencesRepository,
         threadExecutionPlanner = threadExecutionPlanner,
         externalResearchPlanner = externalResearchPlanner,
-        knowledgeGraphPlanner = knowledgeGraphPlanner,
         conceptGraphPlanner = conceptGraphPlanner,
         applicationScope = applicationScope,
     )

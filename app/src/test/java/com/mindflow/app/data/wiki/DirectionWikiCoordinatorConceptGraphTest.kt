@@ -14,6 +14,14 @@ import org.junit.Test
 
 class DirectionWikiCoordinatorConceptGraphTest {
     @Test
+    fun `direction wiki snapshot exposes conceptGraph as the only production graph field`() {
+        val fields = DirectionWikiSnapshot::class.java.declaredFields.map { it.name }
+
+        assertThat(fields).contains("conceptGraph")
+        assertThat(fields).doesNotContain("graph")
+    }
+
+    @Test
     fun `buildConceptGraphCandidates combines recent concept buckets with long-term object concepts`() {
         val candidates = buildConceptGraphCandidates(
             conceptBuckets = mapOf(

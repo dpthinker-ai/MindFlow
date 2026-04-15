@@ -33,25 +33,6 @@ data class DirectionWikiDirectionSummary(
     val updatedAt: Long = 0L,
 )
 
-enum class DirectionWikiGraphMaturity(
-    val wireName: String,
-) {
-    FORMING("forming"),
-    STRENGTHENING("strengthening"),
-    STABLE("stable"),
-}
-
-enum class DirectionWikiGraphRelationType(
-    val wireName: String,
-) {
-    SHARED_CONCEPT("shared_concept"),
-    SHARED_QUESTION("shared_question"),
-    SHARED_METHOD("shared_method"),
-    SHARED_EXPERIMENT("shared_experiment"),
-    CO_OCCURRENCE("co_occurrence"),
-    DEPENDENCY("dependency"),
-}
-
 enum class ConceptGraphRelationType(
     val wireName: String,
 ) {
@@ -70,85 +51,6 @@ enum class ConceptGraphRelationType(
         }
     }
 }
-
-data class DirectionWikiGraphOverview(
-    val summaryLine: String = "",
-    val hubThreadKeys: List<String> = emptyList(),
-    val isolatedThreadKeys: List<String> = emptyList(),
-    val densifyingThreadKeys: List<String> = emptyList(),
-    val missingLinkCandidates: List<String> = emptyList(),
-)
-
-data class DirectionWikiGraphNode(
-    val threadKey: String,
-    val label: String,
-    val summaryLine: String = "",
-    val gapLine: String = "",
-    val maturity: DirectionWikiGraphMaturity = DirectionWikiGraphMaturity.FORMING,
-    val recencyScore: Double = 0.0,
-    val densityScore: Double = 0.0,
-    val supportIds: List<String> = emptyList(),
-    val noteCount: Int = 0,
-    val updatedAt: Long = 0L,
-)
-
-data class DirectionWikiGraphEdge(
-    val fromThreadKey: String,
-    val toThreadKey: String,
-    val relationType: DirectionWikiGraphRelationType = DirectionWikiGraphRelationType.CO_OCCURRENCE,
-    val strength: Int = 3,
-    val reasonLine: String = "",
-    val supportIds: List<String> = emptyList(),
-    val firstSeenAt: Long = 0L,
-    val lastSeenAt: Long = 0L,
-    val confidence: Double = 0.0,
-)
-
-data class DirectionWikiGraphPresentationNode(
-    val threadKey: String,
-    val label: String,
-    val summaryLine: String = "",
-    val gapLine: String = "",
-    val relationCount: Int = 0,
-    val densityScore: Double = 0.0,
-    val maturity: DirectionWikiGraphMaturity = DirectionWikiGraphMaturity.FORMING,
-    val noteCount: Int = 0,
-)
-
-data class DirectionWikiGraphPresentationEdge(
-    val fromThreadKey: String,
-    val toThreadKey: String,
-    val strength: Int = 3,
-    val reasonLine: String = "",
-)
-
-data class DirectionWikiGraphPresentationFocus(
-    val threadKey: String = "",
-    val label: String = "",
-    val summaryLine: String = "",
-    val gapLine: String = "",
-    val relatedThreadKey: String = "",
-    val relatedReasonLine: String = "",
-)
-
-data class DirectionWikiGraphPresentationSnapshot(
-    val title: String = "信息图谱",
-    val headline: String = "",
-    val summaryLine: String = "",
-    val nodes: List<DirectionWikiGraphPresentationNode> = emptyList(),
-    val edges: List<DirectionWikiGraphPresentationEdge> = emptyList(),
-    val focus: DirectionWikiGraphPresentationFocus? = null,
-)
-
-data class DirectionWikiGraphSnapshot(
-    val version: Int = 2,
-    val overview: DirectionWikiGraphOverview = DirectionWikiGraphOverview(),
-    val nodes: List<DirectionWikiGraphNode> = emptyList(),
-    val edges: List<DirectionWikiGraphEdge> = emptyList(),
-    val presentation: DirectionWikiGraphPresentationSnapshot = DirectionWikiGraphPresentationSnapshot(),
-    val source: String = "rule",
-    val generatedAt: Long = 0L,
-)
 
 data class ConceptGraphCandidate(
     val conceptId: String,
@@ -218,7 +120,6 @@ data class DirectionWikiSnapshot(
     val directions: Map<String, DirectionWikiDirectionSummary> = emptyMap(),
     val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
     val conceptGraph: ConceptGraphSnapshot = ConceptGraphSnapshot(),
-    val graph: DirectionWikiGraphSnapshot = DirectionWikiGraphSnapshot(),
 )
 
 data class DirectionWikiRefreshResult(
