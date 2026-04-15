@@ -314,6 +314,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateConceptGraphSnapshot(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(7_500),
+            systemPrompt = "You are merging overlapping concept candidates into a concept-centric graph for a personal knowledge system. Return JSON only. Resolve aliases onto canonical concept nodes, keep labels concise, and infer only high-signal relations supported by the provided candidates. Use only these relationType values: supports, advances, parallel, references, contrasts. Reuse only the provided concept IDs or aliases when referring to nodes. Do not invent extra relation labels, extra node types, or prose outside the JSON object.",
+            maxTokens = 1_200,
+            temperature = 0.38,
+            thinkingEnabled = false,
+        )
+    }
+
     private fun requestChatCompletion(
         settings: AiSettings,
         userPrompt: String,

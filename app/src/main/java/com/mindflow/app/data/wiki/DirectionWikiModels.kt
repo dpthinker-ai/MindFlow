@@ -52,6 +52,25 @@ enum class DirectionWikiGraphRelationType(
     DEPENDENCY("dependency"),
 }
 
+enum class ConceptGraphRelationType(
+    val wireName: String,
+) {
+    SUPPORTS("supports"),
+    ADVANCES("advances"),
+    PARALLEL("parallel"),
+    REFERENCES("references"),
+    CONTRASTS("contrasts"),
+    ;
+
+    companion object {
+        fun fromWireName(raw: String): ConceptGraphRelationType? {
+            val normalized = raw.trim().lowercase()
+            if (normalized.isBlank()) return null
+            return entries.firstOrNull { it.wireName == normalized }
+        }
+    }
+}
+
 data class DirectionWikiGraphOverview(
     val summaryLine: String = "",
     val hubThreadKeys: List<String> = emptyList(),
@@ -127,6 +146,44 @@ data class DirectionWikiGraphSnapshot(
     val nodes: List<DirectionWikiGraphNode> = emptyList(),
     val edges: List<DirectionWikiGraphEdge> = emptyList(),
     val presentation: DirectionWikiGraphPresentationSnapshot = DirectionWikiGraphPresentationSnapshot(),
+    val source: String = "rule",
+    val generatedAt: Long = 0L,
+)
+
+data class ConceptGraphCandidate(
+    val conceptId: String,
+    val title: String,
+    val aliases: List<String> = emptyList(),
+    val summary: String = "",
+    val hotnessScore: Double = 0.0,
+    val updatedAt: Long = 0L,
+    val sourceIds: List<String> = emptyList(),
+)
+
+data class ConceptGraphNode(
+    val conceptId: String,
+    val label: String,
+    val aliases: List<String> = emptyList(),
+    val summary: String = "",
+    val hotnessScore: Double = 0.0,
+    val updatedAt: Long = 0L,
+    val sourceIds: List<String> = emptyList(),
+)
+
+data class ConceptGraphEdge(
+    val fromConceptId: String,
+    val toConceptId: String,
+    val relationType: ConceptGraphRelationType = ConceptGraphRelationType.REFERENCES,
+    val reasonLine: String = "",
+    val supportIds: List<String> = emptyList(),
+    val confidence: Double = 0.0,
+)
+
+data class ConceptGraphSnapshot(
+    val version: Int = 1,
+    val defaultCenterNodeId: String = "",
+    val nodes: List<ConceptGraphNode> = emptyList(),
+    val edges: List<ConceptGraphEdge> = emptyList(),
     val source: String = "rule",
     val generatedAt: Long = 0L,
 )
