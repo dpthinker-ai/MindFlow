@@ -1,463 +1,141 @@
 package com.mindflow.app.ui.screens.flow
 
 import com.google.common.truth.Truth.assertThat
-import com.mindflow.app.data.connect.DirectionStage
-import com.mindflow.app.data.local.entity.NoteEntity
-import com.mindflow.app.data.model.FolderSource
-import com.mindflow.app.data.model.KnowledgeTrust
-import com.mindflow.app.data.model.NoteHorizon
-import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.model.TagSource
-import com.mindflow.app.data.model.TopicSource
-import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
-import com.mindflow.app.data.wiki.DirectionWikiGraphMaturity
-import com.mindflow.app.data.wiki.DirectionWikiGraphNode
-import com.mindflow.app.data.wiki.DirectionWikiGraphOverview
-import com.mindflow.app.data.wiki.DirectionWikiGraphPresentationEdge
-import com.mindflow.app.data.wiki.DirectionWikiGraphPresentationNode
-import com.mindflow.app.data.wiki.DirectionWikiGraphPresentationSnapshot
-import com.mindflow.app.data.wiki.DirectionWikiGraphSnapshot
+import com.mindflow.app.data.wiki.ConceptGraphEdge
+import com.mindflow.app.data.wiki.ConceptGraphNode
+import com.mindflow.app.data.wiki.ConceptGraphRelationType
+import com.mindflow.app.data.wiki.ConceptGraphSnapshot
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import org.junit.Test
 
 class KnowledgeGraphScreenTest {
     @Test
-    fun `selectVisibleGraph prefers presentation nodes and filters edges to visible graph`() {
-        val snapshot = DirectionWikiSnapshot(
-            directions = mapOf(
-                "folder:work" to directionSummary("folder:work", "工作"),
-                "tag:learning" to directionSummary("tag:learning", "学习"),
-            ),
-            graph = DirectionWikiGraphSnapshot(
-                overview = DirectionWikiGraphOverview(
-                    hubThreadKeys = listOf("folder:work", "tag:missing"),
-                    isolatedThreadKeys = listOf("tag:learning"),
-                ),
-                presentation = DirectionWikiGraphPresentationSnapshot(
-                    nodes = listOf(
-                        DirectionWikiGraphPresentationNode(
-                            threadKey = "folder:work",
-                            label = "工作",
-                            summaryLine = "工作结构在变清楚。",
-                            densityScore = 0.9,
-                            maturity = DirectionWikiGraphMaturity.STABLE,
-                            noteCount = 6,
-                        ),
-                        DirectionWikiGraphPresentationNode(
-                            threadKey = "tag:learning",
-                            label = "学习",
-                            summaryLine = "学习主题持续出现。",
-                            densityScore = 0.4,
-                            maturity = DirectionWikiGraphMaturity.FORMING,
-                            noteCount = 2,
-                        ),
-                    ),
-                    edges = listOf(
-                        DirectionWikiGraphPresentationEdge(
-                            fromThreadKey = "folder:work",
-                            toThreadKey = "tag:learning",
-                            strength = 4,
-                            reasonLine = "方法开始共享。",
-                        ),
-                        DirectionWikiGraphPresentationEdge(
-                            fromThreadKey = "folder:work",
-                            toThreadKey = "tag:missing",
-                            strength = 3,
-                            reasonLine = "这条边不应该被保留。",
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-        val selection = selectVisibleGraph(snapshot)
-
-        assertThat(selection.nodes.map { it.threadKey }).containsExactly("folder:work", "tag:learning")
-        assertThat(selection.edges).hasSize(1)
-        assertThat(selection.edges.single().fromThreadKey).isEqualTo("folder:work")
-        assertThat(selection.edges.single().toThreadKey).isEqualTo("tag:learning")
-        assertThat(selection.hubNodeIds).containsExactly("folder:work")
-        assertThat(selection.isolatedNodeIds).containsExactly("tag:learning")
-    }
-
-    @Test
-    fun `selectVisibleGraph supplements sparse presentation edges with canonical edges`() {
-        val snapshot = DirectionWikiSnapshot(
-            directions = mapOf(
-                "folder:work" to directionSummary("folder:work", "工作"),
-                "tag:learning" to directionSummary("tag:learning", "学习"),
-                "tag:health" to directionSummary("tag:health", "健康"),
-            ),
-            graph = DirectionWikiGraphSnapshot(
-                overview = DirectionWikiGraphOverview(
-                    hubThreadKeys = listOf("folder:work"),
-                    isolatedThreadKeys = emptyList(),
-                ),
-                edges = listOf(
-                    canonicalEdge("folder:work", "tag:learning", 5, 0.9, "方法共享。"),
-                    canonicalEdge("tag:learning", "tag:health", 4, 0.8, "主题互相支撑。"),
-                ),
-                presentation = DirectionWikiGraphPresentationSnapshot(
-                    nodes = listOf(
-                        presentationNode("folder:work", "工作", 0.9),
-                        presentationNode("tag:learning", "学习", 0.7),
-                        presentationNode("tag:health", "健康", 0.5),
-                    ),
-                    edges = listOf(
-                        DirectionWikiGraphPresentationEdge(
-                            fromThreadKey = "folder:work",
-                            toThreadKey = "tag:learning",
-                            strength = 5,
-                            reasonLine = "方法共享。",
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-        val selection = selectVisibleGraph(snapshot)
-
-        assertThat(selection.edges.map { setOf(it.fromThreadKey, it.toThreadKey) })
-            .containsExactly(
-                setOf("folder:work", "tag:learning"),
-                setOf("tag:learning", "tag:health"),
-            )
-    }
-
-    @Test
-    fun `selectVisibleGraph recovers connected canonical nodes when presentation nodes are disconnected`() {
-        val snapshot = DirectionWikiSnapshot(
-            directions = mapOf(
-                "folder:work" to directionSummary("folder:work", "工作"),
-                "tag:writing" to directionSummary("tag:writing", "写作"),
-                "tag:learning" to directionSummary("tag:learning", "学习"),
-                "tag:health" to directionSummary("tag:health", "健康"),
-            ),
-            graph = DirectionWikiGraphSnapshot(
-                overview = DirectionWikiGraphOverview(
-                    hubThreadKeys = listOf("tag:learning"),
-                    isolatedThreadKeys = emptyList(),
-                ),
-                nodes = listOf(
-                    canonicalNode("folder:work", "工作", densityScore = 0.95, recencyScore = 0.8),
-                    canonicalNode("tag:writing", "写作", densityScore = 0.9, recencyScore = 0.7),
-                    canonicalNode("tag:learning", "学习", densityScore = 0.7, recencyScore = 0.6),
-                    canonicalNode("tag:health", "健康", densityScore = 0.65, recencyScore = 0.5),
-                ),
-                edges = listOf(
-                    canonicalEdge("tag:learning", "tag:health", 5, 0.9, "方法共享。"),
-                ),
-                presentation = DirectionWikiGraphPresentationSnapshot(
-                    nodes = listOf(
-                        presentationNode("folder:work", "工作", 0.95),
-                        presentationNode("tag:writing", "写作", 0.9),
-                    ),
-                    edges = emptyList(),
-                ),
-            ),
-        )
-
-        val selection = selectVisibleGraph(snapshot)
-
-        assertThat(selection.nodes.map { it.threadKey }).containsAtLeast("tag:learning", "tag:health")
-        assertThat(selection.edges.map { setOf(it.fromThreadKey, it.toThreadKey) })
-            .containsExactly(setOf("tag:learning", "tag:health"))
-    }
-
-    @Test
-    fun `projectPureGraphInfo fills blank summaries from direction snapshot`() {
-        val snapshot = DirectionWikiSnapshot(
-            directions = mapOf(
-                "folder:work" to directionSummary(
-                    threadKey = "folder:work",
-                    title = "工作",
-                    conclusionLine = "工作主线已经更清楚了。",
-                ),
-            ),
-        )
-        val selection = SelectedGraphData(
-            headline = "1 个主题",
-            summaryLine = "",
-            hubNodeIds = setOf("folder:work"),
-            isolatedNodeIds = emptySet(),
+    fun `buildConceptGraphViewport uses snapshot default center`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "learning",
             nodes = listOf(
-                SelectedGraphNode(
-                    threadKey = "folder:work",
-                    label = "工作",
-                    summaryLine = "",
-                    densityScore = 0.8,
-                    maturity = DirectionWikiGraphMaturity.STRENGTHENING,
-                    noteCount = 5,
-                ),
-            ),
-            edges = emptyList(),
-        )
-
-        val projection = projectPureGraphInfo(snapshot, selection)
-
-        assertThat(projection.nodes).hasSize(1)
-        assertThat(projection.nodes.single().summaryLine).isEqualTo("工作主线已经更清楚了。")
-        assertThat(projection.nodes.single().relationCount).isEqualTo(0)
-    }
-
-    @Test
-    fun `buildGraphVisualState assigns structure statuses from projection`() {
-        val projection = GraphProjection(
-            headline = "3 个主题",
-            summaryLine = "",
-            hubNodeIds = setOf("folder:work"),
-            isolatedNodeIds = setOf("tag:health"),
-            nodes = listOf(
-                GraphProjectionNode(
-                    threadKey = "folder:work",
-                    label = "工作",
-                    summaryLine = "工作主线更清楚了。",
-                    densityScore = 0.9,
-                    maturity = DirectionWikiGraphMaturity.STABLE,
-                    noteCount = 6,
-                    relationCount = 2,
-                ),
-                GraphProjectionNode(
-                    threadKey = "tag:learning",
-                    label = "学习",
-                    summaryLine = "学习方法在成形。",
-                    densityScore = 0.6,
-                    maturity = DirectionWikiGraphMaturity.STRENGTHENING,
-                    noteCount = 3,
-                    relationCount = 1,
-                ),
-                GraphProjectionNode(
-                    threadKey = "tag:health",
-                    label = "健康",
-                    summaryLine = "健康主题独立出现。",
-                    densityScore = 0.3,
-                    maturity = DirectionWikiGraphMaturity.FORMING,
-                    noteCount = 1,
-                    relationCount = 0,
-                ),
+                conceptNode("work", "工作", hotnessScore = 0.9, updatedAt = 100),
+                conceptNode("learning", "学习", hotnessScore = 0.7, updatedAt = 200),
             ),
             edges = listOf(
-                GraphProjectionEdge(
-                    fromThreadKey = "folder:work",
-                    toThreadKey = "tag:learning",
-                    strength = 4,
-                    reasonLine = "方法共享。",
+                conceptEdge(
+                    fromConceptId = "work",
+                    toConceptId = "learning",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.8,
                 ),
             ),
         )
 
-        val overview = buildGraphVisualState(
-            directions = emptyMap(),
-            projection = projection,
-        )
+        val viewport = buildConceptGraphViewport(snapshot)
 
-        assertThat(overview.nodes.first { it.id == "folder:work" }.structureStatus).isEqualTo(GraphStructureStatus.HUB)
-        assertThat(overview.nodes.first { it.id == "tag:learning" }.structureStatus).isEqualTo(GraphStructureStatus.LINKED)
-        assertThat(overview.nodes.first { it.id == "tag:health" }.structureStatus).isEqualTo(GraphStructureStatus.ISOLATED)
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("learning")
+        assertThat(viewport.neighbors.map { it.node.conceptId }).containsExactly("work")
+        assertThat(viewport.hiddenNeighborCount).isEqualTo(0)
     }
 
     @Test
-    fun `buildActivatedGraphNodes only uses exact folder and tag matches`() {
-        val graphNodes = listOf(
-            GraphNodeUi(
-                id = "folder:work",
-                label = "工作",
-                summaryLine = "工作主线更清楚了。",
-                threadKey = "folder:work",
-                structureStatus = GraphStructureStatus.HUB,
-                densityScore = 0.8,
-                maturity = DirectionWikiGraphMaturity.STABLE,
-                noteCount = 5,
-                relationCount = 2,
-                priority = 5,
-            ),
-        )
+    fun `buildConceptGraphViewport caps first hop neighbors at six`() {
+        val snapshot = denselyConnectedSnapshot()
 
-        val fuzzyOnly = buildActivatedGraphNodes(
-            notes = listOf(
-                note(
-                    id = 1,
-                    topic = "随手想法",
-                    content = "今天一直在想工作节奏，但没有打标签。",
-                ),
-            ),
-            graphNodes = graphNodes,
-        )
-        val exactMatch = buildActivatedGraphNodes(
-            notes = listOf(
-                note(
-                    id = 2,
-                    topic = "工作记录",
-                    content = "补一条工作记录。",
-                    folderKey = "work",
-                ),
-            ),
-            graphNodes = graphNodes,
-        )
+        val viewport = buildConceptGraphViewport(snapshot)
 
-        assertThat(fuzzyOnly).isEmpty()
-        assertThat(exactMatch.map { it.id }).containsExactly("folder:work")
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("center")
+        assertThat(viewport.neighbors.map { it.node.conceptId })
+            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")
+            .inOrder()
+        assertThat(viewport.hiddenNeighborCount).isEqualTo(2)
     }
 
     @Test
-    fun `buildDisplayedGraphEdges keeps backbone and expands local relations for selected node`() {
-        val nodes = listOf(
-            graphNode(id = "folder:work", label = "工作", priority = 5, relationCount = 2),
-            graphNode(id = "tag:learning", label = "学习", priority = 4, relationCount = 2),
-            graphNode(id = "tag:writing", label = "写作", priority = 3, relationCount = 2),
-        )
-        val edges = listOf(
-            GraphEdgeUi(fromId = "folder:work", toId = "tag:learning", weight = 5, reasonLine = "方法共享。"),
-            GraphEdgeUi(fromId = "tag:learning", toId = "tag:writing", weight = 4, reasonLine = "表达互相支撑。"),
-            GraphEdgeUi(fromId = "folder:work", toId = "tag:writing", weight = 2, reasonLine = "零散相关。"),
+    fun `buildConceptGraphViewport reveals more neighbors after explicit expansion`() {
+        val snapshot = denselyConnectedSnapshot()
+
+        val collapsed = buildConceptGraphViewport(snapshot)
+        val expanded = buildConceptGraphViewport(
+            snapshot = snapshot,
+            expandedCenterNodeIds = setOf("center"),
         )
 
-        val defaultEdges = buildDisplayedGraphEdges(
-            nodes = nodes,
-            edges = edges,
-            selectedNodeId = null,
-        )
-        val focusedEdges = buildDisplayedGraphEdges(
-            nodes = nodes,
-            edges = edges,
-            selectedNodeId = "folder:work",
-        )
-
-        assertThat(defaultEdges.map { setOf(it.fromId, it.toId) })
-            .containsExactly(setOf("folder:work", "tag:learning"), setOf("tag:learning", "tag:writing"))
-        assertThat(defaultEdges.all { it.emphasis == GraphEdgeEmphasis.BACKBONE }).isTrue()
-        assertThat(focusedEdges.map { setOf(it.fromId, it.toId) })
+        assertThat(collapsed.neighbors).hasSize(6)
+        assertThat(expanded.neighbors.map { it.node.conceptId })
             .containsExactly(
-                setOf("folder:work", "tag:learning"),
-                setOf("tag:learning", "tag:writing"),
-                setOf("folder:work", "tag:writing"),
+                "node-1",
+                "node-2",
+                "node-3",
+                "node-4",
+                "node-5",
+                "node-6",
+                "node-7",
+                "node-8",
             )
-        assertThat(
-            focusedEdges.first { setOf(it.fromId, it.toId) == setOf("folder:work", "tag:writing") }.emphasis,
-        ).isEqualTo(GraphEdgeEmphasis.FOCUS)
+            .inOrder()
+        assertThat(expanded.hiddenNeighborCount).isEqualTo(0)
     }
 
-    @Test
-    fun `buildFocusedGraphNodeIds returns selected node and its direct neighbors`() {
-        val edges = listOf(
-            GraphEdgeUi(fromId = "folder:work", toId = "tag:learning", weight = 5),
-            GraphEdgeUi(fromId = "tag:learning", toId = "tag:writing", weight = 4),
-            GraphEdgeUi(fromId = "folder:work", toId = "tag:health", weight = 2),
+    private fun denselyConnectedSnapshot(): DirectionWikiSnapshot =
+        conceptSnapshot(
+            defaultCenterNodeId = "center",
+            nodes = buildList {
+                add(conceptNode("center", "中心知识点", hotnessScore = 1.0, updatedAt = 1_000))
+                repeat(8) { index ->
+                    add(
+                        conceptNode(
+                            conceptId = "node-${index + 1}",
+                            label = "关联${index + 1}",
+                            hotnessScore = 0.9 - (index * 0.05),
+                            updatedAt = 900L - index,
+                        ),
+                    )
+                }
+            },
+            edges = List(8) { index ->
+                conceptEdge(
+                    fromConceptId = "center",
+                    toConceptId = "node-${index + 1}",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.95 - (index * 0.05),
+                )
+            },
         )
 
-        val focused = buildFocusedGraphNodeIds(
+    private fun conceptSnapshot(
+        defaultCenterNodeId: String,
+        nodes: List<ConceptGraphNode>,
+        edges: List<ConceptGraphEdge>,
+    ) = DirectionWikiSnapshot(
+        conceptGraph = ConceptGraphSnapshot(
+            defaultCenterNodeId = defaultCenterNodeId,
+            nodes = nodes,
             edges = edges,
-            selectedNodeId = "folder:work",
-        )
-
-        assertThat(focused).containsExactly("folder:work", "tag:learning", "tag:health")
-    }
-
-    @Test
-    fun `compactGraphRelationLabel keeps first clause short and readable`() {
-        assertThat(compactGraphRelationLabel("方法共享。两条线已经开始互相借力。")).isEqualTo("方法共享")
-        assertThat(compactGraphRelationLabel("因为这个主题和长期恢复有关，所以会反复出现。")).isEqualTo("这个主题和长期恢")
-        assertThat(compactGraphRelationLabel("")).isEqualTo("相关")
-    }
-
-    private fun graphNode(
-        id: String,
-        label: String,
-        priority: Int,
-        relationCount: Int,
-    ) = GraphNodeUi(
-        id = id,
-        label = label,
-        summaryLine = "$label 正在成形。",
-        threadKey = id,
-        structureStatus = GraphStructureStatus.LINKED,
-        densityScore = 0.5,
-        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
-        noteCount = 3,
-        relationCount = relationCount,
-        priority = priority,
+        ),
     )
 
-    private fun presentationNode(
-        threadKey: String,
+    private fun conceptNode(
+        conceptId: String,
         label: String,
-        densityScore: Double,
-    ) = DirectionWikiGraphPresentationNode(
-        threadKey = threadKey,
+        hotnessScore: Double,
+        updatedAt: Long,
+        summary: String = "$label 的摘要。",
+    ) = ConceptGraphNode(
+        conceptId = conceptId,
         label = label,
-        summaryLine = "$label 正在成形。",
-        densityScore = densityScore,
-        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
-        noteCount = 3,
+        summary = summary,
+        hotnessScore = hotnessScore,
+        updatedAt = updatedAt,
     )
 
-    private fun canonicalEdge(
-        from: String,
-        to: String,
-        strength: Int,
+    private fun conceptEdge(
+        fromConceptId: String,
+        toConceptId: String,
+        relationType: ConceptGraphRelationType,
         confidence: Double,
-        reasonLine: String,
-    ) = com.mindflow.app.data.wiki.DirectionWikiGraphEdge(
-        fromThreadKey = from,
-        toThreadKey = to,
-        relationType = com.mindflow.app.data.wiki.DirectionWikiGraphRelationType.CO_OCCURRENCE,
-        strength = strength,
-        confidence = confidence,
+        reasonLine: String = "这是一条关系解释。",
+    ) = ConceptGraphEdge(
+        fromConceptId = fromConceptId,
+        toConceptId = toConceptId,
+        relationType = relationType,
         reasonLine = reasonLine,
-        supportIds = emptyList(),
-        firstSeenAt = 1_000L,
-        lastSeenAt = 1_000L,
-    )
-
-    private fun canonicalNode(
-        threadKey: String,
-        label: String,
-        densityScore: Double,
-        recencyScore: Double,
-    ) = DirectionWikiGraphNode(
-        threadKey = threadKey,
-        label = label,
-        summaryLine = "$label 正在成形。",
-        densityScore = densityScore,
-        recencyScore = recencyScore,
-        maturity = DirectionWikiGraphMaturity.STRENGTHENING,
-        noteCount = 3,
-        updatedAt = 1_000L,
-    )
-
-    private fun directionSummary(
-        threadKey: String,
-        title: String,
-        conclusionLine: String = "",
-    ) = DirectionWikiDirectionSummary(
-        threadKey = threadKey,
-        slug = threadKey,
-        title = title,
-        stage = DirectionStage.FORMING,
-        conclusionLine = conclusionLine,
-        updatedAt = 1_000L,
-    )
-
-    private fun note(
-        id: Long,
-        topic: String,
-        content: String,
-        folderKey: String? = null,
-        tags: List<String> = emptyList(),
-    ) = NoteEntity(
-        id = id,
-        content = content,
-        topic = topic,
-        topicSource = TopicSource.RULE,
-        folderKey = folderKey,
-        folderSource = FolderSource.RULE,
-        tags = tags,
-        tagSource = TagSource.RULE,
-        status = NoteStatus.IDEA,
-        horizon = NoteHorizon.MEDIUM,
-        knowledgeTrust = KnowledgeTrust.NONE,
-        isArchived = false,
-        createdAt = 1_000L,
-        updatedAt = 1_000L,
+        confidence = confidence,
     )
 }
