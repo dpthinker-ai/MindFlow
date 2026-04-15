@@ -41,6 +41,58 @@ class ConceptGraphPlannerTest {
     }
 
     @Test
+    fun `summarize bounds concept-graph ai context as valid json and keeps omitted candidates`() = runTest {
+        var capturedContext = ""
+        val planner = planner(
+            resultFactory = { context ->
+                capturedContext = context
+                val visibleConceptId = extractCandidateConceptIds(context).first()
+                AiChatResult.Success(
+                    content = """
+                        {
+                          "nodes": [
+                            {
+                              "conceptId": "$visibleConceptId",
+                              "label": "AI-$visibleConceptId",
+                              "summary": "AI 仅覆盖可见子集。"
+                            }
+                          ],
+                          "edges": []
+                        }
+                    """.trimIndent(),
+                )
+            },
+        )
+
+        val candidates = (1..18).map { index ->
+            candidate(
+                conceptId = "concept-$index",
+                title = "概念 $index",
+                aliases = listOf("alias-$index-${"x".repeat(120)}"),
+                hotnessScore = 1.0 - (index * 0.01),
+                updatedAt = 10_000L - index,
+                summary = "summary-$index ".repeat(220),
+                sourceIds = listOf("source-$index-${"y".repeat(120)}"),
+            )
+        }
+
+        val snapshot = planner.summarize(candidates)
+        val visibleCandidateIds = extractCandidateConceptIds(capturedContext)
+
+        assertJsonObjectParses(capturedContext)
+        assertThat(capturedContext.length).isAtMost(CONCEPT_GRAPH_AI_CONTEXT_MAX_CHARS)
+        assertThat(visibleCandidateIds).isNotEmpty()
+        assertThat(visibleCandidateIds.size).isLessThan(candidates.size)
+        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.nodes.map { it.conceptId })
+            .containsExactlyElementsIn(candidates.map { it.conceptId })
+            .inOrder()
+        assertThat(snapshot.nodes.first().label).isEqualTo("AI-concept-1")
+        assertThat(snapshot.nodes.last().label).isEqualTo("概念 18")
+        assertThat(snapshot.nodes.last().summary).isEqualTo(candidates.last().summary)
+    }
+
+    @Test
     fun `summarize merges aliases into canonical nodes`() = runTest {
         val planner = planner(
             aiResponse = """
@@ -469,7 +521,10 @@ class ConceptGraphPlannerTest {
         assertThat(snapshot.edges).isEmpty()
     }
 
-    private fun planner(aiResponse: String): ConceptGraphPlanner =
+    private fun planner(
+        aiResponse: String = """{"nodes":[],"edges":[]}""",
+        resultFactory: ((String) -> AiChatResult)? = null,
+    ): ConceptGraphPlanner =
         ConceptGraphPlanner(
             aiSettingsRepository = FakeAiSettingsRepository(
                 initial = AiSettings(
@@ -478,8 +533,8 @@ class ConceptGraphPlannerTest {
                 ),
             ),
             aiServiceClient = AiServiceClient(),
-            conceptGraphGenerator = { _, _ ->
-                AiChatResult.Success(content = aiResponse)
+            conceptGraphGenerator = { _, context ->
+                resultFactory?.invoke(context) ?: AiChatResult.Success(content = aiResponse)
             },
         )
 
@@ -511,6 +566,57 @@ class ConceptGraphPlannerTest {
         )
         method.isAccessible = true
         return method.invoke(planner, candidates) as String
+    }
+
+    private fun extractCandidateConceptIds(
+        context: String,
+    ): List<String> {
+        val candidatesArrayStart = context.indexOf("\"candidates\":[")
+        require(candidatesArrayStart >= 0) { "Missing candidates array in context: $context" }
+
+        val arrayStart = context.indexOf('[', startIndex = candidatesArrayStart)
+        var depth = 0
+        var inString = false
+        var escaping = false
+
+        for (index in arrayStart until context.length) {
+            val character = context[index]
+            if (escaping) {
+                escaping = false
+                continue
+            }
+            when (character) {
+                '\\' -> if (inString) escaping = true
+                '"' -> inString = !inString
+                '[' -> if (!inString) depth += 1
+                ']' -> if (!inString) {
+                    depth -= 1
+                    if (depth == 0) {
+                        val candidatesArray = context.substring(arrayStart, index + 1)
+                        return Regex("\\{\"conceptId\":\"([^\"]+)\"")
+                            .findAll(candidatesArray)
+                            .map { match -> match.groupValues[1] }
+                            .toList()
+                    }
+                }
+            }
+        }
+
+        error("Unterminated candidates array in context: $context")
+    }
+
+    private fun assertJsonObjectParses(
+        json: String,
+    ) {
+        val parserClass = Class.forName(
+            "com.mindflow.app.data.wiki.ConceptGraphPlanner\$MiniJsonParser",
+        )
+        val parserConstructor = parserClass.getDeclaredConstructor(String::class.java)
+        parserConstructor.isAccessible = true
+        val parser = parserConstructor.newInstance(json)
+        val parseObject = parserClass.getDeclaredMethod("parseObject")
+        parseObject.isAccessible = true
+        parseObject.invoke(parser)
     }
 
     private class FakeAiSettingsRepository(
