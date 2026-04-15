@@ -147,12 +147,15 @@ class ConceptGraphPlanner(
             val root = MiniJsonParser(jsonText).parseObject()
             val candidateByConceptId = candidates.associateByNormalizedConceptId()
             val resolutionTables = buildCandidateResolutionTables(candidates)
-            val nodes = parseNodes(
+            val llmNodes = parseNodes(
                 root = root,
                 resolutionTables = resolutionTables,
                 candidateByConceptId = candidateByConceptId,
             )
-            if (nodes.isEmpty()) return null
+            val nodes = mergeNodesWithFallback(
+                candidates = candidates,
+                llmNodes = llmNodes,
+            )
 
             val resolvedNodeIds = nodes.map { it.conceptId }.toSet()
             val edges = parseEdges(
@@ -160,6 +163,7 @@ class ConceptGraphPlanner(
                 resolutionTables = resolutionTables,
                 resolvedNodeIds = resolvedNodeIds,
             )
+            if (llmNodes.isEmpty() && edges.isEmpty()) return null
 
             ConceptGraphSnapshot(
                 defaultCenterNodeId = selectDefaultCenterNodeId(
@@ -174,6 +178,30 @@ class ConceptGraphPlanner(
         } catch (_: IllegalArgumentException) {
             null
         }
+    }
+
+    private fun mergeNodesWithFallback(
+        candidates: List<ConceptGraphCandidate>,
+        llmNodes: List<ConceptGraphNode>,
+    ): List<ConceptGraphNode> {
+        val mergedNodes = linkedMapOf<String, ConceptGraphNode>()
+        candidates.forEach { candidate ->
+            mergedNodes[candidate.conceptId] = candidate.toNode(
+                label = candidate.title,
+                aliases = candidate.aliases,
+                summary = candidate.summary,
+                sourceIds = candidate.sourceIds,
+            )
+        }
+        llmNodes.forEach { node ->
+            val fallbackNode = mergedNodes[node.conceptId]
+            mergedNodes[node.conceptId] = if (fallbackNode != null) {
+                node.mergeWith(fallbackNode)
+            } else {
+                node
+            }
+        }
+        return mergedNodes.values.toList()
     }
 
     private fun parseNodes(

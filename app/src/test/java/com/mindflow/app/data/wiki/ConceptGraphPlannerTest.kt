@@ -103,6 +103,78 @@ class ConceptGraphPlannerTest {
     }
 
     @Test
+    fun `summarize keeps omitted candidates when ai returns only a partial node set`() = runTest {
+        val planner = planner(
+            aiResponse = """
+                {
+                  "nodes": [
+                    {
+                      "conceptId": "sleep",
+                      "label": "深度睡眠",
+                      "aliases": ["rest"],
+                      "summary": "AI 补充后的睡眠摘要。",
+                      "sourceIds": ["note-1", "note-2"]
+                    },
+                    {
+                      "conceptId": "recovery",
+                      "label": "恢复",
+                      "summary": "AI 只覆盖了部分候选。"
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "fromConceptId": "sleep",
+                      "toConceptId": "recovery",
+                      "relationType": "supports",
+                      "reasonLine": "睡眠支持恢复。"
+                    }
+                  ]
+                }
+            """.trimIndent(),
+        )
+
+        val snapshot = planner.summarize(
+            candidates = listOf(
+                candidate(
+                    conceptId = "sleep",
+                    title = "睡眠",
+                    aliases = listOf("rest"),
+                    hotnessScore = 0.8,
+                    updatedAt = 1_000,
+                    sourceIds = listOf("note-1"),
+                ),
+                candidate(
+                    conceptId = "recovery",
+                    title = "恢复",
+                    hotnessScore = 0.7,
+                    updatedAt = 900,
+                    sourceIds = listOf("note-2"),
+                ),
+                candidate(
+                    conceptId = "focus",
+                    title = "专注",
+                    aliases = listOf("flow"),
+                    hotnessScore = 0.6,
+                    updatedAt = 800,
+                    summary = "未被 AI 提及的候选概念。",
+                    sourceIds = listOf("note-3"),
+                ),
+            ),
+        )
+
+        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery", "focus").inOrder()
+        assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.label).isEqualTo("深度睡眠")
+        assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.sourceIds).containsExactly("note-1", "note-2").inOrder()
+        assertThat(snapshot.nodes.first { it.conceptId == "focus" }.label).isEqualTo("专注")
+        assertThat(snapshot.nodes.first { it.conceptId == "focus" }.aliases).containsExactly("flow")
+        assertThat(snapshot.nodes.first { it.conceptId == "focus" }.summary).isEqualTo("未被 AI 提及的候选概念。")
+        assertThat(snapshot.edges).hasSize(1)
+        assertThat(snapshot.edges.first().fromConceptId).isEqualTo("sleep")
+        assertThat(snapshot.edges.first().toConceptId).isEqualTo("recovery")
+    }
+
+    @Test
     fun `summarize resolves nodes and edges from unique alias and label references`() = runTest {
         val planner = planner(
             aiResponse = """
@@ -390,7 +462,10 @@ class ConceptGraphPlannerTest {
         )
 
         assertThat(snapshot.source).isEqualTo("llm+rule")
-        assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("focus")
+        assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery", "focus").inOrder()
+        assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.label).isEqualTo("恢复")
+        assertThat(snapshot.nodes.first { it.conceptId == "recovery" }.label).isEqualTo("恢复")
+        assertThat(snapshot.nodes.first { it.conceptId == "focus" }.label).isEqualTo("专注")
         assertThat(snapshot.edges).isEmpty()
     }
 
