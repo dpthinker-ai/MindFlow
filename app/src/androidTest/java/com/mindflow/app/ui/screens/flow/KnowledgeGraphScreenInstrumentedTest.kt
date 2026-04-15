@@ -109,6 +109,34 @@ class KnowledgeGraphScreenInstrumentedTest {
     }
 
     @Test
+    fun bidirectionalPairsPreferCurrentCenterDirectionForDisplayedCopy() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = bidirectionalPairSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("支持").assertIsDisplayed()
+        composeRule.onAllNodesWithText("被推进").assertCountEquals(0)
+
+        composeRule.onNodeWithTag(graphNodeTestTag("learning")).performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("learning")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("支持")
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("从工作切到学习时应该展示这条关系。")
+
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("推进")
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("从学习切回工作时应该展示这条关系。")
+    }
+
+    @Test
     fun isolatedCenterShowsNotConnectedYetEmptyState() {
         composeRule.setContent {
             MindFlowTheme {
@@ -270,6 +298,33 @@ class KnowledgeGraphScreenInstrumentedTest {
                         relationType = ConceptGraphRelationType.ADVANCES,
                         reasonLine = "写下来能推进工作复盘。",
                         confidence = 0.78,
+                    ),
+                ),
+            ),
+        )
+
+    private fun bidirectionalPairSnapshot(): DirectionWikiSnapshot =
+        DirectionWikiSnapshot(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "work",
+                nodes = listOf(
+                    conceptNode("work", "工作系统", "把任务和知识组织成稳定节奏。", 0.95, 1_000),
+                    conceptNode("learning", "学习循环", "把反馈变成可重复练习。", 0.8, 900),
+                ),
+                edges = listOf(
+                    conceptEdge(
+                        fromConceptId = "work",
+                        toConceptId = "learning",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "从工作切到学习时应该展示这条关系。",
+                        confidence = 0.58,
+                    ),
+                    conceptEdge(
+                        fromConceptId = "learning",
+                        toConceptId = "work",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "从学习切回工作时应该展示这条关系。",
+                        confidence = 0.97,
                     ),
                 ),
             ),

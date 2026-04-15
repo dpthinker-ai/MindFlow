@@ -616,12 +616,18 @@ internal fun buildConceptGraphViewport(
     return ConceptGraphViewport(
         centerNode = centerNode,
         neighbors = visibleNeighbors.map { neighbor ->
+            val displayRelation = resolveConceptGraphDisplayRelation(
+                graph = graph,
+                centerNodeId = centerNodeId,
+                neighborNodeId = neighbor.node.conceptId,
+                fallbackEdge = neighbor.relation,
+            )
             ConceptGraphViewportNeighbor(
                 node = neighbor.node,
-                relation = neighbor.relation,
+                relation = displayRelation,
                 relationWord = conceptRelationWord(
-                    relationType = neighbor.relation.relationType,
-                    fromCenter = neighbor.fromCenter,
+                    relationType = displayRelation.relationType,
+                    fromCenter = displayRelation.fromConceptId == centerNodeId,
                 ),
             )
         },
@@ -660,11 +666,17 @@ internal fun buildConceptGraphCenterRelation(
     if (previousId == currentId) return null
 
     val nodeById = graph.nodes.associateBy { it.conceptId }
-    val edge = buildBestRankedConceptNeighbors(
+    val fallbackEdge = buildBestRankedConceptNeighbors(
         graph = graph,
         centerNodeId = previousId,
         nodeById = nodeById,
     )[currentId]?.relation ?: return null
+    val edge = resolveConceptGraphDisplayRelation(
+        graph = graph,
+        centerNodeId = previousId,
+        neighborNodeId = currentId,
+        fallbackEdge = fallbackEdge,
+    )
     val previousLabel = nodeById[previousId]?.label.orEmpty()
     val currentLabel = nodeById[currentId]?.label.orEmpty()
     return ConceptGraphCenterRelation(
@@ -712,6 +724,36 @@ private fun buildBestRankedConceptNeighbors(
     }
     return bestNeighborById
 }
+
+private fun resolveConceptGraphDisplayRelation(
+    graph: ConceptGraphSnapshot,
+    centerNodeId: String,
+    neighborNodeId: String,
+    fallbackEdge: ConceptGraphEdge,
+): ConceptGraphEdge =
+    highestConfidenceConceptEdge(
+        graph = graph,
+        fromConceptId = centerNodeId,
+        toConceptId = neighborNodeId,
+    )
+        ?: highestConfidenceConceptEdge(
+            graph = graph,
+            fromConceptId = neighborNodeId,
+            toConceptId = centerNodeId,
+        )
+        ?: fallbackEdge
+
+private fun highestConfidenceConceptEdge(
+    graph: ConceptGraphSnapshot,
+    fromConceptId: String,
+    toConceptId: String,
+): ConceptGraphEdge? =
+    graph.edges
+        .asSequence()
+        .filter { edge ->
+            edge.fromConceptId == fromConceptId && edge.toConceptId == toConceptId
+        }
+        .maxByOrNull(ConceptGraphEdge::confidence)
 
 private fun ConceptGraphEdge.toRankedConceptNeighbor(
     centerNodeId: String,

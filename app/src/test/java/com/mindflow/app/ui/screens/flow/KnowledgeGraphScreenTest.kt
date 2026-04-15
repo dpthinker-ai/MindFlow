@@ -371,6 +371,39 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
+    fun `buildConceptGraphViewport prefers center outgoing relation word for opposite direction pair`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "work",
+            nodes = listOf(
+                conceptNode("work", "工作系统", hotnessScore = 0.9, updatedAt = 900),
+                conceptNode("learning", "学习循环", hotnessScore = 0.8, updatedAt = 800),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "work",
+                    toConceptId = "learning",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.6,
+                    reasonLine = "从工作出发时应该展示这条关系。",
+                ),
+                conceptEdge(
+                    fromConceptId = "learning",
+                    toConceptId = "work",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.95,
+                    reasonLine = "反向关系虽然更强，但不该改写当前中心的文案。",
+                ),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(snapshot)
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("work")
+        assertThat(viewport.neighbors.map { it.node.conceptId }).containsExactly("learning")
+        assertThat(viewport.neighbors.single().relationWord).isEqualTo("支持")
+    }
+
+    @Test
     fun `buildConceptGraphCenterRelation uses reverse relation word for backward traversal`() {
         val graph = ConceptGraphSnapshot(
             defaultCenterNodeId = "work",
@@ -399,6 +432,46 @@ class KnowledgeGraphScreenTest {
             ConceptGraphCenterRelation(
                 relationWord = "被支持",
                 reasonLine = "把工作拆回可执行练习。",
+            ),
+        )
+    }
+
+    @Test
+    fun `buildConceptGraphCenterRelation prefers previous center outgoing edge for opposite direction pair`() {
+        val graph = ConceptGraphSnapshot(
+            defaultCenterNodeId = "work",
+            nodes = listOf(
+                conceptNode("work", "工作系统", hotnessScore = 0.9, updatedAt = 900),
+                conceptNode("learning", "学习循环", hotnessScore = 0.8, updatedAt = 800),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "learning",
+                    toConceptId = "work",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.55,
+                    reasonLine = "从学习回到工作时应该沿这条关系解释。",
+                ),
+                conceptEdge(
+                    fromConceptId = "work",
+                    toConceptId = "learning",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.97,
+                    reasonLine = "反向关系更强，但不该覆盖当前切换方向。",
+                ),
+            ),
+        )
+
+        val relation = buildConceptGraphCenterRelation(
+            graph = graph,
+            previousCenterNodeId = "learning",
+            currentCenterNodeId = "work",
+        )
+
+        assertThat(relation).isEqualTo(
+            ConceptGraphCenterRelation(
+                relationWord = "支持",
+                reasonLine = "从学习回到工作时应该沿这条关系解释。",
             ),
         )
     }
