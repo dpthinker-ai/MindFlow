@@ -136,14 +136,15 @@ internal fun KnowledgeGraphScreen(
     }
     var centerNodeId by rememberSaveable { mutableStateOf(defaultCenterNodeId) }
     var previousCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
-    var expandedCenterNodeIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var expandedCenterNodeIds by rememberSaveable(snapshot.conceptGraph) {
+        mutableStateOf(emptyList<String>())
+    }
 
     LaunchedEffect(snapshot.conceptGraph, defaultCenterNodeId, validNodeIds) {
         if (centerNodeId.isBlank() || centerNodeId !in validNodeIds) {
             centerNodeId = defaultCenterNodeId
             previousCenterNodeId = null
         }
-        expandedCenterNodeIds = expandedCenterNodeIds.filter { it in validNodeIds }
     }
 
     val viewport = remember(snapshot.conceptGraph, centerNodeId, expandedCenterNodeIds) {
@@ -681,19 +682,23 @@ private fun buildSwitchableConceptNodes(
     graph: ConceptGraphSnapshot,
     centerNodeId: String,
 ): List<ConceptGraphNode> {
-    val connectionCountByNodeId = mutableMapOf<String, Int>()
+    val connectedNodeIdsByNodeId = mutableMapOf<String, MutableSet<String>>()
     graph.edges.forEach { edge ->
         if (edge.fromConceptId == edge.toConceptId) return@forEach
-        connectionCountByNodeId[edge.fromConceptId] =
-            connectionCountByNodeId.getOrDefault(edge.fromConceptId, 0) + 1
-        connectionCountByNodeId[edge.toConceptId] =
-            connectionCountByNodeId.getOrDefault(edge.toConceptId, 0) + 1
+        connectedNodeIdsByNodeId
+            .getOrPut(edge.fromConceptId) { linkedSetOf() }
+            .add(edge.toConceptId)
+        connectedNodeIdsByNodeId
+            .getOrPut(edge.toConceptId) { linkedSetOf() }
+            .add(edge.fromConceptId)
     }
     return graph.nodes
         .asSequence()
         .filter { it.conceptId != centerNodeId }
         .sortedWith(
-            compareByDescending<ConceptGraphNode> { connectionCountByNodeId[it.conceptId] ?: 0 }
+            compareByDescending<ConceptGraphNode> {
+                connectedNodeIdsByNodeId[it.conceptId]?.size ?: 0
+            }
                 .thenByDescending { it.hotnessScore }
                 .thenByDescending { it.updatedAt }
                 .thenBy { it.label },

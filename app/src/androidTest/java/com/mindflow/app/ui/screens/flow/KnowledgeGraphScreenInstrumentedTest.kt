@@ -1,6 +1,9 @@
 package com.mindflow.app.ui.screens.flow
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -158,6 +161,48 @@ class KnowledgeGraphScreenInstrumentedTest {
         composeRule.onAllNodesWithText("展开其余 2 个关联知识点").assertCountEquals(0)
     }
 
+    @Test
+    fun refreshingSnapshotPreservesCurrentCenterButResetsExpansionState() {
+        var snapshot by mutableStateOf(refreshScopedExpansionSnapshot(generatedAt = 1L))
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = snapshot,
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("branch")).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(graphNodeTestTag("branch")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("刷新前用于验证展开状态。")
+        composeRule.onNodeWithTag(graphNodeTestTag("leaf-6")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-7")).assertCountEquals(0)
+
+        composeRule.onNodeWithText("展开其余 8 个关联知识点").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("leaf-12")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-13")).assertCountEquals(0)
+
+        composeRule.runOnUiThread {
+            snapshot = refreshScopedExpansionSnapshot(
+                generatedAt = 2L,
+                branchSummary = "刷新后应该保留当前中心，但回到首批关联知识点。",
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("branch")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains(
+            "刷新后应该保留当前中心，但回到首批关联知识点。",
+        )
+        composeRule.onNodeWithTag(graphNodeTestTag("leaf-6")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-7")).assertCountEquals(0)
+        composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-12")).assertCountEquals(0)
+        composeRule.onNodeWithText("展开其余 8 个关联知识点").assertIsDisplayed()
+    }
+
     private fun connectedSnapshot(): DirectionWikiSnapshot =
         DirectionWikiSnapshot(
             conceptGraph = ConceptGraphSnapshot(
@@ -275,6 +320,41 @@ class KnowledgeGraphScreenInstrumentedTest {
                         toConceptId = "node-${index + 1}",
                         relationType = ConceptGraphRelationType.ADVANCES,
                         reasonLine = "中心知识点连接到关联${index + 1}。",
+                        confidence = 0.99 - (index * 0.01),
+                    )
+                },
+            ),
+        )
+
+    private fun refreshScopedExpansionSnapshot(
+        generatedAt: Long,
+        branchSummary: String = "刷新前用于验证展开状态。",
+    ): DirectionWikiSnapshot =
+        DirectionWikiSnapshot(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "entry",
+                generatedAt = generatedAt,
+                nodes = buildList {
+                    add(conceptNode("entry", "入口概念", "用于切换到展开中心。", 0.3, 1_000))
+                    add(conceptNode("branch", "刷新中心", branchSummary, 0.95, 990))
+                    repeat(14) { index ->
+                        add(
+                            conceptNode(
+                                conceptId = "leaf-${index + 1}",
+                                label = "分支${index + 1}",
+                                summary = "刷新中心的第 ${index + 1} 个关联知识点。",
+                                hotnessScore = 0.9 - (index * 0.02),
+                                updatedAt = 980L - index,
+                            ),
+                        )
+                    }
+                },
+                edges = List(14) { index ->
+                    conceptEdge(
+                        fromConceptId = "branch",
+                        toConceptId = "leaf-${index + 1}",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "刷新中心连接到分支${index + 1}。",
                         confidence = 0.99 - (index * 0.01),
                     )
                 },

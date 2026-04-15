@@ -186,6 +186,64 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
+    fun `buildConceptGraphViewport ranks isolated switch targets by distinct connected concepts`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "solo",
+            nodes = listOf(
+                conceptNode("solo", "独立概念", hotnessScore = 0.1, updatedAt = 100),
+                conceptNode("spread", "分散连接", hotnessScore = 0.2, updatedAt = 200),
+                conceptNode("duplicate", "重复连接", hotnessScore = 0.99, updatedAt = 990),
+                conceptNode("bridge", "桥梁概念", hotnessScore = 0.98, updatedAt = 980),
+                conceptNode("leaf-1", "叶子1", hotnessScore = 0.4, updatedAt = 400),
+                conceptNode("leaf-2", "叶子2", hotnessScore = 0.3, updatedAt = 300),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "duplicate",
+                    toConceptId = "bridge",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.9,
+                ),
+                conceptEdge(
+                    fromConceptId = "duplicate",
+                    toConceptId = "bridge",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.8,
+                ),
+                conceptEdge(
+                    fromConceptId = "bridge",
+                    toConceptId = "duplicate",
+                    relationType = ConceptGraphRelationType.REFERENCES,
+                    confidence = 0.7,
+                ),
+                conceptEdge(
+                    fromConceptId = "spread",
+                    toConceptId = "leaf-1",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.6,
+                ),
+                conceptEdge(
+                    fromConceptId = "spread",
+                    toConceptId = "leaf-2",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.5,
+                ),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(
+            snapshot = snapshot,
+            batchSize = 10,
+        )
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("solo")
+        assertThat(viewport.neighbors).isEmpty()
+        assertThat(viewport.switchableNodes.map { it.conceptId })
+            .containsExactly("spread", "duplicate", "bridge", "leaf-1", "leaf-2")
+            .inOrder()
+    }
+
+    @Test
     fun `buildConceptGraphCenterRelation uses best ranked edge for selected neighbor`() {
         val graph = ConceptGraphSnapshot(
             defaultCenterNodeId = "work",
