@@ -106,6 +106,33 @@ class KnowledgeGraphScreenInstrumentedTest {
     }
 
     @Test
+    fun isolatedCenterRevealsSwitchTargetsOneBatchAtATime() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = isolatedSparseSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("solo")).assertIsSelected()
+        composeRule.onNodeWithTag(graphNodeTestTag("node-6")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("node-7")).assertCountEquals(0)
+
+        composeRule.onNodeWithText("展开其余 8 个可切换知识点").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("node-12")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("node-13")).assertCountEquals(0)
+        composeRule.onNodeWithText("展开其余 2 个可切换知识点").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("node-13")).assertIsDisplayed()
+        composeRule.onNodeWithTag(graphNodeTestTag("node-14")).assertIsDisplayed()
+        composeRule.onAllNodesWithText("展开其余 2 个可切换知识点").assertCountEquals(0)
+    }
+
+    @Test
     fun explicitExpansionRevealsNeighborsOneBatchAtATime() {
         composeRule.setContent {
             MindFlowTheme {
@@ -175,6 +202,50 @@ class KnowledgeGraphScreenInstrumentedTest {
                         relationType = ConceptGraphRelationType.ADVANCES,
                         reasonLine = "旁支概念会继续推进到桥接概念。",
                         confidence = 0.82,
+                    ),
+                ),
+            ),
+        )
+
+    private fun isolatedSparseSnapshot(): DirectionWikiSnapshot =
+        DirectionWikiSnapshot(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "solo",
+                nodes = buildList {
+                    add(conceptNode("solo", "独立概念", "用于验证逐批切换。", 0.2, 1_000))
+                    repeat(14) { index ->
+                        add(
+                            conceptNode(
+                                conceptId = "node-${index + 1}",
+                                label = "候选${index + 1}",
+                                summary = "第 ${index + 1} 个可切换知识点。",
+                                hotnessScore = 0.98 - (index * 0.02),
+                                updatedAt = 980L - index,
+                            ),
+                        )
+                    }
+                },
+                edges = listOf(
+                    conceptEdge(
+                        fromConceptId = "node-1",
+                        toConceptId = "node-2",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "候选1和候选2形成第一条稀疏关系。",
+                        confidence = 0.9,
+                    ),
+                    conceptEdge(
+                        fromConceptId = "node-1",
+                        toConceptId = "node-3",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "候选1继续推进到候选3。",
+                        confidence = 0.85,
+                    ),
+                    conceptEdge(
+                        fromConceptId = "node-4",
+                        toConceptId = "node-5",
+                        relationType = ConceptGraphRelationType.REFERENCES,
+                        reasonLine = "候选4和候选5之间只有一条轻量引用。",
+                        confidence = 0.7,
                     ),
                 ),
             ),

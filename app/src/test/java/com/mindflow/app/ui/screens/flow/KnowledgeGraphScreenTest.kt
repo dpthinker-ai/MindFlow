@@ -130,6 +130,62 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
+    fun `buildConceptGraphViewport batches switchable nodes for isolated sparse graph`() {
+        val snapshot = isolatedSparseSnapshot()
+
+        val collapsed = buildConceptGraphViewport(snapshot)
+        val firstExpansion = buildConceptGraphViewport(
+            snapshot = snapshot,
+            expandedCenterNodeIds = listOf("solo"),
+        )
+        val secondExpansion = buildConceptGraphViewport(
+            snapshot = snapshot,
+            expandedCenterNodeIds = listOf("solo", "solo"),
+        )
+
+        assertThat(collapsed.centerNode?.conceptId).isEqualTo("solo")
+        assertThat(collapsed.neighbors).isEmpty()
+        assertThat(collapsed.switchableNodes.map { it.conceptId })
+            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")
+            .inOrder()
+        assertThat(firstExpansion.neighbors).isEmpty()
+        assertThat(firstExpansion.switchableNodes.map { it.conceptId })
+            .containsExactly(
+                "node-1",
+                "node-2",
+                "node-3",
+                "node-4",
+                "node-5",
+                "node-6",
+                "node-7",
+                "node-8",
+                "node-9",
+                "node-10",
+                "node-11",
+                "node-12",
+            )
+            .inOrder()
+        assertThat(secondExpansion.switchableNodes.map { it.conceptId })
+            .containsExactly(
+                "node-1",
+                "node-2",
+                "node-3",
+                "node-4",
+                "node-5",
+                "node-6",
+                "node-7",
+                "node-8",
+                "node-9",
+                "node-10",
+                "node-11",
+                "node-12",
+                "node-13",
+                "node-14",
+            )
+            .inOrder()
+    }
+
+    @Test
     fun `buildConceptGraphCenterRelation uses best ranked edge for selected neighbor`() {
         val graph = ConceptGraphSnapshot(
             defaultCenterNodeId = "work",
@@ -219,6 +275,44 @@ class KnowledgeGraphScreenTest {
                     confidence = 0.99 - (index * 0.01),
                 )
             },
+        )
+
+    private fun isolatedSparseSnapshot(): DirectionWikiSnapshot =
+        conceptSnapshot(
+            defaultCenterNodeId = "solo",
+            nodes = buildList {
+                add(conceptNode("solo", "独立概念", hotnessScore = 0.2, updatedAt = 1_000))
+                repeat(14) { index ->
+                    add(
+                        conceptNode(
+                            conceptId = "node-${index + 1}",
+                            label = "候选${index + 1}",
+                            hotnessScore = 0.98 - (index * 0.02),
+                            updatedAt = 980L - index,
+                        ),
+                    )
+                }
+            },
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "node-1",
+                    toConceptId = "node-2",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.9,
+                ),
+                conceptEdge(
+                    fromConceptId = "node-1",
+                    toConceptId = "node-3",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.85,
+                ),
+                conceptEdge(
+                    fromConceptId = "node-4",
+                    toConceptId = "node-5",
+                    relationType = ConceptGraphRelationType.REFERENCES,
+                    confidence = 0.7,
+                ),
+            ),
         )
 
     private fun conceptSnapshot(

@@ -66,13 +66,14 @@ internal const val KnowledgeGraphInfoPanelTag = "knowledge-graph-info-panel"
 internal fun graphNodeTestTag(nodeId: String): String =
     "graph-node-" + nodeId.replace(Regex("[^A-Za-z0-9_-]"), "_")
 
-private const val FirstHopNeighborCap = 6
+private const val ConceptGraphBatchSize = 6
 
 internal data class ConceptGraphViewport(
     val centerNode: ConceptGraphNode? = null,
     val neighbors: List<ConceptGraphViewportNeighbor> = emptyList(),
     val hiddenNeighborCount: Int = 0,
     val switchableNodes: List<ConceptGraphNode> = emptyList(),
+    val hiddenSwitchableNodeCount: Int = 0,
 )
 
 internal data class ConceptGraphViewportNeighbor(
@@ -289,6 +290,11 @@ private fun ConceptGraphPanel(
                                 node = node,
                                 onClick = { onSelectNode(node.conceptId) },
                             )
+                        }
+                    }
+                    if (viewport.hiddenSwitchableNodeCount > 0) {
+                        TextButton(onClick = { onExpandCenter(centerNode.conceptId) }) {
+                            Text("展开其余 ${viewport.hiddenSwitchableNodeCount} 个可切换知识点")
                         }
                     }
                 }
@@ -537,7 +543,7 @@ internal fun buildConceptGraphViewport(
     snapshot: DirectionWikiSnapshot,
     currentCenterNodeId: String? = null,
     expandedCenterNodeIds: Collection<String> = emptyList(),
-    firstHopCap: Int = FirstHopNeighborCap,
+    batchSize: Int = ConceptGraphBatchSize,
 ): ConceptGraphViewport {
     val graph = snapshot.conceptGraph
     val nodeById = graph.nodes.associateBy { it.conceptId }
@@ -549,9 +555,8 @@ internal fun buildConceptGraphViewport(
         centerNodeId = centerNodeId,
         nodeById = nodeById,
     ).values.sortedWith(rankedConceptNeighborComparator)
-    val visibleNeighborCount = firstHopCap.coerceAtLeast(0) * (expandedCenterNodeIds.count { it == centerNodeId } + 1)
-    val visibleNeighbors = rankedNeighbors.take(visibleNeighborCount)
-    val switchableNodes = if (rankedNeighbors.isEmpty()) {
+    val visibleNodeCount = batchSize.coerceAtLeast(0) * (expandedCenterNodeIds.count { it == centerNodeId } + 1)
+    val allSwitchableNodes = if (rankedNeighbors.isEmpty()) {
         buildSwitchableConceptNodes(
             graph = graph,
             centerNodeId = centerNodeId,
@@ -559,6 +564,8 @@ internal fun buildConceptGraphViewport(
     } else {
         emptyList()
     }
+    val visibleSwitchableNodes = allSwitchableNodes.take(visibleNodeCount)
+    val visibleNeighbors = rankedNeighbors.take(visibleNodeCount)
 
     return ConceptGraphViewport(
         centerNode = centerNode,
@@ -569,7 +576,8 @@ internal fun buildConceptGraphViewport(
             )
         },
         hiddenNeighborCount = (rankedNeighbors.size - visibleNeighbors.size).coerceAtLeast(0),
-        switchableNodes = switchableNodes,
+        switchableNodes = visibleSwitchableNodes,
+        hiddenSwitchableNodeCount = (allSwitchableNodes.size - visibleSwitchableNodes.size).coerceAtLeast(0),
     )
 }
 
