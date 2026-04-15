@@ -461,6 +461,112 @@ class DirectionWikiCoordinatorConceptGraphTest {
         assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
     }
 
+    @Test
+    fun `parseDirectionWikiSnapshotOrDefault marks migrated legacy graph-only export stale for prompt regeneration`() {
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = """
+                {
+                  "generatedAt": 1700000000000,
+                  "rootPath": "/tmp/direction-wiki",
+                  "directions": [
+                    {
+                      "threadKey": "tag:health",
+                      "slug": "tag:health",
+                      "title": "健康",
+                      "stage": "FORMING",
+                      "assetSummary": "稳定复盘节奏。",
+                      "stageHistorySummary": "forming -> strengthening",
+                      "updatedAt": 1000,
+                      "signalPoints": [],
+                      "hypothesisPoints": [],
+                      "verifiedPoints": [],
+                      "validatedPoints": [],
+                      "lintIssues": [],
+                      "openQuestions": []
+                    }
+                  ],
+                  "knowledgeItems": [
+                    {
+                      "id": "concept:health:review",
+                      "type": "CONCEPT",
+                      "title": "复盘",
+                      "summary": "复盘 的摘要",
+                      "supportLine": "1 条来源",
+                      "trustLabel": "已查证",
+                      "threadKey": "tag:health",
+                      "noteId": 10,
+                      "updatedAt": 1699999999000
+                    }
+                  ],
+                  "graph": {
+                    "nodes": [
+                      {
+                        "id": "legacy-review",
+                        "title": "复盘"
+                      }
+                    ],
+                    "edges": []
+                  }
+                }
+            """.trimIndent(),
+            defaultRootPath = "/tmp/knowledge-layer",
+        )
+
+        assertThat(restored.rootPath).isEqualTo("/tmp/direction-wiki")
+        assertThat(restored.lastGeneratedAt).isEqualTo(0L)
+        assertThat(restored.directions.keys).containsExactly("tag:health")
+        assertThat(restored.knowledgeItems.map { it.id }).containsExactly("concept:health:review")
+        assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+    }
+
+    @Test
+    fun `legacy graph-only snapshot triggers refresh even when timestamp was recently generated`() {
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = """
+                {
+                  "generatedAt": 1700000000000,
+                  "rootPath": "/tmp/direction-wiki",
+                  "directions": [
+                    {
+                      "threadKey": "tag:health",
+                      "slug": "tag:health",
+                      "title": "健康",
+                      "stage": "FORMING",
+                      "assetSummary": "稳定复盘节奏。",
+                      "stageHistorySummary": "forming -> strengthening",
+                      "updatedAt": 1000,
+                      "signalPoints": [],
+                      "hypothesisPoints": [],
+                      "verifiedPoints": [],
+                      "validatedPoints": [],
+                      "lintIssues": [],
+                      "openQuestions": []
+                    }
+                  ],
+                  "graph": {
+                    "nodes": [
+                      {
+                        "id": "legacy-review",
+                        "title": "复盘"
+                      }
+                    ],
+                    "edges": []
+                  }
+                }
+            """.trimIndent(),
+            defaultRootPath = "/tmp/knowledge-layer",
+        )
+
+        assertThat(
+            shouldRefreshDirectionWikiSnapshot(
+                current = restored,
+                candidateThreadKeys = listOf("tag:health"),
+                now = 1_700_000_005_000L,
+                refreshIntervalMs = 18L * 60L * 60L * 1000L,
+            )
+        ).isTrue()
+    }
+
     private fun objectCandidate(
         noteId: Long,
         relatedConcepts: List<String> = listOf("复盘"),

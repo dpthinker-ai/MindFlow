@@ -590,6 +590,17 @@ private fun graphSearchItemSlug(
     return if (base.isNotBlank()) base else "item"
 }
 
+internal fun shouldRefreshDirectionWikiSnapshot(
+    current: DirectionWikiSnapshot,
+    candidateThreadKeys: List<String>,
+    now: Long,
+    refreshIntervalMs: Long,
+): Boolean {
+    val isFreshEnough = current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs
+    val hasCandidateCoverage = candidateThreadKeys.all { it in current.directions.keys }
+    return !isFreshEnough || !hasCandidateCoverage
+}
+
 private fun KnowledgeObjectType.toKnowledgeSearchType(): KnowledgeLayerSearchType = when (this) {
     KnowledgeObjectType.QUESTION -> KnowledgeLayerSearchType.QUESTION
     KnowledgeObjectType.METHOD -> KnowledgeLayerSearchType.METHOD
@@ -623,9 +634,16 @@ class DirectionWikiCoordinator(
             val activeNotes = allNotes.filter { !it.isArchived }
             val followed = threadPreferencesRepository.getCurrent().followedThreadKeys.sorted()
             val candidateThreadKeys = buildCandidateThreadKeys(activeNotes, followed)
-            val isFreshEnough = current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs
-            val hasCandidateCoverage = candidateThreadKeys.all { it in current.directions.keys }
-            if (isFreshEnough && hasCandidateCoverage) return@launch
+            if (
+                !shouldRefreshDirectionWikiSnapshot(
+                    current = current,
+                    candidateThreadKeys = candidateThreadKeys,
+                    now = now,
+                    refreshIntervalMs = refreshIntervalMs,
+                )
+            ) {
+                return@launch
+            }
             runCatching { refreshNow() }
         }
     }
@@ -2281,6 +2299,7 @@ internal fun parseDirectionWikiSnapshotOrDefault(
 private fun ConceptGraphJsonFields.toDirectionWikiSnapshot(
     defaultRootPath: String,
 ): DirectionWikiSnapshot {
+    val requiresPromptConceptGraphRegeneration = values["conceptGraph"] == null && values["graph"] != null
     val directions = buildMap {
         objectList("directions").forEach { item ->
             val threadKey = item.string("threadKey")
@@ -2353,7 +2372,9 @@ private fun ConceptGraphJsonFields.toDirectionWikiSnapshot(
 
     return DirectionWikiSnapshot(
         rootPath = string("rootPath").ifBlank { defaultRootPath },
-        lastGeneratedAt = long("generatedAt") ?: 0L,
+        // Legacy graph-only exports were migrated without a production conceptGraph.
+        // Keep the usable snapshot data, but force a prompt refresh to regenerate the concept graph.
+        lastGeneratedAt = if (requiresPromptConceptGraphRegeneration) 0L else long("generatedAt") ?: 0L,
         directions = directions,
         knowledgeItems = knowledgeItems,
         conceptGraph = conceptGraph,
