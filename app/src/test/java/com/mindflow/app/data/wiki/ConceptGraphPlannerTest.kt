@@ -157,6 +157,66 @@ class ConceptGraphPlannerTest {
     }
 
     @Test
+    fun `summarize prefers the stronger later duplicate edge`() = runTest {
+        val planner = planner(
+            aiResponse = """
+                {
+                  "nodes": [
+                    {
+                      "conceptId": "sleep",
+                      "label": "睡眠"
+                    },
+                    {
+                      "conceptId": "recovery",
+                      "label": "恢复"
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "fromConceptId": "sleep",
+                      "toConceptId": "recovery",
+                      "relationType": "supports",
+                      "reasonLine": "较弱证据。",
+                      "supportIds": ["note-1"],
+                      "confidence": 0.2
+                    },
+                    {
+                      "fromConceptId": "sleep",
+                      "toConceptId": "recovery",
+                      "relationType": "supports",
+                      "reasonLine": "更强证据。",
+                      "supportIds": ["note-1", "note-2"],
+                      "confidence": 0.9
+                    }
+                  ]
+                }
+            """.trimIndent(),
+        )
+
+        val snapshot = planner.summarize(
+            candidates = listOf(
+                candidate(
+                    conceptId = "sleep",
+                    title = "睡眠",
+                    hotnessScore = 0.8,
+                    updatedAt = 1_000,
+                ),
+                candidate(
+                    conceptId = "recovery",
+                    title = "恢复",
+                    hotnessScore = 0.7,
+                    updatedAt = 900,
+                ),
+            ),
+        )
+
+        assertThat(snapshot.edges).hasSize(1)
+        assertThat(snapshot.edges.first().reasonLine).isEqualTo("更强证据。")
+        assertThat(snapshot.edges.first().supportIds).containsExactly("note-1", "note-2").inOrder()
+        assertThat(snapshot.edges.first().confidence).isEqualTo(0.9)
+    }
+
+    @Test
     fun `summarize prefers the hottest node and breaks ties by recency`() = runTest {
         val planner = planner(aiResponse = """{"nodes":[],"edges":[]}""")
 

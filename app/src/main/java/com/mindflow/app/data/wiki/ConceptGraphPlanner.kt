@@ -222,7 +222,8 @@ class ConceptGraphPlanner(
                 supportIds = item.stringList("supportIds").distinct(),
                 confidence = (item.double("confidence") ?: 0.0).coerceIn(0.0, 1.0),
             )
-            edges.putIfAbsent(edge.identityKey(), edge)
+            val identityKey = edge.identityKey()
+            edges[identityKey] = edges[identityKey]?.preferredForDisplayAgainst(edge) ?: edge
         }
         return edges.values.toList()
     }
@@ -357,6 +358,18 @@ class ConceptGraphPlanner(
 
     private fun ConceptGraphEdge.identityKey(): String =
         listOf(fromConceptId, toConceptId, relationType.wireName).joinToString("|")
+
+    private fun ConceptGraphEdge.preferredForDisplayAgainst(
+        other: ConceptGraphEdge,
+    ): ConceptGraphEdge = listOf(this, other)
+        .sortedWith(
+            compareByDescending<ConceptGraphEdge> { it.confidence }
+                .thenByDescending { it.supportIds.size }
+                .thenByDescending { it.reasonLine.isNotBlank() }
+                .thenBy { it.reasonLine }
+                .thenBy { it.supportIds.sorted().joinToString("|") },
+        )
+        .first()
 
     private fun normalizeConceptKey(
         raw: String,
