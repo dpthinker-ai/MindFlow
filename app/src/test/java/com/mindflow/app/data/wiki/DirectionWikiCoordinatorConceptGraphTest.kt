@@ -122,6 +122,139 @@ class DirectionWikiCoordinatorConceptGraphTest {
         assertThat(restored).isEqualTo(ConceptGraphSnapshot())
     }
 
+    @Test
+    fun `buildDirectionWikiExportJson writes conceptGraph and omits legacy graph key`() {
+        val export = buildDirectionWikiExportJson(
+            generatedAt = 7_000L,
+            rootPath = "/tmp/knowledge-layer",
+            summaries = listOf(
+                directionSummary(
+                    threadKey = "tag:health",
+                    title = "健康",
+                ).copy(
+                    assetSummary = "稳定复盘节奏。",
+                    stageHistorySummary = "2026-04-16FORMING",
+                ),
+            ),
+            knowledgeItems = listOf(
+                knowledgeItem(
+                    id = "concept:health:review",
+                    type = KnowledgeLayerSearchType.CONCEPT,
+                    title = "复盘",
+                ),
+            ),
+            conceptGraph = conceptGraphSnapshot(),
+        )
+
+        assertThat(export).contains("\"conceptGraph\":")
+        assertThat(export).doesNotContain("\"graph\":")
+        assertThat(export).contains("\"defaultCenterNodeId\":\"concept:review\"")
+    }
+
+    @Test
+    fun `parseDirectionWikiSnapshotOrDefault preserves non graph data when conceptGraph is missing`() {
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = """
+                {
+                  "generatedAt": 7000,
+                  "rootPath": "/tmp/knowledge-layer",
+                  "directions": [
+                    {
+                      "threadKey": "tag:health",
+                      "slug": "tag:health",
+                      "title": "健康",
+                      "stage": "FORMING",
+                      "assetSummary": "稳定复盘节奏。",
+                      "stageHistorySummary": "forming -> settling",
+                      "updatedAt": 1000,
+                      "signalPoints": [],
+                      "hypothesisPoints": [],
+                      "verifiedPoints": [],
+                      "validatedPoints": [],
+                      "lintIssues": [],
+                      "openQuestions": []
+                    }
+                  ],
+                  "knowledgeItems": [
+                    {
+                      "id": "concept:health:review",
+                      "type": "CONCEPT",
+                      "title": "复盘",
+                      "summary": "复盘 的摘要",
+                      "supportLine": "1 条来源",
+                      "trustLabel": "已查证",
+                      "threadKey": "tag:health",
+                      "noteId": 10,
+                      "updatedAt": 6000
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            defaultRootPath = "/fallback/root",
+        )
+
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
+        assertThat(restored.lastGeneratedAt).isEqualTo(7_000L)
+        assertThat(restored.directions.keys).containsExactly("tag:health")
+        assertThat(restored.directions.getValue("tag:health").assetSummary).isEqualTo("稳定复盘节奏。")
+        assertThat(restored.directions.getValue("tag:health").stageHistorySummary).isEqualTo("forming -> settling")
+        assertThat(restored.knowledgeItems.map { it.id }).containsExactly("concept:health:review")
+        assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+    }
+
+    @Test
+    fun `parseDirectionWikiSnapshotOrDefault preserves non graph data when conceptGraph is malformed`() {
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = """
+                {
+                  "generatedAt": 9000,
+                  "rootPath": "/tmp/knowledge-layer",
+                  "directions": [
+                    {
+                      "threadKey": "tag:sleep",
+                      "slug": "tag:sleep",
+                      "title": "睡眠",
+                      "stage": "FORMING",
+                      "assetSummary": "先固定入睡窗口。",
+                      "stageHistorySummary": "forming -> strengthening",
+                      "updatedAt": 1000,
+                      "signalPoints": [],
+                      "hypothesisPoints": [],
+                      "verifiedPoints": [],
+                      "validatedPoints": [],
+                      "lintIssues": [],
+                      "openQuestions": []
+                    }
+                  ],
+                  "knowledgeItems": [
+                    {
+                      "id": "method:tag:sleep:bedtime",
+                      "type": "METHOD",
+                      "title": "固定入睡流程",
+                      "summary": "固定入睡流程 的摘要",
+                      "supportLine": "1 条来源",
+                      "trustLabel": "已查证",
+                      "threadKey": "tag:health",
+                      "noteId": 10,
+                      "updatedAt": 6000
+                    }
+                  ],
+                  "conceptGraph": "{not-valid}"
+                }
+            """.trimIndent(),
+            defaultRootPath = "/fallback/root",
+        )
+
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
+        assertThat(restored.lastGeneratedAt).isEqualTo(9_000L)
+        assertThat(restored.directions.keys).containsExactly("tag:sleep")
+        assertThat(restored.directions.getValue("tag:sleep").assetSummary).isEqualTo("先固定入睡窗口。")
+        assertThat(restored.directions.getValue("tag:sleep").stageHistorySummary).isEqualTo("forming -> strengthening")
+        assertThat(restored.knowledgeItems.map { it.id }).containsExactly("method:tag:sleep:bedtime")
+        assertThat(restored.knowledgeItems.single().type).isEqualTo(KnowledgeLayerSearchType.METHOD)
+        assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+    }
+
     private fun objectCandidate(
         noteId: Long,
         relatedConcepts: List<String>,
@@ -146,6 +279,56 @@ class DirectionWikiCoordinatorConceptGraphTest {
         title = title,
         stage = DirectionStage.FORMING,
         updatedAt = 1_000L,
+    )
+
+    private fun knowledgeItem(
+        id: String,
+        type: KnowledgeLayerSearchType,
+        title: String,
+    ) = KnowledgeLayerSearchItem(
+        id = id,
+        type = type,
+        title = title,
+        summary = "$title 的摘要",
+        supportLine = "1 条来源",
+        trustLabel = "已查证",
+        threadKey = "tag:health",
+        noteId = 10L,
+        updatedAt = 6_000L,
+    )
+
+    private fun conceptGraphSnapshot() = ConceptGraphSnapshot(
+        defaultCenterNodeId = "concept:review",
+        nodes = listOf(
+            ConceptGraphNode(
+                conceptId = "concept:review",
+                label = "复盘",
+                summary = "固定复盘有助于形成反馈回路。",
+                hotnessScore = 0.9,
+                updatedAt = 5_000L,
+                sourceIds = listOf("note:1"),
+            ),
+            ConceptGraphNode(
+                conceptId = "concept:sleep",
+                label = "睡眠",
+                summary = "睡眠质量会影响白天执行力。",
+                hotnessScore = 0.8,
+                updatedAt = 4_000L,
+                sourceIds = listOf("note:2"),
+            ),
+        ),
+        edges = listOf(
+            ConceptGraphEdge(
+                fromConceptId = "concept:review",
+                toConceptId = "concept:sleep",
+                relationType = ConceptGraphRelationType.SUPPORTS,
+                reasonLine = "复盘帮助调整睡眠策略。",
+                supportIds = listOf("note:1", "note:2"),
+                confidence = 0.75,
+            ),
+        ),
+        source = "rule",
+        generatedAt = 7_000L,
     )
 
     private fun note(
