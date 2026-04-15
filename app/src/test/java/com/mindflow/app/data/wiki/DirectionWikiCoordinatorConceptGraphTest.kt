@@ -40,6 +40,41 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildConceptBuckets ignores repeated tags that only repeat inside one direction`() {
+        val conceptBuckets = buildConceptBuckets(
+            summaries = listOf(
+                directionSummary("folder:work", "工作"),
+            ),
+            allNotes = listOf(
+                note(1L, "记录 A", tags = listOf("睡眠")),
+                note(2L, "记录 B", tags = listOf("睡眠")),
+            ),
+        )
+
+        assertThat(conceptBuckets).isEmpty()
+    }
+
+    @Test
+    fun `buildConceptBuckets keeps tags reused across directions`() {
+        val conceptBuckets = buildConceptBuckets(
+            summaries = listOf(
+                directionSummary("folder:work", "工作"),
+                directionSummary("tag:health", "健康"),
+            ),
+            allNotes = listOf(
+                note(1L, "工作记录", tags = listOf("睡眠")),
+                note(2L, "健康记录", tags = listOf("health", "睡眠"), folderKey = "life"),
+            ),
+        )
+
+        assertThat(conceptBuckets.keys).containsExactly("睡眠")
+        assertThat(conceptBuckets.getValue("睡眠").map { it.first.threadKey })
+            .containsExactly("folder:work", "tag:health")
+            .inOrder()
+        assertThat(conceptBuckets.getValue("睡眠").map { it.second.id }).containsExactly(1L, 2L).inOrder()
+    }
+
+    @Test
     fun `buildGraphObjectSearchItems keeps shared object entries per thread`() {
         val objectItems = buildGraphObjectSearchItems(
             candidates = listOf(
@@ -650,12 +685,13 @@ class DirectionWikiCoordinatorConceptGraphTest {
         id: Long,
         topic: String,
         tags: List<String>,
+        folderKey: String = "work",
     ) = NoteEntity(
         id = id,
         content = "$topic 的内容",
         topic = topic,
         topicSource = TopicSource.MANUAL,
-        folderKey = "work",
+        folderKey = folderKey,
         folderSource = FolderSource.MANUAL,
         tags = tags,
         tagSource = TagSource.MANUAL,

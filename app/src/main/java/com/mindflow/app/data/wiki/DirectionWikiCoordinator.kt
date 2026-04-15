@@ -180,6 +180,28 @@ internal fun buildConceptGraphCandidates(
         )
 }
 
+internal fun buildConceptBuckets(
+    summaries: List<DirectionWikiDirectionSummary>,
+    allNotes: List<NoteEntity>,
+): Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>> =
+    buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
+        summaries.forEach { summary ->
+            NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
+                .forEach { note ->
+                    note.tags
+                        .asSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .forEach { tag ->
+                            getOrPut(tag) { mutableListOf() }.add(summary to note)
+                        }
+                }
+        }
+    }
+        .filterValues { pairs -> pairs.map { it.first.threadKey }.distinct().size >= 2 }
+        .toSortedMap()
+
 internal fun ConceptGraphSnapshot.toConceptGraphJsonString(): String =
     renderConceptGraphJsonObject(
         linkedMapOf(
@@ -1214,28 +1236,6 @@ class DirectionWikiCoordinator(
             }
         }
     }
-
-    private fun buildConceptBuckets(
-        summaries: List<DirectionWikiDirectionSummary>,
-        allNotes: List<NoteEntity>,
-    ): Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>> =
-        buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
-            summaries.forEach { summary ->
-                NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
-                    .forEach { note ->
-                        note.tags
-                            .asSequence()
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .forEach { tag ->
-                                getOrPut(tag) { mutableListOf() }.add(summary to note)
-                            }
-                    }
-            }
-        }
-            .filterValues { pairs -> pairs.size >= 2 }
-            .toSortedMap()
 
     private fun writeLintFiles(
         generatedAt: Long,
