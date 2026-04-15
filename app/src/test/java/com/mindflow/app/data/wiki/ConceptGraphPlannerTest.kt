@@ -371,6 +371,65 @@ class ConceptGraphPlannerTest {
     }
 
     @Test
+    fun `summarize prefers a connected node over a slightly hotter isolated node when edges exist`() = runTest {
+        val planner = planner(
+            aiResponse = """
+                {
+                  "nodes": [
+                    {
+                      "conceptId": "isolated-hot",
+                      "label": "孤立热点"
+                    },
+                    {
+                      "conceptId": "connected-center",
+                      "label": "连接中心"
+                    },
+                    {
+                      "conceptId": "supporting-node",
+                      "label": "支撑节点"
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "fromConceptId": "connected-center",
+                      "toConceptId": "supporting-node",
+                      "relationType": "supports",
+                      "reasonLine": "连接中心有实际关联。"
+                    }
+                  ]
+                }
+            """.trimIndent(),
+        )
+
+        val snapshot = planner.summarize(
+            candidates = listOf(
+                candidate(
+                    conceptId = "isolated-hot",
+                    title = "孤立热点",
+                    hotnessScore = 0.92,
+                    updatedAt = 1_500,
+                ),
+                candidate(
+                    conceptId = "connected-center",
+                    title = "连接中心",
+                    hotnessScore = 0.9,
+                    updatedAt = 1_400,
+                ),
+                candidate(
+                    conceptId = "supporting-node",
+                    title = "支撑节点",
+                    hotnessScore = 0.5,
+                    updatedAt = 1_300,
+                ),
+            ),
+        )
+
+        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.edges).hasSize(1)
+        assertThat(snapshot.defaultCenterNodeId).isEqualTo("connected-center")
+    }
+
+    @Test
     fun `summarize keeps candidate hotness and recency after ai parse`() = runTest {
         val planner = planner(
             aiResponse = """

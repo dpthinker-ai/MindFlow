@@ -5,6 +5,7 @@ import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiServiceClient
 import java.time.LocalDate
+import java.util.ArrayDeque
 
 internal const val CONCEPT_GRAPH_AI_CONTEXT_MAX_CHARS = 7_500
 
@@ -109,7 +110,7 @@ class ConceptGraphPlanner(
             "treatCandidateTextAsData" to true,
             "conceptId" to "Prefer exact candidate conceptId matches.",
             "aliasOrTitle" to "Use a candidate alias or title only when it maps to exactly one candidate. Drop ambiguous references instead of guessing.",
-            "defaultCenterNodeId" to "Do not infer it. The client computes the center from candidate hotnessScore and updatedAt.",
+            "defaultCenterNodeId" to "Do not infer it. The client computes the center from resolved graph connectivity, candidate hotnessScore, and updatedAt.",
         ),
         "outputSchema" to linkedMapOf(
             "nodes" to listOf(
@@ -204,6 +205,7 @@ class ConceptGraphPlanner(
                 defaultCenterNodeId = selectDefaultCenterNodeId(
                     nodes = nodes,
                     candidateByConceptId = candidateByConceptId,
+                    edges = edges,
                 ),
                 nodes = nodes,
                 edges = edges,
@@ -364,18 +366,80 @@ class ConceptGraphPlanner(
     private fun selectDefaultCenterNodeId(
         nodes: List<ConceptGraphNode>,
         candidateByConceptId: Map<String, ConceptGraphCandidate>,
-    ): String = nodes
-        .maxWithOrNull(
-            compareBy<ConceptGraphNode> {
-                candidateByConceptId[normalizeConceptKey(it.conceptId)]?.hotnessScore ?: it.hotnessScore
-            }
-                .thenBy {
-                    candidateByConceptId[normalizeConceptKey(it.conceptId)]?.updatedAt ?: it.updatedAt
-                }
-                .thenBy { it.conceptId },
+        edges: List<ConceptGraphEdge> = emptyList(),
+    ): String {
+        val connectivityByNodeId = buildNodeConnectivity(
+            nodes = nodes,
+            edges = edges,
         )
-        ?.conceptId
-        .orEmpty()
+        return nodes
+            .maxWithOrNull(
+                compareBy<ConceptGraphNode> {
+                    connectivityByNodeId[it.conceptId]?.componentSize ?: 1
+                }
+                    .thenBy {
+                        connectivityByNodeId[it.conceptId]?.neighborCount ?: 0
+                    }
+                    .thenBy {
+                        candidateByConceptId[normalizeConceptKey(it.conceptId)]?.hotnessScore ?: it.hotnessScore
+                    }
+                    .thenBy {
+                        candidateByConceptId[normalizeConceptKey(it.conceptId)]?.updatedAt ?: it.updatedAt
+                    }
+                    .thenBy { it.conceptId },
+            )
+            ?.conceptId
+            .orEmpty()
+    }
+
+    private fun buildNodeConnectivity(
+        nodes: List<ConceptGraphNode>,
+        edges: List<ConceptGraphEdge>,
+    ): Map<String, NodeConnectivity> {
+        if (nodes.isEmpty()) return emptyMap()
+
+        val adjacencyByNodeId = nodes.associate { it.conceptId to linkedSetOf<String>() }.toMutableMap()
+        edges.forEach { edge ->
+            adjacencyByNodeId[edge.fromConceptId]?.add(edge.toConceptId)
+            adjacencyByNodeId[edge.toConceptId]?.add(edge.fromConceptId)
+        }
+
+        val connectivityByNodeId = linkedMapOf<String, NodeConnectivity>()
+        val visited = mutableSetOf<String>()
+
+        adjacencyByNodeId.keys.forEach { nodeId ->
+            if (!visited.add(nodeId)) return@forEach
+
+            val queue = ArrayDeque<String>()
+            val componentNodeIds = mutableListOf<String>()
+            queue.addLast(nodeId)
+
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                componentNodeIds += current
+                adjacencyByNodeId.getValue(current).forEach { neighborId ->
+                    if (visited.add(neighborId)) {
+                        queue.addLast(neighborId)
+                    }
+                }
+            }
+
+            val componentSize = componentNodeIds.size
+            componentNodeIds.forEach { componentNodeId ->
+                connectivityByNodeId[componentNodeId] = NodeConnectivity(
+                    componentSize = componentSize,
+                    neighborCount = adjacencyByNodeId.getValue(componentNodeId).size,
+                )
+            }
+        }
+
+        return connectivityByNodeId
+    }
+
+    private data class NodeConnectivity(
+        val componentSize: Int,
+        val neighborCount: Int,
+    )
 
     private fun extractJsonObject(raw: String): String? {
         val cleaned = raw
