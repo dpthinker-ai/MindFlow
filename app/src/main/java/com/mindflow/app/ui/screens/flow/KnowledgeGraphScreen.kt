@@ -72,6 +72,7 @@ internal data class ConceptGraphViewport(
     val centerNode: ConceptGraphNode? = null,
     val neighbors: List<ConceptGraphViewportNeighbor> = emptyList(),
     val hiddenNeighborCount: Int = 0,
+    val switchableNodes: List<ConceptGraphNode> = emptyList(),
 )
 
 internal data class ConceptGraphViewportNeighbor(
@@ -96,6 +97,11 @@ private val rankedConceptNeighborComparator =
         .thenByDescending { it.node.hotnessScore }
         .thenByDescending { it.node.updatedAt }
         .thenBy { it.node.label }
+
+private val conceptNodeComparator =
+    compareByDescending<ConceptGraphNode> { it.hotnessScore }
+        .thenByDescending { it.updatedAt }
+        .thenBy { it.label }
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -139,14 +145,11 @@ internal fun KnowledgeGraphScreen(
         expandedCenterNodeIds = expandedCenterNodeIds.filter { it in validNodeIds }
     }
 
-    val expandedCenterNodeIdSet = remember(expandedCenterNodeIds) {
-        expandedCenterNodeIds.toSet()
-    }
-    val viewport = remember(snapshot.conceptGraph, centerNodeId, expandedCenterNodeIdSet) {
+    val viewport = remember(snapshot.conceptGraph, centerNodeId, expandedCenterNodeIds) {
         buildConceptGraphViewport(
             snapshot = snapshot,
             currentCenterNodeId = centerNodeId.takeIf { it.isNotBlank() },
-            expandedCenterNodeIds = expandedCenterNodeIdSet,
+            expandedCenterNodeIds = expandedCenterNodeIds,
         )
     }
     val relationFromPreviousCenter = remember(
@@ -200,9 +203,7 @@ internal fun KnowledgeGraphScreen(
                             viewport = viewport,
                             relationFromPreviousCenter = relationFromPreviousCenter,
                             onExpandCenter = { centerId ->
-                                if (centerId !in expandedCenterNodeIds) {
-                                    expandedCenterNodeIds = expandedCenterNodeIds + centerId
-                                }
+                                expandedCenterNodeIds = expandedCenterNodeIds + centerId
                             },
                             onSelectNode = { nodeId ->
                                 if (nodeId != centerNodeId) {
@@ -272,6 +273,25 @@ private fun ConceptGraphPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
+                if (viewport.switchableNodes.isNotEmpty()) {
+                    Text(
+                        text = "切换到其他知识点",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSoft,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        viewport.switchableNodes.forEach { node ->
+                            SwitchableConceptNodeCard(
+                                node = node,
+                                onClick = { onSelectNode(node.conceptId) },
+                            )
+                        }
+                    }
+                }
             } else {
                 Text(
                     text = "一跳关联",
@@ -313,7 +333,6 @@ private fun CenterConceptNodeCard(
                 contentDescription = "知识点 ${node.label}"
                 stateDescription = "中心节点"
                 selected = true
-                role = Role.Button
             },
         color = accent.copy(alpha = 0.14f),
         shape = RoundedCornerShape(20.dp),
@@ -398,6 +417,64 @@ private fun NeighborConceptNodeCard(
 }
 
 @Composable
+private fun SwitchableConceptNodeCard(
+    node: ConceptGraphNode,
+    onClick: () -> Unit,
+) {
+    val accent = conceptNodeAccent(node.conceptId)
+    Surface(
+        modifier = Modifier
+            .widthIn(min = 148.dp, max = 196.dp)
+            .testTag(graphNodeTestTag(node.conceptId))
+            .semantics(mergeDescendants = true) {
+                contentDescription = "知识点 ${node.label}"
+                stateDescription = "可切换知识点"
+                selected = false
+                role = Role.Button
+            }
+            .clickable(onClick = onClick),
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.25f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Surface(
+                color = accent.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.2f)),
+            ) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    text = "切换查看",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent,
+                    maxLines = 1,
+                )
+            }
+            Text(
+                text = node.label,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (node.summary.isNotBlank()) {
+                Text(
+                    text = node.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ConceptGraphInfoCard(
     centerNode: ConceptGraphNode,
     relationFromPreviousCenter: ConceptGraphCenterRelation?,
@@ -459,7 +536,7 @@ private fun ConceptGraphInfoCard(
 internal fun buildConceptGraphViewport(
     snapshot: DirectionWikiSnapshot,
     currentCenterNodeId: String? = null,
-    expandedCenterNodeIds: Set<String> = emptySet(),
+    expandedCenterNodeIds: Collection<String> = emptyList(),
     firstHopCap: Int = FirstHopNeighborCap,
 ): ConceptGraphViewport {
     val graph = snapshot.conceptGraph
@@ -467,31 +544,20 @@ internal fun buildConceptGraphViewport(
     val centerNodeId = resolveConceptGraphCenterNodeId(snapshot, currentCenterNodeId) ?: return ConceptGraphViewport()
     val centerNode = nodeById[centerNodeId] ?: return ConceptGraphViewport()
 
-    val bestNeighborById = linkedMapOf<String, RankedConceptNeighbor>()
-    graph.edges.forEach { edge ->
-        val neighborId = when (centerNodeId) {
-            edge.fromConceptId -> edge.toConceptId
-            edge.toConceptId -> edge.fromConceptId
-            else -> null
-        } ?: return@forEach
-        if (neighborId == centerNodeId) return@forEach
-        val neighborNode = nodeById[neighborId] ?: return@forEach
-        val candidate = RankedConceptNeighbor(
-            node = neighborNode,
-            relation = edge,
-            fromCenter = edge.fromConceptId == centerNodeId,
+    val rankedNeighbors = buildBestRankedConceptNeighbors(
+        graph = graph,
+        centerNodeId = centerNodeId,
+        nodeById = nodeById,
+    ).values.sortedWith(rankedConceptNeighborComparator)
+    val visibleNeighborCount = firstHopCap.coerceAtLeast(0) * (expandedCenterNodeIds.count { it == centerNodeId } + 1)
+    val visibleNeighbors = rankedNeighbors.take(visibleNeighborCount)
+    val switchableNodes = if (rankedNeighbors.isEmpty()) {
+        buildSwitchableConceptNodes(
+            graph = graph,
+            centerNodeId = centerNodeId,
         )
-        val existing = bestNeighborById[neighborId]
-        if (existing == null || rankedConceptNeighborComparator.compare(candidate, existing) < 0) {
-            bestNeighborById[neighborId] = candidate
-        }
-    }
-
-    val rankedNeighbors = bestNeighborById.values.sortedWith(rankedConceptNeighborComparator)
-    val visibleNeighbors = if (centerNodeId in expandedCenterNodeIds) {
-        rankedNeighbors
     } else {
-        rankedNeighbors.take(firstHopCap.coerceAtLeast(0))
+        emptyList()
     }
 
     return ConceptGraphViewport(
@@ -503,6 +569,7 @@ internal fun buildConceptGraphViewport(
             )
         },
         hiddenNeighborCount = (rankedNeighbors.size - visibleNeighbors.size).coerceAtLeast(0),
+        switchableNodes = switchableNodes,
     )
 }
 
@@ -520,11 +587,7 @@ internal fun resolveConceptGraphCenterNodeId(
     return requested
         ?: defaultCenter
         ?: graph.nodes
-            .sortedWith(
-                compareByDescending<ConceptGraphNode> { it.hotnessScore }
-                    .thenByDescending { it.updatedAt }
-                    .thenBy { it.label },
-            )
+            .sortedWith(conceptNodeComparator)
             .firstOrNull()
             ?.conceptId
 }
@@ -538,13 +601,12 @@ internal fun buildConceptGraphCenterRelation(
     val currentId = currentCenterNodeId?.takeIf { it.isNotBlank() } ?: return null
     if (previousId == currentId) return null
 
-    val edge = graph.edges.firstOrNull {
-        it.fromConceptId == previousId && it.toConceptId == currentId
-    } ?: graph.edges.firstOrNull {
-        it.fromConceptId == currentId && it.toConceptId == previousId
-    } ?: return null
-
     val nodeById = graph.nodes.associateBy { it.conceptId }
+    val edge = buildBestRankedConceptNeighbors(
+        graph = graph,
+        centerNodeId = previousId,
+        nodeById = nodeById,
+    )[currentId]?.relation ?: return null
     val previousLabel = nodeById[previousId]?.label.orEmpty()
     val currentLabel = nodeById[currentId]?.label.orEmpty()
     return ConceptGraphCenterRelation(
@@ -569,6 +631,67 @@ internal fun conceptRelationWord(
         ConceptGraphRelationType.REFERENCES -> "参考"
         ConceptGraphRelationType.CONTRASTS -> "对比"
     }
+
+private fun buildBestRankedConceptNeighbors(
+    graph: ConceptGraphSnapshot,
+    centerNodeId: String,
+    nodeById: Map<String, ConceptGraphNode>,
+): Map<String, RankedConceptNeighbor> {
+    val bestNeighborById = linkedMapOf<String, RankedConceptNeighbor>()
+    graph.edges.forEach { edge ->
+        val candidate = edge.toRankedConceptNeighbor(
+            centerNodeId = centerNodeId,
+            nodeById = nodeById,
+        ) ?: return@forEach
+        val existing = bestNeighborById[candidate.node.conceptId]
+        if (existing == null || rankedConceptNeighborComparator.compare(candidate, existing) < 0) {
+            bestNeighborById[candidate.node.conceptId] = candidate
+        }
+    }
+    return bestNeighborById
+}
+
+private fun ConceptGraphEdge.toRankedConceptNeighbor(
+    centerNodeId: String,
+    nodeById: Map<String, ConceptGraphNode>,
+): RankedConceptNeighbor? {
+    val neighborId = when (centerNodeId) {
+        fromConceptId -> toConceptId
+        toConceptId -> fromConceptId
+        else -> null
+    } ?: return null
+    if (neighborId == centerNodeId) return null
+    val neighborNode = nodeById[neighborId] ?: return null
+    return RankedConceptNeighbor(
+        node = neighborNode,
+        relation = this,
+        fromCenter = fromConceptId == centerNodeId,
+    )
+}
+
+private fun buildSwitchableConceptNodes(
+    graph: ConceptGraphSnapshot,
+    centerNodeId: String,
+): List<ConceptGraphNode> {
+    val connectionCountByNodeId = mutableMapOf<String, Int>()
+    graph.edges.forEach { edge ->
+        if (edge.fromConceptId == edge.toConceptId) return@forEach
+        connectionCountByNodeId[edge.fromConceptId] =
+            connectionCountByNodeId.getOrDefault(edge.fromConceptId, 0) + 1
+        connectionCountByNodeId[edge.toConceptId] =
+            connectionCountByNodeId.getOrDefault(edge.toConceptId, 0) + 1
+    }
+    return graph.nodes
+        .asSequence()
+        .filter { it.conceptId != centerNodeId }
+        .sortedWith(
+            compareByDescending<ConceptGraphNode> { connectionCountByNodeId[it.conceptId] ?: 0 }
+                .thenByDescending { it.hotnessScore }
+                .thenByDescending { it.updatedAt }
+                .thenBy { it.label },
+        )
+        .toList()
+}
 
 private fun conceptNodeAccent(
     conceptId: String,

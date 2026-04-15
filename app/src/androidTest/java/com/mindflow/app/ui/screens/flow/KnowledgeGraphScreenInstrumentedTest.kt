@@ -1,13 +1,18 @@
 package com.mindflow.app.ui.screens.flow
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -47,6 +52,8 @@ class KnowledgeGraphScreenInstrumentedTest {
                 "中心节点",
             ),
         )
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).assert(hasNoClickAction())
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).assert(hasNoButtonRole())
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("工作系统")
     }
 
@@ -92,6 +99,36 @@ class KnowledgeGraphScreenInstrumentedTest {
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("独立概念")
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("这个知识点还没有连接起来。")
         composeRule.onNodeWithText("这个知识点还没有连接起来。").assertIsDisplayed()
+        composeRule.onNodeWithTag(graphNodeTestTag("other")).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(graphNodeTestTag("other")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("旁支概念")
+        composeRule.onNodeWithTag(graphNodeTestTag("bridge")).assertIsDisplayed()
+    }
+
+    @Test
+    fun explicitExpansionRevealsNeighborsOneBatchAtATime() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = expansionSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("node-6")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("node-7")).assertCountEquals(0)
+
+        composeRule.onNodeWithText("展开其余 8 个关联知识点").performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("node-12")).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(graphNodeTestTag("node-13")).assertCountEquals(0)
+        composeRule.onNodeWithText("展开其余 2 个关联知识点").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("node-13")).assertIsDisplayed()
+        composeRule.onNodeWithTag(graphNodeTestTag("node-14")).assertIsDisplayed()
+        composeRule.onAllNodesWithText("展开其余 2 个关联知识点").assertCountEquals(0)
     }
 
     private fun connectedSnapshot(): DirectionWikiSnapshot =
@@ -128,9 +165,48 @@ class KnowledgeGraphScreenInstrumentedTest {
                 defaultCenterNodeId = "solo",
                 nodes = listOf(
                     conceptNode("solo", "独立概念", "还没有任何稳定关系。", 0.9, 1_000),
-                    conceptNode("other", "旁支概念", "暂时没有被连接。", 0.4, 800),
+                    conceptNode("other", "旁支概念", "通向另一个知识簇。", 0.8, 950),
+                    conceptNode("bridge", "桥接概念", "把这个知识簇连起来。", 0.6, 850),
                 ),
-                edges = emptyList(),
+                edges = listOf(
+                    conceptEdge(
+                        fromConceptId = "other",
+                        toConceptId = "bridge",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "旁支概念会继续推进到桥接概念。",
+                        confidence = 0.82,
+                    ),
+                ),
+            ),
+        )
+
+    private fun expansionSnapshot(): DirectionWikiSnapshot =
+        DirectionWikiSnapshot(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "center",
+                nodes = buildList {
+                    add(conceptNode("center", "中心知识点", "用于验证逐批展开。", 1.0, 1_000))
+                    repeat(14) { index ->
+                        add(
+                            conceptNode(
+                                conceptId = "node-${index + 1}",
+                                label = "关联${index + 1}",
+                                summary = "第 ${index + 1} 个关联知识点。",
+                                hotnessScore = 0.95 - (index * 0.03),
+                                updatedAt = 950L - index,
+                            ),
+                        )
+                    }
+                },
+                edges = List(14) { index ->
+                    conceptEdge(
+                        fromConceptId = "center",
+                        toConceptId = "node-${index + 1}",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "中心知识点连接到关联${index + 1}。",
+                        confidence = 0.99 - (index * 0.01),
+                    )
+                },
             ),
         )
 
@@ -161,4 +237,15 @@ class KnowledgeGraphScreenInstrumentedTest {
         reasonLine = reasonLine,
         confidence = confidence,
     )
+
+    private fun hasNoClickAction(): SemanticsMatcher =
+        SemanticsMatcher("has no click action") { semanticsNode ->
+            !semanticsNode.config.contains(SemanticsActions.OnClick)
+        }
+
+    private fun hasNoButtonRole(): SemanticsMatcher =
+        SemanticsMatcher("does not expose button role") { semanticsNode ->
+            !semanticsNode.config.contains(SemanticsProperties.Role) ||
+                semanticsNode.config[SemanticsProperties.Role] != Role.Button
+        }
 }
