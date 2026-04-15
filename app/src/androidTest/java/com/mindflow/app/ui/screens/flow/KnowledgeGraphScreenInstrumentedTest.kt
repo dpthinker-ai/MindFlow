@@ -87,6 +87,28 @@ class KnowledgeGraphScreenInstrumentedTest {
     }
 
     @Test
+    fun clickingBackAcrossDirectedRelationUsesReverseRelationCopy() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = connectedSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("learning")).performClick()
+        composeRule.onNodeWithText("被支持").assertIsDisplayed()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("work")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("被支持")
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("把工作拆回可执行练习。")
+    }
+
+    @Test
     fun isolatedCenterShowsNotConnectedYetEmptyState() {
         composeRule.setContent {
             MindFlowTheme {

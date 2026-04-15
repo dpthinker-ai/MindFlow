@@ -283,6 +283,64 @@ class KnowledgeGraphScreenTest {
         )
     }
 
+    @Test
+    fun `buildConceptGraphViewport uses reverse relation word for incoming edge neighbor`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "learning",
+            nodes = listOf(
+                conceptNode("work", "工作系统", hotnessScore = 0.9, updatedAt = 900),
+                conceptNode("learning", "学习循环", hotnessScore = 0.8, updatedAt = 800),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "work",
+                    toConceptId = "learning",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.9,
+                ),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(snapshot)
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("learning")
+        assertThat(viewport.neighbors.map { it.node.conceptId }).containsExactly("work")
+        assertThat(viewport.neighbors.single().relationWord).isEqualTo("被支持")
+    }
+
+    @Test
+    fun `buildConceptGraphCenterRelation uses reverse relation word for backward traversal`() {
+        val graph = ConceptGraphSnapshot(
+            defaultCenterNodeId = "work",
+            nodes = listOf(
+                conceptNode("work", "工作系统", hotnessScore = 0.9, updatedAt = 900),
+                conceptNode("learning", "学习循环", hotnessScore = 0.8, updatedAt = 800),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "work",
+                    toConceptId = "learning",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.9,
+                    reasonLine = "把工作拆回可执行练习。",
+                ),
+            ),
+        )
+
+        val relation = buildConceptGraphCenterRelation(
+            graph = graph,
+            previousCenterNodeId = "learning",
+            currentCenterNodeId = "work",
+        )
+
+        assertThat(relation).isEqualTo(
+            ConceptGraphCenterRelation(
+                relationWord = "被支持",
+                reasonLine = "把工作拆回可执行练习。",
+            ),
+        )
+    }
+
     private fun denselyConnectedSnapshot(): DirectionWikiSnapshot =
         conceptSnapshot(
             defaultCenterNodeId = "center",

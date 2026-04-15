@@ -79,6 +79,7 @@ internal data class ConceptGraphViewport(
 internal data class ConceptGraphViewportNeighbor(
     val node: ConceptGraphNode,
     val relation: ConceptGraphEdge,
+    val relationWord: String,
 )
 
 internal data class ConceptGraphCenterRelation(
@@ -397,7 +398,7 @@ private fun NeighborConceptNodeCard(
             ) {
                 Text(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    text = conceptRelationWord(neighbor.relation.relationType),
+                    text = neighbor.relationWord,
                     style = MaterialTheme.typography.labelSmall,
                     color = accent,
                     maxLines = 1,
@@ -574,6 +575,10 @@ internal fun buildConceptGraphViewport(
             ConceptGraphViewportNeighbor(
                 node = neighbor.node,
                 relation = neighbor.relation,
+                relationWord = conceptRelationWord(
+                    relationType = neighbor.relation.relationType,
+                    fromCenter = neighbor.fromCenter,
+                ),
             )
         },
         hiddenNeighborCount = (rankedNeighbors.size - visibleNeighbors.size).coerceAtLeast(0),
@@ -619,7 +624,10 @@ internal fun buildConceptGraphCenterRelation(
     val previousLabel = nodeById[previousId]?.label.orEmpty()
     val currentLabel = nodeById[currentId]?.label.orEmpty()
     return ConceptGraphCenterRelation(
-        relationWord = conceptRelationWord(edge.relationType),
+        relationWord = conceptRelationWord(
+            relationType = edge.relationType,
+            fromCenter = edge.fromConceptId == previousId,
+        ),
         reasonLine = edge.reasonLine.ifBlank {
             if (previousLabel.isNotBlank() && currentLabel.isNotBlank()) {
                 "$previousLabel 和 $currentLabel 之间已经出现了直接关系。"
@@ -632,12 +640,13 @@ internal fun buildConceptGraphCenterRelation(
 
 internal fun conceptRelationWord(
     relationType: ConceptGraphRelationType,
+    fromCenter: Boolean = true,
 ): String =
     when (relationType) {
-        ConceptGraphRelationType.SUPPORTS -> "支持"
-        ConceptGraphRelationType.ADVANCES -> "推进"
+        ConceptGraphRelationType.SUPPORTS -> if (fromCenter) "支持" else "被支持"
+        ConceptGraphRelationType.ADVANCES -> if (fromCenter) "推进" else "被推进"
         ConceptGraphRelationType.PARALLEL -> "并行"
-        ConceptGraphRelationType.REFERENCES -> "参考"
+        ConceptGraphRelationType.REFERENCES -> if (fromCenter) "参考" else "被参考"
         ConceptGraphRelationType.CONTRASTS -> "对比"
     }
 
