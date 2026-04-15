@@ -99,7 +99,7 @@ internal fun buildConceptGraphCandidates(
         sourceIds: List<String>,
         hotnessContribution: Double,
     ) {
-        val normalizedTitle = title.trim()
+        val normalizedTitle = stableConceptDisplayLabel(title)
         if (normalizedTitle.isBlank()) return
         val identityKey = stableConceptIdentityKey(normalizedTitle)
         val conceptId = stableConceptId(identityKey)
@@ -108,6 +108,7 @@ internal fun buildConceptGraphCandidates(
             merged[identityKey] = MutableConceptGraphCandidate(
                 conceptId = conceptId,
                 title = normalizedTitle,
+                displayLabels = linkedSetOf(normalizedTitle),
                 summary = summary.trim(),
                 hotnessScore = hotnessContribution,
                 updatedAt = updatedAt,
@@ -116,14 +117,14 @@ internal fun buildConceptGraphCandidates(
             return
         }
 
-        existing.aliases += normalizedTitle
+        existing.displayLabels += normalizedTitle
+        existing.title = stableConceptDisplayLabel(existing.displayLabels)
         existing.sourceIds += sourceIds
         existing.hotnessScore += hotnessContribution
         if (
             updatedAt > existing.updatedAt ||
             (updatedAt == existing.updatedAt && existing.summary.isBlank() && summary.isNotBlank())
         ) {
-            existing.title = normalizedTitle
             existing.summary = summary.trim()
             existing.updatedAt = updatedAt
         }
@@ -146,10 +147,10 @@ internal fun buildConceptGraphCandidates(
     objectCandidates.forEach { candidate ->
         candidate.relatedConcepts
             .asSequence()
-            .map(String::trim)
+            .map(::stableConceptDisplayLabel)
             .filter(String::isNotBlank)
+            .distinctBy(::stableConceptIdentityKey)
             .filter { concept -> stableConceptIdentityKey(concept) in surfacedConceptKeys }
-            .distinct()
             .forEach { concept ->
                 mergeCandidate(
                     title = concept,
@@ -166,7 +167,7 @@ internal fun buildConceptGraphCandidates(
             ConceptGraphCandidate(
                 conceptId = candidate.conceptId,
                 title = candidate.title,
-                aliases = candidate.aliases
+                aliases = candidate.displayLabels
                     .filter { it != candidate.title }
                     .distinct()
                     .sorted(),
@@ -187,23 +188,33 @@ internal fun buildConceptBuckets(
     summaries: List<DirectionWikiDirectionSummary>,
     allNotes: List<NoteEntity>,
 ): Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>> =
-    buildMap<String, MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>>> {
+    buildMap<String, MutableConceptBucket> {
         summaries.forEach { summary ->
             NoteConnectionAnalyzer.notesForThread(summary.threadKey, allNotes)
                 .forEach { note ->
                     note.tags
                         .asSequence()
-                        .map { it.trim() }
+                        .map(::stableConceptDisplayLabel)
                         .filter { it.isNotBlank() }
-                        .distinct()
-                        .forEach { tag ->
-                            getOrPut(tag) { mutableListOf() }.add(summary to note)
+                        .groupBy(::stableConceptIdentityKey)
+                        .forEach { (identityKey, labels) ->
+                            val bucket = getOrPut(identityKey) { MutableConceptBucket() }
+                            bucket.displayLabels += labels
+                            bucket.pairs += summary to note
                         }
                 }
         }
     }
-        .filterValues { pairs -> pairs.map { it.first.threadKey }.distinct().size >= 2 }
-        .toSortedMap()
+        .mapNotNull { (_, bucket) ->
+            val pairs = bucket.pairs
+            if (pairs.map { it.first.threadKey }.distinct().size < 2) {
+                return@mapNotNull null
+            }
+            val displayLabel = stableConceptDisplayLabel(bucket.displayLabels)
+            displayLabel.takeIf { it.isNotBlank() }?.let { it to pairs.toList() }
+        }
+        .sortedBy { it.first }
+        .toMap(linkedMapOf())
 
 internal fun ConceptGraphSnapshot.toConceptGraphJsonString(): String =
     renderConceptGraphJsonObject(
@@ -311,19 +322,42 @@ private fun ConceptGraphJsonFields.toConceptGraphSnapshot(): ConceptGraphSnapsho
 private data class MutableConceptGraphCandidate(
     val conceptId: String,
     var title: String,
-    val aliases: MutableSet<String> = linkedSetOf(),
+    val displayLabels: MutableSet<String> = linkedSetOf(),
     var summary: String,
     var hotnessScore: Double,
     var updatedAt: Long,
     val sourceIds: MutableSet<String>,
 )
 
+private data class MutableConceptBucket(
+    val displayLabels: MutableSet<String> = linkedSetOf(),
+    val pairs: MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>> = mutableListOf(),
+)
+
 private fun stableConceptIdentityKey(
+    raw: String,
+): String = stableConceptDisplayLabel(raw)
+    .lowercase()
+
+private fun stableConceptDisplayLabel(
     raw: String,
 ): String = raw
     .trim()
-    .lowercase()
     .replace(Regex("\\s+"), " ")
+
+private fun stableConceptDisplayLabel(
+    rawLabels: Iterable<String>,
+): String = rawLabels
+    .asSequence()
+    .map(::stableConceptDisplayLabel)
+    .filter(String::isNotBlank)
+    .distinct()
+    .sortedWith(
+        compareBy<String> { it.lowercase() }
+            .thenBy { it },
+    )
+    .firstOrNull()
+    .orEmpty()
 
 private fun stableConceptId(
     identityKey: String,
@@ -2448,7 +2482,10 @@ private fun ConceptGraphJsonFields.toDirectionWikiSnapshot(
     val conceptGraphResult = parseStoredConceptGraph(values["conceptGraph"])
 
     return DirectionWikiSnapshot(
-        rootPath = string("rootPath").ifBlank { defaultRootPath },
+        rootPath = canonicalSnapshotRootPath(
+            storedRootPath = string("rootPath"),
+            defaultRootPath = defaultRootPath,
+        ),
         // Legacy graph-only exports were migrated without a production conceptGraph.
         // Keep the usable snapshot data, but force a prompt refresh to regenerate the concept graph.
         lastGeneratedAt = if (
@@ -2463,6 +2500,22 @@ private fun ConceptGraphJsonFields.toDirectionWikiSnapshot(
         knowledgeItems = knowledgeItems,
         conceptGraph = conceptGraphResult.snapshot,
     )
+}
+
+private fun canonicalSnapshotRootPath(
+    storedRootPath: String,
+    defaultRootPath: String,
+): String {
+    val normalizedStoredRootPath = storedRootPath.trim()
+    if (normalizedStoredRootPath.isBlank()) return defaultRootPath
+    return if (
+        File(normalizedStoredRootPath).name == "direction-wiki" &&
+        File(defaultRootPath).name == "knowledge-layer"
+    ) {
+        defaultRootPath
+    } else {
+        normalizedStoredRootPath
+    }
 }
 
 private fun ConceptGraphSnapshot.toDirectionWikiExportValue(): Map<String, Any?> =

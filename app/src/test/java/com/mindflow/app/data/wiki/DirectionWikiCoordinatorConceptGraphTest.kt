@@ -75,6 +75,39 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildConceptBuckets normalizes equivalent tags before cross-direction reuse filtering`() {
+        val conceptBuckets = buildConceptBuckets(
+            summaries = listOf(
+                directionSummary("folder:work", "工作"),
+                directionSummary("folder:life", "生活"),
+            ),
+            allNotes = listOf(
+                note(1L, "工作接口笔记", tags = listOf("REST API"), folderKey = "work"),
+                note(2L, "生活系统整理", tags = listOf("rest api"), folderKey = "life"),
+            ),
+        )
+
+        assertThat(conceptBuckets.keys).containsExactly("REST API")
+        assertThat(conceptBuckets.getValue("REST API").map { it.first.threadKey })
+            .containsExactly("folder:work", "folder:life")
+            .inOrder()
+        assertThat(conceptBuckets.getValue("REST API").map { it.second.id }).containsExactly(1L, 2L).inOrder()
+
+        val candidates = buildConceptGraphCandidates(
+            conceptBuckets = conceptBuckets,
+            objectCandidates = listOf(
+                objectCandidate(
+                    noteId = 3L,
+                    relatedConcepts = listOf("rest api"),
+                ),
+            ),
+        )
+
+        assertThat(candidates.map { it.title }).containsExactly("REST API")
+        assertThat(candidates.single().sourceIds).containsAtLeast("note:1", "note:2", "methods:3")
+    }
+
+    @Test
     fun `buildGraphObjectSearchItems keeps shared object entries per thread`() {
         val objectItems = buildGraphObjectSearchItems(
             candidates = listOf(
@@ -602,7 +635,7 @@ class DirectionWikiCoordinatorConceptGraphTest {
             defaultRootPath = "/tmp/knowledge-layer",
         )
 
-        assertThat(restored.rootPath).isEqualTo("/tmp/direction-wiki")
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
         assertThat(restored.lastGeneratedAt).isEqualTo(0L)
         assertThat(restored.directions.keys).containsExactly("tag:health")
         assertThat(restored.knowledgeItems.map { it.id }).containsExactly("concept:health:review")
@@ -647,6 +680,7 @@ class DirectionWikiCoordinatorConceptGraphTest {
             defaultRootPath = "/tmp/knowledge-layer",
         )
 
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
         assertThat(
             shouldRefreshDirectionWikiSnapshot(
                 current = restored,
