@@ -42,6 +42,24 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildConceptGraphCandidates keeps punctuation-heavy concepts distinct`() {
+        val candidates = buildConceptGraphCandidates(
+            conceptBuckets = mapOf(
+                "C#" to listOf(
+                    directionSummary("tag:dotnet", "Dotnet") to note(11L, "CSharp", tags = listOf("C#")),
+                ),
+                "C++" to listOf(
+                    directionSummary("tag:cpp", "Cpp") to note(12L, "Cpp", tags = listOf("C++")),
+                ),
+            ),
+            objectCandidates = emptyList(),
+        )
+
+        assertThat(candidates.map { it.title }).containsExactly("C++", "C#")
+        assertThat(candidates.map { it.conceptId }.distinct()).hasSize(2)
+    }
+
+    @Test
     fun `concept graph json round-trip preserves default center and edges`() {
         val snapshot = ConceptGraphSnapshot(
             defaultCenterNodeId = "concept:a",
@@ -87,6 +105,13 @@ class DirectionWikiCoordinatorConceptGraphTest {
         assertThat(restored.edges.single().fromConceptId).isEqualTo("concept:a")
         assertThat(restored.edges.single().toConceptId).isEqualTo("concept:b")
         assertThat(restored.edges.single().relationType).isEqualTo(ConceptGraphRelationType.SUPPORTS)
+    }
+
+    @Test
+    fun `safe concept graph parser falls back to default snapshot on malformed json`() {
+        val restored = parseConceptGraphSnapshotOrDefault("{not-valid")
+
+        assertThat(restored).isEqualTo(ConceptGraphSnapshot())
     }
 
     private fun objectCandidate(

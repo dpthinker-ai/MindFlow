@@ -101,10 +101,11 @@ internal fun buildConceptGraphCandidates(
     ) {
         val normalizedTitle = title.trim()
         if (normalizedTitle.isBlank()) return
-        val conceptId = "concept:${graphSearchItemSlug(normalizedTitle)}"
-        val existing = merged[conceptId]
+        val identityKey = stableConceptIdentityKey(normalizedTitle)
+        val conceptId = stableConceptId(identityKey)
+        val existing = merged[identityKey]
         if (existing == null) {
-            merged[conceptId] = MutableConceptGraphCandidate(
+            merged[identityKey] = MutableConceptGraphCandidate(
                 conceptId = conceptId,
                 title = normalizedTitle,
                 summary = summary.trim(),
@@ -212,6 +213,16 @@ internal fun ConceptGraphSnapshot.toConceptGraphJsonString(): String =
         ),
     )
 
+internal fun parseConceptGraphSnapshotOrDefault(
+    raw: String?,
+): ConceptGraphSnapshot =
+    raw
+        ?.takeIf { it.isNotBlank() }
+        ?.let { json ->
+            runCatching { json.toConceptGraphSnapshot() }.getOrDefault(ConceptGraphSnapshot())
+        }
+        ?: ConceptGraphSnapshot()
+
 internal fun String.toConceptGraphSnapshot(): ConceptGraphSnapshot {
     val root = ConceptGraphMiniJsonParser(this).parseObject()
     val nodes = buildList {
@@ -288,6 +299,17 @@ private fun JSONArray?.toStringList(): List<String> {
         }
     }
 }
+
+private fun stableConceptIdentityKey(
+    raw: String,
+): String = raw
+    .trim()
+    .lowercase()
+    .replace(Regex("\\s+"), " ")
+
+private fun stableConceptId(
+    identityKey: String,
+): String = "concept:${identityKey.encodeToByteArray().joinToString("") { "%02x".format(it) }}"
 
 private fun renderConceptGraphJsonObject(
     fields: Map<String, Any?>,
@@ -2054,11 +2076,13 @@ class DirectionWikiCoordinator(
                     )
                 }
             }
-            val conceptGraph = when (val rawConceptGraph = json.opt("conceptGraph")) {
-                is JSONObject -> rawConceptGraph.toString().toConceptGraphSnapshot()
-                is String -> rawConceptGraph.toConceptGraphSnapshot()
-                else -> ConceptGraphSnapshot()
-            }
+            val conceptGraph = parseConceptGraphSnapshotOrDefault(
+                when (val rawConceptGraph = json.opt("conceptGraph")) {
+                    is JSONObject -> rawConceptGraph.toString()
+                    is String -> rawConceptGraph
+                    else -> null
+                },
+            )
             val graphObject = json.optJSONObject("graph")
             val graph = graphObject?.let { graphJson ->
                 val overviewObject = graphJson.optJSONObject("overview")
