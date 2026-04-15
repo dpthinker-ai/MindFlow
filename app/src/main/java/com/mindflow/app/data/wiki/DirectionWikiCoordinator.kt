@@ -29,30 +29,111 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-internal fun buildGraphConceptSearchItems(
+internal data class SurfacedConceptEntry(
+    val title: String,
+    val aliases: List<String> = emptyList(),
+    val notePairs: List<Pair<DirectionWikiDirectionSummary, NoteEntity>> = emptyList(),
+    val relatedObjects: List<KnowledgeObjectCandidate> = emptyList(),
+)
+
+internal fun buildSurfacedConceptEntries(
     conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+    objectCandidates: List<KnowledgeObjectCandidate>,
+): List<SurfacedConceptEntry> {
+    val merged = linkedMapOf<String, MutableSurfacedConceptEntry>()
+
+    conceptBuckets.forEach { (concept, pairs) ->
+        val identityKey = stableConceptIdentityKey(concept)
+        if (identityKey.isBlank()) return@forEach
+        val bucket = merged.getOrPut(identityKey) { MutableSurfacedConceptEntry() }
+        bucket.displayLabels += concept
+        bucket.notePairs += pairs
+    }
+
+    objectCandidates.forEach { candidate ->
+        candidate.relatedConcepts
+            .asSequence()
+            .map(::stableConceptDisplayLabel)
+            .filter(String::isNotBlank)
+            .distinctBy(::stableConceptIdentityKey)
+            .forEach { concept ->
+                val identityKey = stableConceptIdentityKey(concept)
+                if (identityKey.isBlank()) return@forEach
+                val bucket = merged.getOrPut(identityKey) { MutableSurfacedConceptEntry() }
+                bucket.displayLabels += concept
+                bucket.relatedObjects += candidate
+            }
+    }
+
+    return merged.values
+        .mapNotNull { bucket ->
+            val title = stableConceptDisplayLabel(bucket.displayLabels)
+            title.takeIf { it.isNotBlank() }?.let {
+                SurfacedConceptEntry(
+                    title = title,
+                    aliases = bucket.displayLabels
+                        .map(::stableConceptDisplayLabel)
+                        .filter { label -> label.isNotBlank() && label != title }
+                        .distinct()
+                        .sorted(),
+                    notePairs = bucket.notePairs
+                        .distinctBy { (summary, note) -> summary.threadKey to note.id },
+                    relatedObjects = bucket.relatedObjects
+                        .distinctBy { candidate -> candidate.type.folderName to candidate.noteId },
+                )
+            }
+        }
+        .sortedBy { it.title }
+}
+
+internal fun buildGraphConceptSearchItems(
+    conceptEntries: List<SurfacedConceptEntry>,
 ): List<KnowledgeLayerSearchItem> =
-    conceptBuckets
-        .flatMap { (tag, pairs) ->
-            val directionCount = pairs.map { it.first.threadKey }.distinct().size
-            pairs
-                .groupBy { it.first.threadKey }
-                .mapNotNull { (threadKey, threadPairs) ->
-                    val latestPair = threadPairs.maxByOrNull { it.second.updatedAt } ?: return@mapNotNull null
-                    KnowledgeLayerSearchItem(
-                        id = "concept:${threadKey}:${graphSearchItemSlug(tag)}",
-                        type = KnowledgeLayerSearchType.CONCEPT,
-                        title = tag,
-                        summary = NoteInsightSummaryExtractor.extract(latestPair.second).ifBlank {
-                            latestPair.second.content.trim().take(90)
-                        },
-                        supportLine = "${threadPairs.size} 条记录 · ${directionCount} 条方向",
-                        trustLabel = ResearchEvidenceAnalyzer.classify(latestPair.second).label,
-                        threadKey = threadKey,
-                        noteId = latestPair.second.id,
-                        updatedAt = latestPair.second.updatedAt,
-                    )
-                }
+    conceptEntries
+        .flatMap { entry ->
+            val directionCount = surfacedConceptDirectionCount(entry)
+            buildList {
+                entry.notePairs
+                    .groupBy { it.first.threadKey }
+                    .forEach { (threadKey, threadPairs) ->
+                        val latestPair = threadPairs.maxByOrNull { it.second.updatedAt } ?: return@forEach
+                        add(
+                            KnowledgeLayerSearchItem(
+                                id = "concept:${threadKey}:${graphSearchItemSlug(entry.title)}",
+                                type = KnowledgeLayerSearchType.CONCEPT,
+                                title = entry.title,
+                                summary = NoteInsightSummaryExtractor.extract(latestPair.second).ifBlank {
+                                    latestPair.second.content.trim().take(90)
+                                },
+                                supportLine = "${threadPairs.size} 条记录 · ${directionCount} 条方向",
+                                trustLabel = ResearchEvidenceAnalyzer.classify(latestPair.second).label,
+                                threadKey = threadKey,
+                                noteId = latestPair.second.id,
+                                updatedAt = latestPair.second.updatedAt,
+                            ),
+                        )
+                    }
+
+                entry.relatedObjects
+                    .groupBy { it.threadKey }
+                    .forEach { (threadKey, threadObjects) ->
+                        if (entry.notePairs.any { it.first.threadKey == threadKey }) return@forEach
+                        val latestObject = threadObjects.maxByOrNull { it.updatedAt } ?: return@forEach
+                        add(
+                            KnowledgeLayerSearchItem(
+                                id = "concept:${threadKey}:${graphSearchItemSlug(entry.title)}",
+                                type = KnowledgeLayerSearchType.CONCEPT,
+                                title = entry.title,
+                                summary = latestObject.summary,
+                                supportLine = "${threadObjects.size} 个对象 · ${directionCount} 条方向",
+                                trustLabel = latestObject.evidenceType.label,
+                                threadKey = threadKey,
+                                noteId = latestObject.noteId,
+                                updatedAt = latestObject.updatedAt,
+                            ),
+                        )
+                    }
+            }
         }
         .distinctBy { it.id }
         .sortedByDescending { it.updatedAt }
@@ -87,94 +168,58 @@ internal fun buildGraphObjectSearchItems(
 internal fun buildConceptGraphCandidates(
     conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
     objectCandidates: List<KnowledgeObjectCandidate>,
-): List<ConceptGraphCandidate> {
-    val merged = linkedMapOf<String, MutableConceptGraphCandidate>()
-    val surfacedConceptKeys = conceptBuckets.keys
-        .mapTo(linkedSetOf(), ::stableConceptIdentityKey)
+): List<ConceptGraphCandidate> =
+    buildSurfacedConceptEntries(
+        conceptBuckets = conceptBuckets,
+        objectCandidates = objectCandidates,
+    )
+        .mapNotNull { entry ->
+            val identityKey = stableConceptIdentityKey(entry.title)
+            if (identityKey.isBlank()) return@mapNotNull null
 
-    fun mergeCandidate(
-        title: String,
-        summary: String,
-        updatedAt: Long,
-        sourceIds: List<String>,
-        hotnessContribution: Double,
-    ) {
-        val normalizedTitle = stableConceptDisplayLabel(title)
-        if (normalizedTitle.isBlank()) return
-        val identityKey = stableConceptIdentityKey(normalizedTitle)
-        val conceptId = stableConceptId(identityKey)
-        val existing = merged[identityKey]
-        if (existing == null) {
-            merged[identityKey] = MutableConceptGraphCandidate(
-                conceptId = conceptId,
-                title = normalizedTitle,
-                displayLabels = linkedSetOf(normalizedTitle),
-                summary = summary.trim(),
-                hotnessScore = hotnessContribution,
-                updatedAt = updatedAt,
-                sourceIds = linkedSetOf<String>().apply { addAll(sourceIds) },
-            )
-            return
-        }
+            var summary = ""
+            var updatedAt = 0L
 
-        existing.displayLabels += normalizedTitle
-        existing.title = stableConceptDisplayLabel(existing.displayLabels)
-        existing.sourceIds += sourceIds
-        existing.hotnessScore += hotnessContribution
-        if (
-            updatedAt > existing.updatedAt ||
-            (updatedAt == existing.updatedAt && existing.summary.isBlank() && summary.isNotBlank())
-        ) {
-            existing.summary = summary.trim()
-            existing.updatedAt = updatedAt
-        }
-    }
+            fun updateLatest(sourceSummary: String, sourceUpdatedAt: Long) {
+                val trimmedSummary = sourceSummary.trim()
+                if (
+                    sourceUpdatedAt > updatedAt ||
+                    (sourceUpdatedAt == updatedAt && summary.isBlank() && trimmedSummary.isNotBlank())
+                ) {
+                    summary = trimmedSummary
+                    updatedAt = sourceUpdatedAt
+                }
+            }
 
-    conceptBuckets.forEach { (concept, pairs) ->
-        val latest = pairs.maxByOrNull { it.second.updatedAt } ?: return@forEach
-        val directionCount = pairs.map { it.first.threadKey }.distinct().size
-        mergeCandidate(
-            title = concept,
-            summary = NoteInsightSummaryExtractor.extract(latest.second).ifBlank {
-                latest.second.content.trim().take(90)
-            },
-            updatedAt = latest.second.updatedAt,
-            sourceIds = pairs.map { "note:${it.second.id}" }.distinct(),
-            hotnessContribution = pairs.size.toDouble() + directionCount.toDouble(),
-        )
-    }
-
-    objectCandidates.forEach { candidate ->
-        candidate.relatedConcepts
-            .asSequence()
-            .map(::stableConceptDisplayLabel)
-            .filter(String::isNotBlank)
-            .distinctBy(::stableConceptIdentityKey)
-            .filter { concept -> stableConceptIdentityKey(concept) in surfacedConceptKeys }
-            .forEach { concept ->
-                mergeCandidate(
-                    title = concept,
-                    summary = candidate.summary,
-                    updatedAt = candidate.updatedAt,
-                    sourceIds = listOf("${candidate.type.folderName}:${candidate.noteId}"),
-                    hotnessContribution = 1.0,
+            entry.notePairs.forEach { (_, note) ->
+                updateLatest(
+                    sourceSummary = NoteInsightSummaryExtractor.extract(note).ifBlank {
+                        note.content.trim().take(90)
+                    },
+                    sourceUpdatedAt = note.updatedAt,
                 )
             }
-    }
+            entry.relatedObjects.forEach { candidate ->
+                updateLatest(
+                    sourceSummary = candidate.summary,
+                    sourceUpdatedAt = candidate.updatedAt,
+                )
+            }
 
-    return merged.values
-        .map { candidate ->
             ConceptGraphCandidate(
-                conceptId = candidate.conceptId,
-                title = candidate.title,
-                aliases = candidate.displayLabels
-                    .filter { it != candidate.title }
-                    .distinct()
-                    .sorted(),
-                summary = candidate.summary,
-                hotnessScore = candidate.hotnessScore,
-                updatedAt = candidate.updatedAt,
-                sourceIds = candidate.sourceIds.toList(),
+                conceptId = stableConceptId(identityKey),
+                title = entry.title,
+                aliases = entry.aliases,
+                summary = summary,
+                hotnessScore = entry.notePairs.size.toDouble() +
+                    entry.notePairs.map { it.first.threadKey }.distinct().size.toDouble() +
+                    entry.relatedObjects.size.toDouble(),
+                updatedAt = updatedAt,
+                sourceIds = (
+                    entry.notePairs.map { "note:${it.second.id}" } +
+                        entry.relatedObjects.map { "${it.type.folderName}:${it.noteId}" }
+                    )
+                    .distinct(),
             )
         }
         .sortedWith(
@@ -182,7 +227,6 @@ internal fun buildConceptGraphCandidates(
                 .thenByDescending { it.updatedAt }
                 .thenBy { it.title },
         )
-}
 
 internal fun buildConceptBuckets(
     summaries: List<DirectionWikiDirectionSummary>,
@@ -319,20 +363,33 @@ private fun ConceptGraphJsonFields.toConceptGraphSnapshot(): ConceptGraphSnapsho
     )
 }
 
-private data class MutableConceptGraphCandidate(
-    val conceptId: String,
-    var title: String,
+private data class MutableSurfacedConceptEntry(
     val displayLabels: MutableSet<String> = linkedSetOf(),
-    var summary: String,
-    var hotnessScore: Double,
-    var updatedAt: Long,
-    val sourceIds: MutableSet<String>,
+    val notePairs: MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>> = mutableListOf(),
+    val relatedObjects: MutableList<KnowledgeObjectCandidate> = mutableListOf(),
 )
 
 private data class MutableConceptBucket(
     val displayLabels: MutableSet<String> = linkedSetOf(),
     val pairs: MutableList<Pair<DirectionWikiDirectionSummary, NoteEntity>> = mutableListOf(),
 )
+
+private fun surfacedConceptDirectionCount(
+    entry: SurfacedConceptEntry,
+): Int = (entry.notePairs.map { it.first.threadKey } + entry.relatedObjects.map { it.threadKey })
+    .distinct()
+    .size
+
+private fun buildConceptIndexSupportLine(
+    entry: SurfacedConceptEntry,
+): String {
+    val directionCount = surfacedConceptDirectionCount(entry)
+    return if (entry.notePairs.isNotEmpty()) {
+        "${entry.notePairs.size} 条记录 · ${directionCount} 条方向"
+    } else {
+        "${entry.relatedObjects.size} 个对象 · ${directionCount} 条方向"
+    }
+}
 
 private fun stableConceptIdentityKey(
     raw: String,
@@ -481,7 +538,7 @@ private fun parseStoredConceptGraph(
 
     null -> StoredConceptGraphParseResult(
         snapshot = ConceptGraphSnapshot(),
-        requiresPromptRegeneration = false,
+        requiresPromptRegeneration = true,
     )
 
     else -> StoredConceptGraphParseResult(
@@ -1097,11 +1154,15 @@ class DirectionWikiCoordinator(
             },
         )
 
+        val conceptEntries = buildSurfacedConceptEntries(
+            conceptBuckets = conceptBuckets,
+            objectCandidates = objectCandidates,
+        )
         writeConceptFiles(
             generatedAt = generatedAt,
-            conceptBuckets = conceptBuckets,
+            conceptEntries = conceptEntries,
             conceptsDir = conceptsDir,
-            candidates = objectCandidates,
+            directionsByThreadKey = summaries.associateBy { it.threadKey },
         )
         writeKnowledgeObjectFiles(
             generatedAt = generatedAt,
@@ -1160,14 +1221,11 @@ class DirectionWikiCoordinator(
 
         val knowledgeItems = buildKnowledgeSearchItems(
             summaries = summaries,
-            conceptBuckets = conceptBuckets,
+            conceptEntries = conceptEntries,
             candidates = objectCandidates,
         )
         val conceptGraph = conceptGraphPlanner.summarize(
-            candidates = buildConceptGraphCandidates(
-                conceptBuckets = conceptBuckets,
-                objectCandidates = objectCandidates,
-            ),
+            candidates = buildConceptGraphCandidates(conceptBuckets, objectCandidates),
         )
         File(rootDir, "wiki/graph.md").writeText(
             buildConceptGraphMarkdown(
@@ -1186,9 +1244,9 @@ class DirectionWikiCoordinator(
 
     private fun writeConceptFiles(
         generatedAt: Long,
-        conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+        conceptEntries: List<SurfacedConceptEntry>,
         conceptsDir: File,
-        candidates: List<KnowledgeObjectCandidate>,
+        directionsByThreadKey: Map<String, DirectionWikiDirectionSummary>,
     ) {
         File(conceptsDir, "index.md").writeText(
             buildString {
@@ -1196,49 +1254,54 @@ class DirectionWikiCoordinator(
                 appendLine()
                 appendLine("更新时间：${displayTime(generatedAt)}")
                 appendLine()
-                if (conceptBuckets.isEmpty()) {
-                    appendLine("还没有形成跨方向复用的概念。")
+                if (conceptEntries.isEmpty()) {
+                    appendLine("还没有形成可复用的概念。")
                 } else {
-                    conceptBuckets.forEach { (tag, pairs) ->
-                        val slug = slugFor(tag, tag)
-                        val directionCount = pairs.map { it.first.threadKey }.distinct().size
-                        appendLine("- [$tag]($slug.md) · ${pairs.size} 条记录 · ${directionCount} 条方向")
+                    conceptEntries.forEach { entry ->
+                        val slug = slugFor(entry.title, entry.title)
+                        appendLine("- [${entry.title}]($slug.md) · ${buildConceptIndexSupportLine(entry)}")
                     }
                 }
             },
         )
 
-        conceptBuckets.forEach { (tag, pairs) ->
-            val slug = slugFor(tag, tag)
-            val uniqueDirections = pairs
-                .map { it.first }
+        conceptEntries.forEach { entry ->
+            val slug = slugFor(entry.title, entry.title)
+            val uniqueDirections = (
+                entry.notePairs.map { it.first } +
+                    entry.relatedObjects.mapNotNull { candidate -> directionsByThreadKey[candidate.threadKey] }
+                )
                 .distinctBy { it.threadKey }
                 .sortedBy { it.title }
-            val uniqueNotes = pairs
-                .distinctBy { it.second.id }
-                .sortedByDescending { it.second.updatedAt }
+            val uniqueNotes = entry.notePairs
+                .map { it.second }
+                .distinctBy { it.id }
+                .sortedByDescending { it.updatedAt }
                 .take(6)
-            val relatedObjects = candidates
-                .filter { candidate -> tag in candidate.relatedConcepts }
-                .groupBy { it.type }
+            val relatedObjects = entry.relatedObjects.groupBy { it.type }
             File(conceptsDir, "$slug.md").writeText(
                 buildString {
-                    appendLine("# $tag")
+                    appendLine("# ${entry.title}")
                     appendLine()
                     appendLine("- 最近更新：${displayTime(generatedAt)}")
                     appendLine("- 相关方向：${uniqueDirections.size} 条")
                     appendLine("- 相关记录：${uniqueNotes.size} 条")
+                    if (entry.relatedObjects.isNotEmpty()) {
+                        appendLine("- 相关对象：${entry.relatedObjects.size} 个")
+                    }
                     appendLine()
                     appendLine("## 关联方向")
                     uniqueDirections.forEach { direction ->
                         appendLine("- [${direction.title}](../directions/${direction.slug}.md) · ${direction.stage.label} · [证据](../evidence/${direction.slug}.md)")
                     }
-                    appendLine()
-                    appendLine("## 最近记录")
-                    uniqueNotes.forEach { (_, note) ->
-                        val summary = NoteInsightSummaryExtractor.extract(note)
-                        appendLine("- ${note.topic.ifBlank { "未命名记录" }}")
-                        appendLine("  - ${summary.ifBlank { note.content.trim().take(72) }}")
+                    if (uniqueNotes.isNotEmpty()) {
+                        appendLine()
+                        appendLine("## 最近记录")
+                        uniqueNotes.forEach { note ->
+                            val summary = NoteInsightSummaryExtractor.extract(note)
+                            appendLine("- ${note.topic.ifBlank { "未命名记录" }}")
+                            appendLine("  - ${summary.ifBlank { note.content.trim().take(72) }}")
+                        }
                     }
                     if (relatedObjects.isNotEmpty()) {
                         appendLine()
@@ -1956,7 +2019,7 @@ class DirectionWikiCoordinator(
 
     private fun buildKnowledgeSearchItems(
         summaries: List<DirectionWikiDirectionSummary>,
-        conceptBuckets: Map<String, List<Pair<DirectionWikiDirectionSummary, NoteEntity>>>,
+        conceptEntries: List<SurfacedConceptEntry>,
         candidates: List<KnowledgeObjectCandidate>,
     ): List<KnowledgeLayerSearchItem> {
         val directionItems = summaries.map { summary ->
@@ -1971,7 +2034,7 @@ class DirectionWikiCoordinator(
                 updatedAt = summary.updatedAt,
             )
         }
-        val conceptItems = buildGraphConceptSearchItems(conceptBuckets)
+        val conceptItems = buildGraphConceptSearchItems(conceptEntries)
         val objectItems = buildGraphObjectSearchItems(candidates)
         val conclusionItems = summaries
             .filter { it.conclusionLine.isNotBlank() || it.assetSummary.isNotBlank() }

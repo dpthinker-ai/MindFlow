@@ -24,11 +24,14 @@ class DirectionWikiCoordinatorConceptGraphTest {
     @Test
     fun `buildGraphConceptSearchItems keeps shared concept entries per thread`() {
         val conceptItems = buildGraphConceptSearchItems(
-            conceptBuckets = mapOf(
-                "睡眠" to listOf(
-                    directionSummary("folder:work", "工作") to note(1L, "记录 A", tags = listOf("睡眠")),
-                    directionSummary("tag:health", "健康") to note(2L, "记录 B", tags = listOf("睡眠")),
+            conceptEntries = buildSurfacedConceptEntries(
+                conceptBuckets = mapOf(
+                    "睡眠" to listOf(
+                        directionSummary("folder:work", "工作") to note(1L, "记录 A", tags = listOf("睡眠")),
+                        directionSummary("tag:health", "健康") to note(2L, "记录 B", tags = listOf("睡眠")),
+                    ),
                 ),
+                objectCandidates = emptyList(),
             ),
         )
 
@@ -127,7 +130,55 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
-    fun `buildConceptGraphCandidates only keeps object-derived concepts when they already surface as reusable concepts`() {
+    fun `buildSurfacedConceptEntries normalizes object concepts onto existing reusable concept pages`() {
+        val entries = buildSurfacedConceptEntries(
+            conceptBuckets = mapOf(
+                "REST API" to listOf(
+                    directionSummary("folder:work", "工作") to note(1L, "接口记录", tags = listOf("REST API")),
+                    directionSummary("folder:life", "生活") to note(2L, "系统记录", tags = listOf("rest api"), folderKey = "life"),
+                ),
+            ),
+            objectCandidates = listOf(
+                objectCandidate(
+                    noteId = 3L,
+                    relatedConcepts = listOf("rest api", "结构化"),
+                ),
+            ),
+        )
+
+        assertThat(entries.map { it.title }).containsExactly("REST API", "结构化").inOrder()
+        assertThat(entries.first { it.title == "REST API" }.notePairs.map { it.second.id }).containsExactly(1L, 2L).inOrder()
+        assertThat(entries.first { it.title == "REST API" }.relatedObjects.map { it.noteId }).containsExactly(3L)
+        assertThat(entries.first { it.title == "结构化" }.notePairs).isEmpty()
+        assertThat(entries.first { it.title == "结构化" }.relatedObjects.map { it.noteId }).containsExactly(3L)
+    }
+
+    @Test
+    fun `buildGraphConceptSearchItems surfaces single-direction object-derived concepts`() {
+        val conceptItems = buildGraphConceptSearchItems(
+            conceptEntries = buildSurfacedConceptEntries(
+                conceptBuckets = emptyMap(),
+                objectCandidates = listOf(
+                    objectCandidate(
+                        noteId = 3L,
+                        threadKey = "tag:learning",
+                        threadTitle = "学习",
+                        relatedConcepts = listOf("结构化"),
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(conceptItems).hasSize(1)
+        assertThat(conceptItems.single().title).isEqualTo("结构化")
+        assertThat(conceptItems.single().threadKey).isEqualTo("tag:learning")
+        assertThat(conceptItems.single().summary).isEqualTo("每周固定复盘一次。")
+        assertThat(conceptItems.single().supportLine).isEqualTo("1 个对象 · 1 条方向")
+        assertThat(conceptItems.single().noteId).isEqualTo(3L)
+    }
+
+    @Test
+    fun `buildConceptGraphCandidates keeps object-derived concepts even without reusable concept surface`() {
         val candidates = buildConceptGraphCandidates(
             conceptBuckets = mapOf(
                 "复盘" to listOf(
@@ -145,13 +196,17 @@ class DirectionWikiCoordinatorConceptGraphTest {
             ),
         )
 
-        assertThat(candidates.map { it.title }).containsExactly("复盘", "睡眠规律")
-        assertThat(candidates).hasSize(2)
+        assertThat(candidates.map { it.title }).containsExactly("复盘", "睡眠规律", "结构化").inOrder()
+        assertThat(candidates).hasSize(3)
         assertThat(candidates.maxOf { it.updatedAt }).isEqualTo(3_000L)
 
         val retrospective = candidates.first { it.title == "复盘" }
         assertThat(retrospective.sourceIds).containsAtLeast("note:1", "methods:3")
         assertThat(retrospective.updatedAt).isEqualTo(3_000L)
+
+        val structured = candidates.first { it.title == "结构化" }
+        assertThat(structured.sourceIds).containsExactly("methods:3")
+        assertThat(structured.updatedAt).isEqualTo(3_000L)
     }
 
     @Test
@@ -426,7 +481,7 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
-    fun `parseDirectionWikiSnapshotOrDefault preserves non graph data when conceptGraph is missing`() {
+    fun `parseDirectionWikiSnapshotOrDefault marks missing conceptGraph stale for prompt regeneration`() {
         val restored = parseDirectionWikiSnapshotOrDefault(
             raw = """
                 {
@@ -468,12 +523,20 @@ class DirectionWikiCoordinatorConceptGraphTest {
         )
 
         assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
-        assertThat(restored.lastGeneratedAt).isEqualTo(7_000L)
+        assertThat(restored.lastGeneratedAt).isEqualTo(0L)
         assertThat(restored.directions.keys).containsExactly("tag:health")
         assertThat(restored.directions.getValue("tag:health").assetSummary).isEqualTo("稳定复盘节奏。")
         assertThat(restored.directions.getValue("tag:health").stageHistorySummary).isEqualTo("forming -> settling")
         assertThat(restored.knowledgeItems.map { it.id }).containsExactly("concept:health:review")
         assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+        assertThat(
+            shouldRefreshDirectionWikiSnapshot(
+                current = restored,
+                candidateThreadKeys = listOf("tag:health"),
+                now = 12_000L,
+                refreshIntervalMs = 18L * 60L * 60L * 1000L,
+            ),
+        ).isTrue()
     }
 
     @Test
