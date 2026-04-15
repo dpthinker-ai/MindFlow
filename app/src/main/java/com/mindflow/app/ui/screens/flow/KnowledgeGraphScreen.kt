@@ -93,6 +93,12 @@ private data class RankedConceptNeighbor(
     val fromCenter: Boolean,
 )
 
+private data class ConceptComponentSwitchTarget(
+    val node: ConceptGraphNode,
+    val componentSize: Int,
+    val connectedConceptCount: Int,
+)
+
 private val rankedConceptNeighborComparator =
     compareByDescending<RankedConceptNeighbor> { it.relation.confidence }
         .thenByDescending { it.fromCenter }
@@ -104,6 +110,13 @@ private val conceptNodeComparator =
     compareByDescending<ConceptGraphNode> { it.hotnessScore }
         .thenByDescending { it.updatedAt }
         .thenBy { it.label }
+
+private val conceptComponentSwitchTargetComparator =
+    compareByDescending<ConceptComponentSwitchTarget> { it.componentSize }
+        .thenByDescending { it.connectedConceptCount }
+        .thenByDescending { it.node.hotnessScore }
+        .thenByDescending { it.node.updatedAt }
+        .thenBy { it.node.label }
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -137,7 +150,10 @@ internal fun KnowledgeGraphScreen(
     }
     var centerNodeId by rememberSaveable { mutableStateOf(defaultCenterNodeId) }
     var previousCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
-    var expandedCenterNodeIds by rememberSaveable(snapshot.conceptGraph) {
+    var expandedNeighborCenterNodeIds by rememberSaveable(snapshot.conceptGraph) {
+        mutableStateOf(emptyList<String>())
+    }
+    var expandedSwitchableCenterNodeIds by rememberSaveable(snapshot.conceptGraph) {
         mutableStateOf(emptyList<String>())
     }
 
@@ -148,11 +164,17 @@ internal fun KnowledgeGraphScreen(
         }
     }
 
-    val viewport = remember(snapshot.conceptGraph, centerNodeId, expandedCenterNodeIds) {
+    val viewport = remember(
+        snapshot.conceptGraph,
+        centerNodeId,
+        expandedNeighborCenterNodeIds,
+        expandedSwitchableCenterNodeIds,
+    ) {
         buildConceptGraphViewport(
             snapshot = snapshot,
             currentCenterNodeId = centerNodeId.takeIf { it.isNotBlank() },
-            expandedCenterNodeIds = expandedCenterNodeIds,
+            expandedCenterNodeIds = expandedNeighborCenterNodeIds,
+            expandedSwitchableCenterNodeIds = expandedSwitchableCenterNodeIds,
         )
     }
     val relationFromPreviousCenter = remember(
@@ -205,8 +227,11 @@ internal fun KnowledgeGraphScreen(
                         ConceptGraphPanel(
                             viewport = viewport,
                             relationFromPreviousCenter = relationFromPreviousCenter,
-                            onExpandCenter = { centerId ->
-                                expandedCenterNodeIds = expandedCenterNodeIds + centerId
+                            onExpandNeighbors = { centerId ->
+                                expandedNeighborCenterNodeIds = expandedNeighborCenterNodeIds + centerId
+                            },
+                            onExpandSwitchTargets = { centerId ->
+                                expandedSwitchableCenterNodeIds = expandedSwitchableCenterNodeIds + centerId
                             },
                             onSelectNode = { nodeId ->
                                 if (nodeId != centerNodeId) {
@@ -242,7 +267,8 @@ private fun EmptyConceptGraphPanel() {
 private fun ConceptGraphPanel(
     viewport: ConceptGraphViewport,
     relationFromPreviousCenter: ConceptGraphCenterRelation?,
-    onExpandCenter: (String) -> Unit,
+    onExpandNeighbors: (String) -> Unit,
+    onExpandSwitchTargets: (String) -> Unit,
     onSelectNode: (String) -> Unit,
 ) {
     val centerNode = viewport.centerNode ?: return
@@ -276,30 +302,6 @@ private fun ConceptGraphPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
-                if (viewport.switchableNodes.isNotEmpty()) {
-                    Text(
-                        text = "切换到其他知识点",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSoft,
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        viewport.switchableNodes.forEach { node ->
-                            SwitchableConceptNodeCard(
-                                node = node,
-                                onClick = { onSelectNode(node.conceptId) },
-                            )
-                        }
-                    }
-                    if (viewport.hiddenSwitchableNodeCount > 0) {
-                        TextButton(onClick = { onExpandCenter(centerNode.conceptId) }) {
-                            Text("展开其余 ${viewport.hiddenSwitchableNodeCount} 个可切换知识点")
-                        }
-                    }
-                }
             } else {
                 Text(
                     text = "一跳关联",
@@ -319,8 +321,42 @@ private fun ConceptGraphPanel(
                     }
                 }
                 if (viewport.hiddenNeighborCount > 0) {
-                    TextButton(onClick = { onExpandCenter(centerNode.conceptId) }) {
+                    TextButton(onClick = { onExpandNeighbors(centerNode.conceptId) }) {
                         Text("展开其余 ${viewport.hiddenNeighborCount} 个关联知识点")
+                    }
+                }
+            }
+            if (viewport.switchableNodes.isNotEmpty()) {
+                Text(
+                    text = if (viewport.neighbors.isEmpty()) {
+                        "切换到其他知识点"
+                    } else {
+                        "切换到其他知识簇"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    viewport.switchableNodes.forEach { node ->
+                        SwitchableConceptNodeCard(
+                            node = node,
+                            onClick = { onSelectNode(node.conceptId) },
+                        )
+                    }
+                }
+                if (viewport.hiddenSwitchableNodeCount > 0) {
+                    TextButton(onClick = { onExpandSwitchTargets(centerNode.conceptId) }) {
+                        Text(
+                            if (viewport.neighbors.isEmpty()) {
+                                "展开其余 ${viewport.hiddenSwitchableNodeCount} 个可切换知识点"
+                            } else {
+                                "展开其余 ${viewport.hiddenSwitchableNodeCount} 个知识簇入口"
+                            },
+                        )
                     }
                 }
             }
@@ -545,6 +581,7 @@ internal fun buildConceptGraphViewport(
     snapshot: DirectionWikiSnapshot,
     currentCenterNodeId: String? = null,
     expandedCenterNodeIds: Collection<String> = emptyList(),
+    expandedSwitchableCenterNodeIds: Collection<String> = expandedCenterNodeIds,
     batchSize: Int = ConceptGraphBatchSize,
 ): ConceptGraphViewport {
     val graph = snapshot.conceptGraph
@@ -557,17 +594,24 @@ internal fun buildConceptGraphViewport(
         centerNodeId = centerNodeId,
         nodeById = nodeById,
     ).values.sortedWith(rankedConceptNeighborComparator)
-    val visibleNodeCount = batchSize.coerceAtLeast(0) * (expandedCenterNodeIds.count { it == centerNodeId } + 1)
+    val normalizedBatchSize = batchSize.coerceAtLeast(0)
+    val visibleNeighborCount =
+        normalizedBatchSize * (expandedCenterNodeIds.count { it == centerNodeId } + 1)
+    val visibleSwitchableNodeCount =
+        normalizedBatchSize * (expandedSwitchableCenterNodeIds.count { it == centerNodeId } + 1)
     val allSwitchableNodes = if (rankedNeighbors.isEmpty()) {
         buildSwitchableConceptNodes(
             graph = graph,
             centerNodeId = centerNodeId,
         )
     } else {
-        emptyList()
+        buildDisconnectedComponentSwitchableNodes(
+            graph = graph,
+            centerNodeId = centerNodeId,
+        )
     }
-    val visibleSwitchableNodes = allSwitchableNodes.take(visibleNodeCount)
-    val visibleNeighbors = rankedNeighbors.take(visibleNodeCount)
+    val visibleSwitchableNodes = allSwitchableNodes.take(visibleSwitchableNodeCount)
+    val visibleNeighbors = rankedNeighbors.take(visibleNeighborCount)
 
     return ConceptGraphViewport(
         centerNode = centerNode,
@@ -691,6 +735,49 @@ private fun buildSwitchableConceptNodes(
     graph: ConceptGraphSnapshot,
     centerNodeId: String,
 ): List<ConceptGraphNode> {
+    val connectedNodeIdsByNodeId = buildConnectedNodeIdsByNodeId(graph)
+    val comparator = buildSwitchableConceptNodeComparator(connectedNodeIdsByNodeId)
+    return graph.nodes
+        .asSequence()
+        .filter { it.conceptId != centerNodeId }
+        .sortedWith(comparator)
+        .toList()
+}
+
+private fun buildDisconnectedComponentSwitchableNodes(
+    graph: ConceptGraphSnapshot,
+    centerNodeId: String,
+): List<ConceptGraphNode> {
+    val connectedNodeIdsByNodeId = buildConnectedNodeIdsByNodeId(graph)
+    val nodeById = graph.nodes.associateBy { it.conceptId }
+    val comparator = buildSwitchableConceptNodeComparator(connectedNodeIdsByNodeId)
+    return buildConceptComponents(
+        nodeIds = graph.nodes.map { it.conceptId },
+        connectedNodeIdsByNodeId = connectedNodeIdsByNodeId,
+    )
+        .asSequence()
+        .filterNot { centerNodeId in it }
+        .mapNotNull { componentNodeIds ->
+            componentNodeIds
+                .asSequence()
+                .mapNotNull(nodeById::get)
+                .minWithOrNull(comparator)
+                ?.let { representative ->
+                    ConceptComponentSwitchTarget(
+                        node = representative,
+                        componentSize = componentNodeIds.size,
+                        connectedConceptCount = connectedNodeIdsByNodeId[representative.conceptId]?.size ?: 0,
+                    )
+                }
+        }
+        .sortedWith(conceptComponentSwitchTargetComparator)
+        .map { it.node }
+        .toList()
+}
+
+private fun buildConnectedNodeIdsByNodeId(
+    graph: ConceptGraphSnapshot,
+): Map<String, Set<String>> {
     val connectedNodeIdsByNodeId = mutableMapOf<String, MutableSet<String>>()
     graph.edges.forEach { edge ->
         if (edge.fromConceptId == edge.toConceptId) return@forEach
@@ -701,19 +788,43 @@ private fun buildSwitchableConceptNodes(
             .getOrPut(edge.toConceptId) { linkedSetOf() }
             .add(edge.fromConceptId)
     }
-    return graph.nodes
-        .asSequence()
-        .filter { it.conceptId != centerNodeId }
-        .sortedWith(
-            compareByDescending<ConceptGraphNode> {
-                connectedNodeIdsByNodeId[it.conceptId]?.size ?: 0
-            }
-                .thenByDescending { it.hotnessScore }
-                .thenByDescending { it.updatedAt }
-                .thenBy { it.label },
-        )
-        .toList()
+    return connectedNodeIdsByNodeId
 }
+
+private fun buildConceptComponents(
+    nodeIds: List<String>,
+    connectedNodeIdsByNodeId: Map<String, Set<String>>,
+): List<Set<String>> {
+    val visitedNodeIds = mutableSetOf<String>()
+    val components = mutableListOf<Set<String>>()
+    nodeIds.forEach { nodeId ->
+        if (!visitedNodeIds.add(nodeId)) return@forEach
+        val componentNodeIds = linkedSetOf<String>()
+        val pendingNodeIds = ArrayDeque<String>()
+        pendingNodeIds.addLast(nodeId)
+        while (pendingNodeIds.isNotEmpty()) {
+            val currentNodeId = pendingNodeIds.removeFirst()
+            if (!componentNodeIds.add(currentNodeId)) continue
+            connectedNodeIdsByNodeId[currentNodeId].orEmpty().forEach { neighborNodeId ->
+                if (visitedNodeIds.add(neighborNodeId)) {
+                    pendingNodeIds.addLast(neighborNodeId)
+                }
+            }
+        }
+        components += componentNodeIds
+    }
+    return components
+}
+
+private fun buildSwitchableConceptNodeComparator(
+    connectedNodeIdsByNodeId: Map<String, Set<String>>,
+): Comparator<ConceptGraphNode> =
+    compareByDescending<ConceptGraphNode> {
+        connectedNodeIdsByNodeId[it.conceptId]?.size ?: 0
+    }
+        .thenByDescending { it.hotnessScore }
+        .thenByDescending { it.updatedAt }
+        .thenBy { it.label }
 
 private fun conceptNodeAccent(
     conceptId: String,

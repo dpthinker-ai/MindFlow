@@ -184,6 +184,28 @@ class KnowledgeGraphScreenInstrumentedTest {
     }
 
     @Test
+    fun connectedCenterStillShowsSwitchAffordanceForOtherComponents() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = disconnectedComponentsSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("core")).assertIsSelected()
+        composeRule.onNodeWithTag(graphNodeTestTag("neighbor")).assertIsDisplayed()
+        composeRule.onNodeWithText("切换到其他知识簇").assertIsDisplayed()
+        composeRule.onNodeWithTag(graphNodeTestTag("island-hub")).assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(graphNodeTestTag("island-hub")).assertIsSelected()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("另一个知识簇的入口。")
+        composeRule.onNodeWithTag(graphNodeTestTag("island-leaf")).assertIsDisplayed()
+    }
+
+    @Test
     fun refreshingSnapshotPreservesCurrentCenterButResetsExpansionState() {
         var snapshot by mutableStateOf(refreshScopedExpansionSnapshot(generatedAt = 1L))
         composeRule.setContent {
@@ -345,6 +367,35 @@ class KnowledgeGraphScreenInstrumentedTest {
                         confidence = 0.99 - (index * 0.01),
                     )
                 },
+            ),
+        )
+
+    private fun disconnectedComponentsSnapshot(): DirectionWikiSnapshot =
+        DirectionWikiSnapshot(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "core",
+                nodes = listOf(
+                    conceptNode("core", "中心概念", "当前中心仍然有一跳邻居。", 0.95, 1_000),
+                    conceptNode("neighbor", "邻居概念", "和中心概念直接相连。", 0.9, 990),
+                    conceptNode("island-hub", "孤岛入口", "另一个知识簇的入口。", 0.88, 980),
+                    conceptNode("island-leaf", "孤岛叶子", "只有切换过去后才能继续展开。", 0.8, 970),
+                ),
+                edges = listOf(
+                    conceptEdge(
+                        fromConceptId = "core",
+                        toConceptId = "neighbor",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "中心概念会先展示自己的直接邻居。",
+                        confidence = 0.94,
+                    ),
+                    conceptEdge(
+                        fromConceptId = "island-hub",
+                        toConceptId = "island-leaf",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "切换过去后能继续浏览另一个知识簇。",
+                        confidence = 0.91,
+                    ),
+                ),
             ),
         )
 

@@ -244,6 +244,68 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
+    fun `buildConceptGraphViewport keeps other disconnected components reachable when center has neighbors`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "core-a",
+            nodes = listOf(
+                conceptNode("core-a", "核心A", hotnessScore = 0.95, updatedAt = 950),
+                conceptNode("core-b", "核心B", hotnessScore = 0.9, updatedAt = 940),
+                conceptNode("island-a", "孤岛A", hotnessScore = 0.85, updatedAt = 930),
+                conceptNode("island-b", "孤岛B", hotnessScore = 0.8, updatedAt = 920),
+                conceptNode("island-c", "孤岛C", hotnessScore = 0.75, updatedAt = 910),
+                conceptNode("island-d", "孤岛D", hotnessScore = 0.7, updatedAt = 900),
+                conceptNode("island-e", "孤岛E", hotnessScore = 0.65, updatedAt = 890),
+                conceptNode("island-f", "孤岛F", hotnessScore = 0.6, updatedAt = 880),
+                conceptNode("island-g", "孤岛G", hotnessScore = 0.55, updatedAt = 870),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "core-a",
+                    toConceptId = "core-b",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.95,
+                ),
+                conceptEdge(
+                    fromConceptId = "island-a",
+                    toConceptId = "island-b",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.91,
+                ),
+                conceptEdge(
+                    fromConceptId = "island-c",
+                    toConceptId = "island-d",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.88,
+                ),
+                conceptEdge(
+                    fromConceptId = "island-e",
+                    toConceptId = "island-f",
+                    relationType = ConceptGraphRelationType.REFERENCES,
+                    confidence = 0.83,
+                ),
+                conceptEdge(
+                    fromConceptId = "island-g",
+                    toConceptId = "island-g",
+                    relationType = ConceptGraphRelationType.PARALLEL,
+                    confidence = 0.4,
+                ),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(
+            snapshot = snapshot,
+            batchSize = 3,
+        )
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("core-a")
+        assertThat(viewport.neighbors.map { it.node.conceptId }).containsExactly("core-b")
+        assertThat(viewport.switchableNodes.map { it.conceptId })
+            .containsExactly("island-a", "island-c", "island-e")
+            .inOrder()
+        assertThat(viewport.hiddenSwitchableNodeCount).isEqualTo(1)
+    }
+
+    @Test
     fun `buildConceptGraphCenterRelation uses best ranked edge for selected neighbor`() {
         val graph = ConceptGraphSnapshot(
             defaultCenterNodeId = "work",
