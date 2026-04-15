@@ -94,7 +94,7 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
-    fun `buildConceptGraphCandidates combines recent concept buckets with long-term object concepts`() {
+    fun `buildConceptGraphCandidates only keeps object-derived concepts when they already surface as reusable concepts`() {
         val candidates = buildConceptGraphCandidates(
             conceptBuckets = mapOf(
                 "复盘" to listOf(
@@ -112,8 +112,8 @@ class DirectionWikiCoordinatorConceptGraphTest {
             ),
         )
 
-        assertThat(candidates.map { it.title }).containsAtLeast("复盘", "睡眠规律", "结构化")
-        assertThat(candidates).hasSize(3)
+        assertThat(candidates.map { it.title }).containsExactly("复盘", "睡眠规律")
+        assertThat(candidates).hasSize(2)
         assertThat(candidates.maxOf { it.updatedAt }).isEqualTo(3_000L)
 
         val retrospective = candidates.first { it.title == "复盘" }
@@ -444,7 +444,7 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
-    fun `parseDirectionWikiSnapshotOrDefault preserves non graph data when conceptGraph is malformed`() {
+    fun `parseDirectionWikiSnapshotOrDefault preserves non graph data and marks malformed conceptGraph stale`() {
         val restored = parseDirectionWikiSnapshotOrDefault(
             raw = """
                 {
@@ -487,13 +487,68 @@ class DirectionWikiCoordinatorConceptGraphTest {
         )
 
         assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
-        assertThat(restored.lastGeneratedAt).isEqualTo(9_000L)
+        assertThat(restored.lastGeneratedAt).isEqualTo(0L)
         assertThat(restored.directions.keys).containsExactly("tag:sleep")
         assertThat(restored.directions.getValue("tag:sleep").assetSummary).isEqualTo("先固定入睡窗口。")
         assertThat(restored.directions.getValue("tag:sleep").stageHistorySummary).isEqualTo("forming -> strengthening")
         assertThat(restored.knowledgeItems.map { it.id }).containsExactly("method:tag:sleep:bedtime")
         assertThat(restored.knowledgeItems.single().type).isEqualTo(KnowledgeLayerSearchType.METHOD)
         assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+        assertThat(
+            shouldRefreshDirectionWikiSnapshot(
+                current = restored,
+                candidateThreadKeys = listOf("tag:sleep"),
+                now = 12_000L,
+                refreshIntervalMs = 18L * 60L * 60L * 1000L,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `parseDirectionWikiSnapshotOrDefault marks default-falling malformed conceptGraph object stale`() {
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = """
+                {
+                  "generatedAt": 1700000000000,
+                  "rootPath": "/tmp/knowledge-layer",
+                  "directions": [
+                    {
+                      "threadKey": "tag:health",
+                      "slug": "tag:health",
+                      "title": "健康",
+                      "stage": "FORMING",
+                      "assetSummary": "稳定复盘节奏。",
+                      "stageHistorySummary": "forming -> strengthening",
+                      "updatedAt": 1000,
+                      "signalPoints": [],
+                      "hypothesisPoints": [],
+                      "verifiedPoints": [],
+                      "validatedPoints": [],
+                      "lintIssues": [],
+                      "openQuestions": []
+                    }
+                  ],
+                  "conceptGraph": {
+                    "nodes": [],
+                    "edges": []
+                  }
+                }
+            """.trimIndent(),
+            defaultRootPath = "/fallback/root",
+        )
+
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
+        assertThat(restored.lastGeneratedAt).isEqualTo(0L)
+        assertThat(restored.directions.keys).containsExactly("tag:health")
+        assertThat(restored.conceptGraph).isEqualTo(ConceptGraphSnapshot())
+        assertThat(
+            shouldRefreshDirectionWikiSnapshot(
+                current = restored,
+                candidateThreadKeys = listOf("tag:health"),
+                now = 1_700_000_005_000L,
+                refreshIntervalMs = 18L * 60L * 60L * 1000L,
+            ),
+        ).isTrue()
     }
 
     @Test

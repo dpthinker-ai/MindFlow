@@ -89,6 +89,8 @@ internal fun buildConceptGraphCandidates(
     objectCandidates: List<KnowledgeObjectCandidate>,
 ): List<ConceptGraphCandidate> {
     val merged = linkedMapOf<String, MutableConceptGraphCandidate>()
+    val surfacedConceptKeys = conceptBuckets.keys
+        .mapTo(linkedSetOf(), ::stableConceptIdentityKey)
 
     fun mergeCandidate(
         title: String,
@@ -146,6 +148,7 @@ internal fun buildConceptGraphCandidates(
             .asSequence()
             .map(String::trim)
             .filter(String::isNotBlank)
+            .filter { concept -> stableConceptIdentityKey(concept) in surfacedConceptKeys }
             .distinct()
             .forEach { concept ->
                 mergeCandidate(
@@ -410,6 +413,85 @@ private data class ConceptGraphJsonFields(
 
     fun int(key: String): Int? =
         double(key)?.toInt()
+}
+
+private data class StoredConceptGraphParseResult(
+    val snapshot: ConceptGraphSnapshot,
+    val requiresPromptRegeneration: Boolean,
+)
+
+private fun parseStoredConceptGraph(
+    rawConceptGraph: ConceptGraphJsonValue?,
+): StoredConceptGraphParseResult = when (rawConceptGraph) {
+    is ConceptGraphJsonValue.JsonObject -> parseStoredConceptGraphFields(rawConceptGraph.toFields())
+    is ConceptGraphJsonValue.JsonString -> {
+        val trimmed = rawConceptGraph.value.trim()
+        if (trimmed.isBlank()) {
+            StoredConceptGraphParseResult(
+                snapshot = ConceptGraphSnapshot(),
+                requiresPromptRegeneration = true,
+            )
+        } else {
+            runCatching { ConceptGraphMiniJsonParser(trimmed).parseObject() }
+                .fold(
+                    onSuccess = ::parseStoredConceptGraphFields,
+                    onFailure = {
+                        StoredConceptGraphParseResult(
+                            snapshot = ConceptGraphSnapshot(),
+                            requiresPromptRegeneration = true,
+                        )
+                    },
+                )
+        }
+    }
+
+    null -> StoredConceptGraphParseResult(
+        snapshot = ConceptGraphSnapshot(),
+        requiresPromptRegeneration = false,
+    )
+
+    else -> StoredConceptGraphParseResult(
+        snapshot = ConceptGraphSnapshot(),
+        requiresPromptRegeneration = true,
+    )
+}
+
+private fun parseStoredConceptGraphFields(
+    fields: ConceptGraphJsonFields,
+): StoredConceptGraphParseResult {
+    val snapshotResult = runCatching { fields.toConceptGraphSnapshot() }
+    val snapshot = snapshotResult.getOrDefault(ConceptGraphSnapshot())
+    val requiresPromptRegeneration = snapshotResult.isFailure ||
+        (snapshot == ConceptGraphSnapshot() && !fields.isCanonicalDefaultConceptGraphPayload())
+    return StoredConceptGraphParseResult(
+        snapshot = snapshot,
+        requiresPromptRegeneration = requiresPromptRegeneration,
+    )
+}
+
+private fun ConceptGraphJsonFields.isCanonicalDefaultConceptGraphPayload(): Boolean {
+    val requiredKeys = setOf(
+        "version",
+        "defaultCenterNodeId",
+        "source",
+        "generatedAt",
+        "nodes",
+        "edges",
+    )
+    if (!requiredKeys.all(values::containsKey)) return false
+    val version = (values["version"] as? ConceptGraphJsonValue.JsonNumber)?.value?.toInt() ?: return false
+    val defaultCenterNodeId = (values["defaultCenterNodeId"] as? ConceptGraphJsonValue.JsonString)?.value?.trim()
+        ?: return false
+    val source = (values["source"] as? ConceptGraphJsonValue.JsonString)?.value?.trim() ?: return false
+    val generatedAt = (values["generatedAt"] as? ConceptGraphJsonValue.JsonNumber)?.value?.toLong() ?: return false
+    val nodes = (values["nodes"] as? ConceptGraphJsonValue.JsonArray)?.items ?: return false
+    val edges = (values["edges"] as? ConceptGraphJsonValue.JsonArray)?.items ?: return false
+    return version == 1 &&
+        defaultCenterNodeId.isBlank() &&
+        source == "rule" &&
+        generatedAt == 0L &&
+        nodes.isEmpty() &&
+        edges.isEmpty()
 }
 
 private sealed interface ConceptGraphJsonValue {
@@ -2363,21 +2445,23 @@ private fun ConceptGraphJsonFields.toDirectionWikiSnapshot(
         }
     }
 
-    val conceptGraph = when (val rawConceptGraph = values["conceptGraph"]) {
-        is ConceptGraphJsonValue.JsonObject ->
-            runCatching { rawConceptGraph.toFields().toConceptGraphSnapshot() }.getOrDefault(ConceptGraphSnapshot())
-        is ConceptGraphJsonValue.JsonString -> parseConceptGraphSnapshotOrDefault(rawConceptGraph.value)
-        else -> ConceptGraphSnapshot()
-    }
+    val conceptGraphResult = parseStoredConceptGraph(values["conceptGraph"])
 
     return DirectionWikiSnapshot(
         rootPath = string("rootPath").ifBlank { defaultRootPath },
         // Legacy graph-only exports were migrated without a production conceptGraph.
         // Keep the usable snapshot data, but force a prompt refresh to regenerate the concept graph.
-        lastGeneratedAt = if (requiresPromptConceptGraphRegeneration) 0L else long("generatedAt") ?: 0L,
+        lastGeneratedAt = if (
+            requiresPromptConceptGraphRegeneration ||
+            conceptGraphResult.requiresPromptRegeneration
+        ) {
+            0L
+        } else {
+            long("generatedAt") ?: 0L
+        },
         directions = directions,
         knowledgeItems = knowledgeItems,
-        conceptGraph = conceptGraph,
+        conceptGraph = conceptGraphResult.snapshot,
     )
 }
 
