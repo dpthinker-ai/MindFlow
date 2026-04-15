@@ -22,6 +22,43 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildGraphConceptSearchItems keeps shared concept entries per thread`() {
+        val conceptItems = buildGraphConceptSearchItems(
+            conceptBuckets = mapOf(
+                "睡眠" to listOf(
+                    directionSummary("folder:work", "工作") to note(1L, "记录 A", tags = listOf("睡眠")),
+                    directionSummary("tag:health", "健康") to note(2L, "记录 B", tags = listOf("睡眠")),
+                ),
+            ),
+        )
+
+        assertThat(conceptItems).hasSize(2)
+        assertThat(conceptItems.map { it.threadKey }).containsExactly("tag:health", "folder:work").inOrder()
+        assertThat(conceptItems.map { it.title }.distinct()).containsExactly("睡眠")
+        assertThat(conceptItems.map { it.supportLine }.distinct()).containsExactly("1 条记录 · 2 条方向")
+        assertThat(conceptItems.map { it.noteId }).containsExactly(2L, 1L).inOrder()
+    }
+
+    @Test
+    fun `buildGraphObjectSearchItems keeps shared object entries per thread`() {
+        val objectItems = buildGraphObjectSearchItems(
+            candidates = listOf(
+                objectCandidate(threadKey = "folder:work", threadTitle = "工作", noteId = 1L, updatedAt = 1_001L),
+                objectCandidate(threadKey = "tag:learning", threadTitle = "学习", noteId = 2L, updatedAt = 1_002L),
+                objectCandidate(threadKey = "folder:work", threadTitle = "工作", noteId = 3L, updatedAt = 1_003L),
+            ),
+        )
+
+        assertThat(objectItems).hasSize(2)
+        assertThat(objectItems.map { it.threadKey }).containsExactly("folder:work", "tag:learning")
+        assertThat(objectItems.map { it.title }.distinct()).containsExactly("固定复盘流程")
+        assertThat(objectItems.all { it.type == KnowledgeLayerSearchType.METHOD }).isTrue()
+        assertThat(objectItems.first { it.threadKey == "folder:work" }.noteId).isEqualTo(3L)
+        assertThat(objectItems.first { it.threadKey == "folder:work" }.supportLine).isEqualTo("2 条来源 · 2 条方向")
+        assertThat(objectItems.first { it.threadKey == "tag:learning" }.supportLine).isEqualTo("1 条来源 · 2 条方向")
+    }
+
+    @Test
     fun `buildConceptGraphCandidates combines recent concept buckets with long-term object concepts`() {
         val candidates = buildConceptGraphCandidates(
             conceptBuckets = mapOf(
@@ -162,7 +199,62 @@ class DirectionWikiCoordinatorConceptGraphTest {
         assertThat(markdown).contains("- 概念8：概念8 的摘要")
         assertThat(markdown).doesNotContain("- 概念9：概念9 的摘要")
         assertThat(markdown).contains("- 概念1 -> 概念2 · 推进")
-        assertThat(markdown).doesNotContain("- 概念1 -> 概念9 · 支撑")
+        assertThat(markdown).doesNotContain("- 概念1 -> 概念9 · 支持")
+    }
+
+    @Test
+    fun `buildConceptGraphMarkdown uses shipped UI terminology`() {
+        val markdown = buildConceptGraphMarkdown(
+            generatedAt = 8_000L,
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "concept:1",
+                nodes = (1..4).map { index ->
+                    ConceptGraphNode(
+                        conceptId = "concept:$index",
+                        label = "概念$index",
+                        summary = "概念$index 的摘要",
+                        hotnessScore = (10 - index).toDouble(),
+                        updatedAt = (10 - index).toLong(),
+                        sourceIds = listOf("note:$index"),
+                    )
+                },
+                edges = listOf(
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:1",
+                        toConceptId = "concept:2",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "概念1 支持概念2。",
+                        supportIds = listOf("note:1", "note:2"),
+                        confidence = 0.95,
+                    ),
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:1",
+                        toConceptId = "concept:3",
+                        relationType = ConceptGraphRelationType.REFERENCES,
+                        reasonLine = "概念1 参考概念3。",
+                        supportIds = listOf("note:1", "note:3"),
+                        confidence = 0.9,
+                    ),
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:2",
+                        toConceptId = "concept:4",
+                        relationType = ConceptGraphRelationType.CONTRASTS,
+                        reasonLine = "概念2 对比概念4。",
+                        supportIds = listOf("note:2", "note:4"),
+                        confidence = 0.85,
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(markdown).contains("# 知识图谱")
+        assertThat(markdown).contains("- 概念1 -> 概念2 · 支持")
+        assertThat(markdown).contains("- 概念1 -> 概念3 · 参考")
+        assertThat(markdown).contains("- 概念2 -> 概念4 · 对比")
+        assertThat(markdown).doesNotContain("# 概念图谱")
+        assertThat(markdown).doesNotContain("· 支撑")
+        assertThat(markdown).doesNotContain("· 引用")
+        assertThat(markdown).doesNotContain("· 对照")
     }
 
     @Test
@@ -371,15 +463,18 @@ class DirectionWikiCoordinatorConceptGraphTest {
 
     private fun objectCandidate(
         noteId: Long,
-        relatedConcepts: List<String>,
+        relatedConcepts: List<String> = listOf("复盘"),
+        threadKey: String = "tag:learning",
+        threadTitle: String = "学习",
+        updatedAt: Long = 3_000L,
     ) = KnowledgeObjectCandidate(
         type = KnowledgeObjectType.METHOD,
         title = "固定复盘流程",
         summary = "每周固定复盘一次。",
         noteId = noteId,
-        updatedAt = 3_000L,
-        threadKey = "tag:learning",
-        threadTitle = "学习",
+        updatedAt = updatedAt,
+        threadKey = threadKey,
+        threadTitle = threadTitle,
         relatedConcepts = relatedConcepts,
         evidenceType = ResearchEvidenceType.VERIFIED,
     )

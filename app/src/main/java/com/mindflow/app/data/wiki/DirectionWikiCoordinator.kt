@@ -2170,7 +2170,7 @@ internal fun buildConceptGraphMarkdown(
         .toList()
 
     return buildString {
-        appendLine("# 概念图谱")
+        appendLine("# 知识图谱")
         appendLine()
         appendLine("更新时间：${formatDirectionWikiDisplayTime(generatedAt)}")
         centerNode?.let { node ->
@@ -2200,7 +2200,7 @@ internal fun buildConceptGraphMarkdown(
             visibleEdges.forEach { edge ->
                 val fromLabel = nodesById[edge.fromConceptId]?.label ?: edge.fromConceptId
                 val toLabel = nodesById[edge.toConceptId]?.label ?: edge.toConceptId
-                appendLine("- $fromLabel -> $toLabel · ${edge.relationType.toMarkdownLabel()}")
+                appendLine("- $fromLabel -> $toLabel · ${edge.relationType.toUiRelationWord()}")
                 edge.reasonLine.takeIf { it.isNotBlank() }?.let { appendLine("  - $it") }
             }
         }
@@ -2389,13 +2389,13 @@ private fun ConceptGraphSnapshot.toDirectionWikiExportValue(): Map<String, Any?>
         },
     )
 
-private fun ConceptGraphRelationType.toMarkdownLabel(): String =
+private fun ConceptGraphRelationType.toUiRelationWord(): String =
     when (this) {
-        ConceptGraphRelationType.SUPPORTS -> "支撑"
+        ConceptGraphRelationType.SUPPORTS -> "支持"
         ConceptGraphRelationType.ADVANCES -> "推进"
         ConceptGraphRelationType.PARALLEL -> "并行"
-        ConceptGraphRelationType.REFERENCES -> "引用"
-        ConceptGraphRelationType.CONTRASTS -> "对照"
+        ConceptGraphRelationType.REFERENCES -> "参考"
+        ConceptGraphRelationType.CONTRASTS -> "对比"
     }
 
 private fun formatDirectionWikiDisplayTime(time: Long): String =
