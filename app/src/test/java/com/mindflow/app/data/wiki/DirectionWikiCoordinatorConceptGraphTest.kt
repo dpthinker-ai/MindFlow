@@ -326,6 +326,50 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildConceptGraphMarkdown always renders the resolved center concept and only matching relationships`() {
+        val markdown = buildConceptGraphMarkdown(
+            generatedAt = 8_000L,
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "concept:9",
+                nodes = (1..9).map { index ->
+                    ConceptGraphNode(
+                        conceptId = "concept:$index",
+                        label = "概念$index",
+                        summary = "概念$index 的摘要",
+                        hotnessScore = (10 - index).toDouble(),
+                        updatedAt = (10 - index).toLong(),
+                        sourceIds = listOf("note:$index"),
+                    )
+                },
+                edges = listOf(
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:9",
+                        toConceptId = "concept:1",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "中心概念和概念1之间存在稳定关系。",
+                        supportIds = listOf("note:9", "note:1"),
+                        confidence = 0.9,
+                    ),
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:1",
+                        toConceptId = "concept:8",
+                        relationType = ConceptGraphRelationType.REFERENCES,
+                        reasonLine = "概念8 未进入展示集合。",
+                        supportIds = listOf("note:1", "note:8"),
+                        confidence = 0.8,
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(markdown).contains("中心概念：概念9")
+        assertThat(markdown).contains("- 概念9：概念9 的摘要")
+        assertThat(markdown).doesNotContain("- 概念8：概念8 的摘要")
+        assertThat(markdown).contains("- 概念9 -> 概念1 · 支持")
+        assertThat(markdown).doesNotContain("- 概念1 -> 概念8 · 参考")
+    }
+
+    @Test
     fun `buildConceptGraphMarkdown uses shipped UI terminology`() {
         val markdown = buildConceptGraphMarkdown(
             generatedAt = 8_000L,
@@ -751,6 +795,27 @@ class DirectionWikiCoordinatorConceptGraphTest {
                 now = 1_700_000_005_000L,
                 refreshIntervalMs = 18L * 60L * 60L * 1000L,
             )
+        ).isTrue()
+    }
+
+    @Test
+    fun `shouldRefreshDirectionWikiSnapshot refreshes when covered thread notes changed after last generation`() {
+        val current = DirectionWikiSnapshot(
+            rootPath = "/tmp/knowledge-layer",
+            lastGeneratedAt = 1_700_000_000_000L,
+            directions = mapOf(
+                "tag:health" to directionSummary("tag:health", "健康").copy(updatedAt = 1_000L),
+            ),
+        )
+
+        assertThat(
+            shouldRefreshDirectionWikiSnapshot(
+                current = current,
+                candidateThreadKeys = listOf("tag:health"),
+                candidateThreadFreshness = mapOf("tag:health" to 2_000L),
+                now = 1_700_000_005_000L,
+                refreshIntervalMs = 18L * 60L * 60L * 1000L,
+            ),
         ).isTrue()
     }
 

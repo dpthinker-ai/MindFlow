@@ -788,12 +788,16 @@ private fun graphSearchItemSlug(
 internal fun shouldRefreshDirectionWikiSnapshot(
     current: DirectionWikiSnapshot,
     candidateThreadKeys: List<String>,
+    candidateThreadFreshness: Map<String, Long> = emptyMap(),
     now: Long,
     refreshIntervalMs: Long,
 ): Boolean {
     val isFreshEnough = current.lastGeneratedAt > 0L && now - current.lastGeneratedAt < refreshIntervalMs
     val hasCandidateCoverage = candidateThreadKeys.all { it in current.directions.keys }
-    return !isFreshEnough || !hasCandidateCoverage
+    val isCandidateFreshnessAligned = candidateThreadFreshness.all { (threadKey, latestUpdatedAt) ->
+        current.directions[threadKey]?.updatedAt == latestUpdatedAt
+    }
+    return !isFreshEnough || !hasCandidateCoverage || !isCandidateFreshnessAligned
 }
 
 private fun KnowledgeObjectType.toKnowledgeSearchType(): KnowledgeLayerSearchType = when (this) {
@@ -829,10 +833,15 @@ class DirectionWikiCoordinator(
             val activeNotes = allNotes.filter { !it.isArchived }
             val followed = threadPreferencesRepository.getCurrent().followedThreadKeys.sorted()
             val candidateThreadKeys = buildCandidateThreadKeys(activeNotes, followed)
+            val candidateThreadFreshness = buildCandidateThreadFreshness(
+                activeNotes = activeNotes,
+                candidateThreadKeys = candidateThreadKeys,
+            )
             if (
                 !shouldRefreshDirectionWikiSnapshot(
                     current = current,
                     candidateThreadKeys = candidateThreadKeys,
+                    candidateThreadFreshness = candidateThreadFreshness,
                     now = now,
                     refreshIntervalMs = refreshIntervalMs,
                 )
@@ -841,6 +850,15 @@ class DirectionWikiCoordinator(
             }
             runCatching { refreshNow() }
         }
+    }
+
+    private fun buildCandidateThreadFreshness(
+        activeNotes: List<NoteEntity>,
+        candidateThreadKeys: List<String>,
+    ): Map<String, Long> = candidateThreadKeys.associateWith { threadKey ->
+        NoteConnectionAnalyzer.notesForThread(threadKey, activeNotes)
+            .maxOfOrNull(NoteEntity::updatedAt)
+            ?: 0L
     }
 
     suspend fun refreshNow(): DirectionWikiRefreshResult = withContext(Dispatchers.IO) {
@@ -2344,13 +2362,20 @@ internal fun buildConceptGraphMarkdown(
 ): String {
     val nodesById = conceptGraph.nodes.associateBy { it.conceptId }
     val centerNode = nodesById[conceptGraph.defaultCenterNodeId]
-    val visibleNodes = conceptGraph.nodes
+    val rankedNodes = conceptGraph.nodes
         .sortedWith(
             compareByDescending<ConceptGraphNode> { it.hotnessScore }
                 .thenByDescending { it.updatedAt }
                 .thenBy { it.label },
         )
-        .take(8)
+    val visibleNodes = buildList {
+        centerNode?.let(::add)
+        rankedNodes
+            .asSequence()
+            .filterNot { it.conceptId == centerNode?.conceptId }
+            .take(if (centerNode == null) 8 else 7)
+            .forEach(::add)
+    }
     val visibleNodeIds = visibleNodes.mapTo(linkedSetOf()) { it.conceptId }
     val visibleEdges = conceptGraph.edges
         .asSequence()
