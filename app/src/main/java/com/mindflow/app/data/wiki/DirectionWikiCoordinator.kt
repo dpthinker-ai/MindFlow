@@ -2154,7 +2154,12 @@ internal fun buildConceptGraphMarkdown(
                 .thenBy { it.label },
         )
         .take(8)
+    val visibleNodeIds = visibleNodes.mapTo(linkedSetOf()) { it.conceptId }
     val visibleEdges = conceptGraph.edges
+        .asSequence()
+        .filter { edge ->
+            edge.fromConceptId in visibleNodeIds && edge.toConceptId in visibleNodeIds
+        }
         .sortedWith(
             compareByDescending<ConceptGraphEdge> { it.confidence }
                 .thenByDescending { it.supportIds.size }
@@ -2162,6 +2167,7 @@ internal fun buildConceptGraphMarkdown(
                 .thenBy { it.toConceptId },
         )
         .take(10)
+        .toList()
 
     return buildString {
         appendLine("# 概念图谱")

@@ -123,6 +123,49 @@ class DirectionWikiCoordinatorConceptGraphTest {
     }
 
     @Test
+    fun `buildConceptGraphMarkdown only lists relationships between rendered concepts`() {
+        val markdown = buildConceptGraphMarkdown(
+            generatedAt = 8_000L,
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "concept:1",
+                nodes = (1..9).map { index ->
+                    ConceptGraphNode(
+                        conceptId = "concept:$index",
+                        label = "概念$index",
+                        summary = "概念$index 的摘要",
+                        hotnessScore = (10 - index).toDouble(),
+                        updatedAt = (10 - index).toLong(),
+                        sourceIds = listOf("note:$index"),
+                    )
+                },
+                edges = listOf(
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:1",
+                        toConceptId = "concept:9",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        reasonLine = "高置信边，但目标节点未进入展示列表。",
+                        supportIds = listOf("note:1", "note:9"),
+                        confidence = 0.95,
+                    ),
+                    ConceptGraphEdge(
+                        fromConceptId = "concept:1",
+                        toConceptId = "concept:2",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        reasonLine = "展示列表内的稳定关系。",
+                        supportIds = listOf("note:1", "note:2"),
+                        confidence = 0.8,
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(markdown).contains("- 概念8：概念8 的摘要")
+        assertThat(markdown).doesNotContain("- 概念9：概念9 的摘要")
+        assertThat(markdown).contains("- 概念1 -> 概念2 · 推进")
+        assertThat(markdown).doesNotContain("- 概念1 -> 概念9 · 支撑")
+    }
+
+    @Test
     fun `buildDirectionWikiExportJson writes conceptGraph and omits legacy graph key`() {
         val export = buildDirectionWikiExportJson(
             generatedAt = 7_000L,
@@ -149,6 +192,77 @@ class DirectionWikiCoordinatorConceptGraphTest {
         assertThat(export).contains("\"conceptGraph\":")
         assertThat(export).doesNotContain("\"graph\":")
         assertThat(export).contains("\"defaultCenterNodeId\":\"concept:review\"")
+    }
+
+    @Test
+    fun `direction wiki export json round-trip preserves directions knowledge items and concept graph`() {
+        val direction = directionSummary(
+            threadKey = "tag:health",
+            title = "健康",
+        ).copy(
+            assetSummary = "稳定复盘节奏。",
+            conclusionLine = "本周的结论已经足够明确。",
+            nextShiftLine = "下周继续固定睡眠窗口。",
+            groundingLine = "已有两条查证和一条验证。",
+            trustLine = "验证比猜测更多。",
+            knowledgeObjectLine = "1 个问题 / 1 个方法 / 1 个实验",
+            healthLine = "健康度高",
+            maintenanceLine = "每周复盘一次",
+            maintenanceTargetLine = "优先盯睡眠和复盘",
+            maintenanceSourceLine = "来自过去 7 天记录",
+            maintenanceDimensionLine = "行动和恢复双维度",
+            maintenanceFocusLine = "先守住睡眠，再优化训练",
+            continuityLine = "连续 3 周保持",
+            trajectoryLine = "从 forming 向 strengthening 推进",
+            stageHistorySummary = "forming -> strengthening",
+            snapshotStageLine = "最近两次快照都在推进",
+            snapshotCadenceLine = "每周一次快照",
+            signalPoints = listOf("晚上 11 点前入睡更稳定"),
+            hypothesisPoints = listOf("晨间散步可能提升执行力"),
+            verifiedPoints = listOf("固定睡前流程后中断减少"),
+            validatedPoints = listOf("连续两周都维持了固定窗口"),
+            lintIssues = listOf("缺少长期实验对照"),
+            openQuestions = listOf("是否需要增加午后恢复策略"),
+            updatedAt = 9_000L,
+        )
+        val knowledgeItems = listOf(
+            knowledgeItem(
+                id = "concept:health:review",
+                type = KnowledgeLayerSearchType.CONCEPT,
+                title = "复盘",
+            ),
+            knowledgeItem(
+                id = "method:health:sleep-window",
+                type = KnowledgeLayerSearchType.METHOD,
+                title = "固定睡眠窗口",
+            ).copy(
+                summary = "把睡眠窗口固定到 23:00-07:00。",
+                supportLine = "2 条来源",
+                trustLabel = "已验证",
+                threadKey = "tag:health",
+                noteId = 22L,
+                updatedAt = 8_500L,
+            ),
+        )
+        val conceptGraph = conceptGraphSnapshot()
+        val export = buildDirectionWikiExportJson(
+            generatedAt = 10_000L,
+            rootPath = "/tmp/knowledge-layer",
+            summaries = listOf(direction),
+            knowledgeItems = knowledgeItems,
+            conceptGraph = conceptGraph,
+        )
+
+        val restored = parseDirectionWikiSnapshotOrDefault(
+            raw = export,
+            defaultRootPath = "/fallback/root",
+        )
+
+        assertThat(restored.rootPath).isEqualTo("/tmp/knowledge-layer")
+        assertThat(restored.lastGeneratedAt).isEqualTo(10_000L)
+        assertThat(restored.directions).containsExactly("tag:health", direction)
+        assertThat(restored.knowledgeItems).containsExactlyElementsIn(knowledgeItems).inOrder()
+        assertThat(restored.conceptGraph).isEqualTo(conceptGraph)
     }
 
     @Test
