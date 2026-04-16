@@ -1,6 +1,13 @@
 package com.mindflow.app.ui.screens.flow
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.KnowledgeTrust
+import com.mindflow.app.data.model.NoteHorizon
+import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.TagSource
+import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.wiki.ConceptGraphEdge
 import com.mindflow.app.data.wiki.ConceptGraphNode
 import com.mindflow.app.data.wiki.ConceptGraphRelationType
@@ -27,11 +34,48 @@ class KnowledgeGraphScreenTest {
             ),
         )
 
-        val viewport = buildConceptGraphViewport(snapshot)
+        val viewport = buildConceptGraphViewport(
+            snapshot = snapshot,
+            currentCenterNodeId = "solo",
+        )
 
         assertThat(viewport.centerNode?.conceptId).isEqualTo("learning")
         assertThat(viewport.neighbors.map { it.node.conceptId }).containsExactly("work")
         assertThat(viewport.hiddenNeighborCount).isEqualTo(0)
+    }
+
+    @Test
+    fun `buildConceptGraphViewport falls back to a connected center when default center is isolated`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "solo",
+            nodes = listOf(
+                conceptNode("solo", "独立点", hotnessScore = 1.0, updatedAt = 1_000),
+                conceptNode("hub", "中心知识点", hotnessScore = 0.9, updatedAt = 900),
+                conceptNode("leaf-a", "关联A", hotnessScore = 0.8, updatedAt = 800),
+                conceptNode("leaf-b", "关联B", hotnessScore = 0.7, updatedAt = 700),
+            ),
+            edges = listOf(
+                conceptEdge(
+                    fromConceptId = "hub",
+                    toConceptId = "leaf-a",
+                    relationType = ConceptGraphRelationType.SUPPORTS,
+                    confidence = 0.95,
+                ),
+                conceptEdge(
+                    fromConceptId = "hub",
+                    toConceptId = "leaf-b",
+                    relationType = ConceptGraphRelationType.ADVANCES,
+                    confidence = 0.9,
+                ),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(snapshot)
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("hub")
+        assertThat(viewport.neighbors.map { it.node.conceptId })
+            .containsExactly("leaf-a", "leaf-b")
+            .inOrder()
     }
 
     @Test
@@ -51,7 +95,10 @@ class KnowledgeGraphScreenTest {
     fun `buildConceptGraphViewport reveals more neighbors after explicit expansion`() {
         val snapshot = largeConnectedSnapshot()
 
-        val collapsed = buildConceptGraphViewport(snapshot)
+        val collapsed = buildConceptGraphViewport(
+            snapshot = snapshot,
+            currentCenterNodeId = "solo",
+        )
         val firstExpansion = buildConceptGraphViewport(
             snapshot = snapshot,
             expandedCenterNodeIds = listOf("center"),
@@ -120,7 +167,10 @@ class KnowledgeGraphScreenTest {
             ),
         )
 
-        val viewport = buildConceptGraphViewport(snapshot)
+        val viewport = buildConceptGraphViewport(
+            snapshot = snapshot,
+            currentCenterNodeId = "solo",
+        )
 
         assertThat(viewport.centerNode?.conceptId).isEqualTo("solo")
         assertThat(viewport.neighbors).isEmpty()
@@ -133,13 +183,18 @@ class KnowledgeGraphScreenTest {
     fun `buildConceptGraphViewport batches switchable nodes for isolated sparse graph`() {
         val snapshot = isolatedSparseSnapshot()
 
-        val collapsed = buildConceptGraphViewport(snapshot)
+        val collapsed = buildConceptGraphViewport(
+            snapshot = snapshot,
+            currentCenterNodeId = "solo",
+        )
         val firstExpansion = buildConceptGraphViewport(
             snapshot = snapshot,
+            currentCenterNodeId = "solo",
             expandedCenterNodeIds = listOf("solo"),
         )
         val secondExpansion = buildConceptGraphViewport(
             snapshot = snapshot,
+            currentCenterNodeId = "solo",
             expandedCenterNodeIds = listOf("solo", "solo"),
         )
 
@@ -233,6 +288,7 @@ class KnowledgeGraphScreenTest {
 
         val viewport = buildConceptGraphViewport(
             snapshot = snapshot,
+            currentCenterNodeId = "solo",
             batchSize = 10,
         )
 
@@ -476,6 +532,49 @@ class KnowledgeGraphScreenTest {
         )
     }
 
+    @Test
+    fun `buildActivatedGraphNodes highlights source backed concept nodes for selected notes`() {
+        val graphNodes = listOf(
+            GraphNodeUi(
+                id = "sleep",
+                label = "睡眠",
+                summaryLine = "睡眠相关。",
+                structureStatus = GraphStructureStatus.LINKED,
+                noteCount = 3,
+                relationCount = 2,
+                sourceIds = listOf("note:11"),
+            ),
+            GraphNodeUi(
+                id = "recovery",
+                label = "恢复",
+                summaryLine = "恢复相关。",
+                structureStatus = GraphStructureStatus.LINKED,
+                noteCount = 2,
+                relationCount = 1,
+                sourceIds = listOf("note:22"),
+            ),
+            GraphNodeUi(
+                id = "focus",
+                label = "专注",
+                summaryLine = "专注相关。",
+                structureStatus = GraphStructureStatus.EMERGING,
+                noteCount = 1,
+                relationCount = 0,
+                sourceIds = listOf("note:33"),
+            ),
+        )
+
+        val activated = buildActivatedGraphNodes(
+            notes = listOf(
+                note(22L, "恢复记录"),
+                note(11L, "睡眠记录"),
+            ),
+            graphNodes = graphNodes,
+        )
+
+        assertThat(activated.map { it.id }).containsExactly("sleep", "recovery").inOrder()
+    }
+
     private fun denselyConnectedSnapshot(): DirectionWikiSnapshot =
         conceptSnapshot(
             defaultCenterNodeId = "center",
@@ -604,5 +703,25 @@ class KnowledgeGraphScreenTest {
         relationType = relationType,
         reasonLine = reasonLine,
         confidence = confidence,
+    )
+
+    private fun note(
+        id: Long,
+        topic: String,
+    ) = NoteEntity(
+        id = id,
+        content = "$topic 内容",
+        topic = topic,
+        topicSource = TopicSource.MANUAL,
+        folderKey = null,
+        folderSource = FolderSource.RULE,
+        tags = emptyList(),
+        tagSource = TagSource.RULE,
+        status = NoteStatus.IDEA,
+        horizon = NoteHorizon.MEDIUM,
+        knowledgeTrust = KnowledgeTrust.NONE,
+        isArchived = false,
+        createdAt = id * 10,
+        updatedAt = id * 10 + 1,
     )
 }

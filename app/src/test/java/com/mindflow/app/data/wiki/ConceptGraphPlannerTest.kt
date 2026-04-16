@@ -227,6 +227,64 @@ class ConceptGraphPlannerTest {
     }
 
     @Test
+    fun `summarize infers fallback edges from shared source ids when ai omits edges`() = runTest {
+        val planner = planner(
+            aiResponse = """
+                {
+                  "nodes": [
+                    {
+                      "conceptId": "sleep",
+                      "label": "睡眠"
+                    },
+                    {
+                      "conceptId": "recovery",
+                      "label": "恢复"
+                    },
+                    {
+                      "conceptId": "focus",
+                      "label": "专注"
+                    }
+                  ],
+                  "edges": []
+                }
+            """.trimIndent(),
+        )
+
+        val snapshot = planner.summarize(
+            candidates = listOf(
+                candidate(
+                    conceptId = "sleep",
+                    title = "睡眠",
+                    hotnessScore = 0.9,
+                    updatedAt = 1_000,
+                    sourceIds = listOf("note:1", "note:2"),
+                ),
+                candidate(
+                    conceptId = "recovery",
+                    title = "恢复",
+                    hotnessScore = 0.8,
+                    updatedAt = 900,
+                    sourceIds = listOf("note:2", "note:3"),
+                ),
+                candidate(
+                    conceptId = "focus",
+                    title = "专注",
+                    hotnessScore = 0.7,
+                    updatedAt = 800,
+                    sourceIds = listOf("note:4"),
+                ),
+            ),
+        )
+
+        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.edges).hasSize(1)
+        assertThat(snapshot.edges.single().fromConceptId).isEqualTo("recovery")
+        assertThat(snapshot.edges.single().toConceptId).isEqualTo("sleep")
+        assertThat(snapshot.edges.single().relationType).isEqualTo(ConceptGraphRelationType.PARALLEL)
+        assertThat(snapshot.edges.single().supportIds).containsExactly("note:2")
+    }
+
+    @Test
     fun `summarize resolves nodes and edges from unique alias and label references`() = runTest {
         val planner = planner(
             aiResponse = """

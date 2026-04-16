@@ -84,9 +84,10 @@ class ConceptGraphPlanner(
             defaultCenterNodeId = selectDefaultCenterNodeId(
                 nodes = nodes,
                 candidateByConceptId = candidates.associateByNormalizedConceptId(),
+                edges = buildRuleEdges(candidates),
             ),
             nodes = nodes,
-            edges = emptyList(),
+            edges = buildRuleEdges(candidates),
             source = "rule",
             generatedAt = generatedAt,
         )
@@ -194,10 +195,16 @@ class ConceptGraphPlanner(
             )
 
             val resolvedNodeIds = nodes.map { it.conceptId }.toSet()
-            val edges = parseEdges(
+            val llmEdges = parseEdges(
                 root = root,
                 resolutionTables = resolutionTables,
                 resolvedNodeIds = resolvedNodeIds,
+            )
+            val edges = mergeEdgesWithRuleFallback(
+                primaryEdges = llmEdges,
+                fallbackEdges = buildRuleEdges(
+                    candidates = candidates.filter { it.conceptId in resolvedNodeIds },
+                ),
             )
             if (llmNodes.isEmpty() && edges.isEmpty()) return null
 
@@ -214,6 +221,100 @@ class ConceptGraphPlanner(
             )
         } catch (_: IllegalArgumentException) {
             null
+        }
+    }
+
+    private fun buildRuleEdges(
+        candidates: List<ConceptGraphCandidate>,
+    ): List<ConceptGraphEdge> {
+        if (candidates.size < 2) return emptyList()
+
+        val candidateByConceptId = candidates.associateBy { it.conceptId }
+        val sharedSupportIdsByPairKey = linkedMapOf<String, MutableSet<String>>()
+
+        candidates
+            .flatMap { candidate ->
+                candidate.sourceIds
+                    .asSequence()
+                    .map { supportId -> supportId.trim() }
+                    .filter { supportId -> supportId.isNotBlank() }
+                    .distinct()
+                    .map { supportId -> supportId to candidate.conceptId }
+                    .toList()
+            }
+            .groupBy(
+                keySelector = { it.first },
+                valueTransform = { it.second },
+            )
+            .values
+            .forEach { conceptIds ->
+                val uniqueConceptIds = conceptIds.distinct().sorted()
+                if (uniqueConceptIds.size < 2) return@forEach
+                uniqueConceptIds.forEachIndexed { leftIndex, leftConceptId ->
+                    for (rightIndex in leftIndex + 1 until uniqueConceptIds.size) {
+                        val rightConceptId = uniqueConceptIds[rightIndex]
+                        val pairKey = unorderedConceptPairKey(leftConceptId, rightConceptId)
+                        sharedSupportIdsByPairKey
+                            .getOrPut(pairKey) { linkedSetOf() }
+                            .addAll(
+                                candidates
+                                    .first { it.conceptId == leftConceptId }
+                                    .sourceIds
+                                    .intersect(candidateByConceptId.getValue(rightConceptId).sourceIds.toSet()),
+                            )
+                    }
+                }
+            }
+
+        return sharedSupportIdsByPairKey.entries
+            .mapNotNull { (pairKey, supportIds) ->
+                val (fromConceptId, toConceptId) = pairKey.split("|")
+                if (supportIds.isEmpty()) return@mapNotNull null
+                val fromCandidate = candidateByConceptId[fromConceptId] ?: return@mapNotNull null
+                val toCandidate = candidateByConceptId[toConceptId] ?: return@mapNotNull null
+                ConceptGraphEdge(
+                    fromConceptId = fromConceptId,
+                    toConceptId = toConceptId,
+                    relationType = ConceptGraphRelationType.PARALLEL,
+                    reasonLine = "这些知识点经常一起出现在同一条记录里。",
+                    supportIds = supportIds.toList().sorted(),
+                    confidence = (
+                        0.24 +
+                            (supportIds.size.coerceAtMost(4) * 0.08) +
+                            (minOf(fromCandidate.hotnessScore, toCandidate.hotnessScore) * 0.05)
+                        )
+                        .coerceIn(0.0, 0.55),
+                )
+            }
+            .sortedWith(
+                compareByDescending<ConceptGraphEdge> { it.supportIds.size }
+                    .thenByDescending {
+                        (candidateByConceptId[it.fromConceptId]?.hotnessScore ?: 0.0) +
+                            (candidateByConceptId[it.toConceptId]?.hotnessScore ?: 0.0)
+                    }
+                    .thenByDescending {
+                        maxOf(
+                            candidateByConceptId[it.fromConceptId]?.updatedAt ?: 0L,
+                            candidateByConceptId[it.toConceptId]?.updatedAt ?: 0L,
+                        )
+                    }
+                    .thenBy { unorderedConceptPairKey(it.fromConceptId, it.toConceptId) },
+            )
+    }
+
+    private fun mergeEdgesWithRuleFallback(
+        primaryEdges: List<ConceptGraphEdge>,
+        fallbackEdges: List<ConceptGraphEdge>,
+    ): List<ConceptGraphEdge> {
+        if (primaryEdges.isEmpty()) return fallbackEdges
+        if (fallbackEdges.isEmpty()) return primaryEdges
+
+        val coveredPairKeys = primaryEdges
+            .map { edge -> unorderedConceptPairKey(edge.fromConceptId, edge.toConceptId) }
+            .toSet()
+
+        return primaryEdges + fallbackEdges.filterNot { edge ->
+            unorderedConceptPairKey(edge.fromConceptId, edge.toConceptId) in coveredPairKeys
         }
     }
 
@@ -485,6 +586,11 @@ class ConceptGraphPlanner(
 
     private fun ConceptGraphEdge.identityKey(): String =
         listOf(fromConceptId, toConceptId, relationType.wireName).joinToString("|")
+
+    private fun unorderedConceptPairKey(
+        leftConceptId: String,
+        rightConceptId: String,
+    ): String = listOf(leftConceptId, rightConceptId).sorted().joinToString("|")
 
     private fun ConceptGraphEdge.preferredForDisplayAgainst(
         other: ConceptGraphEdge,
