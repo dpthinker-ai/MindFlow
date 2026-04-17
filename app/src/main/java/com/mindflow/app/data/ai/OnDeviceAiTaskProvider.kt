@@ -1,0 +1,26 @@
+package com.mindflow.app.data.ai
+
+import com.mindflow.app.data.localmodel.OnDeviceAiClient
+import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
+
+class OnDeviceAiTaskProvider(
+    private val settingsRepository: OnDeviceModelSettingsRepository,
+    private val client: OnDeviceAiClient,
+) : AiTaskProvider {
+    @Suppress("UNCHECKED_CAST")
+    override suspend fun <T : AiTaskPayload> run(request: AiTaskRequest<T>): T? {
+        val settings = settingsRepository.getCurrent()
+        if (!settings.isReady) return null
+        val input = request.input
+        val result = when (request.type) {
+            AiTaskType.EXTRACT_TOPIC -> client.extractTopic(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.EXTRACT_TAGS -> client.extractTags(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.CLASSIFY_CATEGORY -> client.classifyFolder(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.POLISH_CONTENT -> client.polishContent(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.GRAPH_EXTRACT_CONCEPTS -> client.extractConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
+            AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> client.canonicalizeConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
+            AiTaskType.GRAPH_GENERATE_RELATIONS -> client.generateConceptGraphRelations(settings, (input as AiTaskInput.GraphContext).contextSummary)
+        }
+        return result.toPayloadOrNull(request.type) as T?
+    }
+}

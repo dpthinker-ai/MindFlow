@@ -300,6 +300,48 @@ class AiServiceClient {
         )
     }
 
+    suspend fun extractConceptGraphConcepts(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are extracting concept candidates for a personal knowledge graph. Return exactly one JSON object and nothing else. Output schema: {\"concepts\":[\"string\"]}. Keep only concise concept labels.",
+            maxTokens = 520,
+            temperature = 0.25,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun canonicalizeConceptGraphConcepts(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are canonicalizing overlapping concept labels for a personal knowledge graph. Return exactly one JSON object and nothing else. Output schema: {\"canonical\":{\"canonical label\":[\"alias\"]}}.",
+            maxTokens = 620,
+            temperature = 0.22,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun generateConceptGraphRelations(
+        settings: AiSettings,
+        contextSummary: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = contextSummary.take(5_000),
+            systemPrompt = "You are generating local concept-graph relations around a center node. Return exactly one JSON object and nothing else. Output schema: {\"relations\":[{\"fromConceptId\":\"string\",\"toConceptId\":\"string\",\"relationType\":\"supports|advances|parallel|references|contrasts\",\"reasonLine\":\"string\",\"confidence\":0.0}]}. Only connect the provided nodes.",
+            maxTokens = 720,
+            temperature = 0.3,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun generateConceptGraphSnapshot(
         settings: AiSettings,
         contextSummary: String,

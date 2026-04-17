@@ -24,6 +24,13 @@ interface OnDeviceAiClient {
     suspend fun generateLocalKnowledgeShape(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateLocalOpenQuestion(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateEditorRecall(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun extractTopic(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun extractTags(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun classifyFolder(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun polishContent(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun extractConceptGraphConcepts(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun canonicalizeConceptGraphConcepts(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun generateConceptGraphRelations(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
 }
 
 class LiteRtLmOnDeviceAiClient(
@@ -90,6 +97,41 @@ class LiteRtLmOnDeviceAiClient(
         settings: OnDeviceModelSettings,
         contextSummary: String,
     ): AiChatResult = runPrompt(settings, FlowOnDevicePromptFactory.editorRecall(contextSummary))
+
+    override suspend fun extractTopic(
+        settings: OnDeviceModelSettings,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.extractTopic(content))
+
+    override suspend fun extractTags(
+        settings: OnDeviceModelSettings,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.extractTags(content))
+
+    override suspend fun classifyFolder(
+        settings: OnDeviceModelSettings,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.classifyFolder(content))
+
+    override suspend fun polishContent(
+        settings: OnDeviceModelSettings,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.polish(content))
+
+    override suspend fun extractConceptGraphConcepts(
+        settings: OnDeviceModelSettings,
+        contextSummary: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.extractGraphConcepts(contextSummary))
+
+    override suspend fun canonicalizeConceptGraphConcepts(
+        settings: OnDeviceModelSettings,
+        contextSummary: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.canonicalizeGraphConcepts(contextSummary))
+
+    override suspend fun generateConceptGraphRelations(
+        settings: OnDeviceModelSettings,
+        contextSummary: String,
+    ): AiChatResult = runPrompt(settings, contextSummary)
 
     private suspend fun runPrompt(
         settings: OnDeviceModelSettings,
