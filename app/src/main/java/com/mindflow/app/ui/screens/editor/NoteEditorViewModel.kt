@@ -15,10 +15,8 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
-import com.mindflow.app.data.settings.AiSettingsRepository
-import com.mindflow.app.data.topic.AiChatResult
-import com.mindflow.app.data.topic.AiServiceClient
-import java.time.LocalDate
+import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.ContentPolishResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -66,8 +64,7 @@ sealed interface NoteEditorEvent {
 
 class NoteEditorViewModel(
     private val noteRepository: NoteRepository,
-    private val aiSettingsRepository: AiSettingsRepository,
-    private val aiServiceClient: AiServiceClient,
+    private val contentPolishPlanner: ContentPolishPlanner,
     private val noteId: Long?,
     private val initialContent: String,
     private val initialTopic: String,
@@ -200,44 +197,22 @@ class NoteEditorViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isPolishingContent = true) }
-            val settings = aiSettingsRepository.getCurrent()
-            if (!settings.isConfigured) {
-                _uiState.update { it.copy(isPolishingContent = false) }
-                _events.emit(NoteEditorEvent.Message("请先在设置里完成 AI 配置"))
-                return@launch
-            }
-
-            val dayKey = LocalDate.now().toString()
-            aiSettingsRepository.recordUsage(
-                requestIncrement = 1,
-                dayKey = dayKey,
-            )
-
-            when (val result = aiServiceClient.polishContent(settings, state.content)) {
-                is AiChatResult.Success -> {
-                    aiSettingsRepository.recordUsage(
-                        successIncrement = 1,
-                        tokenIncrement = result.totalTokens ?: 0,
-                        dayKey = dayKey,
-                    )
-                    val polished = normalizePolishedContent(result.content)
-                    if (polished.isBlank()) {
-                        _events.emit(NoteEditorEvent.Message("AI 没有返回可用内容"))
-                    } else if (polished == state.content.trim()) {
-                        _events.emit(NoteEditorEvent.Message("AI 返回内容与当前正文接近，没有生成新的润色稿"))
-                    } else {
-                        _uiState.update {
-                            it.copy(
-                                isPolishingContent = false,
-                                polishedOriginalContent = state.content,
-                                polishedCandidateContent = polished,
-                            )
-                        }
-                        _events.emit(NoteEditorEvent.Message("AI 已生成润色结果，长按可对照原文"))
-                        return@launch
+            when (val result = contentPolishPlanner.polish(state.content)) {
+                is ContentPolishResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isPolishingContent = false,
+                            polishedOriginalContent = state.content,
+                            polishedCandidateContent = result.polishedText,
+                        )
                     }
+                    _events.emit(NoteEditorEvent.Message("AI 已生成润色结果，长按可对照原文"))
+                    return@launch
                 }
-                is AiChatResult.Failure -> {
+                ContentPolishResult.NoChange -> {
+                    _events.emit(NoteEditorEvent.Message("AI 返回内容与当前正文接近，没有生成新的润色稿"))
+                }
+                is ContentPolishResult.Failure -> {
                     _events.emit(NoteEditorEvent.Message(result.message))
                 }
             }
@@ -497,20 +472,13 @@ class NoteEditorViewModel(
         }
     }
 
-    private fun normalizePolishedContent(raw: String): String =
-        raw
-            .trim()
-            .removePrefix("```markdown")
-            .removePrefix("```text")
-            .removePrefix("```")
-            .removeSuffix("```")
-            .trim()
+
+
 
     companion object {
         fun factory(
             noteRepository: NoteRepository,
-            aiSettingsRepository: AiSettingsRepository,
-            aiServiceClient: AiServiceClient,
+            contentPolishPlanner: ContentPolishPlanner,
             noteId: Long?,
             initialContent: String,
             initialTopic: String,
@@ -521,8 +489,7 @@ class NoteEditorViewModel(
             initializer {
                 NoteEditorViewModel(
                     noteRepository = noteRepository,
-                    aiSettingsRepository = aiSettingsRepository,
-                    aiServiceClient = aiServiceClient,
+                    contentPolishPlanner = contentPolishPlanner,
                     noteId = noteId,
                     initialContent = initialContent,
                     initialTopic = initialTopic,

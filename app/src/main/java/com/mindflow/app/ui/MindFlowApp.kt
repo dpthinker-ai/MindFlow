@@ -69,6 +69,7 @@ import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.topic.ContentPolishPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
@@ -119,6 +120,7 @@ fun MindFlowApp(
     externalResearchPlanner: ExternalResearchPlanner,
     directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
+    contentPolishPlanner: ContentPolishPlanner,
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
@@ -363,8 +365,7 @@ fun MindFlowApp(
                 val captureSeed = captureSeeds[seedId] ?: CaptureSeed(requestId = seedId)
                 EditorRoute(
                     noteRepository = noteRepository,
-                    aiSettingsRepository = aiSettingsRepository,
-                    aiServiceClient = aiServiceClient,
+                    contentPolishPlanner = contentPolishPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = null,
                     captureSessionKey = seedId,
@@ -397,8 +398,7 @@ fun MindFlowApp(
                 val noteId = backStackEntry.arguments?.getLong(MindFlowDestinations.DETAIL_ARG)
                 EditorRoute(
                     noteRepository = noteRepository,
-                    aiSettingsRepository = aiSettingsRepository,
-                    aiServiceClient = aiServiceClient,
+                    contentPolishPlanner = contentPolishPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = noteId,
                     captureSessionKey = null,

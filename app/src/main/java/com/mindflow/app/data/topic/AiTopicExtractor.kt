@@ -1,59 +1,42 @@
 package com.mindflow.app.data.topic
 
-import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.ai.AiTaskInput
+import com.mindflow.app.data.ai.AiTaskPayload
+import com.mindflow.app.data.ai.AiTaskRequest
+import com.mindflow.app.data.ai.AiTaskRouter
+import com.mindflow.app.data.ai.AiTaskType
 import java.security.MessageDigest
-import java.time.LocalDate
 import java.util.LinkedHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AiTopicExtractor(
-    private val aiSettingsRepository: AiSettingsRepository,
-    private val aiServiceClient: AiServiceClient,
+    private val aiTaskRouter: AiTaskRouter,
 ) {
     suspend fun extract(content: String): AiTopicResult = withContext(Dispatchers.IO) {
-        val settings = aiSettingsRepository.getCurrent()
-        if (!settings.aiEnabled || !settings.isConfigured) {
-            return@withContext AiTopicResult()
-        }
-
-        val cacheKey = buildCacheKey(settings, content)
+        val cacheKey = buildCacheKey(content)
         getCached(cacheKey)?.let { cachedTopic ->
             return@withContext AiTopicResult(topic = cachedTopic)
         }
 
-        aiSettingsRepository.recordUsage(
-            requestIncrement = 1,
-            dayKey = LocalDate.now().toString(),
-        )
-        return@withContext when (val result = aiServiceClient.extractTopic(settings, content)) {
-            is AiChatResult.Success -> {
-                val normalized = normalize(result.content)
-                if (!normalized.isNullOrBlank()) {
-                    putCached(cacheKey, normalized)
-                }
-                aiSettingsRepository.recordUsage(
-                    successIncrement = 1,
-                    tokenIncrement = result.totalTokens ?: 0,
-                    dayKey = LocalDate.now().toString(),
-                )
-                AiTopicResult(
-                    topic = normalized,
-                )
-            }
-            is AiChatResult.Failure -> AiTopicResult(
-                notice = when (result.reason) {
-                    AiFailureReason.RATE_LIMIT -> "AI 暂时限流，已改用本地规则"
-                    AiFailureReason.AUTH,
-                    AiFailureReason.MODEL,
-                    AiFailureReason.CONFIG,
-                    AiFailureReason.NETWORK,
-                    AiFailureReason.SERVER,
-                    AiFailureReason.OTHER,
-                    -> null
-                },
+        val result = runCatching {
+            aiTaskRouter.run(
+                AiTaskRequest(
+                    type = AiTaskType.EXTRACT_TOPIC,
+                    input = AiTaskInput.NoteText(content),
+                    validate = { payload ->
+                        val topic = payload as AiTaskPayload.Topic
+                        topic.topic.isNotBlank() && topic.topic !in setOf("记录", "想法", "学习", "随想")
+                    },
+                ),
             )
+        }.getOrNull() ?: return@withContext AiTopicResult()
+
+        val normalized = normalize((result.payload as AiTaskPayload.Topic).topic)
+        if (!normalized.isNullOrBlank()) {
+            putCached(cacheKey, normalized)
         }
+        AiTopicResult(topic = normalized)
     }
 
     @Synchronized
@@ -69,24 +52,13 @@ class AiTopicExtractor(
 
     @Synchronized
     private fun putCached(cacheKey: String, topic: String) {
-        topicCache[cacheKey] = CachedTopic(
-            topic = topic,
-            expiresAt = System.currentTimeMillis() + CACHE_TTL_MS,
-        )
+        topicCache[cacheKey] = CachedTopic(topic = topic, expiresAt = System.currentTimeMillis() + CACHE_TTL_MS)
     }
 
-    private fun buildCacheKey(
-        settings: com.mindflow.app.data.model.AiSettings,
-        content: String,
-    ): String {
-        val raw = listOf(
-            settings.configFingerprint,
-            content.trim(),
-        ).joinToString("|")
-        return MessageDigest.getInstance("SHA-256")
-            .digest(raw.toByteArray())
+    private fun buildCacheKey(content: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(content.trim().toByteArray())
             .joinToString("") { byte -> "%02x".format(byte) }
-    }
 
     private fun normalize(raw: String?): String? {
         val cleaned = raw
@@ -101,15 +73,11 @@ class AiTopicExtractor(
         return cleaned?.takeIf { it.isNotBlank() }
     }
 
-    private data class CachedTopic(
-        val topic: String,
-        val expiresAt: Long,
-    )
+    private data class CachedTopic(val topic: String, val expiresAt: Long)
 
     private companion object {
         val topicCache = object : LinkedHashMap<String, CachedTopic>(32, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedTopic>?): Boolean =
-                size > 64
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedTopic>?): Boolean = size > 64
         }
         const val CACHE_TTL_MS = 30 * 60 * 1000L
     }

@@ -81,8 +81,7 @@ import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallResult
-import com.mindflow.app.data.settings.AiSettingsRepository
-import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.topic.ContentPolishPlanner
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.GridTwo
@@ -135,8 +134,7 @@ internal fun shouldComputeEditorInsights(
 @Composable
 fun EditorRoute(
     noteRepository: NoteRepository,
-    aiSettingsRepository: AiSettingsRepository,
-    aiServiceClient: AiServiceClient,
+    contentPolishPlanner: ContentPolishPlanner,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     noteId: Long?,
     captureSessionKey: Long? = null,
@@ -159,8 +157,7 @@ fun EditorRoute(
         },
         factory = NoteEditorViewModel.factory(
             noteRepository = noteRepository,
-            aiSettingsRepository = aiSettingsRepository,
-            aiServiceClient = aiServiceClient,
+            contentPolishPlanner = contentPolishPlanner,
             noteId = noteId,
             initialContent = initialContent,
             initialTopic = initialTopic,

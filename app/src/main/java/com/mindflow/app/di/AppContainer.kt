@@ -33,12 +33,16 @@ import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesOnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
+import com.mindflow.app.data.topic.ContentPolishPlanner
 import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.ai.AiTaskRouter
+import com.mindflow.app.data.ai.CloudAiTaskProvider
+import com.mindflow.app.data.ai.OnDeviceAiTaskProvider
 import com.mindflow.app.data.topic.AiFolderClassifier
 import com.mindflow.app.data.topic.AiTagExtractor
 import com.mindflow.app.data.topic.CombinedTagExtractor
@@ -109,26 +113,39 @@ class AppContainer(context: Context) {
         onDeviceAiClient = onDeviceAiClient,
     )
 
+    val aiTaskRouter = AiTaskRouter(
+        resolveMode = { onDeviceModelSettingsRepository.getCurrent().executionMode },
+        onDeviceProvider = OnDeviceAiTaskProvider(
+            settingsRepository = onDeviceModelSettingsRepository,
+            client = onDeviceAiClient,
+        ),
+        cloudProvider = CloudAiTaskProvider(
+            settingsRepository = aiSettingsRepository,
+            client = aiServiceClient,
+        ),
+    )
+
+    val contentPolishPlanner = ContentPolishPlanner(
+        aiTaskRouter = aiTaskRouter,
+    )
+
     private val topicExtractor = CombinedTopicExtractor(
         aiTopicExtractor = AiTopicExtractor(
-            aiSettingsRepository = aiSettingsRepository,
-            aiServiceClient = aiServiceClient,
+            aiTaskRouter = aiTaskRouter,
         ),
         ruleBasedTopicExtractor = RuleBasedTopicExtractor(),
     )
 
     private val tagExtractor = CombinedTagExtractor(
         aiTagExtractor = AiTagExtractor(
-            aiSettingsRepository = aiSettingsRepository,
-            aiServiceClient = aiServiceClient,
+            aiTaskRouter = aiTaskRouter,
         ),
         ruleBasedTagExtractor = RuleBasedTagExtractor(),
     )
 
     private val folderClassifier = CombinedFolderClassifier(
         aiFolderClassifier = AiFolderClassifier(
-            aiSettingsRepository = aiSettingsRepository,
-            aiServiceClient = aiServiceClient,
+            aiTaskRouter = aiTaskRouter,
         ),
         ruleBasedFolderClassifier = RuleBasedFolderClassifier(),
     )
