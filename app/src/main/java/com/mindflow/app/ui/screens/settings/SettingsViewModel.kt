@@ -2,6 +2,7 @@ package com.mindflow.app.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.mindflow.app.data.ai.AiExecutionMode
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -49,7 +50,7 @@ data class SettingsUiState(
     val aiTokensToday: Int = 0,
     val localModelLabel: String = OnDeviceModelSettings.DEFAULT_MODEL_LABEL,
     val localModelDownloadUrl: String = OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
-    val localModelPreferOnDevice: Boolean = false,
+    val aiExecutionMode: AiExecutionMode = AiExecutionMode.AUTOMATIC,
     val localModelPath: String = "",
     val localModelDownloadedBytes: Long = 0L,
     val localModelDownloadTargetBytes: Long = OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES,
@@ -163,7 +164,7 @@ class SettingsViewModel(
                     it.copy(
                         localModelLabel = settings.modelLabel,
                         localModelDownloadUrl = settings.modelDownloadUrl,
-                        localModelPreferOnDevice = settings.preferOnDevice,
+                        aiExecutionMode = settings.executionMode,
                         localModelPath = settings.localModelPath,
                         localModelDownloadedBytes = settings.downloadedBytes,
                         localModelDownloadTargetBytes = settings.downloadTargetBytes,
@@ -277,8 +278,8 @@ class SettingsViewModel(
         _uiState.update { it.copy(localModelDownloadUrl = value) }
     }
 
-    fun onLocalPreferOnDeviceChange(value: Boolean) {
-        _uiState.update { it.copy(localModelPreferOnDevice = value) }
+    fun onAiExecutionModeChange(value: AiExecutionMode) {
+        _uiState.update { it.copy(aiExecutionMode = value) }
     }
 
     fun onCloudBaseUrlChange(value: String) {
@@ -392,7 +393,7 @@ class SettingsViewModel(
                 OnDeviceModelSettings(
                     modelLabel = state.localModelLabel,
                     modelDownloadUrl = state.localModelDownloadUrl,
-                    preferOnDevice = state.localModelPreferOnDevice,
+                    executionMode = state.aiExecutionMode,
                     localModelPath = state.localModelPath,
                     downloadedBytes = state.localModelDownloadedBytes,
                     downloadTargetBytes = state.localModelDownloadTargetBytes,
@@ -411,7 +412,7 @@ class SettingsViewModel(
         val settings = OnDeviceModelSettings(
             modelLabel = state.localModelLabel,
             modelDownloadUrl = state.localModelDownloadUrl,
-            preferOnDevice = state.localModelPreferOnDevice,
+            executionMode = state.aiExecutionMode,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
             downloadTargetBytes = state.localModelDownloadTargetBytes,
@@ -438,7 +439,7 @@ class SettingsViewModel(
         val settings = OnDeviceModelSettings(
             modelLabel = state.localModelLabel,
             modelDownloadUrl = state.localModelDownloadUrl,
-            preferOnDevice = state.localModelPreferOnDevice,
+            executionMode = state.aiExecutionMode,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
             downloadTargetBytes = state.localModelDownloadTargetBytes,
@@ -493,7 +494,7 @@ class SettingsViewModel(
         val settings = OnDeviceModelSettings(
             modelLabel = state.localModelLabel,
             modelDownloadUrl = state.localModelDownloadUrl,
-            preferOnDevice = state.localModelPreferOnDevice,
+            executionMode = state.aiExecutionMode,
             localModelPath = state.localModelPath,
             downloadedBytes = state.localModelDownloadedBytes,
             downloadTargetBytes = state.localModelDownloadTargetBytes,

@@ -53,6 +53,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mindflow.app.data.ai.AiExecutionMode
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -204,7 +205,7 @@ fun SettingsRoute(
         onBaseUrlChange = viewModel::onBaseUrlChange,
         onModelChange = viewModel::onModelChange,
         onLocalModelDownloadUrlChange = viewModel::onLocalModelDownloadUrlChange,
-        onLocalPreferOnDeviceChange = viewModel::onLocalPreferOnDeviceChange,
+        onAiExecutionModeChange = viewModel::onAiExecutionModeChange,
         onSaveAi = viewModel::saveAi,
         onSaveLocalModel = viewModel::saveLocalModel,
         onTestAi = viewModel::testAiConnection,
@@ -263,7 +264,7 @@ private fun SettingsScreen(
     onBaseUrlChange: (String) -> Unit,
     onModelChange: (String) -> Unit,
     onLocalModelDownloadUrlChange: (String) -> Unit,
-    onLocalPreferOnDeviceChange: (Boolean) -> Unit,
+    onAiExecutionModeChange: (AiExecutionMode) -> Unit,
     onSaveAi: () -> Unit,
     onSaveLocalModel: () -> Unit,
     onTestAi: () -> Unit,
@@ -362,7 +363,7 @@ private fun SettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
                 onLocalModelDownloadUrlChange = onLocalModelDownloadUrlChange,
-                onLocalPreferOnDeviceChange = onLocalPreferOnDeviceChange,
+                onAiExecutionModeChange = onAiExecutionModeChange,
                 onSaveLocalModel = onSaveLocalModel,
                 onTestLocalModel = onTestLocalModel,
                 onDownloadLocalModel = onDownloadLocalModel,
@@ -464,12 +465,11 @@ private fun SettingsHomeScreen(
                         }
                         OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
                     },
-                    headline = if (uiState.localModelPreferOnDevice && uiState.localModelStatus == OnDeviceModelStatus.READY) {
-                        "本地优先"
-                    } else if (uiState.localModelStatus == OnDeviceModelStatus.READY) {
-                        "已就绪"
-                    } else {
-                        "未就绪"
+                    headline = when {
+                        uiState.localModelStatus != OnDeviceModelStatus.READY -> "未就绪"
+                        uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC -> "自动"
+                        uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY -> "仅端侧"
+                        else -> "仅云侧"
                     },
                     accent = AccentBlue,
                     onClick = onOpenLocalModel,
@@ -612,7 +612,7 @@ private fun LocalModelSettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onLocalModelDownloadUrlChange: (String) -> Unit,
-    onLocalPreferOnDeviceChange: (Boolean) -> Unit,
+    onAiExecutionModeChange: (AiExecutionMode) -> Unit,
     onSaveLocalModel: () -> Unit,
     onTestLocalModel: () -> Unit,
     onDownloadLocalModel: () -> Unit,
@@ -728,17 +728,45 @@ private fun LocalModelSettingsScreen(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("本地优先", style = MaterialTheme.typography.titleSmall)
+                            Text("执行模式", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "打开后，显式的本地模型能力会优先走端侧；首页和 Flow 导航不会再静默拉起本地模型。",
+                                text = "自动模式默认端侧优先；仅端侧和仅云侧会强制固定 provider。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            GridTwo {
+                                FilterChip(
+                                    selected = uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC,
+                                    onClick = { onAiExecutionModeChange(AiExecutionMode.AUTOMATIC) },
+                                    label = { Text("自动") },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                                )
+                                FilterChip(
+                                    selected = uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY,
+                                    onClick = { onAiExecutionModeChange(AiExecutionMode.ON_DEVICE_ONLY) },
+                                    label = { Text("仅端侧") },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                                )
+                            }
+                            FilterChip(
+                                selected = uiState.aiExecutionMode == AiExecutionMode.CLOUD_ONLY,
+                                onClick = { onAiExecutionModeChange(AiExecutionMode.CLOUD_ONLY) },
+                                label = { Text("仅云侧") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                ),
+                            )
                         }
-                        Switch(
-                            checked = uiState.localModelPreferOnDevice,
-                            onCheckedChange = onLocalPreferOnDeviceChange,
-                        )
                     }
                 }
                 GhostActionButton(

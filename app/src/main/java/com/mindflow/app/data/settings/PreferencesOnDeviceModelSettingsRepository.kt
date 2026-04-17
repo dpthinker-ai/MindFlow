@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.model.OnDeviceModelSettings
 import com.mindflow.app.data.model.OnDeviceModelStatus
 import java.io.IOException
@@ -36,7 +37,10 @@ class PreferencesOnDeviceModelSettingsRepository(
                         ?.takeIf { it.isNotBlank() }
                         ?: OnDeviceModelSettings.DEFAULT_MODEL_DOWNLOAD_URL,
                 ),
-                preferOnDevice = preferences[PREFER_ON_DEVICE] ?: false,
+                executionMode = OnDeviceExecutionModeCodec.decode(
+                    raw = preferences[EXECUTION_MODE],
+                    legacyPreferOnDevice = preferences[PREFER_ON_DEVICE],
+                ),
                 localModelPath = preferences[LOCAL_MODEL_PATH].orEmpty(),
                 downloadedBytes = preferences[DOWNLOADED_BYTES] ?: 0L,
                 downloadTargetBytes = preferences[DOWNLOAD_TARGET_BYTES] ?: OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES,
@@ -54,6 +58,7 @@ class PreferencesOnDeviceModelSettingsRepository(
         context.onDeviceModelDataStore.edit { preferences ->
             preferences[MODEL_LABEL] = settings.modelLabel.trim().ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_LABEL }
             preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(settings.modelDownloadUrl)
+            preferences[EXECUTION_MODE] = settings.executionMode.name
             preferences[PREFER_ON_DEVICE] = settings.preferOnDevice
             preferences[DOWNLOAD_TARGET_BYTES] = settings.downloadTargetBytes
         }
@@ -133,6 +138,7 @@ class PreferencesOnDeviceModelSettingsRepository(
         val MODEL_LABEL = stringPreferencesKey("model_label")
         val MODEL_DOWNLOAD_URL = stringPreferencesKey("model_download_url")
         val PREFER_ON_DEVICE = booleanPreferencesKey("prefer_on_device")
+        val EXECUTION_MODE = stringPreferencesKey("execution_mode")
         val LOCAL_MODEL_PATH = stringPreferencesKey("local_model_path")
         val DOWNLOADED_BYTES = longPreferencesKey("downloaded_bytes")
         val DOWNLOAD_TARGET_BYTES = longPreferencesKey("download_target_bytes")

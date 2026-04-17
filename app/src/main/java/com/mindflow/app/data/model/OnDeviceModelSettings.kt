@@ -1,5 +1,7 @@
 package com.mindflow.app.data.model
 
+import com.mindflow.app.data.ai.AiExecutionMode
+
 enum class OnDeviceModelStatus {
     NOT_DOWNLOADED,
     DOWNLOADING,
@@ -10,7 +12,7 @@ enum class OnDeviceModelStatus {
 data class OnDeviceModelSettings(
     val modelLabel: String = DEFAULT_MODEL_LABEL,
     val modelDownloadUrl: String = DEFAULT_MODEL_DOWNLOAD_URL,
-    val preferOnDevice: Boolean = false,
+    val executionMode: AiExecutionMode = AiExecutionMode.AUTOMATIC,
     val localModelPath: String = "",
     val downloadedBytes: Long = 0L,
     val downloadTargetBytes: Long = DEFAULT_MODEL_SIZE_BYTES,
@@ -23,6 +25,10 @@ data class OnDeviceModelSettings(
 
     val hasPartialDownload: Boolean
         get() = !isReady && downloadedBytes > 0L
+
+    @Deprecated("Use executionMode")
+    val preferOnDevice: Boolean
+        get() = executionMode != AiExecutionMode.CLOUD_ONLY
 
     companion object {
         const val DEFAULT_MODEL_LABEL = "Gemma 4 E4B"
