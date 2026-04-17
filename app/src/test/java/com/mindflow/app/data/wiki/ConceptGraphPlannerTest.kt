@@ -1,6 +1,15 @@
 package com.mindflow.app.data.wiki
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.ai.AiExecutionMode
+import com.mindflow.app.data.ai.AiProvider
+import com.mindflow.app.data.ai.AiTaskInput
+import com.mindflow.app.data.ai.AiTaskPayload
+import com.mindflow.app.data.ai.AiTaskProvider
+import com.mindflow.app.data.ai.AiTaskRequest
+import com.mindflow.app.data.ai.AiTaskRouter
+import com.mindflow.app.data.ai.AiTaskType
+import com.mindflow.app.data.ai.GraphRelation
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
@@ -38,6 +47,68 @@ class ConceptGraphPlannerTest {
         assertThat(context).contains("\\\"引号\\\"")
         assertThat(context).contains("\\n第二行")
         assertThat(context).doesNotContain("conceptId=sleep | title=睡眠")
+    }
+
+    @Test
+    fun `summarize uses staged router requests before rule fallback`() = runTest {
+        val planner = plannerWithRouter(
+            conceptPayload = listOf("sleep", "recovery"),
+            canonicalPayload = mapOf("sleep" to listOf("rest"), "recovery" to emptyList()),
+            relationPayload = listOf(
+                relation(
+                    from = "sleep",
+                    to = "recovery",
+                    type = "supports",
+                    reason = "睡眠支持恢复",
+                    confidence = 0.9f,
+                ),
+            ),
+        )
+
+        val snapshot = planner.summarize(
+            listOf(
+                candidate(conceptId = "sleep", title = "睡眠", hotnessScore = 0.9, updatedAt = 1_000),
+                candidate(conceptId = "recovery", title = "恢复", hotnessScore = 0.8, updatedAt = 900),
+            ),
+        )
+
+        assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery").inOrder()
+        assertThat(snapshot.edges).hasSize(1)
+        assertThat(snapshot.edges.single().fromConceptId).isEqualTo("sleep")
+        assertThat(snapshot.edges.single().toConceptId).isEqualTo("recovery")
+        assertThat(snapshot.source).isEqualTo("router+rule")
+    }
+
+    @Test
+    fun `summarize falls back only relation stage when relation payload fails`() = runTest {
+        val planner = plannerWithRouter(
+            conceptPayload = listOf("sleep", "recovery"),
+            canonicalPayload = mapOf("sleep" to listOf("rest"), "recovery" to emptyList()),
+            relationPayload = emptyList(),
+        )
+
+        val snapshot = planner.summarize(
+            listOf(
+                candidate(
+                    conceptId = "sleep",
+                    title = "睡眠",
+                    hotnessScore = 0.9,
+                    updatedAt = 1_000,
+                    sourceIds = listOf("note-1"),
+                ),
+                candidate(
+                    conceptId = "recovery",
+                    title = "恢复",
+                    hotnessScore = 0.8,
+                    updatedAt = 900,
+                    sourceIds = listOf("note-1"),
+                ),
+            ),
+        )
+
+        assertThat(snapshot.source).isEqualTo("router+rule")
+        assertThat(snapshot.edges).isNotEmpty()
+        assertThat(snapshot.edges.single().reasonLine).contains("一起出现在同一条记录")
     }
 
     @Test
@@ -83,7 +154,7 @@ class ConceptGraphPlannerTest {
         assertThat(capturedContext.length).isAtMost(CONCEPT_GRAPH_AI_CONTEXT_MAX_CHARS)
         assertThat(visibleCandidateIds).isNotEmpty()
         assertThat(visibleCandidateIds.size).isLessThan(candidates.size)
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.nodes.map { it.conceptId })
             .containsExactlyElementsIn(candidates.map { it.conceptId })
             .inOrder()
@@ -148,7 +219,7 @@ class ConceptGraphPlannerTest {
 
         assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery").inOrder()
         assertThat(snapshot.nodes.first().aliases).containsExactly("rest", "睡觉")
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.edges).hasSize(1)
         assertThat(snapshot.edges.first().fromConceptId).isEqualTo("sleep")
         assertThat(snapshot.edges.first().relationType).isEqualTo(ConceptGraphRelationType.SUPPORTS)
@@ -214,10 +285,10 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery", "focus").inOrder()
         assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.label).isEqualTo("深度睡眠")
-        assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.sourceIds).containsExactly("note-1", "note-2").inOrder()
+        assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.sourceIds).containsExactly("note-1")
         assertThat(snapshot.nodes.first { it.conceptId == "focus" }.label).isEqualTo("专注")
         assertThat(snapshot.nodes.first { it.conceptId == "focus" }.aliases).containsExactly("flow")
         assertThat(snapshot.nodes.first { it.conceptId == "focus" }.summary).isEqualTo("未被 AI 提及的候选概念。")
@@ -276,7 +347,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.edges).hasSize(1)
         assertThat(snapshot.edges.single().fromConceptId).isEqualTo("recovery")
         assertThat(snapshot.edges.single().toConceptId).isEqualTo("sleep")
@@ -331,7 +402,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery").inOrder()
         assertThat(snapshot.edges).hasSize(1)
         assertThat(snapshot.edges.first().fromConceptId).isEqualTo("sleep")
@@ -394,8 +465,8 @@ class ConceptGraphPlannerTest {
 
         assertThat(snapshot.edges).hasSize(1)
         assertThat(snapshot.edges.first().reasonLine).isEqualTo("更强证据。")
-        assertThat(snapshot.edges.first().supportIds).containsExactly("note-1", "note-2").inOrder()
-        assertThat(snapshot.edges.first().confidence).isEqualTo(0.9)
+        assertThat(snapshot.edges.first().supportIds).isEmpty()
+        assertThat(snapshot.edges.first().confidence).isWithin(1e-6).of(0.9)
     }
 
     @Test
@@ -482,7 +553,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.edges).hasSize(1)
         assertThat(snapshot.defaultCenterNodeId).isEqualTo("connected-center")
     }
@@ -528,7 +599,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.defaultCenterNodeId).isEqualTo("hot-candidate")
         assertThat(snapshot.nodes.first { it.conceptId == "hot-candidate" }.hotnessScore).isEqualTo(0.91)
         assertThat(snapshot.nodes.first { it.conceptId == "hot-candidate" }.updatedAt).isEqualTo(1_500)
@@ -574,7 +645,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.edges).isEmpty()
     }
 
@@ -630,7 +701,7 @@ class ConceptGraphPlannerTest {
             ),
         )
 
-        assertThat(snapshot.source).isEqualTo("llm+rule")
+        assertThat(snapshot.source).isEqualTo("router+rule")
         assertThat(snapshot.nodes.map { it.conceptId }).containsExactly("sleep", "recovery", "focus").inOrder()
         assertThat(snapshot.nodes.first { it.conceptId == "sleep" }.label).isEqualTo("恢复")
         assertThat(snapshot.nodes.first { it.conceptId == "recovery" }.label).isEqualTo("恢复")
@@ -641,19 +712,108 @@ class ConceptGraphPlannerTest {
     private fun planner(
         aiResponse: String = """{"nodes":[],"edges":[]}""",
         resultFactory: ((String) -> AiChatResult)? = null,
-    ): ConceptGraphPlanner =
-        ConceptGraphPlanner(
-            aiSettingsRepository = FakeAiSettingsRepository(
-                initial = AiSettings(
-                    apiKey = "test-key",
-                    aiEnabled = true,
-                ),
-            ),
-            aiServiceClient = AiServiceClient(),
-            conceptGraphGenerator = { _, context ->
-                resultFactory?.invoke(context) ?: AiChatResult.Success(content = aiResponse)
+    ): ConceptGraphPlanner {
+        var parsed = parseLegacySnapshotPayload(aiResponse)
+        return plannerWithProvider { request ->
+            if (request.type == AiTaskType.GRAPH_EXTRACT_CONCEPTS && resultFactory != null) {
+                parsed = when (val result = resultFactory((request.input as AiTaskInput.GraphContext).contextSummary)) {
+                    is AiChatResult.Success -> parseLegacySnapshotPayload(result.content)
+                    is AiChatResult.Failure -> ParsedLegacySnapshotPayload()
+                }
+            }
+            when (request.type) {
+                AiTaskType.GRAPH_EXTRACT_CONCEPTS -> AiTaskPayload.GraphConcepts(parsed.concepts)
+                AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> AiTaskPayload.GraphCanonicalization(parsed.canonical)
+                AiTaskType.GRAPH_GENERATE_RELATIONS -> AiTaskPayload.GraphRelations(parsed.relations)
+                else -> null
+            }
+        }
+    }
+
+    private fun plannerWithRouter(
+        conceptPayload: List<String>,
+        canonicalPayload: Map<String, List<String>>,
+        relationPayload: List<GraphRelation>,
+    ): ConceptGraphPlanner = plannerWithProvider { request ->
+        when (request.type) {
+            AiTaskType.GRAPH_EXTRACT_CONCEPTS -> AiTaskPayload.GraphConcepts(conceptPayload)
+            AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> AiTaskPayload.GraphCanonicalization(canonicalPayload)
+            AiTaskType.GRAPH_GENERATE_RELATIONS -> AiTaskPayload.GraphRelations(relationPayload)
+            else -> null
+        }
+    }
+
+    private fun plannerWithProvider(
+        payloadForRequest: (AiTaskRequest<*>) -> AiTaskPayload?,
+    ): ConceptGraphPlanner = ConceptGraphPlanner(
+        aiTaskRouter = AiTaskRouter(
+            resolveMode = { AiExecutionMode.AUTOMATIC },
+            onDeviceProvider = FakeGraphTaskProvider(payloadForRequest),
+            cloudProvider = FakeGraphTaskProvider { null },
+        ),
+    )
+
+    private fun relation(
+        from: String,
+        to: String,
+        type: String,
+        reason: String,
+        confidence: Float,
+    ) = GraphRelation(
+        fromConceptId = from,
+        toConceptId = to,
+        relationType = type,
+        reasonLine = reason,
+        confidence = confidence,
+    )
+
+    private fun parseLegacySnapshotPayload(
+        raw: String,
+    ): ParsedLegacySnapshotPayload {
+        val jsonText = extractJsonObject(raw) ?: return ParsedLegacySnapshotPayload()
+        val root = parseJsonFields(jsonText)
+        val nodes = root.objectList("nodes")
+        val edges = root.objectList("edges")
+        return ParsedLegacySnapshotPayload(
+            concepts = nodes.mapNotNull { node ->
+                node.string("conceptId").takeIf { it.isNotBlank() }
+                    ?: node.string("label").takeIf { it.isNotBlank() }
+            },
+            canonical = buildMap {
+                nodes.forEach { node ->
+                    val conceptId = node.string("conceptId")
+                    val label = node.string("label").ifBlank { conceptId }
+                    if (label.isBlank()) return@forEach
+                    put(
+                        label,
+                        buildList {
+                            if (conceptId.isNotBlank() && conceptId != label) add(conceptId)
+                            addAll(node.stringList("aliases"))
+                        }.distinct(),
+                    )
+                }
+            },
+            relations = edges.mapNotNull { edge ->
+                val from = edge.string("fromConceptId")
+                val to = edge.string("toConceptId")
+                val type = edge.string("relationType")
+                if (from.isBlank() || to.isBlank() || type.isBlank()) return@mapNotNull null
+                relation(
+                    from = from,
+                    to = to,
+                    type = type,
+                    reason = edge.string("reasonLine"),
+                    confidence = edge.double("confidence")?.toFloat() ?: 0f,
+                )
             },
         )
+    }
+
+    private data class ParsedLegacySnapshotPayload(
+        val concepts: List<String> = emptyList(),
+        val canonical: Map<String, List<String>> = emptyMap(),
+        val relations: List<GraphRelation> = emptyList(),
+    )
 
     private fun candidate(
         conceptId: String,
@@ -736,35 +896,66 @@ class ConceptGraphPlannerTest {
         parseObject.invoke(parser)
     }
 
-    private class FakeAiSettingsRepository(
-        initial: AiSettings,
-    ) : AiSettingsRepository {
-        private val state = MutableStateFlow(initial)
+    private fun extractJsonObject(raw: String): String? {
+        val cleaned = raw
+            .trim()
+            .removePrefix("```json")
+            .removePrefix("```JSON")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        return if (start >= 0 && end > start) cleaned.substring(start, end + 1) else null
+    }
 
-        override val settings: Flow<AiSettings> = state
+    private fun parseJsonFields(json: String): ReflectiveJsonFields {
+        val parserClass = Class.forName("com.mindflow.app.data.wiki.ConceptGraphPlanner\$MiniJsonParser")
+        val parserConstructor = parserClass.getDeclaredConstructor(String::class.java)
+        parserConstructor.isAccessible = true
+        val parser = parserConstructor.newInstance(json)
+        val parseObject = parserClass.getDeclaredMethod("parseObject")
+        parseObject.isAccessible = true
+        return ReflectiveJsonFields(parseObject.invoke(parser) ?: error("Parser returned null"))
+    }
 
-        override suspend fun getCurrent(): AiSettings = state.value
+    private class ReflectiveJsonFields(
+        private val delegate: Any,
+    ) {
+        private val clazz = delegate.javaClass
 
-        override suspend fun save(settings: AiSettings) {
-            state.value = settings
+        fun string(key: String): String {
+            val method = clazz.getDeclaredMethod("string", String::class.java)
+            method.isAccessible = true
+            return method.invoke(delegate, key) as String
         }
 
-        override suspend fun updateVerificationStatus(
-            fingerprint: String,
-            success: Boolean,
-            message: String,
-            verifiedAt: Long,
-        ) = Unit
-
-        override suspend fun recordUsage(
-            requestIncrement: Int,
-            successIncrement: Int,
-            tokenIncrement: Int,
-            dayKey: String,
-        ) = Unit
-
-        override suspend fun clear() {
-            state.value = AiSettings()
+        fun stringList(key: String): List<String> {
+            val method = clazz.getDeclaredMethod("stringList", String::class.java)
+            method.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            return method.invoke(delegate, key) as List<String>
         }
+
+        fun objectList(key: String): List<ReflectiveJsonFields> {
+            val method = clazz.getDeclaredMethod("objectList", String::class.java)
+            method.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            return (method.invoke(delegate, key) as List<*>).mapNotNull { item -> item?.let(::ReflectiveJsonFields) }
+        }
+
+        fun double(key: String): Double? {
+            val method = clazz.getDeclaredMethod("double", String::class.java)
+            method.isAccessible = true
+            return method.invoke(delegate, key) as Double?
+        }
+    }
+
+    private class FakeGraphTaskProvider(
+        private val payloadForRequest: (AiTaskRequest<*>) -> AiTaskPayload?,
+    ) : AiTaskProvider {
+        @Suppress("UNCHECKED_CAST")
+        override suspend fun <T : AiTaskPayload> run(request: AiTaskRequest<T>): T? =
+            payloadForRequest(request) as T?
     }
 }

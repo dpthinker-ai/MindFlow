@@ -131,7 +131,7 @@ class LiteRtLmOnDeviceAiClient(
     override suspend fun generateConceptGraphRelations(
         settings: OnDeviceModelSettings,
         contextSummary: String,
-    ): AiChatResult = runPrompt(settings, contextSummary)
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.generateGraphRelations(contextSummary))
 
     private suspend fun runPrompt(
         settings: OnDeviceModelSettings,

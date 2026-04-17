@@ -4,6 +4,7 @@ class AiTaskRouter(
     private val resolveMode: suspend () -> AiExecutionMode,
     private val onDeviceProvider: AiTaskProvider,
     private val cloudProvider: AiTaskProvider,
+    private val traceRecorder: AiTaskTraceRecorder? = null,
 ) {
     suspend fun <T : AiTaskPayload> run(request: AiTaskRequest<T>): AiTaskResult<T> {
         val mode = resolveMode()
@@ -32,7 +33,7 @@ class AiTaskRouter(
                 }
                 continue
             }
-            return AiTaskResult(
+            val result = AiTaskResult(
                 payload = payload,
                 meta = AiTaskMeta(
                     providerUsed = provider,
@@ -41,6 +42,8 @@ class AiTaskRouter(
                     latencyMs = System.currentTimeMillis() - startedAt,
                 ),
             )
+            traceRecorder?.append(request.type, result.meta)
+            return result
         }
 
         throw AiTaskRoutingException(

@@ -1,23 +1,16 @@
 package com.mindflow.app.data.wiki
 
-import com.mindflow.app.data.model.AiSettings
-import com.mindflow.app.data.settings.AiSettingsRepository
-import com.mindflow.app.data.topic.AiChatResult
-import com.mindflow.app.data.topic.AiServiceClient
-import java.time.LocalDate
+import com.mindflow.app.data.ai.AiTaskInput
+import com.mindflow.app.data.ai.AiTaskPayload
+import com.mindflow.app.data.ai.AiTaskRequest
+import com.mindflow.app.data.ai.AiTaskRouter
+import com.mindflow.app.data.ai.AiTaskType
 import java.util.ArrayDeque
 
 internal const val CONCEPT_GRAPH_AI_CONTEXT_MAX_CHARS = 7_500
 
 class ConceptGraphPlanner(
-    private val aiSettingsRepository: AiSettingsRepository,
-    private val aiServiceClient: AiServiceClient,
-    private val conceptGraphGenerator: suspend (AiSettings, String) -> AiChatResult = { settings, contextSummary ->
-        aiServiceClient.generateConceptGraphSnapshot(
-            settings = settings,
-            contextSummary = contextSummary,
-        )
-    },
+    private val aiTaskRouter: AiTaskRouter,
 ) {
     suspend fun summarize(
         candidates: List<ConceptGraphCandidate>,
@@ -25,47 +18,42 @@ class ConceptGraphPlanner(
         if (candidates.isEmpty()) return ConceptGraphSnapshot()
 
         val generatedAt = System.currentTimeMillis()
-        val fallbackSnapshot = buildRuleSnapshot(
+        val ruleSnapshot = buildRuleSnapshot(
             candidates = candidates,
             generatedAt = generatedAt,
         )
-        val settings = aiSettingsRepository.getCurrent()
-        if (!settings.aiEnabled || !settings.isConfigured) {
-            return fallbackSnapshot
-        }
 
-        val dayKey = LocalDate.now().toString()
-        aiSettingsRepository.recordUsage(
-            requestIncrement = 1,
-            dayKey = dayKey,
-        )
+        val conceptPayload = runStage<AiTaskPayload.GraphConcepts>(
+            type = AiTaskType.GRAPH_EXTRACT_CONCEPTS,
+            context = buildAiContext(candidates),
+            validate = { payload -> payload.concepts.isNotEmpty() },
+        ) ?: return ruleSnapshot
 
-        return when (
-            val result = conceptGraphGenerator(
-                settings,
-                buildAiContext(candidates),
-            )
-        ) {
-            is AiChatResult.Success -> {
-                val parsed = parseSnapshot(
-                    raw = result.content,
+        val canonicalPayload = runStage<AiTaskPayload.GraphCanonicalization>(
+            type = AiTaskType.GRAPH_CANONICALIZE_CONCEPTS,
+            context = buildCanonicalizationContext(
+                candidates = candidates,
+                concepts = conceptPayload,
+            ),
+            validate = { payload -> payload.canonical.isNotEmpty() },
+        ) ?: return ruleSnapshot.copy(source = "router+rule")
+
+        val snapshot = buildSnapshotFromStages(
+            candidates = candidates,
+            concepts = conceptPayload,
+            canonical = canonicalPayload,
+            relations = runStage<AiTaskPayload.GraphRelations>(
+                type = AiTaskType.GRAPH_GENERATE_RELATIONS,
+                context = buildRelationContext(
                     candidates = candidates,
-                    generatedAt = generatedAt,
-                )
-                if (parsed != null && parsed.nodes.isNotEmpty()) {
-                    aiSettingsRepository.recordUsage(
-                        successIncrement = 1,
-                        tokenIncrement = result.totalTokens ?: 0,
-                        dayKey = dayKey,
-                    )
-                    parsed
-                } else {
-                    fallbackSnapshot
-                }
-            }
-
-            is AiChatResult.Failure -> fallbackSnapshot
-        }
+                    canonical = canonicalPayload,
+                    defaultCenterNodeId = ruleSnapshot.defaultCenterNodeId,
+                ),
+                validate = { payload -> payload.relations.isNotEmpty() },
+            ),
+            generatedAt = generatedAt,
+        )
+        return snapshot.copy(source = "router+rule")
     }
 
     private fun buildRuleSnapshot(
@@ -173,6 +161,239 @@ class ConceptGraphPlanner(
             emptyList()
         }
     }
+
+
+    private fun buildCanonicalizationContext(
+        candidates: List<ConceptGraphCandidate>,
+        concepts: AiTaskPayload.GraphConcepts,
+    ): String = renderJsonObject(
+        linkedMapOf(
+            "task" to "canonicalize_concept_candidates",
+            "inputVersion" to 1,
+            "extractedConcepts" to concepts.concepts.map { it.trim() }.filter { it.isNotBlank() }.distinct(),
+            "candidates" to buildAiContextCandidatePayloads(candidates),
+        ),
+    )
+
+    private fun buildRelationContext(
+        candidates: List<ConceptGraphCandidate>,
+        canonical: AiTaskPayload.GraphCanonicalization,
+        defaultCenterNodeId: String,
+    ): String {
+        val nodes = buildNodesFromCanonicalization(
+            candidates = candidates,
+            canonical = canonical,
+        )
+        val centerNode = nodes.firstOrNull { it.conceptId == defaultCenterNodeId }
+            ?: nodes.maxWithOrNull(
+                compareBy<ConceptGraphNode> { it.hotnessScore }
+                    .thenBy { it.updatedAt }
+                    .thenBy { it.conceptId },
+            )
+            ?: return renderJsonObject(
+                linkedMapOf(
+                    "task" to "generate_local_relations",
+                    "inputVersion" to 1,
+                    "allowedRelationTypes" to ConceptGraphRelationType.entries.map { it.wireName },
+                    "center" to null,
+                    "neighbors" to emptyList<String>(),
+                ),
+            )
+        val neighbors = nodes
+            .asSequence()
+            .filter { it.conceptId != centerNode.conceptId }
+            .sortedWith(
+                compareByDescending<ConceptGraphNode> { it.hotnessScore }
+                    .thenByDescending { it.updatedAt }
+                    .thenBy { it.conceptId },
+            )
+            .take(RELATION_CONTEXT_NEIGHBOR_LIMIT)
+            .map { node ->
+                linkedMapOf(
+                    "conceptId" to node.conceptId,
+                    "label" to node.label,
+                    "aliases" to node.aliases,
+                    "summary" to node.summary.truncateForAiContext(AI_CONTEXT_RELATION_SUMMARY_MAX_CHARS),
+                    "sourceIds" to node.sourceIds,
+                )
+            }
+            .toList()
+        return renderJsonObject(
+            linkedMapOf(
+                "task" to "generate_local_relations",
+                "inputVersion" to 1,
+                "allowedRelationTypes" to ConceptGraphRelationType.entries.map { it.wireName },
+                "center" to linkedMapOf(
+                    "conceptId" to centerNode.conceptId,
+                    "label" to centerNode.label,
+                    "aliases" to centerNode.aliases,
+                    "summary" to centerNode.summary.truncateForAiContext(AI_CONTEXT_RELATION_SUMMARY_MAX_CHARS),
+                    "sourceIds" to centerNode.sourceIds,
+                ),
+                "neighbors" to neighbors,
+            ),
+        )
+    }
+
+    private fun buildSnapshotFromStages(
+        candidates: List<ConceptGraphCandidate>,
+        concepts: AiTaskPayload.GraphConcepts,
+        canonical: AiTaskPayload.GraphCanonicalization,
+        relations: AiTaskPayload.GraphRelations?,
+        generatedAt: Long,
+    ): ConceptGraphSnapshot {
+        val candidateByConceptId = candidates.associateByNormalizedConceptId()
+        val nodes = buildNodesFromCanonicalization(
+            candidates = candidates,
+            canonical = canonical,
+        )
+        val selectedConceptIds = concepts.concepts
+            .asSequence()
+            .map { raw -> normalizeConceptKey(raw) }
+            .filter { it.isNotBlank() }
+            .toSet()
+        val scopedCandidates = if (selectedConceptIds.isEmpty()) {
+            candidates
+        } else {
+            candidates.filter { candidate ->
+                candidate.conceptId in nodes.map { it.conceptId }.toSet() ||
+                    normalizeConceptKey(candidate.conceptId) in selectedConceptIds ||
+                    normalizeConceptKey(candidate.title) in selectedConceptIds
+            }
+        }
+        val resolvedNodeIds = nodes.map { it.conceptId }.toSet()
+        val fallbackEdges = buildRuleEdges(
+            candidates = scopedCandidates.filter { it.conceptId in resolvedNodeIds },
+        )
+        val edges = mergeEdgesWithRuleFallback(
+            primaryEdges = relations?.let {
+                buildEdgesFromRelations(
+                    relations = it,
+                    candidates = candidates,
+                    resolvedNodeIds = resolvedNodeIds,
+                )
+            }.orEmpty(),
+            fallbackEdges = fallbackEdges,
+        )
+        return ConceptGraphSnapshot(
+            defaultCenterNodeId = selectDefaultCenterNodeId(
+                nodes = nodes,
+                candidateByConceptId = candidateByConceptId,
+                edges = edges,
+            ),
+            nodes = nodes,
+            edges = edges,
+            source = "router+rule",
+            generatedAt = generatedAt,
+        )
+    }
+
+    private fun buildNodesFromCanonicalization(
+        candidates: List<ConceptGraphCandidate>,
+        canonical: AiTaskPayload.GraphCanonicalization,
+    ): List<ConceptGraphNode> {
+        val resolutionTables = buildCandidateResolutionTables(candidates)
+        val labelOverrides = linkedMapOf<String, String>()
+        val aliasOverrides = linkedMapOf<String, MutableSet<String>>()
+
+        canonical.canonical.forEach { (canonicalLabel, aliases) ->
+            val conceptId = resolveCanonicalConceptId(
+                canonicalLabel = canonicalLabel,
+                aliases = aliases,
+                resolutionTables = resolutionTables,
+            ) ?: return@forEach
+            val candidate = candidates.firstOrNull { it.conceptId == conceptId } ?: return@forEach
+            val bucket = aliasOverrides.getOrPut(conceptId) { linkedSetOf() }
+            val cleanedCanonicalLabel = canonicalLabel.trim()
+            if (cleanedCanonicalLabel.isNotBlank() && cleanedCanonicalLabel != candidate.conceptId) {
+                labelOverrides[conceptId] = cleanedCanonicalLabel
+            }
+            (aliases + listOf(cleanedCanonicalLabel))
+                .asSequence()
+                .map { value -> value.trim() }
+                .filter { value -> value.isNotBlank() }
+                .filter { value -> value != conceptId }
+                .forEach(bucket::add)
+        }
+
+        return candidates.map { candidate ->
+            val overrideLabel = labelOverrides[candidate.conceptId]
+            val mergedAliases = (candidate.aliases + aliasOverrides[candidate.conceptId].orEmpty())
+                .asSequence()
+                .map { alias -> alias.trim() }
+                .filter { alias -> alias.isNotBlank() }
+                .filter { alias -> alias != candidate.conceptId && alias != overrideLabel }
+                .distinct()
+                .toList()
+            candidate.toNode(
+                label = overrideLabel.takeUnless { it.isNullOrBlank() } ?: candidate.title,
+                aliases = mergedAliases,
+                summary = candidate.summary,
+                sourceIds = candidate.sourceIds,
+            )
+        }
+    }
+
+    private fun resolveCanonicalConceptId(
+        canonicalLabel: String,
+        aliases: List<String>,
+        resolutionTables: CandidateResolutionTables,
+    ): String? {
+        resolveNodeId(canonicalLabel, resolutionTables)?.let { return it }
+        aliases.forEach { alias ->
+            resolveNodeId(alias, resolutionTables)?.let { return it }
+        }
+        return null
+    }
+
+    private fun buildEdgesFromRelations(
+        relations: AiTaskPayload.GraphRelations,
+        candidates: List<ConceptGraphCandidate>,
+        resolvedNodeIds: Set<String>,
+    ): List<ConceptGraphEdge> {
+        if (relations.relations.isEmpty()) return emptyList()
+        val candidateByConceptId = candidates.associateBy { it.conceptId }
+        val resolutionTables = buildCandidateResolutionTables(candidates)
+        val edges = linkedMapOf<String, ConceptGraphEdge>()
+        relations.relations.forEach { relation ->
+            val fromConceptId = resolveNodeId(relation.fromConceptId, resolutionTables) ?: return@forEach
+            val toConceptId = resolveNodeId(relation.toConceptId, resolutionTables) ?: return@forEach
+            if (fromConceptId == toConceptId) return@forEach
+            if (fromConceptId !in resolvedNodeIds || toConceptId !in resolvedNodeIds) return@forEach
+            val relationType = ConceptGraphRelationType.fromWireName(relation.relationType) ?: return@forEach
+            val supportIds = candidateByConceptId[fromConceptId]
+                .orEmptySourceIds()
+                .intersect(candidateByConceptId[toConceptId].orEmptySourceIds())
+                .sorted()
+            val edge = ConceptGraphEdge(
+                fromConceptId = fromConceptId,
+                toConceptId = toConceptId,
+                relationType = relationType,
+                reasonLine = relation.reasonLine.trim(),
+                supportIds = supportIds,
+                confidence = relation.confidence.toDouble().coerceIn(0.0, 1.0),
+            )
+            val identityKey = edge.identityKey()
+            edges[identityKey] = edges[identityKey]?.preferredForDisplayAgainst(edge) ?: edge
+        }
+        return edges.values.toList()
+    }
+
+    private fun ConceptGraphCandidate?.orEmptySourceIds(): Set<String> = this?.sourceIds?.toSet().orEmpty()
+
+    private suspend fun <T : AiTaskPayload> runStage(
+        type: AiTaskType,
+        context: String,
+        validate: (T) -> Boolean,
+    ): T? = runCatching {
+        aiTaskRouter.run(
+            AiTaskRequest(
+                type = type,
+                input = AiTaskInput.GraphContext(context),
+                validate = validate,
+            ),
+        ).payload
+    }.getOrNull()
 
     private fun parseSnapshot(
         raw: String,
@@ -740,6 +961,8 @@ class ConceptGraphPlanner(
         const val AI_CONTEXT_MINIMAL_ALIAS_LIMIT = 2
         const val AI_CONTEXT_SOURCE_ID_LIMIT = 6
         const val AI_CONTEXT_SUMMARY_MAX_CHARS = 320
+        const val AI_CONTEXT_RELATION_SUMMARY_MAX_CHARS = 120
+        const val RELATION_CONTEXT_NEIGHBOR_LIMIT = 8
     }
 
     private data class JsonFields(

@@ -41,6 +41,7 @@ import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.ai.AiTaskRouter
+import com.mindflow.app.data.ai.AiTaskTraceRecorder
 import com.mindflow.app.data.ai.CloudAiTaskProvider
 import com.mindflow.app.data.ai.OnDeviceAiTaskProvider
 import com.mindflow.app.data.topic.AiFolderClassifier
@@ -53,6 +54,7 @@ import com.mindflow.app.data.topic.CombinedTopicExtractor
 import com.mindflow.app.data.topic.RuleBasedFolderClassifier
 import com.mindflow.app.data.topic.RuleBasedTopicExtractor
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
+import java.io.File
 import com.mindflow.app.data.wiki.ConceptGraphPlanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +115,10 @@ class AppContainer(context: Context) {
         onDeviceAiClient = onDeviceAiClient,
     )
 
+    private val aiTaskTraceRecorder = AiTaskTraceRecorder(
+        File(context.applicationContext.filesDir, "ai-traces"),
+    )
+
     val aiTaskRouter = AiTaskRouter(
         resolveMode = { onDeviceModelSettingsRepository.getCurrent().executionMode },
         onDeviceProvider = OnDeviceAiTaskProvider(
@@ -123,6 +129,7 @@ class AppContainer(context: Context) {
             settingsRepository = aiSettingsRepository,
             client = aiServiceClient,
         ),
+        traceRecorder = aiTaskTraceRecorder,
     )
 
     val contentPolishPlanner = ContentPolishPlanner(
@@ -225,8 +232,7 @@ class AppContainer(context: Context) {
     )
 
     val conceptGraphPlanner = ConceptGraphPlanner(
-        aiSettingsRepository = aiSettingsRepository,
-        aiServiceClient = aiServiceClient,
+        aiTaskRouter = aiTaskRouter,
     )
 
     val directionWikiCoordinator = DirectionWikiCoordinator(

@@ -41,15 +41,18 @@ object GemmaTaskPromptFactory {
         上下文数据：$context
     """.trimIndent()
 
+    fun generateGraphRelations(context: String): String = """
+        你在生成知识图谱的局部关系。
+        只判断中心知识点与候选邻居之间的关系。
+        只处理这一层局部关系，不要补充未提供的新节点。
+        只返回 JSON：{"relations":[{"fromConceptId":"...","toConceptId":"...","relationType":"supports|advances|parallel|references|contrasts","reasonLine":"...","confidence":0.0}]}
+        上下文数据：$context
+    """.trimIndent()
+
     fun generateGraphRelations(center: String, neighbors: List<String>): String {
         val neighborList = neighbors.joinToString(separator = ", ")
-        return """
-            你在生成知识图谱的局部关系。
-            只判断中心知识点与候选邻居之间的关系。
-            只处理这一层局部关系，不要补充未提供的新节点。
-            只返回 JSON：{"relations":[{"fromConceptId":"...","toConceptId":"...","relationType":"supports|advances|parallel|references|contrasts","reasonLine":"...","confidence":0.0}]}
-            中心知识点：$center
-            候选邻居：$neighborList
-        """.trimIndent()
+        return generateGraphRelations(
+            context = "中心知识点：$center\n候选邻居：$neighborList",
+        )
     }
 }
