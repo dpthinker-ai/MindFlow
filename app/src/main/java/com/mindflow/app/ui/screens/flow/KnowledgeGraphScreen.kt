@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -591,78 +592,67 @@ private fun KnowledgeGraphPanel(
     }
 }
 
+private fun conceptGraphCanvasHeight(cardWidth: Dp, neighborCount: Int): Dp {
+    val proportional = cardWidth * when {
+        neighborCount <= 0 -> 0.42f
+        neighborCount <= 2 -> 0.50f
+        neighborCount <= 4 -> 0.56f
+        else -> 0.62f
+    }
+    val baseline = when {
+        neighborCount <= 0 -> 144.dp
+        neighborCount <= 2 -> 164.dp
+        neighborCount <= 4 -> 180.dp
+        else -> 196.dp
+    }
+    return maxOf(proportional, baseline).coerceAtMost(228.dp)
+}
+
 @Composable
 private fun ConceptGraphViewportCanvas(
     viewport: ConceptGraphViewport,
     onSelectNode: (String) -> Unit,
 ) {
-    val centerNode = viewport.centerNode ?: return
-    val density = LocalDensity.current
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .testTag(KnowledgeGraphCanvasTag),
-    ) {
-        val widthPx = with(density) { maxWidth.toPx() }
-        val heightPx = with(density) { maxHeight.toPx() }
-        val center = remember(viewport.neighbors.size, widthPx, heightPx) {
-            buildConceptGraphCenterPosition(
-                neighborCount = viewport.neighbors.size,
-                widthPx = widthPx,
-                heightPx = heightPx,
-            )
-        }
-        val neighborPositions = remember(viewport.neighbors, center, widthPx, heightPx) {
-            buildConceptGraphNeighborPositions(
-                neighborCount = viewport.neighbors.size,
-                center = center,
-                widthPx = widthPx,
-                heightPx = heightPx,
-            )
+    viewport.centerNode ?: return
+    var renderError by remember(viewport.centerNode?.conceptId) { mutableStateOf<String?>(null) }
+    val payload = remember(viewport) { viewport.toWebPayload() }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val canvasHeight = remember(maxWidth, viewport.neighbors.size) {
+            conceptGraphCanvasHeight(maxWidth, viewport.neighbors.size)
         }
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            viewport.neighbors.forEachIndexed { index, neighbor ->
-                val target = neighborPositions.getOrElse(index) { center }
-                drawLine(
-                    color = BorderSoft.copy(alpha = 0.72f),
-                    start = androidx.compose.ui.geometry.Offset(center.first, center.second),
-                    end = androidx.compose.ui.geometry.Offset(target.first, target.second),
-                    strokeWidth = 1.6f + (neighbor.relation.confidence * 1.2f).toFloat(),
+        if (renderError != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(canvasHeight)
+                    .testTag(KnowledgeGraphCanvasTag),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = renderError ?: "图谱加载失败",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSoft,
                 )
             }
-        }
-
-        ConceptGraphDotNode(
-            node = centerNode,
-            accent = conceptNodeAccent(centerNode.conceptId),
-            modifier = Modifier.offset {
-                IntOffset(
-                    x = (center.first - 40.dp.toPx(density)).roundToInt(),
-                    y = (center.second - 18.dp.toPx(density)).roundToInt(),
-                )
-            },
-            selected = true,
-            onClick = {},
-        )
-
-        viewport.neighbors.forEachIndexed { index, neighbor ->
-            val position = neighborPositions.getOrElse(index) { center }
-            ConceptGraphDotNode(
-                node = neighbor.node,
-                accent = conceptNodeAccent(neighbor.node.conceptId),
-                modifier = Modifier.offset {
-                    IntOffset(
-                        x = (position.first - 34.dp.toPx(density)).roundToInt(),
-                        y = (position.second - 14.dp.toPx(density)).roundToInt(),
-                    )
-                },
-                selected = false,
-                onClick = { onSelectNode(neighbor.node.conceptId) },
+        } else {
+            WebViewGraphCanvas(
+                payload = payload,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(canvasHeight),
+                onNodeClick = onSelectNode,
+                onRenderError = { renderError = it },
             )
         }
     }
+}
+
+private enum class ConceptGraphNodeLabelPlacement {
+    BOTTOM,
+    START,
+    END,
 }
 
 @Composable
@@ -671,28 +661,34 @@ private fun ConceptGraphDotNode(
     accent: Color,
     modifier: Modifier,
     selected: Boolean,
+    labelPlacement: ConceptGraphNodeLabelPlacement,
     onClick: () -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .width(if (selected) 84.dp else 68.dp)
-            .testTag(graphNodeTestTag(node.conceptId))
-            .semantics(mergeDescendants = true) {
-                contentDescription = "知识点 ${node.label}"
-                stateDescription = if (selected) "中心节点" else "直接关联知识点"
-                this.selected = selected
-                role = Role.Button
-            }
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    val containerModifier = modifier
+        .testTag(graphNodeTestTag(node.conceptId))
+        .semantics(mergeDescendants = true) {
+            contentDescription = "知识点 ${node.label}"
+            stateDescription = if (selected) "中心节点" else "直接关联知识点"
+            this.selected = selected
+            role = Role.Button
+        }
+        .clickable(onClick = onClick)
+
+    val dotSize = if (selected) 24.dp else 16.dp
+    val textStyle = if (selected) {
+        MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    } else {
+        MaterialTheme.typography.labelSmall
+    }
+    val textColor = if (selected) TextMain else TextSoft
+
+    val dotContent: @Composable () -> Unit = {
         Box(
             modifier = Modifier
-                .size(if (selected) 24.dp else 16.dp)
+                .size(dotSize)
                 .clip(CircleShape)
-                .background(accent.copy(alpha = if (selected) 0.94f else 0.86f)),
-                contentAlignment = Alignment.Center,
+                .background(accent.copy(alpha = if (selected) 0.94f else 0.88f)),
+            contentAlignment = Alignment.Center,
         ) {
             if (selected) {
                 Box(
@@ -703,55 +699,102 @@ private fun ConceptGraphDotNode(
                 )
             }
         }
-        Text(
-            text = node.label,
-            style = if (selected) {
-                MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    if (!selected && labelPlacement != ConceptGraphNodeLabelPlacement.BOTTOM) {
+        Row(
+            modifier = containerModifier.widthIn(max = 140.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (labelPlacement == ConceptGraphNodeLabelPlacement.START) {
+                Text(
+                    text = node.label,
+                    style = textStyle,
+                    color = textColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                dotContent()
             } else {
-                MaterialTheme.typography.labelSmall
-            },
-            color = if (selected) TextMain else TextSoft,
-            maxLines = if (selected) 2 else 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+                dotContent()
+                Text(
+                    text = node.label,
+                    style = textStyle,
+                    color = textColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    } else {
+        Column(
+            modifier = containerModifier.width(if (selected) 96.dp else 72.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            dotContent()
+            Text(
+                text = node.label,
+                style = textStyle,
+                color = textColor,
+                maxLines = if (selected) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
+
+private data class ConceptGraphNeighborLayout(
+    val position: Pair<Float, Float>,
+    val labelPlacement: ConceptGraphNodeLabelPlacement,
+)
 
 private fun buildConceptGraphCenterPosition(
     neighborCount: Int,
     widthPx: Float,
     heightPx: Float,
 ): Pair<Float, Float> {
-    if (neighborCount <= 0) return widthPx / 2f to heightPx / 2f
-    return clamp(widthPx * 0.24f, 56f, widthPx - 56f) to
-        clamp(heightPx * 0.5f, 60f, heightPx - 60f)
+    if (neighborCount <= 0) return widthPx / 2f to (heightPx * 0.5f)
+    return clamp(widthPx * 0.47f, 168f, widthPx - 168f) to
+        clamp(heightPx * 0.54f, 124f, heightPx - 124f)
 }
 
-private fun buildConceptGraphNeighborPositions(
+private fun buildConceptGraphNeighborLayouts(
     neighborCount: Int,
     center: Pair<Float, Float>,
     widthPx: Float,
     heightPx: Float,
-): List<Pair<Float, Float>> {
+): List<ConceptGraphNeighborLayout> {
     if (neighborCount <= 0) return emptyList()
     val centerX = center.first
     val centerY = center.second
-    if (neighborCount == 1) {
-        return listOf(
-            clamp(centerX + min(widthPx * 0.46f, 176f), centerX + 84f, widthPx - 48f) to centerY,
-        )
+    val orbitX = min(widthPx * 0.28f, 224f)
+    val orbitY = min(heightPx * 0.26f, 172f)
+    val slots = listOf(
+        Triple(0.02f, -1.92f, ConceptGraphNodeLabelPlacement.BOTTOM),
+        Triple(1.22f, -1.18f, ConceptGraphNodeLabelPlacement.END),
+        Triple(1.96f, -0.02f, ConceptGraphNodeLabelPlacement.END),
+        Triple(1.26f, 1.24f, ConceptGraphNodeLabelPlacement.END),
+        Triple(-0.08f, 1.96f, ConceptGraphNodeLabelPlacement.BOTTOM),
+        Triple(-0.88f, 0.72f, ConceptGraphNodeLabelPlacement.BOTTOM),
+    )
+    val pattern = when (neighborCount) {
+        1 -> listOf(2)
+        2 -> listOf(1, 4)
+        3 -> listOf(0, 2, 4)
+        4 -> listOf(0, 1, 3, 5)
+        5 -> listOf(0, 1, 2, 4, 5)
+        else -> listOf(0, 1, 2, 3, 4, 5)
     }
-    val verticalSpan = min(heightPx * 0.62f, 208f)
-    val startY = centerY - (verticalSpan / 2f)
-    val baseOffsetX = min(widthPx * 0.42f, 148f)
-    val edgeOffsetX = min(widthPx * 0.1f, 34f)
-    return List(neighborCount) { index ->
-        val normalized = index.toFloat() / (neighborCount - 1).toFloat()
-        val distanceFromMiddle = (normalized - 0.5f).absoluteValue * 2f
-        val x = centerX + baseOffsetX + (distanceFromMiddle * edgeOffsetX)
-        val y = startY + (normalized * verticalSpan)
-        clamp(x, centerX + 80f, widthPx - 44f) to
-            clamp(y, 42f, heightPx - 42f)
+    return pattern.take(neighborCount).map { slotIndex ->
+        val slot = slots[slotIndex]
+        val x = clamp(centerX + (orbitX * slot.first), 124f, widthPx - 124f)
+        val y = clamp(centerY + (orbitY * slot.second), 116f, heightPx - 116f)
+        ConceptGraphNeighborLayout(
+            position = x to y,
+            labelPlacement = slot.third,
+        )
     }
 }
 
