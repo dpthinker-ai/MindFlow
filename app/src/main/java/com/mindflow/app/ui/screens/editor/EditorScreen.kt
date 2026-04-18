@@ -2,6 +2,7 @@ package com.mindflow.app.ui.screens.editor
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.speech.RecognizerIntent
@@ -54,8 +55,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,12 +70,17 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mindflow.app.MindFlowApplication
+import com.mindflow.app.data.ai.AiExecutionMode
+import com.mindflow.app.data.ai.AiProvider
+import com.mindflow.app.data.ai.AiTaskType
 import com.mindflow.app.data.connect.NoteConnectionAnalyzer
 import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.KnowledgeTrust
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteHorizon
+import com.mindflow.app.data.model.OnDeviceModelSettings
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
@@ -96,6 +102,7 @@ import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -119,7 +126,17 @@ internal data class EditorDraftAnalysis(
 private data class EditorSupportInsights(
     val relatedNotes: List<NoteEntity> = emptyList(),
     val suggestedThread: ThemeThread? = null,
-    val knowledgeRecall: EditorKnowledgeRecallResult? = null,
+)
+
+private data class EditorKnowledgeRecallUiState(
+    val isLoading: Boolean = false,
+    val result: EditorKnowledgeRecallResult? = null,
+)
+
+internal data class EditorAiTraceSnapshot(
+    val taskType: AiTaskType,
+    val providerUsed: AiProvider,
+    val fallbackOccurred: Boolean,
 )
 
 internal const val CaptureContentFieldTestTag = "capture_content_field"
@@ -130,6 +147,108 @@ internal fun shouldComputeEditorInsights(
     metadataExpanded: Boolean,
     extraInfoExpanded: Boolean,
 ): Boolean = !isLoading && noteId != null && metadataExpanded && extraInfoExpanded
+
+internal fun shouldRequestEditorKnowledgeRecall(
+    isLoading: Boolean,
+    requestVersion: Int,
+): Boolean = !isLoading && requestVersion > 0
+
+internal fun buildEditorAiModeSummary(
+    mode: AiExecutionMode,
+    onDeviceReady: Boolean,
+): String = when (mode) {
+    AiExecutionMode.AUTOMATIC -> {
+        if (onDeviceReady) {
+            "当前策略：自动。先端侧，失败后回退云侧。"
+        } else {
+            "当前策略：自动。端侧未就绪，这次会直接走云侧。"
+        }
+    }
+    AiExecutionMode.ON_DEVICE_ONLY -> {
+        if (onDeviceReady) {
+            "当前策略：仅端侧。所有整理都会固定走本地模型。"
+        } else {
+            "当前策略：仅端侧。本地模型未就绪时，这类整理不会返回结果。"
+        }
+    }
+    AiExecutionMode.CLOUD_ONLY -> "当前策略：仅云侧。不会占用本地模型推理资源。"
+}
+
+internal fun buildEditorAiRunFeedback(
+    taskType: AiTaskType,
+    provider: AiProvider,
+    fallbackOccurred: Boolean,
+): String {
+    val actionLabel = when (taskType) {
+        AiTaskType.POLISH_CONTENT -> "整理正文"
+        AiTaskType.EXTRACT_TOPIC -> "整理主题"
+        AiTaskType.EXTRACT_TAGS -> "整理标签"
+        AiTaskType.CLASSIFY_CATEGORY -> "整理分类"
+        AiTaskType.GRAPH_EXTRACT_CONCEPTS,
+        AiTaskType.GRAPH_CANONICALIZE_CONCEPTS,
+        AiTaskType.GRAPH_GENERATE_RELATIONS,
+        -> "AI 任务"
+    }
+    val providerLabel = when (provider) {
+        AiProvider.ON_DEVICE -> "端侧"
+        AiProvider.CLOUD -> "云侧"
+    }
+    return if (fallbackOccurred) {
+        "本次${actionLabel}由${providerLabel}完成，端侧没有给出可用结果。"
+    } else {
+        "本次${actionLabel}由${providerLabel}完成。"
+    }
+}
+
+internal fun parseEditorAiTraceSnapshot(raw: String): EditorAiTraceSnapshot? {
+    val normalized = raw.trim()
+    val taskType = extractJsonStringValue(normalized, "taskType")
+        ?.let { runCatching { AiTaskType.valueOf(it) }.getOrNull() }
+        ?: return null
+    val providerUsed = extractJsonStringValue(normalized, "providerUsed")
+        ?.let { runCatching { AiProvider.valueOf(it) }.getOrNull() }
+        ?: return null
+    val fallbackOccurred = extractJsonBooleanValue(normalized, "fallbackOccurred") ?: false
+    return EditorAiTraceSnapshot(
+        taskType = taskType,
+        providerUsed = providerUsed,
+        fallbackOccurred = fallbackOccurred,
+    )
+}
+
+private fun extractJsonStringValue(
+    raw: String,
+    key: String,
+): String? = Regex(""""$key"\s*:\s*"([^"]+)"""")
+    .find(raw)
+    ?.groupValues
+    ?.getOrNull(1)
+
+private fun extractJsonBooleanValue(
+    raw: String,
+    key: String,
+): Boolean? = Regex(""""$key"\s*:\s*(true|false)""")
+    .find(raw)
+    ?.groupValues
+    ?.getOrNull(1)
+    ?.toBooleanStrictOrNull()
+
+private fun readLatestEditorAiRunFeedback(
+    context: Context,
+    expectedTaskType: AiTaskType,
+): String? {
+    val traceFile = File(context.applicationContext.filesDir, "ai-traces/latest-successful-provider.json")
+    val snapshot = traceFile.takeIf(File::exists)
+        ?.readText()
+        ?.let(::parseEditorAiTraceSnapshot)
+        ?: return null
+    if (snapshot.taskType != expectedTaskType) return null
+    return buildEditorAiRunFeedback(
+        taskType = snapshot.taskType,
+        provider = snapshot.providerUsed,
+        fallbackOccurred = snapshot.fallbackOccurred,
+    )
+}
 
 @Composable
 fun EditorRoute(
@@ -296,7 +415,6 @@ private fun rememberEditorSupportInsights(
     shouldCompute: Boolean,
     uiState: NoteEditorUiState,
     noteRepository: NoteRepository,
-    editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
 ): EditorSupportInsights {
     if (!shouldCompute) {
         return EditorSupportInsights()
@@ -335,31 +453,10 @@ private fun rememberEditorSupportInsights(
             buildEditorDraftAnalysis(analysisInput)
         }
     }
-    val knowledgeRecall by produceState<EditorKnowledgeRecallResult?>(
-        initialValue = null,
-        analysisInput.isLoading,
-        analysisInput.topic,
-        analysisInput.content,
-        draftAnalysis.suggestedThread?.key,
-        draftAnalysis.relatedNotes.map { it.id to it.updatedAt },
-    ) {
-        if (analysisInput.isLoading) {
-            value = null
-            return@produceState
-        }
-        delay(700)
-        value = editorKnowledgeRecallPlanner.summarize(
-            draftTopic = analysisInput.topic,
-            draftContent = analysisInput.content,
-            suggestedThreadTitle = draftAnalysis.suggestedThread?.title,
-            relatedNotes = draftAnalysis.relatedNotes,
-        )
-    }
 
     return EditorSupportInsights(
         relatedNotes = draftAnalysis.relatedNotes,
         suggestedThread = draftAnalysis.suggestedThread,
-        knowledgeRecall = knowledgeRecall,
     )
 }
 
@@ -578,9 +675,28 @@ private fun FullEditorScreen(
     var metadataExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(!uiState.isNew) }
     var extraInfoExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
     var recordInfoExpanded by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
+    var knowledgeRecallRequestVersion by rememberSaveable(uiState.noteId) { mutableStateOf(0) }
+    var aiRunFeedback by rememberSaveable(uiState.noteId) { mutableStateOf<String?>(null) }
+    var polishWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
+    var topicWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
+    var tagsWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
+    var folderWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     val editorScrollState = rememberScrollState()
     val contentBringIntoViewRequester = remember { BringIntoViewRequester() }
     var isContentFieldFocused by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val onDeviceSettingsRepository = remember(context.applicationContext) {
+        (context.applicationContext as MindFlowApplication).appContainer.onDeviceModelSettingsRepository
+    }
+    val onDeviceSettings by onDeviceSettingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = OnDeviceModelSettings(),
+    )
+    val aiModeSummary = remember(onDeviceSettings.executionMode, onDeviceSettings.isReady) {
+        buildEditorAiModeSummary(
+            mode = onDeviceSettings.executionMode,
+            onDeviceReady = onDeviceSettings.isReady,
+        )
+    }
 
     fun requestBack() {
         if (uiState.hasUnsavedChanges) {
@@ -617,13 +733,81 @@ private fun FullEditorScreen(
         ),
         uiState = uiState,
         noteRepository = noteRepository,
-        editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
     )
+    val knowledgeRecallUiState by produceState(
+        initialValue = EditorKnowledgeRecallUiState(),
+        knowledgeRecallRequestVersion,
+        uiState.isLoading,
+        uiState.topic,
+        uiState.content,
+        insights.suggestedThread?.key,
+        insights.relatedNotes.map { it.id to it.updatedAt },
+    ) {
+        if (
+            !shouldRequestEditorKnowledgeRecall(
+                isLoading = uiState.isLoading,
+                requestVersion = knowledgeRecallRequestVersion,
+            )
+        ) {
+            value = EditorKnowledgeRecallUiState()
+            return@produceState
+        }
+
+        value = EditorKnowledgeRecallUiState(isLoading = true)
+        value = EditorKnowledgeRecallUiState(
+            result = editorKnowledgeRecallPlanner.summarize(
+                draftTopic = uiState.topic,
+                draftContent = uiState.content,
+                suggestedThreadTitle = insights.suggestedThread?.title,
+                relatedNotes = insights.relatedNotes,
+            ),
+        )
+    }
 
     LaunchedEffect(isContentFieldFocused) {
         if (isContentFieldFocused) {
             delay(160)
             contentBringIntoViewRequester.bringIntoView()
+        }
+    }
+
+    LaunchedEffect(uiState.isPolishingContent) {
+        if (uiState.isPolishingContent) {
+            polishWasRunning = true
+        } else if (polishWasRunning) {
+            polishWasRunning = false
+            aiRunFeedback = readLatestEditorAiRunFeedback(context, AiTaskType.POLISH_CONTENT)
+                ?: "本次整理正文按当前策略运行，但没有记录到最终 provider。"
+        }
+    }
+
+    LaunchedEffect(uiState.isRefreshingTopic) {
+        if (uiState.isRefreshingTopic) {
+            topicWasRunning = true
+        } else if (topicWasRunning) {
+            topicWasRunning = false
+            aiRunFeedback = readLatestEditorAiRunFeedback(context, AiTaskType.EXTRACT_TOPIC)
+                ?: "本次整理主题已结束，可能直接回到了规则结果。"
+        }
+    }
+
+    LaunchedEffect(uiState.isRefreshingTags) {
+        if (uiState.isRefreshingTags) {
+            tagsWasRunning = true
+        } else if (tagsWasRunning) {
+            tagsWasRunning = false
+            aiRunFeedback = readLatestEditorAiRunFeedback(context, AiTaskType.EXTRACT_TAGS)
+                ?: "本次整理标签已结束，可能直接回到了规则结果。"
+        }
+    }
+
+    LaunchedEffect(uiState.isRefreshingFolder) {
+        if (uiState.isRefreshingFolder) {
+            folderWasRunning = true
+        } else if (folderWasRunning) {
+            folderWasRunning = false
+            aiRunFeedback = readLatestEditorAiRunFeedback(context, AiTaskType.CLASSIFY_CATEGORY)
+                ?: "本次整理分类已结束，可能直接回到了规则结果。"
         }
     }
 
@@ -768,6 +952,18 @@ private fun FullEditorScreen(
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                Text(
+                                    text = aiModeSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                aiRunFeedback?.let { feedback ->
+                                    Text(
+                                        text = feedback,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AccentBlue,
+                                    )
+                                }
                                 GridTwo {
                                     GhostActionButton(
                                         text = if (uiState.isPolishingContent) "整理正文中" else "整理正文",
@@ -1041,23 +1237,56 @@ private fun FullEditorScreen(
                             }
                         }
 
-                        insights.knowledgeRecall?.let { recall ->
-                            Text("旧知识召回", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Surface(
-                                color = WhiteGlass.copy(alpha = 0.9f),
-                                shape = MaterialTheme.shapes.medium,
-                                border = BorderStroke(1.dp, BorderSoft),
+                        Text("旧知识召回", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(
+                            color = WhiteGlass.copy(alpha = 0.9f),
+                            shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, BorderSoft),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                Text(
+                                    text = "这块改成手动触发，避免一展开就悄悄拉起本地模型。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                GhostActionButton(
+                                    text = if (knowledgeRecallUiState.isLoading) "召回中..." else "召回旧知识",
+                                    onClick = { knowledgeRecallRequestVersion += 1 },
+                                    enabled = !knowledgeRecallUiState.isLoading &&
+                                        (insights.relatedNotes.isNotEmpty() || insights.suggestedThread != null),
+                                )
+                                if (
+                                    !knowledgeRecallUiState.isLoading &&
+                                    knowledgeRecallUiState.result == null &&
+                                    insights.relatedNotes.isEmpty() &&
+                                    insights.suggestedThread == null
                                 ) {
+                                    Text(
+                                        text = "当前还没有足够上下文可召回，先补一点正文或标签。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSoft,
+                                    )
+                                }
+                                knowledgeRecallUiState.result?.let { recall ->
                                     Text(
                                         text = recall.line,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    val providerLine = if (recall.usedOnDevice) {
+                                        "本次召回由端侧完成。"
+                                    } else {
+                                        "本次没有命中可用端侧结果，已回退到规则说明。"
+                                    }
+                                    Text(
+                                        text = providerLine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (recall.usedOnDevice) AccentBlue else TextSoft,
                                     )
                                     recall.support.takeIf { it.isNotBlank() }?.let { support ->
                                         Text(
