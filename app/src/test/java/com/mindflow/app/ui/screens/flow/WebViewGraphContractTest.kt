@@ -118,6 +118,145 @@ class WebViewGraphContractTest {
     }
 
     @Test
+    fun `isolated viewport uses switchable nodes as suggested graph targets`() {
+        val viewport = ConceptGraphViewport(
+            centerNode = ConceptGraphNode(
+                conceptId = "center",
+                label = "中心知识点",
+                summary = "测试中心点。",
+            ),
+            switchableNodes = listOf(
+                ConceptGraphNode(
+                    conceptId = "switch-1",
+                    label = "切换知识点1",
+                    summary = "测试切换点。",
+                ),
+                ConceptGraphNode(
+                    conceptId = "switch-2",
+                    label = "切换知识点2",
+                    summary = "测试切换点。",
+                ),
+            ),
+        )
+
+        val payload = viewport.toWebPayload()
+
+        assertThat(payload.nodes.map { it.id }).containsExactly("center", "switch-1", "switch-2")
+        assertThat(payload.nodes.first { it.id == "switch-1" }.isSuggested).isTrue()
+        assertThat(payload.nodes.first { it.id == "switch-2" }.isSuggested).isTrue()
+        assertThat(payload.edges).hasSize(2)
+        assertThat(payload.edges.all { it.isSuggested }).isTrue()
+        assertThat(payload.edges.map { it.target }).containsExactly("switch-1", "switch-2")
+    }
+
+    @Test
+    fun `connected viewport includes suggested preview neighbors as dashed graph targets`() {
+        val viewport = ConceptGraphViewport(
+            centerNode = ConceptGraphNode(
+                conceptId = "center",
+                label = "中心知识点",
+                summary = "测试中心点。",
+            ),
+            neighbors = listOf(
+                ConceptGraphViewportNeighbor(
+                    node = ConceptGraphNode(
+                        conceptId = "near",
+                        label = "直接邻居",
+                        summary = "测试邻接点。",
+                    ),
+                    relation = ConceptGraphEdge(
+                        fromConceptId = "center",
+                        toConceptId = "near",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        confidence = 0.8,
+                    ),
+                    relationWord = "支持",
+                ),
+            ),
+            suggestedNeighbors = listOf(
+                ConceptGraphViewportNeighbor(
+                    node = ConceptGraphNode(
+                        conceptId = "suggested",
+                        label = "下一层邻居",
+                        summary = "测试下一层点。",
+                    ),
+                    relation = ConceptGraphEdge(
+                        fromConceptId = "center",
+                        toConceptId = "suggested",
+                        relationType = ConceptGraphRelationType.ADVANCES,
+                        confidence = 0.92,
+                    ),
+                    relationWord = "推进",
+                ),
+            ),
+        )
+
+        val payload = viewport.toWebPayload()
+
+        assertThat(payload.nodes.map { it.id }).containsExactly("center", "near", "suggested")
+        assertThat(payload.nodes.first { it.id == "near" }.isSuggested).isFalse()
+        assertThat(payload.nodes.first { it.id == "suggested" }.isSuggested).isTrue()
+        assertThat(payload.edges).hasSize(2)
+        assertThat(payload.edges.first { it.target == "near" }.isSuggested).isFalse()
+        assertThat(payload.edges.first { it.target == "suggested" }.isSuggested).isTrue()
+    }
+
+    @Test
+    fun `previous center is promoted into an explicit return node`() {
+        val viewport = ConceptGraphViewport(
+            centerNode = ConceptGraphNode(
+                conceptId = "target",
+                label = "目标节点",
+                summary = "测试中心点。",
+            ),
+            neighbors = listOf(
+                ConceptGraphViewportNeighbor(
+                    node = ConceptGraphNode(
+                        conceptId = "near",
+                        label = "直接邻居",
+                        summary = "测试邻接点。",
+                    ),
+                    relation = ConceptGraphEdge(
+                        fromConceptId = "target",
+                        toConceptId = "near",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        confidence = 0.8,
+                    ),
+                    relationWord = "支持",
+                ),
+            ),
+            suggestedNeighbors = listOf(
+                ConceptGraphViewportNeighbor(
+                    node = ConceptGraphNode(
+                        conceptId = "origin",
+                        label = "原中心节点",
+                        summary = "测试返回点。",
+                    ),
+                    relation = ConceptGraphEdge(
+                        fromConceptId = "origin",
+                        toConceptId = "target",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        confidence = 0.32,
+                    ),
+                    relationWord = "支持",
+                ),
+            ),
+            returnNodeId = "origin",
+        )
+
+        val payload = viewport.toWebPayload()
+        val returnNode = payload.nodes.first { it.id == "origin" }
+
+        assertThat(returnNode.isSuggested).isTrue()
+        assertThat(returnNode.isReturnNode).isTrue()
+        assertThat(returnNode.emphasis).isEqualTo(2)
+        assertThat(returnNode.displayLabel).isEqualTo("原中心节点")
+        assertThat(payload.nodes.map { it.id })
+            .containsExactly("target", "near", "origin")
+            .inOrder()
+    }
+
+    @Test
     fun `bridge parser accepts nodeClick and rejects malformed events`() {
         val click = parseGraphBridgeEvent("""{"type":"nodeClick","conceptId":"neighbor"}""")
         val malformed = parseGraphBridgeEvent("""{}""")

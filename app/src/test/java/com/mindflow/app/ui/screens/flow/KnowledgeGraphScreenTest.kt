@@ -88,6 +88,9 @@ class KnowledgeGraphScreenTest {
         assertThat(viewport.neighbors.map { it.node.conceptId })
             .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5")
             .inOrder()
+        assertThat(viewport.suggestedNeighbors.map { it.node.conceptId })
+            .containsExactly("node-6", "node-7")
+            .inOrder()
         assertThat(viewport.hiddenNeighborCount).isEqualTo(3)
     }
 
@@ -120,6 +123,60 @@ class KnowledgeGraphScreenTest {
             .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5")
             .inOrder()
         assertThat(viewport.neighbors.map { it.node.conceptId }).doesNotContain("node-6")
+    }
+
+    @Test
+    fun `buildConceptGraphViewport keeps previous center reachable after recentering`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "origin",
+            nodes = buildList {
+                add(conceptNode("origin", "原中心", hotnessScore = 0.2, updatedAt = 200))
+                add(conceptNode("target", "目标节点", hotnessScore = 1.0, updatedAt = 1_000))
+                repeat(6) { index ->
+                    add(
+                        conceptNode(
+                            "node-${index + 1}",
+                            "邻居${index + 1}",
+                            hotnessScore = 0.95 - index * 0.05,
+                            updatedAt = 950 - index * 10L,
+                        ),
+                    )
+                }
+            },
+            edges = buildList {
+                add(
+                    conceptEdge(
+                        fromConceptId = "origin",
+                        toConceptId = "target",
+                        relationType = ConceptGraphRelationType.SUPPORTS,
+                        confidence = 0.31,
+                    ),
+                )
+                repeat(6) { index ->
+                    add(
+                        conceptEdge(
+                            fromConceptId = "target",
+                            toConceptId = "node-${index + 1}",
+                            relationType = ConceptGraphRelationType.ADVANCES,
+                            confidence = 0.96 - index * 0.05,
+                        ),
+                    )
+                }
+            },
+        )
+
+        val viewport = buildConceptGraphViewport(
+            snapshot = snapshot,
+            currentCenterNodeId = "target",
+            previousCenterNodeId = "origin",
+        )
+
+        val reachableIds = viewport.neighbors.map { it.node.conceptId } +
+            viewport.suggestedNeighbors.map { it.node.conceptId }
+
+        assertThat(viewport.centerNode?.conceptId).isEqualTo("target")
+        assertThat(viewport.returnNodeId).isEqualTo("origin")
+        assertThat(reachableIds).contains("origin")
     }
 
     @Test

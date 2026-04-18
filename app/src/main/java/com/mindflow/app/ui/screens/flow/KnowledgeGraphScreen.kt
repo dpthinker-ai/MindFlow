@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -103,6 +104,7 @@ internal fun graphNodeTestTag(nodeId: String): String =
     "graph-node-" + nodeId.replace(Regex("[^A-Za-z0-9_-]"), "_")
 
 internal fun heatmapDayTestTag(date: LocalDate): String = "heatmap-day-$date"
+internal fun graphActivityTimestampTestTag(noteId: Long): String = "graph-activity-timestamp-$noteId"
 
 private const val ConceptGraphBatchSize = 5
 
@@ -182,6 +184,8 @@ internal enum class GraphStructureStatus(
 internal data class ConceptGraphViewport(
     val centerNode: ConceptGraphNode? = null,
     val neighbors: List<ConceptGraphViewportNeighbor> = emptyList(),
+    val suggestedNeighbors: List<ConceptGraphViewportNeighbor> = emptyList(),
+    val returnNodeId: String? = null,
     val hiddenNeighborCount: Int = 0,
     val switchableNodes: List<ConceptGraphNode> = emptyList(),
     val hiddenSwitchableNodeCount: Int = 0,
@@ -486,10 +490,17 @@ private fun KnowledgeGraphPanel(
     var neighborExpansionCount by rememberSaveable(requestedCenterNodeId) { mutableIntStateOf(0) }
     var switchableExpansionCount by rememberSaveable(requestedCenterNodeId) { mutableIntStateOf(0) }
 
-    val viewport = remember(snapshot, requestedCenterNodeId, neighborExpansionCount, switchableExpansionCount) {
+    val viewport = remember(
+        snapshot,
+        requestedCenterNodeId,
+        previousCenterNodeId,
+        neighborExpansionCount,
+        switchableExpansionCount,
+    ) {
         buildConceptGraphViewport(
             snapshot = snapshot,
             currentCenterNodeId = requestedCenterNodeId,
+            previousCenterNodeId = previousCenterNodeId,
             expandedCenterNodeIds = requestedCenterNodeId?.let { centerId ->
                 List(neighborExpansionCount) { centerId }
             }.orEmpty(),
@@ -547,10 +558,12 @@ private fun KnowledgeGraphPanel(
             text = when {
                 viewport.neighbors.isEmpty() && graph.edges.isEmpty() ->
                     "你最近的思考正在沉淀，连接还在慢慢长出来。"
+                viewport.neighbors.isEmpty() && viewport.switchableNodes.isNotEmpty() ->
+                    "这条思路先长到这里，图里这些相关想法可以继续点开。"
                 viewport.neighbors.isEmpty() ->
                     "你最近的思考先落在「${centerNode.label}」，这条思路的连接还比较少。"
                 viewport.hiddenNeighborCount > 0 ->
-                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。先看最靠近它的 ${viewport.neighbors.size} 条。"
+                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。先看最靠近它的 ${viewport.neighbors.size} 条，图里更淡的点可以继续点开。"
                 else ->
                     "你最近的思考，正在围绕「${centerNode.label}」长出连接。"
             },
@@ -565,39 +578,14 @@ private fun KnowledgeGraphPanel(
             centerNode = centerNode,
             relationFromPreviousCenter = relationFromPreviousCenter,
             visibleNeighborCount = viewport.neighbors.size,
+            visibleSuggestedNeighborCount = viewport.suggestedNeighbors.size,
             hiddenNeighborCount = viewport.hiddenNeighborCount,
+            visibleSwitchableCount = viewport.switchableNodes.size,
+            hiddenSwitchableCount = viewport.hiddenSwitchableNodeCount,
         )
-        if (viewport.hiddenNeighborCount > 0) {
-            TextButton(onClick = { neighborExpansionCount += 1 }) {
-                Text("还有 ${viewport.hiddenNeighborCount} 个关联知识点")
-            }
-        }
-        if (viewport.switchableNodes.isNotEmpty()) {
-            Text(
-                text = if (viewport.neighbors.isEmpty()) {
-                    "换个知识点继续看"
-                } else {
-                    "换个中心点继续看"
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSoft,
-            )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                viewport.switchableNodes.forEach { node ->
-                    SwitchableConceptChip(
-                        node = node,
-                        onClick = { selectCenter(node.conceptId) },
-                    )
-                }
-            }
-            if (viewport.hiddenSwitchableNodeCount > 0) {
-                TextButton(onClick = { switchableExpansionCount += 1 }) {
-                    Text("展开其余 ${viewport.hiddenSwitchableNodeCount} 个可切换知识点")
-                }
+        if (viewport.neighbors.isEmpty() && viewport.hiddenSwitchableNodeCount > 0) {
+            TextButton(onClick = { switchableExpansionCount += 1 }) {
+                Text("再展开 ${viewport.hiddenSwitchableNodeCount} 个相关知识点")
             }
         }
     }
@@ -696,12 +684,21 @@ private fun buildConceptGraphSummaryLine(
 
 private fun buildConceptGraphNextHint(
     visibleNeighborCount: Int,
+    visibleSuggestedNeighborCount: Int,
     hiddenNeighborCount: Int,
+    visibleSwitchableCount: Int,
+    hiddenSwitchableCount: Int,
 ): String =
     when {
-        visibleNeighborCount == 0 -> "这个知识点当前先长到这里。你可以切到别的点继续看。"
-        hiddenNeighborCount > 0 -> "先看最靠近它的 $visibleNeighborCount 个关联点，图下还有 $hiddenNeighborCount 个可以继续展开。"
-        else -> "先沿着这些直接连接继续看，或者切到别的点继续看。"
+        visibleNeighborCount == 0 && visibleSwitchableCount > 0 && hiddenSwitchableCount > 0 ->
+            "这条思路先长到这里。直接点图里的相关想法继续展开，图下还能再展开 $hiddenSwitchableCount 个。"
+        visibleNeighborCount == 0 && visibleSwitchableCount > 0 ->
+            "这条思路先长到这里。直接点图里的相关想法继续往下看。"
+        visibleNeighborCount == 0 -> "这个知识点当前先长到这里。"
+        hiddenNeighborCount > 0 && visibleSuggestedNeighborCount > 0 ->
+            "直接点图里的节点继续展开。更淡的点表示下一层关联。"
+        hiddenNeighborCount > 0 -> "直接点图里的节点继续展开。"
+        else -> "直接点图里的节点继续展开。"
     }
 
 @Composable
@@ -709,7 +706,10 @@ private fun ConceptGraphInfoCard(
     centerNode: ConceptGraphNode,
     relationFromPreviousCenter: ConceptGraphCenterRelation?,
     visibleNeighborCount: Int,
+    visibleSuggestedNeighborCount: Int,
     hiddenNeighborCount: Int,
+    visibleSwitchableCount: Int,
+    hiddenSwitchableCount: Int,
 ) {
     Surface(
         modifier = Modifier
@@ -742,7 +742,10 @@ private fun ConceptGraphInfoCard(
             Text(
                 text = buildConceptGraphNextHint(
                     visibleNeighborCount = visibleNeighborCount,
+                    visibleSuggestedNeighborCount = visibleSuggestedNeighborCount,
                     hiddenNeighborCount = hiddenNeighborCount,
+                    visibleSwitchableCount = visibleSwitchableCount,
+                    hiddenSwitchableCount = hiddenSwitchableCount,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
@@ -941,6 +944,10 @@ private fun GraphActivityNoteCard(
     note: NoteEntity,
     onOpenNote: (Long) -> Unit,
 ) {
+    val title = note.topic.ifBlank { "未命名记录" }
+    val preview = note.content.lineSequence().firstOrNull { it.isNotBlank() }
+        ?: "打开这条记录继续看内容。"
+    var titleLineCount by remember(note.id, title) { mutableIntStateOf(1) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -953,36 +960,37 @@ private fun GraphActivityNoteCard(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = note.topic.ifBlank { "未命名记录" },
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = TimeFormatter.compact(note.updatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
-                )
-            }
             Text(
-                text = note.content.lineSequence().firstOrNull { it.isNotBlank() }
-                    ?: "打开这条记录继续看内容。",
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { result ->
+                    titleLineCount = result.lineCount.coerceAtLeast(1)
+                },
+            )
+            Text(
+                modifier = Modifier
+                    .testTag(graphActivityTimestampTestTag(note.id)),
+                text = TimeFormatter.compact(note.updatedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = preview,
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSoft,
-                maxLines = 2,
+                maxLines = if (titleLineCount >= 2) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${note.status.label} · ${note.horizon.label}",
                 style = MaterialTheme.typography.labelSmall,
-                color = Accent,
+                color = Accent.copy(alpha = 0.84f),
             )
         }
     }
@@ -1066,7 +1074,10 @@ private fun ConceptGraphPanel(
             centerNode = centerNode,
             relationFromPreviousCenter = relationFromPreviousCenter,
             visibleNeighborCount = viewport.neighbors.size,
+            visibleSuggestedNeighborCount = viewport.suggestedNeighbors.size,
             hiddenNeighborCount = viewport.hiddenNeighborCount,
+            visibleSwitchableCount = viewport.switchableNodes.size,
+            hiddenSwitchableCount = viewport.hiddenSwitchableNodeCount,
         )
         Column(
             modifier = Modifier
@@ -2535,6 +2546,7 @@ private fun graphRelationsFor(
 internal fun buildConceptGraphViewport(
     snapshot: DirectionWikiSnapshot,
     currentCenterNodeId: String? = null,
+    previousCenterNodeId: String? = null,
     expandedCenterNodeIds: Collection<String> = emptyList(),
     expandedSwitchableCenterNodeIds: Collection<String> = expandedCenterNodeIds,
     batchSize: Int = ConceptGraphBatchSize,
@@ -2570,23 +2582,41 @@ internal fun buildConceptGraphViewport(
         rankedNeighbors = rankedNeighbors,
         visibleNeighborCount = visibleNeighborCount,
     )
+    val suggestedNeighbors = if (visibleNeighbors.isNotEmpty()) {
+        selectSuggestedConceptNeighbors(
+            rankedNeighbors = rankedNeighbors,
+            visibleNeighbors = visibleNeighbors,
+            prioritizedNodeId = previousCenterNodeId,
+        )
+    } else {
+        emptyList()
+    }
+
+    fun toViewportNeighbor(neighbor: RankedConceptNeighbor): ConceptGraphViewportNeighbor {
+        val displayRelation = resolveConceptGraphDisplayRelation(
+            graph = graph,
+            centerNodeId = centerNodeId,
+            neighborNodeId = neighbor.node.conceptId,
+            fallbackEdge = neighbor.relation,
+        )
+        return ConceptGraphViewportNeighbor(
+            node = neighbor.node,
+            relation = displayRelation,
+            relationWord = conceptRelationWord(
+                relationType = displayRelation.relationType,
+                fromCenter = displayRelation.fromConceptId == centerNodeId,
+            ),
+        )
+    }
 
     return ConceptGraphViewport(
         centerNode = centerNode,
-        neighbors = visibleNeighbors.map { neighbor ->
-            val displayRelation = resolveConceptGraphDisplayRelation(
-                graph = graph,
-                centerNodeId = centerNodeId,
-                neighborNodeId = neighbor.node.conceptId,
-                fallbackEdge = neighbor.relation,
-            )
-            ConceptGraphViewportNeighbor(
-                node = neighbor.node,
-                relation = displayRelation,
-                relationWord = conceptRelationWord(
-                    relationType = displayRelation.relationType,
-                    fromCenter = displayRelation.fromConceptId == centerNodeId,
-                ),
+        neighbors = visibleNeighbors.map(::toViewportNeighbor),
+        suggestedNeighbors = suggestedNeighbors.map(::toViewportNeighbor),
+        returnNodeId = previousCenterNodeId?.takeIf { previousId ->
+            previousId != centerNodeId && (
+                visibleNeighbors.any { it.node.conceptId == previousId } ||
+                    suggestedNeighbors.any { it.node.conceptId == previousId }
             )
         },
         hiddenNeighborCount = (rankedNeighbors.size - visibleNeighbors.size).coerceAtLeast(0),
@@ -2614,6 +2644,34 @@ private fun selectVisibleConceptNeighbors(
         .take(remainingSlots)
 
     return anchors + freshNeighbors
+}
+
+private fun selectSuggestedConceptNeighbors(
+    rankedNeighbors: List<RankedConceptNeighbor>,
+    visibleNeighbors: List<RankedConceptNeighbor>,
+    prioritizedNodeId: String? = null,
+    previewCount: Int = 2,
+): List<RankedConceptNeighbor> {
+    if (previewCount <= 0 || rankedNeighbors.isEmpty()) return emptyList()
+    val visibleIds = visibleNeighbors.map { it.node.conceptId }.toSet()
+    val remaining = rankedNeighbors
+        .asSequence()
+        .filterNot { it.node.conceptId in visibleIds }
+        .toList()
+    if (remaining.isEmpty()) return emptyList()
+
+    val prioritized = prioritizedNodeId
+        ?.takeIf { it.isNotBlank() }
+        ?.let { preferredId -> remaining.firstOrNull { it.node.conceptId == preferredId } }
+
+    return buildList {
+        prioritized?.let(::add)
+        remaining.forEach { neighbor ->
+            if (neighbor == prioritized) return@forEach
+            if (size >= previewCount) return@forEach
+            add(neighbor)
+        }
+    }.take(previewCount)
 }
 
 internal fun resolveConceptGraphCenterNodeId(

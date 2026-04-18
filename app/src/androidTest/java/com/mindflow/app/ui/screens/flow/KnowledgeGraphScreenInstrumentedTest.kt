@@ -20,15 +20,25 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.KnowledgeTrust
+import com.mindflow.app.data.model.NoteHorizon
+import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.TagSource
+import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.wiki.ConceptGraphEdge
 import com.mindflow.app.data.wiki.ConceptGraphNode
 import com.mindflow.app.data.wiki.ConceptGraphRelationType
 import com.mindflow.app.data.wiki.ConceptGraphSnapshot
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.ui.theme.MindFlowTheme
+import com.mindflow.app.util.TimeFormatter
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Instant
 
 @RunWith(AndroidJUnit4::class)
 class KnowledgeGraphScreenInstrumentedTest {
@@ -150,8 +160,7 @@ class KnowledgeGraphScreenInstrumentedTest {
 
         composeRule.onNodeWithTag(graphNodeTestTag("solo")).assertIsSelected()
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("独立概念")
-        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("这个知识点还没有连接起来。")
-        composeRule.onNodeWithText("这个知识点还没有连接起来。").assertIsDisplayed()
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("直接点图里的相关想法继续往下看。")
         composeRule.onNodeWithTag(graphNodeTestTag("other")).assertIsDisplayed().performClick()
         composeRule.onNodeWithTag(graphNodeTestTag("other")).assertIsSelected()
         composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("旁支概念")
@@ -174,15 +183,15 @@ class KnowledgeGraphScreenInstrumentedTest {
         composeRule.onNodeWithTag(graphNodeTestTag("node-6")).assertIsDisplayed()
         composeRule.onAllNodesWithTag(graphNodeTestTag("node-7")).assertCountEquals(0)
 
-        composeRule.onNodeWithText("展开其余 8 个可切换知识点").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("再展开 8 个相关知识点").assertIsDisplayed().performClick()
 
         composeRule.onNodeWithTag(graphNodeTestTag("node-12")).assertIsDisplayed()
         composeRule.onAllNodesWithTag(graphNodeTestTag("node-13")).assertCountEquals(0)
-        composeRule.onNodeWithText("展开其余 2 个可切换知识点").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("再展开 2 个相关知识点").assertIsDisplayed().performClick()
 
         composeRule.onNodeWithTag(graphNodeTestTag("node-13")).assertIsDisplayed()
         composeRule.onNodeWithTag(graphNodeTestTag("node-14")).assertIsDisplayed()
-        composeRule.onAllNodesWithText("展开其余 2 个可切换知识点").assertCountEquals(0)
+        composeRule.onAllNodesWithText("再展开 2 个相关知识点").assertCountEquals(0)
     }
 
     @Test
@@ -212,7 +221,25 @@ class KnowledgeGraphScreenInstrumentedTest {
     }
 
     @Test
-    fun connectedCenterStillShowsSwitchAffordanceForOtherComponents() {
+    fun connectedCenterDoesNotRenderDetachedExpandButtonForHiddenNeighbors() {
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = expansionSnapshot(),
+                    notes = emptyList(),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(graphNodeTestTag("center")).assertIsSelected()
+        composeRule.onAllNodesWithText("还有 8 个关联知识点").assertCountEquals(0)
+        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag)
+            .assertTextContains("更淡的点表示下一层关联")
+    }
+
+    @Test
+    fun connectedCenterDoesNotRenderDetachedSwitchList() {
         composeRule.setContent {
             MindFlowTheme {
                 KnowledgeGraphScreen(
@@ -225,12 +252,10 @@ class KnowledgeGraphScreenInstrumentedTest {
 
         composeRule.onNodeWithTag(graphNodeTestTag("core")).assertIsSelected()
         composeRule.onNodeWithTag(graphNodeTestTag("neighbor")).assertIsDisplayed()
-        composeRule.onNodeWithText("切换到其他知识簇").assertIsDisplayed()
-        composeRule.onNodeWithTag(graphNodeTestTag("island-hub")).assertIsDisplayed().performClick()
-
-        composeRule.onNodeWithTag(graphNodeTestTag("island-hub")).assertIsSelected()
-        composeRule.onNodeWithTag(KnowledgeGraphInfoPanelTag).assertTextContains("另一个知识簇的入口。")
-        composeRule.onNodeWithTag(graphNodeTestTag("island-leaf")).assertIsDisplayed()
+        composeRule.onAllNodesWithText("换个中心点继续看").assertCountEquals(0)
+        composeRule.onAllNodesWithText("从这些知识点继续看").assertCountEquals(0)
+        composeRule.onAllNodesWithText("切到别的点继续看").assertCountEquals(0)
+        composeRule.onAllNodesWithTag(graphNodeTestTag("island-hub")).assertCountEquals(0)
     }
 
     @Test
@@ -273,6 +298,65 @@ class KnowledgeGraphScreenInstrumentedTest {
         composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-7")).assertCountEquals(0)
         composeRule.onAllNodesWithTag(graphNodeTestTag("leaf-12")).assertCountEquals(0)
         composeRule.onNodeWithText("展开其余 8 个关联知识点").assertIsDisplayed()
+    }
+
+    @Test
+    fun heatmapNoteCardKeepsTimestampReadableForLongTitle() {
+        val updatedAt = Instant.parse("2026-04-18T08:51:00Z").toEpochMilli()
+        val note = heatmapNote(
+            id = 42L,
+            topic = "快速记录里边这个很多乱七八糟的东西，你描述请描述给他优化一下那个。",
+            updatedAt = updatedAt,
+        )
+
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = connectedSnapshot(),
+                    notes = listOf(note),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("记录热度").assertIsDisplayed()
+        composeRule.onNodeWithText(note.topic, substring = true).assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(graphActivityTimestampTestTag(note.id))
+            .assertIsDisplayed()
+            .assertTextContains(TimeFormatter.compact(updatedAt))
+    }
+
+    @Test
+    fun heatmapNoteCardPlacesTimestampOnIndependentMetaRowInsteadOfRightAlignedTail() {
+        val updatedAt = Instant.parse("2026-04-18T08:51:00Z").toEpochMilli()
+        val note = heatmapNote(
+            id = 88L,
+            topic = "这是一个会把标题撑到两行的记录热度卡片标题，用来验证时间戳不再被挤到右侧尾巴。",
+            updatedAt = updatedAt,
+        )
+
+        composeRule.setContent {
+            MindFlowTheme {
+                KnowledgeGraphScreen(
+                    snapshot = connectedSnapshot(),
+                    notes = listOf(note),
+                    onOpenNote = {},
+                )
+            }
+        }
+
+        val titleBounds = composeRule
+            .onNodeWithText(note.topic, substring = true)
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val timestampBounds = composeRule
+            .onNodeWithTag(graphActivityTimestampTestTag(note.id))
+            .fetchSemanticsNode()
+            .boundsInRoot
+
+        assertThat(timestampBounds.top).isGreaterThan(titleBounds.bottom)
+        assertThat(timestampBounds.left).isWithin(12f).of(titleBounds.left)
     }
 
     private fun connectedSnapshot(): DirectionWikiSnapshot =
@@ -515,6 +599,27 @@ class KnowledgeGraphScreenInstrumentedTest {
         relationType = relationType,
         reasonLine = reasonLine,
         confidence = confidence,
+    )
+
+    private fun heatmapNote(
+        id: Long,
+        topic: String,
+        updatedAt: Long,
+    ) = NoteEntity(
+        id = id,
+        content = "$topic\n继续描述一下具体内容。",
+        topic = topic,
+        topicSource = TopicSource.MANUAL,
+        folderKey = null,
+        folderSource = FolderSource.RULE,
+        tags = emptyList(),
+        tagSource = TagSource.RULE,
+        status = NoteStatus.DONE,
+        horizon = NoteHorizon.MEDIUM,
+        knowledgeTrust = KnowledgeTrust.NONE,
+        isArchived = false,
+        createdAt = updatedAt - 60_000,
+        updatedAt = updatedAt,
     )
 
     private fun hasNoClickAction(): SemanticsMatcher =

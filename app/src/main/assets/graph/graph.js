@@ -3,7 +3,17 @@ let hostViewport = { width: 0, height: 0 };
 let lastPayload = null;
 const BASE_ZOOM = 1;
 const PAN_ENABLE_ZOOM_THRESHOLD = 1.05;
-const TAP_RADIUS_PX = 28;
+const TAP_RADIUS_PX = 34;
+const EMPHASIZED_TAP_RADIUS_PX = 42;
+const RETURN_NODE_TAP_RADIUS_PX = 50;
+const LABEL_HIT_PADDING_PX = 10;
+
+function nodeTapRadius(node) {
+  const emphasis = Number(node.data('emphasis') || 0);
+  if (node.data('isReturnNode')) return RETURN_NODE_TAP_RADIUS_PX;
+  if (emphasis >= 2) return EMPHASIZED_TAP_RADIUS_PX;
+  return TAP_RADIUS_PX;
+}
 
 function postToAndroid(event) {
   if (window.MindFlowGraphBridge && window.MindFlowGraphBridge.postMessage) {
@@ -49,7 +59,9 @@ function rebuildGraph(graph, payload) {
   payload.nodes.forEach((node) => {
     const classes = ['label-bottom'];
     if (!node.isCenter && node.emphasis > 0) {
-      if (node.xFraction <= 0.32) {
+      if (node.yFraction <= 0.28) {
+        classes[0] = 'label-top';
+      } else if (node.xFraction <= 0.32) {
         classes[0] = 'label-left';
       } else if (node.xFraction >= 0.68) {
         classes[0] = 'label-right';
@@ -93,21 +105,60 @@ window.syncHostViewport = function syncHostViewport(width, height) {
   }
 };
 
-function findNearestNode(renderedPosition) {
+function isPointInsideBox(point, box, padding = 0) {
+  if (!box) return false;
+  return (
+    point.x >= (box.x1 - padding) &&
+    point.x <= (box.x2 + padding) &&
+    point.y >= (box.y1 - padding) &&
+    point.y <= (box.y2 + padding)
+  );
+}
+
+function bestBoundingBoxMatch(renderedPosition) {
   if (!cy || !renderedPosition) return null;
   let bestNode = null;
+  let bestArea = Number.POSITIVE_INFINITY;
   let bestDistance = Number.POSITIVE_INFINITY;
+  cy.nodes().forEach((node) => {
+    const box = node.renderedBoundingBox({ includeLabels: true, includeOverlays: false });
+    if (!isPointInsideBox(renderedPosition, box, LABEL_HIT_PADDING_PX)) return;
+    const area = Math.max((box.x2 - box.x1) * (box.y2 - box.y1), 1);
+    const position = node.renderedPosition();
+    const deltaX = position.x - renderedPosition.x;
+    const deltaY = position.y - renderedPosition.y;
+    const distance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+    if (area < bestArea || (area === bestArea && distance < bestDistance)) {
+      bestArea = area;
+      bestDistance = distance;
+      bestNode = node;
+    }
+  });
+  return bestNode;
+}
+
+function nearestRadiusMatch(renderedPosition) {
+  if (!cy || !renderedPosition) return null;
+  let bestNode = null;
+  let bestScore = Number.POSITIVE_INFINITY;
   cy.nodes().forEach((node) => {
     const position = node.renderedPosition();
     const deltaX = position.x - renderedPosition.x;
     const deltaY = position.y - renderedPosition.y;
     const distance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
-    if (distance < bestDistance) {
-      bestDistance = distance;
+    const radius = nodeTapRadius(node);
+    if (distance > radius) return;
+    const score = distance / radius;
+    if (score < bestScore) {
+      bestScore = score;
       bestNode = node;
     }
   });
-  return bestDistance <= TAP_RADIUS_PX ? bestNode : null;
+  return bestNode;
+}
+
+function findNearestNode(renderedPosition) {
+  return bestBoundingBoxMatch(renderedPosition) || nearestRadiusMatch(renderedPosition);
 }
 
 function ensureGraph() {
@@ -135,6 +186,32 @@ function ensureGraph() {
           'overlay-opacity': 0,
           'z-index-compare': 'manual',
           'z-index': 10,
+        },
+      },
+      {
+        selector: 'node[isSuggested = 1]',
+        style: {
+          'background-opacity': 0.76,
+          'border-color': '#F8FCFF',
+          'color': '#49657F',
+        },
+      },
+      {
+        selector: 'node[isReturnNode = 1]',
+        style: {
+          'background-opacity': 0.96,
+          'border-color': '#FFF4D9',
+          'border-width': 2,
+          'z-index': 26,
+        },
+      },
+      {
+        selector: 'node.label-top',
+        style: {
+          'text-halign': 'center',
+          'text-valign': 'top',
+          'text-margin-y': -10,
+          'text-margin-x': 0,
         },
       },
       {
@@ -207,6 +284,16 @@ function ensureGraph() {
           'width': 'mapData(confidence, 0, 1, 1.4, 3.0)',
           'opacity': 0.9,
           'z-index': 4,
+        },
+      },
+      {
+        selector: 'edge[isSuggested = 1]',
+        style: {
+          'line-style': 'dashed',
+          'line-dash-pattern': [6, 5],
+          'line-color': '#CBEAFF',
+          'opacity': 0.72,
+          'width': 1.6,
         },
       },
     ],

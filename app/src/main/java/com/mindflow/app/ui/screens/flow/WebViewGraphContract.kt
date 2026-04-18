@@ -2,6 +2,7 @@ package com.mindflow.app.ui.screens.flow
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import com.mindflow.app.data.wiki.ConceptGraphNode
 
 internal data class WebGraphPayload(
     val version: Int = 1,
@@ -16,6 +17,8 @@ internal data class WebGraphNode(
     val displayLabel: String,
     val accentColor: String,
     val isCenter: Boolean,
+    val isSuggested: Boolean,
+    val isReturnNode: Boolean,
     val emphasis: Int,
     val xFraction: Double,
     val yFraction: Double,
@@ -27,6 +30,7 @@ internal data class WebGraphEdge(
     val target: String,
     val relationType: String,
     val confidence: Double,
+    val isSuggested: Boolean,
 )
 
 internal sealed interface GraphBridgeEvent {
@@ -139,9 +143,47 @@ private fun buildWebNeighborPositions(neighborCount: Int): List<WebGraphPosition
     }
 }
 
+private fun reorderGraphNodesForReturnPath(
+    directGraphNodes: List<ConceptGraphNode>,
+    suggestedGraphNodes: List<ConceptGraphNode>,
+    returnNodeId: String?,
+): List<ConceptGraphNode> {
+    if (returnNodeId.isNullOrBlank()) return directGraphNodes + suggestedGraphNodes
+    val returnNode = (directGraphNodes + suggestedGraphNodes).firstOrNull { it.conceptId == returnNodeId }
+        ?: return directGraphNodes + suggestedGraphNodes
+    return buildList {
+        val leadingDirect = directGraphNodes.take(2)
+        addAll(leadingDirect)
+        if (returnNode.conceptId !in leadingDirect.map { it.conceptId }) {
+            add(returnNode)
+        }
+        directGraphNodes.forEach { node ->
+            if (node.conceptId == returnNodeId || node.conceptId in leadingDirect.map { it.conceptId }) return@forEach
+            add(node)
+        }
+        suggestedGraphNodes.forEach { node ->
+            if (node.conceptId == returnNodeId) return@forEach
+            add(node)
+        }
+    }
+}
+
 internal fun ConceptGraphViewport.toWebPayload(): WebGraphPayload {
     val center = centerNode ?: return WebGraphPayload(centerNodeId = "", nodes = emptyList(), edges = emptyList())
-    val neighborPositions = buildWebNeighborPositions(neighbors.size)
+    val useSwitchTargetsAsSuggestions = neighbors.isEmpty() && switchableNodes.isNotEmpty()
+    val directGraphNodes = neighbors.map { it.node }
+    val suggestedGraphNodes = if (useSwitchTargetsAsSuggestions) {
+        switchableNodes
+    } else {
+        suggestedNeighbors.map { it.node }
+    }
+    val visibleGraphNodes = reorderGraphNodesForReturnPath(
+        directGraphNodes = directGraphNodes,
+        suggestedGraphNodes = suggestedGraphNodes,
+        returnNodeId = returnNodeId,
+    )
+    val suggestedNodeIds = suggestedGraphNodes.map { it.conceptId }.toSet()
+    val neighborPositions = buildWebNeighborPositions(visibleGraphNodes.size)
     val webNodes = buildList {
         add(
             WebGraphNode(
@@ -150,29 +192,37 @@ internal fun ConceptGraphViewport.toWebPayload(): WebGraphPayload {
                 displayLabel = center.label,
                 accentColor = WebGraphToneCenter.toWebHex(),
                 isCenter = true,
+                isSuggested = false,
+                isReturnNode = false,
                 emphasis = 3,
                 xFraction = WebGraphCenterPosition.xFraction,
                 yFraction = WebGraphCenterPosition.yFraction,
             ),
         )
-        neighbors.forEachIndexed { index, neighbor ->
+        visibleGraphNodes.forEachIndexed { index, node ->
             val position = neighborPositions.getOrElse(index) { WebGraphCenterPosition }
+            val isSuggested = node.conceptId in suggestedNodeIds
+            val isReturnNode = node.conceptId == returnNodeId
             val emphasis = when {
+                isReturnNode -> 2
+                isSuggested -> 1
                 index < FullLabelNeighborCount -> 2
                 index < ShortLabelNeighborCount -> 1
                 else -> 0
             }
             add(
                 WebGraphNode(
-                    id = neighbor.node.conceptId,
-                    label = neighbor.node.label,
+                    id = node.conceptId,
+                    label = node.label,
                     displayLabel = when (emphasis) {
-                        2 -> neighbor.node.label
-                        1 -> abbreviatedGraphLabel(neighbor.node.label)
+                        2 -> node.label
+                        1 -> abbreviatedGraphLabel(node.label)
                         else -> ""
                     },
                     accentColor = webAccentForNeighbor(index, emphasis).toWebHex(),
                     isCenter = false,
+                    isSuggested = isSuggested,
+                    isReturnNode = isReturnNode,
                     emphasis = emphasis,
                     xFraction = position.xFraction,
                     yFraction = position.yFraction,
@@ -180,14 +230,37 @@ internal fun ConceptGraphViewport.toWebPayload(): WebGraphPayload {
             )
         }
     }
-    val webEdges = neighbors.map { neighbor ->
-        WebGraphEdge(
-            id = "${neighbor.relation.fromConceptId}->${neighbor.relation.toConceptId}:${neighbor.relation.relationType.wireName}",
-            source = neighbor.relation.fromConceptId,
-            target = neighbor.relation.toConceptId,
-            relationType = neighbor.relation.relationType.wireName,
-            confidence = neighbor.relation.confidence,
-        )
+    val webEdges = if (useSwitchTargetsAsSuggestions) {
+        switchableNodes.map { node ->
+            WebGraphEdge(
+                id = "${center.conceptId}->${node.conceptId}:suggested",
+                source = center.conceptId,
+                target = node.conceptId,
+                relationType = "suggested",
+                confidence = 0.22,
+                isSuggested = true,
+            )
+        }
+    } else {
+        neighbors.map { neighbor ->
+            WebGraphEdge(
+                id = "${neighbor.relation.fromConceptId}->${neighbor.relation.toConceptId}:${neighbor.relation.relationType.wireName}",
+                source = neighbor.relation.fromConceptId,
+                target = neighbor.relation.toConceptId,
+                relationType = neighbor.relation.relationType.wireName,
+                confidence = neighbor.relation.confidence,
+                isSuggested = false,
+            )
+        } + suggestedNeighbors.map { neighbor ->
+            WebGraphEdge(
+                id = "${neighbor.relation.fromConceptId}->${neighbor.relation.toConceptId}:${neighbor.relation.relationType.wireName}:suggested",
+                source = neighbor.relation.fromConceptId,
+                target = neighbor.relation.toConceptId,
+                relationType = neighbor.relation.relationType.wireName,
+                confidence = neighbor.relation.confidence.coerceAtMost(0.42),
+                isSuggested = true,
+            )
+        }
     }
     return WebGraphPayload(
         centerNodeId = center.conceptId,
@@ -223,6 +296,12 @@ internal fun WebGraphPayload.toJavascriptLiteral(): String = buildString {
         append("\"isCenter\":")
         append(node.isCenter)
         append(',')
+        append("\"isSuggested\":")
+        append(node.isSuggested)
+        append(',')
+        append("\"isReturnNode\":")
+        append(node.isReturnNode)
+        append(',')
         append("\"emphasis\":")
         append(node.emphasis)
         append(',')
@@ -253,6 +332,9 @@ internal fun WebGraphPayload.toJavascriptLiteral(): String = buildString {
         append(',')
         append("\"confidence\":")
         append(edge.confidence)
+        append(',')
+        append("\"isSuggested\":")
+        append(edge.isSuggested)
         append('}')
     }
     append(']')
