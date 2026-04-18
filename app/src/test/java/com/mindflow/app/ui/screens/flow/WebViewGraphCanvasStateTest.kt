@@ -33,4 +33,15 @@ class WebViewGraphCanvasStateTest {
         assertThat(state.hasRenderFailure).isTrue()
         assertThat(state.failureMessage).isEqualTo("boom")
     }
+
+    @Test
+    fun `renderer can hand off a fresh payload immediately after page is ready`() {
+        val state = WebViewGraphRenderState()
+        val payload = WebGraphPayload(centerNodeId = "fresh-center", nodes = emptyList(), edges = emptyList())
+
+        state.markPageReady()
+        state.queuePayload(payload)
+
+        assertThat(state.consumePendingPayload()).isEqualTo(payload)
+    }
 }

@@ -5,3 +5,8 @@ html, body, #graph-root {
   background: transparent;
   overflow: hidden;
 }
+
+#graph-root {
+  display: block;
+  touch-action: pan-y pinch-zoom;
+}

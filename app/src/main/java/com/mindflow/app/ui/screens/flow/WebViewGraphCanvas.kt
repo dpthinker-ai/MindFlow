@@ -10,7 +10,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
@@ -82,10 +81,6 @@ internal fun WebViewGraphCanvas(
     onRenderError: (String) -> Unit,
 ) {
     val renderState = remember { WebViewGraphRenderState() }
-    LaunchedEffect(payload) {
-        renderState.queuePayload(payload)
-        renderState.clearError()
-    }
     AndroidView(
         modifier = modifier.testTag(KnowledgeGraphCanvasTag),
         factory = { context ->
@@ -171,6 +166,8 @@ internal fun WebViewGraphCanvas(
             }
         },
         update = { view ->
+            renderState.queuePayload(payload)
+            renderState.clearError()
             view.post {
                 if (renderState.isPageReady && !renderState.hasRenderFailure) {
                     view.pushHostViewportSize()

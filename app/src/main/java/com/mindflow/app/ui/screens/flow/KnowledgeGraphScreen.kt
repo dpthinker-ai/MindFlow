@@ -36,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,7 +104,7 @@ internal fun graphNodeTestTag(nodeId: String): String =
 
 internal fun heatmapDayTestTag(date: LocalDate): String = "heatmap-day-$date"
 
-private const val ConceptGraphBatchSize = 6
+private const val ConceptGraphBatchSize = 5
 
 internal data class GraphNodeUi(
     val id: String,
@@ -216,6 +217,13 @@ private val rankedConceptNeighborComparator =
         .thenByDescending { it.node.updatedAt }
         .thenBy { it.node.label }
 
+private val freshConceptNeighborComparator =
+    compareByDescending<RankedConceptNeighbor> { it.node.updatedAt }
+        .thenByDescending { it.node.hotnessScore }
+        .thenByDescending { it.relation.confidence }
+        .thenByDescending { it.fromCenter }
+        .thenBy { it.node.label }
+
 private val conceptNodeComparator =
     compareByDescending<ConceptGraphNode> { it.hotnessScore }
         .thenByDescending { it.updatedAt }
@@ -286,7 +294,7 @@ internal fun KnowledgeGraphScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "先看记录热度，再看信息图谱。",
+                            text = "先看记录热度，再看思路是怎么连起来的。",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSoft,
                         )
@@ -492,11 +500,10 @@ private fun KnowledgeGraphPanel(
     }
     val centerNode = viewport.centerNode
     val graph = snapshot.conceptGraph
-    val headline = buildString {
-        append("${graph.nodes.size} 个知识点")
-        if (graph.edges.isNotEmpty()) {
-            append(" · ${graph.edges.size} 条连接")
-        }
+    val headline = if (graph.edges.isEmpty()) {
+        "记录先沉淀，连接会慢慢长出来。"
+    } else {
+        "看看最近哪些想法已经开始彼此勾连。"
     }
     val relationFromPreviousCenter = remember(graph, previousCenterNodeId, centerNode?.conceptId) {
         buildConceptGraphCenterRelation(
@@ -524,12 +531,12 @@ private fun KnowledgeGraphPanel(
 
     PanelCard {
         SectionHeader(
-            title = "信息图谱",
+            title = "思路连接",
             headline = headline,
         )
         if (centerNode == null) {
             Text(
-                text = "先让记录继续积累，这里会慢慢长出你的信息图谱。",
+                text = "记录继续积累，这里会慢慢长出最近思路之间的连接。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSoft,
             )
@@ -538,10 +545,14 @@ private fun KnowledgeGraphPanel(
 
         Text(
             text = when {
-                viewport.neighbors.isEmpty() && graph.edges.isEmpty() -> "这些知识点已经出现，但关系还没长出来。"
-                viewport.neighbors.isEmpty() -> "先换到一个有连接的中心点，再看它周围的一跳关系。"
-                viewport.hiddenNeighborCount > 0 -> "当前只展开 ${viewport.neighbors.size} 个一跳关联，先把结构看清楚。"
-                else -> "先看 ${centerNode.label} 周围的一跳关联。"
+                viewport.neighbors.isEmpty() && graph.edges.isEmpty() ->
+                    "你最近的思考正在沉淀，连接还在慢慢长出来。"
+                viewport.neighbors.isEmpty() ->
+                    "你最近的思考先落在「${centerNode.label}」，这条思路的连接还比较少。"
+                viewport.hiddenNeighborCount > 0 ->
+                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。先看最靠近它的 ${viewport.neighbors.size} 条。"
+                else ->
+                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。"
             },
             style = MaterialTheme.typography.bodyMedium,
             color = TextMain,
@@ -558,15 +569,15 @@ private fun KnowledgeGraphPanel(
         )
         if (viewport.hiddenNeighborCount > 0) {
             TextButton(onClick = { neighborExpansionCount += 1 }) {
-                Text("展开其余 ${viewport.hiddenNeighborCount} 个关联知识点")
+                Text("还有 ${viewport.hiddenNeighborCount} 个关联知识点")
             }
         }
         if (viewport.switchableNodes.isNotEmpty()) {
             Text(
                 text = if (viewport.neighbors.isEmpty()) {
-                    "切换到其他知识点"
+                    "换个知识点继续看"
                 } else {
-                    "切换中心点"
+                    "换个中心点继续看"
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = TextSoft,
@@ -595,17 +606,17 @@ private fun KnowledgeGraphPanel(
 private fun conceptGraphCanvasHeight(cardWidth: Dp, neighborCount: Int): Dp {
     val proportional = cardWidth * when {
         neighborCount <= 0 -> 0.42f
-        neighborCount <= 2 -> 0.50f
-        neighborCount <= 4 -> 0.56f
-        else -> 0.62f
+        neighborCount <= 2 -> 0.56f
+        neighborCount <= 4 -> 0.68f
+        else -> 0.82f
     }
     val baseline = when {
-        neighborCount <= 0 -> 144.dp
-        neighborCount <= 2 -> 164.dp
-        neighborCount <= 4 -> 180.dp
-        else -> 196.dp
+        neighborCount <= 0 -> 150.dp
+        neighborCount <= 2 -> 184.dp
+        neighborCount <= 4 -> 216.dp
+        else -> 256.dp
     }
-    return maxOf(proportional, baseline).coerceAtMost(228.dp)
+    return maxOf(proportional, baseline).coerceAtMost(304.dp)
 }
 
 @Composable
@@ -615,6 +626,7 @@ private fun ConceptGraphViewportCanvas(
 ) {
     viewport.centerNode ?: return
     var renderError by remember(viewport.centerNode?.conceptId) { mutableStateOf<String?>(null) }
+    var retryNonce by remember(viewport.centerNode?.conceptId) { mutableIntStateOf(0) }
     val payload = remember(viewport) { viewport.toWebPayload() }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -623,27 +635,119 @@ private fun ConceptGraphViewportCanvas(
         }
 
         if (renderError != null) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(canvasHeight)
                     .testTag(KnowledgeGraphCanvasTag),
-                contentAlignment = Alignment.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = renderError ?: "图谱加载失败",
+                    text = "思路连接暂时没有加载出来。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = TextMain,
                 )
+                val reasonLine = renderError?.trim().orEmpty()
+                if (reasonLine.isNotBlank()) {
+                    Text(
+                        text = reasonLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        renderError = null
+                        retryNonce += 1
+                    },
+                ) {
+                    Text("重试")
+                }
             }
         } else {
-            WebViewGraphCanvas(
-                payload = payload,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(canvasHeight),
-                onNodeClick = onSelectNode,
-                onRenderError = { renderError = it },
+            key(retryNonce) {
+                WebViewGraphCanvas(
+                    payload = payload,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(canvasHeight),
+                    onNodeClick = onSelectNode,
+                    onRenderError = { message ->
+                        renderError = message.ifBlank { "graph_render_failed" }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun buildConceptGraphSummaryLine(
+    centerNode: ConceptGraphNode,
+    relationFromPreviousCenter: ConceptGraphCenterRelation?,
+): String =
+    relationFromPreviousCenter?.let { relation ->
+        relation.reasonLine.takeIf { it.isNotBlank() }?.let { reason ->
+            "${relation.relationWord} · $reason"
+        } ?: relation.relationWord
+    } ?: centerNode.summary.ifBlank {
+        "你最近的思考，正在围绕它继续长。"
+    }
+
+private fun buildConceptGraphNextHint(
+    visibleNeighborCount: Int,
+    hiddenNeighborCount: Int,
+): String =
+    when {
+        visibleNeighborCount == 0 -> "这个知识点当前先长到这里。你可以切到别的点继续看。"
+        hiddenNeighborCount > 0 -> "先看最靠近它的 $visibleNeighborCount 个关联点，图下还有 $hiddenNeighborCount 个可以继续展开。"
+        else -> "先沿着这些直接连接继续看，或者切到别的点继续看。"
+    }
+
+@Composable
+private fun ConceptGraphInfoCard(
+    centerNode: ConceptGraphNode,
+    relationFromPreviousCenter: ConceptGraphCenterRelation?,
+    visibleNeighborCount: Int,
+    hiddenNeighborCount: Int,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(KnowledgeGraphInfoPanelTag)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "知识点详情 ${centerNode.label}"
+            },
+        color = WhiteGlass.copy(alpha = 0.58f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.52f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = centerNode.label,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            Text(
+                text = buildConceptGraphSummaryLine(
+                    centerNode = centerNode,
+                    relationFromPreviousCenter = relationFromPreviousCenter,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMain,
+            )
+            Text(
+                text = buildConceptGraphNextHint(
+                    visibleNeighborCount = visibleNeighborCount,
+                    hiddenNeighborCount = hiddenNeighborCount,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -2428,65 +2532,6 @@ private fun graphRelationsFor(
         .distinctBy { it.relatedNode.id }
 }
 
-@Composable
-private fun ConceptGraphInfoCard(
-    centerNode: ConceptGraphNode,
-    relationFromPreviousCenter: ConceptGraphCenterRelation?,
-    visibleNeighborCount: Int,
-    hiddenNeighborCount: Int,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(KnowledgeGraphInfoPanelTag)
-            .semantics(mergeDescendants = true) {
-                contentDescription = "知识点详情 ${centerNode.label}"
-            },
-        color = WhiteGlass.copy(alpha = 0.76f),
-        shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.9f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = centerNode.label,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
-            )
-            Text(
-                text = centerNode.summary.ifBlank { "这个知识点已经成为当前观察中心。" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextMain,
-            )
-            relationFromPreviousCenter?.let { relation ->
-                Surface(
-                    color = Accent.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, Accent.copy(alpha = 0.18f)),
-                ) {
-                    Text(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        text = "${relation.relationWord} · ${relation.reasonLine}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMain,
-                    )
-                }
-            }
-            Text(
-                text = when {
-                    visibleNeighborCount == 0 -> "这个知识点还没有连接起来。"
-                    hiddenNeighborCount > 0 -> "当前先展示 $visibleNeighborCount 个直接关联知识点，还有 $hiddenNeighborCount 个等待展开。"
-                    else -> "当前展示 $visibleNeighborCount 个直接关联知识点。"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
-            )
-        }
-    }
-}
-
 internal fun buildConceptGraphViewport(
     snapshot: DirectionWikiSnapshot,
     currentCenterNodeId: String? = null,
@@ -2521,7 +2566,10 @@ internal fun buildConceptGraphViewport(
         )
     }
     val visibleSwitchableNodes = allSwitchableNodes.take(visibleSwitchableNodeCount)
-    val visibleNeighbors = rankedNeighbors.take(visibleNeighborCount)
+    val visibleNeighbors = selectVisibleConceptNeighbors(
+        rankedNeighbors = rankedNeighbors,
+        visibleNeighborCount = visibleNeighborCount,
+    )
 
     return ConceptGraphViewport(
         centerNode = centerNode,
@@ -2545,6 +2593,27 @@ internal fun buildConceptGraphViewport(
         switchableNodes = visibleSwitchableNodes,
         hiddenSwitchableNodeCount = (allSwitchableNodes.size - visibleSwitchableNodes.size).coerceAtLeast(0),
     )
+}
+
+private fun selectVisibleConceptNeighbors(
+    rankedNeighbors: List<RankedConceptNeighbor>,
+    visibleNeighborCount: Int,
+): List<RankedConceptNeighbor> {
+    val cappedCount = visibleNeighborCount.coerceAtLeast(0)
+    if (cappedCount == 0 || rankedNeighbors.isEmpty()) return emptyList()
+    if (rankedNeighbors.size <= cappedCount) return rankedNeighbors
+
+    val anchorCount = minOf(2, cappedCount)
+    val anchors = rankedNeighbors.take(anchorCount)
+    val remainingSlots = cappedCount - anchorCount
+    if (remainingSlots == 0) return anchors
+
+    val freshNeighbors = rankedNeighbors
+        .drop(anchorCount)
+        .sortedWith(freshConceptNeighborComparator)
+        .take(remainingSlots)
+
+    return anchors + freshNeighbors
 }
 
 internal fun resolveConceptGraphCenterNodeId(

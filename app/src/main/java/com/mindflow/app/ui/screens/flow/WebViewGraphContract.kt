@@ -1,10 +1,7 @@
 package com.mindflow.app.ui.screens.flow
 
 import androidx.compose.ui.graphics.Color
-import com.mindflow.app.ui.theme.Accent
-import kotlin.math.absoluteValue
-import kotlin.math.cos
-import kotlin.math.sin
+import androidx.compose.ui.graphics.lerp
 
 internal data class WebGraphPayload(
     val version: Int = 1,
@@ -16,8 +13,10 @@ internal data class WebGraphPayload(
 internal data class WebGraphNode(
     val id: String,
     val label: String,
+    val displayLabel: String,
     val accentColor: String,
     val isCenter: Boolean,
+    val emphasis: Int,
     val xFraction: Double,
     val yFraction: Double,
 )
@@ -42,9 +41,12 @@ private data class WebGraphPosition(
     val yFraction: Double,
 )
 
+private const val FullLabelNeighborCount = 2
+private const val ShortLabelNeighborCount = 3
+
 private val WebGraphCenterPosition = WebGraphPosition(
     xFraction = 0.5,
-    yFraction = 0.52,
+    yFraction = 0.5,
 )
 
 private fun Color.toWebHex(): String = String.format(
@@ -54,15 +56,30 @@ private fun Color.toWebHex(): String = String.format(
     (blue * 255).toInt(),
 )
 
-private fun webAccentForConceptId(conceptId: String): Color {
-    val palette = listOf(
-        Accent,
-        Color(0xFF0F766E),
-        Color(0xFF2563EB),
-        Color(0xFFB45309),
-        Color(0xFFDB2777),
-    )
-    return palette[conceptId.hashCode().absoluteValue % palette.size]
+private val WebGraphToneCenter = Color(0xFF158CFF)
+private val WebGraphNeighborPalette = listOf(
+    Color(0xFF45B7FF),
+    Color(0xFF5FD6A7),
+    Color(0xFFFFB458),
+    Color(0xFFB38BFF),
+    Color(0xFFFF8D8D),
+    Color(0xFF63D7E8),
+)
+
+private fun webAccentForNeighbor(index: Int, emphasis: Int): Color {
+    val base = WebGraphNeighborPalette[index % WebGraphNeighborPalette.size]
+    return when {
+        emphasis >= 2 -> base
+        emphasis >= 1 -> lerp(base, Color.White, 0.18f)
+        else -> lerp(base, Color.White, 0.56f)
+    }
+}
+
+private fun abbreviatedGraphLabel(label: String): String {
+    val normalized = label.trim()
+    if (normalized.isBlank()) return ""
+    if (normalized.length <= 4) return normalized
+    return normalized.take(4)
 }
 
 private fun escapeJson(value: String): String = buildString(value.length + 8) {
@@ -93,16 +110,32 @@ private fun extractJsonStringField(raw: String, fieldName: String): String? {
 
 private fun buildWebNeighborPositions(neighborCount: Int): List<WebGraphPosition> {
     if (neighborCount <= 0) return emptyList()
-    val radiusX = 0.32
-    val radiusY = 0.28
-    val startAngleDegrees = -90.0
-    val angleStepDegrees = 360.0 / neighborCount.toDouble()
+    val anchored = listOf(
+        WebGraphPosition(0.51, 0.2),
+        WebGraphPosition(0.24, 0.38),
+        WebGraphPosition(0.76, 0.37),
+        WebGraphPosition(0.34, 0.7),
+        WebGraphPosition(0.67, 0.76),
+        WebGraphPosition(0.18, 0.56),
+        WebGraphPosition(0.84, 0.57),
+        WebGraphPosition(0.28, 0.17),
+        WebGraphPosition(0.72, 0.18),
+        WebGraphPosition(0.46, 0.88),
+        WebGraphPosition(0.57, 0.13),
+        WebGraphPosition(0.13, 0.74),
+        WebGraphPosition(0.88, 0.78),
+        WebGraphPosition(0.58, 0.92),
+    )
     return List(neighborCount) { index ->
-        val angleRadians = Math.toRadians(startAngleDegrees + (angleStepDegrees * index))
-        WebGraphPosition(
-            xFraction = (0.5 + (radiusX * cos(angleRadians))).coerceIn(0.14, 0.86),
-            yFraction = (0.52 + (radiusY * sin(angleRadians))).coerceIn(0.16, 0.84),
-        )
+        anchored.getOrElse(index) {
+            val shellIndex = index - anchored.size
+            val isLeft = shellIndex % 2 == 0
+            val row = shellIndex / 2
+            WebGraphPosition(
+                xFraction = if (isLeft) 0.16 else 0.84,
+                yFraction = (0.28 + (row * 0.12)).coerceAtMost(0.9),
+            )
+        }
     }
 }
 
@@ -114,20 +147,33 @@ internal fun ConceptGraphViewport.toWebPayload(): WebGraphPayload {
             WebGraphNode(
                 id = center.conceptId,
                 label = center.label,
-                accentColor = webAccentForConceptId(center.conceptId).toWebHex(),
+                displayLabel = center.label,
+                accentColor = WebGraphToneCenter.toWebHex(),
                 isCenter = true,
+                emphasis = 3,
                 xFraction = WebGraphCenterPosition.xFraction,
                 yFraction = WebGraphCenterPosition.yFraction,
             ),
         )
         neighbors.forEachIndexed { index, neighbor ->
             val position = neighborPositions.getOrElse(index) { WebGraphCenterPosition }
+            val emphasis = when {
+                index < FullLabelNeighborCount -> 2
+                index < ShortLabelNeighborCount -> 1
+                else -> 0
+            }
             add(
                 WebGraphNode(
                     id = neighbor.node.conceptId,
                     label = neighbor.node.label,
-                    accentColor = webAccentForConceptId(neighbor.node.conceptId).toWebHex(),
+                    displayLabel = when (emphasis) {
+                        2 -> neighbor.node.label
+                        1 -> abbreviatedGraphLabel(neighbor.node.label)
+                        else -> ""
+                    },
+                    accentColor = webAccentForNeighbor(index, emphasis).toWebHex(),
                     isCenter = false,
+                    emphasis = emphasis,
                     xFraction = position.xFraction,
                     yFraction = position.yFraction,
                 ),
@@ -168,11 +214,17 @@ internal fun WebGraphPayload.toJavascriptLiteral(): String = buildString {
         append("\"label\":")
         append(node.label.asJsonString())
         append(',')
+        append("\"displayLabel\":")
+        append(node.displayLabel.asJsonString())
+        append(',')
         append("\"accentColor\":")
         append(node.accentColor.asJsonString())
         append(',')
         append("\"isCenter\":")
         append(node.isCenter)
+        append(',')
+        append("\"emphasis\":")
+        append(node.emphasis)
         append(',')
         append("\"xFraction\":")
         append(node.xFraction)

@@ -79,16 +79,47 @@ class KnowledgeGraphScreenTest {
     }
 
     @Test
-    fun `buildConceptGraphViewport caps first hop neighbors at six`() {
+    fun `buildConceptGraphViewport caps first hop neighbors at five`() {
         val snapshot = denselyConnectedSnapshot()
 
         val viewport = buildConceptGraphViewport(snapshot)
 
         assertThat(viewport.centerNode?.conceptId).isEqualTo("center")
         assertThat(viewport.neighbors.map { it.node.conceptId })
-            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")
+            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5")
             .inOrder()
-        assertThat(viewport.hiddenNeighborCount).isEqualTo(2)
+        assertThat(viewport.hiddenNeighborCount).isEqualTo(3)
+    }
+
+    @Test
+    fun `buildConceptGraphViewport mixes strongest and freshest neighbors instead of freezing on one top five`() {
+        val snapshot = conceptSnapshot(
+            defaultCenterNodeId = "center",
+            nodes = listOf(
+                conceptNode("center", "中心知识点", hotnessScore = 1.0, updatedAt = 1_000),
+                conceptNode("node-1", "稳定1", hotnessScore = 0.91, updatedAt = 910),
+                conceptNode("node-2", "稳定2", hotnessScore = 0.9, updatedAt = 905),
+                conceptNode("node-3", "新近3", hotnessScore = 0.78, updatedAt = 990),
+                conceptNode("node-4", "新近4", hotnessScore = 0.76, updatedAt = 980),
+                conceptNode("node-5", "新近5", hotnessScore = 0.74, updatedAt = 970),
+                conceptNode("node-6", "旧邻居6", hotnessScore = 0.88, updatedAt = 860),
+            ),
+            edges = listOf(
+                conceptEdge("center", "node-1", ConceptGraphRelationType.SUPPORTS, confidence = 0.99),
+                conceptEdge("center", "node-2", ConceptGraphRelationType.SUPPORTS, confidence = 0.98),
+                conceptEdge("center", "node-6", ConceptGraphRelationType.SUPPORTS, confidence = 0.97),
+                conceptEdge("center", "node-3", ConceptGraphRelationType.ADVANCES, confidence = 0.92),
+                conceptEdge("center", "node-4", ConceptGraphRelationType.ADVANCES, confidence = 0.91),
+                conceptEdge("center", "node-5", ConceptGraphRelationType.REFERENCES, confidence = 0.90),
+            ),
+        )
+
+        val viewport = buildConceptGraphViewport(snapshot)
+
+        assertThat(viewport.neighbors.map { it.node.conceptId })
+            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5")
+            .inOrder()
+        assertThat(viewport.neighbors.map { it.node.conceptId }).doesNotContain("node-6")
     }
 
     @Test
@@ -108,7 +139,7 @@ class KnowledgeGraphScreenTest {
             expandedCenterNodeIds = listOf("center", "center"),
         )
 
-        assertThat(collapsed.neighbors).hasSize(6)
+        assertThat(collapsed.neighbors).hasSize(5)
         assertThat(firstExpansion.neighbors.map { it.node.conceptId })
             .containsExactly(
                 "node-1",
@@ -121,11 +152,9 @@ class KnowledgeGraphScreenTest {
                 "node-8",
                 "node-9",
                 "node-10",
-                "node-11",
-                "node-12",
             )
             .inOrder()
-        assertThat(firstExpansion.hiddenNeighborCount).isEqualTo(2)
+        assertThat(firstExpansion.hiddenNeighborCount).isEqualTo(4)
         assertThat(secondExpansion.neighbors.map { it.node.conceptId })
             .containsExactly(
                 "node-1",
@@ -201,7 +230,7 @@ class KnowledgeGraphScreenTest {
         assertThat(collapsed.centerNode?.conceptId).isEqualTo("solo")
         assertThat(collapsed.neighbors).isEmpty()
         assertThat(collapsed.switchableNodes.map { it.conceptId })
-            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")
+            .containsExactly("node-1", "node-2", "node-3", "node-4", "node-5")
             .inOrder()
         assertThat(firstExpansion.neighbors).isEmpty()
         assertThat(firstExpansion.switchableNodes.map { it.conceptId })
@@ -216,8 +245,6 @@ class KnowledgeGraphScreenTest {
                 "node-8",
                 "node-9",
                 "node-10",
-                "node-11",
-                "node-12",
             )
             .inOrder()
         assertThat(secondExpansion.switchableNodes.map { it.conceptId })

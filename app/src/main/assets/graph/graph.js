@@ -1,6 +1,9 @@
 let cy = null;
 let hostViewport = { width: 0, height: 0 };
 let lastPayload = null;
+const BASE_ZOOM = 1;
+const PAN_ENABLE_ZOOM_THRESHOLD = 1.05;
+const TAP_RADIUS_PX = 28;
 
 function postToAndroid(event) {
   if (window.MindFlowGraphBridge && window.MindFlowGraphBridge.postMessage) {
@@ -33,17 +36,45 @@ function materializePosition(node) {
   };
 }
 
+function resetGraphViewport(graph) {
+  graph.resize();
+  graph.zoom(BASE_ZOOM);
+  graph.pan({ x: 0, y: 0 });
+  graph.userPanningEnabled(false);
+}
+
+function rebuildGraph(graph, payload) {
+  if (!payload) return;
+  const elements = [];
+  payload.nodes.forEach((node) => {
+    const classes = ['label-bottom'];
+    if (!node.isCenter && node.emphasis > 0) {
+      if (node.xFraction <= 0.32) {
+        classes[0] = 'label-left';
+      } else if (node.xFraction >= 0.68) {
+        classes[0] = 'label-right';
+      }
+    }
+    elements.push({
+      group: 'nodes',
+      data: { ...node, isCenter: node.isCenter ? 1 : 0 },
+      classes: classes.join(' '),
+      position: materializePosition(node),
+    });
+  });
+  payload.edges.forEach((edge) => {
+    elements.push({ group: 'edges', data: edge });
+  });
+
+  graph.elements().remove();
+  graph.add(elements);
+  graph.layout({ name: 'preset', fit: false, animate: false }).run();
+}
+
 function applyStableViewport(graph, payload) {
   if (!payload) return;
-  graph.resize();
-  const nodesById = new Map(payload.nodes.map((node) => [node.id, node]));
-  graph.nodes().forEach((node) => {
-    const source = nodesById.get(node.id());
-    if (!source) return;
-    node.position(materializePosition(source));
-  });
-  graph.zoom(1);
-  graph.pan({ x: 0, y: 0 });
+  resetGraphViewport(graph);
+  rebuildGraph(graph, payload);
   console.log(
     'stableViewport',
     'graph=', `${graph.width()}x${graph.height()}`,
@@ -62,6 +93,23 @@ window.syncHostViewport = function syncHostViewport(width, height) {
   }
 };
 
+function findNearestNode(renderedPosition) {
+  if (!cy || !renderedPosition) return null;
+  let bestNode = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  cy.nodes().forEach((node) => {
+    const position = node.renderedPosition();
+    const deltaX = position.x - renderedPosition.x;
+    const deltaY = position.y - renderedPosition.y;
+    const distance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestNode = node;
+    }
+  });
+  return bestDistance <= TAP_RADIUS_PX ? bestNode : null;
+}
+
 function ensureGraph() {
   if (cy) return cy;
   applyHostViewport();
@@ -73,38 +121,97 @@ function ensureGraph() {
         selector: 'node',
         style: {
           'background-color': 'data(accentColor)',
-          'label': 'data(label)',
-          'color': '#243145',
-          'font-size': 11,
-          'text-valign': 'bottom',
+          'label': 'data(displayLabel)',
+          'color': '#35506D',
+          'font-size': 10,
           'text-halign': 'center',
-          'text-margin-y': 10,
-          'width': 18,
-          'height': 18,
+          'text-valign': 'bottom',
+          'text-margin-y': 8,
+          'text-margin-x': 0,
+          'width': 14,
+          'height': 14,
+          'border-width': 1,
+          'border-color': '#FFFFFF',
           'overlay-opacity': 0,
+          'z-index-compare': 'manual',
+          'z-index': 10,
         },
       },
       {
-        selector: 'node[isCenter = 1]',
+        selector: 'node.label-left',
+        style: {
+          'text-halign': 'right',
+          'text-valign': 'center',
+          'text-margin-x': -10,
+          'text-margin-y': 0,
+        },
+      },
+      {
+        selector: 'node.label-right',
+        style: {
+          'text-halign': 'left',
+          'text-valign': 'center',
+          'text-margin-x': 10,
+          'text-margin-y': 0,
+        },
+      },
+      {
+        selector: 'node[emphasis = 3]',
         style: {
           'width': 28,
           'height': 28,
           'font-size': 13,
           'font-weight': 600,
+          'text-margin-y': 12,
+          'border-width': 2,
+          'z-index': 30,
+        },
+      },
+      {
+        selector: 'node[emphasis = 2]',
+        style: {
+          'width': 17,
+          'height': 17,
+          'font-size': 11,
+          'font-weight': 500,
+          'z-index': 24,
+        },
+      },
+      {
+        selector: 'node[emphasis = 1]',
+        style: {
+          'width': 14,
+          'height': 14,
+          'font-size': 9,
+          'color': '#4F6275',
+          'text-margin-y': 6,
+          'z-index': 18,
+        },
+      },
+      {
+        selector: 'node[emphasis = 0]',
+        style: {
+          'width': 11,
+          'height': 11,
+          'font-size': 0,
+          'text-opacity': 0,
+          'background-opacity': 0.8,
+          'z-index': 14,
         },
       },
       {
         selector: 'edge',
         style: {
           'curve-style': 'bezier',
-          'line-color': '#b6c2d1',
-          'width': 'mapData(confidence, 0, 1, 1.5, 3.5)',
-          'opacity': 0.85,
+          'line-color': '#A9DEFF',
+          'width': 'mapData(confidence, 0, 1, 1.4, 3.0)',
+          'opacity': 0.9,
+          'z-index': 4,
         },
       },
     ],
     userZoomingEnabled: true,
-    userPanningEnabled: true,
+    userPanningEnabled: false,
     autoungrabify: true,
     boxSelectionEnabled: false,
     minZoom: 0.6,
@@ -113,6 +220,18 @@ function ensureGraph() {
 
   cy.on('tap', 'node', (event) => {
     postToAndroid({ type: 'nodeClick', conceptId: event.target.id() });
+  });
+
+  cy.on('tap', (event) => {
+    if (event.target !== cy) return;
+    const nearestNode = findNearestNode(event.renderedPosition);
+    if (nearestNode) {
+      postToAndroid({ type: 'nodeClick', conceptId: nearestNode.id() });
+    }
+  });
+
+  cy.on('zoom', () => {
+    cy.userPanningEnabled(cy.zoom() > PAN_ENABLE_ZOOM_THRESHOLD);
   });
 
   console.log('graph init');
@@ -130,27 +249,14 @@ window.renderGraph = function renderGraph(payload) {
       return;
     }
 
-    const elements = [];
-    payload.nodes.forEach((node) => {
-      elements.push({
-        data: { ...node, isCenter: node.isCenter ? 1 : 0 },
-        position: materializePosition(node),
-      });
-    });
-    payload.edges.forEach((edge) => {
-      elements.push({ data: edge });
-    });
-
     console.log(
       'renderGraph payload',
       'center=', payload.centerNodeId,
       'nodes=', payload.nodes.length,
       'edges=', payload.edges.length,
     );
-    graph.elements().remove();
-    graph.add(elements);
-    graph.layout({ name: 'preset', fit: false, animate: false }).run();
-
+    resetGraphViewport(graph);
+    rebuildGraph(graph, payload);
     requestAnimationFrame(() => {
       applyStableViewport(graph, payload);
       setTimeout(() => applyStableViewport(graph, payload), 120);

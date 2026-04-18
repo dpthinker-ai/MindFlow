@@ -831,3 +831,191 @@ The plan uses one stable vocabulary throughout:
 - `WebViewGraphCanvas`
 
 No later task renames these types.
+
+## Design Review Addendum
+
+### Overall Rating
+
+Initial design completeness for the graph experience: `5/10`
+
+Target after this review: `9/10`
+
+The renderer swap is directionally correct, but the visual and interaction rules were too loose. Without stronger constraints, the graph drifts back into a circular demo layout, a label ring, or a generic relationship widget. The fix is not another round of visual polish. The fix is to hard-code the product behavior and first-frame hierarchy.
+
+### Pass Scores
+
+| Pass | Before | After | Notes |
+|------|--------|-------|-------|
+| Information Architecture | 4/10 | 9/10 | First-frame composition is now center-clustered, not full-ring |
+| Interaction State Coverage | 5/10 | 9/10 | Sparse, loading, and failure states are now explicitly separated |
+| User Journey & Emotional Arc | 4/10 | 9/10 | The graph now reads as guided exploration, not renderer refresh |
+| AI Slop Risk | 5/10 | 9/10 | Semantic hierarchy replaces decorative graph styling |
+| Design System Alignment | 6/10 | 9/10 | The graph now aligns with MindFlow's "idea growth" language |
+| Responsive & Accessibility | 5/10 | 9/10 | Gesture priority, hit targets, and non-visual summary are specified |
+| Unresolved Decisions | 3 major gaps | 0 deferred | Key behavior choices are now fixed below |
+
+### Locked Design Decisions
+
+#### 1. First Frame Composition
+
+- The graph card must open as a **center cluster**, not a complete circle or orbit.
+- The first frame must show only the current center node plus the top `3-5` direct neighbors.
+- Secondary and hidden neighbors do not appear in the first frame.
+- Hidden neighbors are represented only by a graph-below secondary action: `还有 N 个关联知识点`.
+
+#### 2. Primary Neighbor Selection
+
+- The first-frame `3-5` neighbors are selected by:
+  1. relation strength first
+  2. structural stability second
+  3. recent activity only as a light tie-breaker
+- The selection must be deterministic for the same graph state.
+- Do not randomize visible neighbors to create "variation".
+
+#### 3. Sparse State
+
+- Sparse graph state still renders the graph.
+- If only the center node or a very small number of edges are available, keep the visible graph and explain that connections are still growing.
+- Sparse state must not visually resemble renderer failure.
+
+#### 4. Loading / Recenter State
+
+- When the user switches center nodes, the previous graph remains visible in a de-emphasized state.
+- The new center takes over smoothly.
+- Do not blank the graph or flash a skeleton between center switches.
+- Use a minimal "updating" indicator only if needed, and keep it visually secondary.
+
+#### 5. Failure State
+
+- Real renderer failure must look clearly different from sparse state.
+- Failure state lives inside the graph card and includes:
+  - a short plain-language failure line
+  - a retry action
+  - the existing explanation and center-switching area kept available below
+
+#### 6. Product Language
+
+- Rename the card title from `信息图谱` to `思路连接`.
+- Supporting copy should describe relationships as something that is **growing** or **starting to connect**.
+- Keep the tone restrained. Do not drift into brand poetry or technical dashboard language.
+
+#### 7. Visual Hierarchy
+
+- The graph should feel like a thought structure, not a generic graph control.
+- Use semantic hierarchy, not decoration:
+  - center node most stable and most prominent
+  - primary neighbors lighter but still clear
+  - weak edges and secondary nodes lower contrast
+- Avoid "every node gets its own color" styling.
+- Replace hash-driven multicolor emphasis with a restrained single color family plus lightness hierarchy.
+
+#### 8. Label Policy
+
+- Labels are not the default first-frame hero.
+- Show full labels for:
+  - the center node
+  - a small number of primary neighbors
+- Secondary neighbors should either hide labels or use very short abbreviated labels until focused.
+- The first impression must remain "graph first, labels second".
+
+#### 9. Mobile Gesture Policy
+
+- Single-finger drag defaults to page scrolling, not graph panning.
+- The graph may take over gesture handling only when the user is clearly operating the graph, such as explicit focus mode or two-finger zoom.
+- The graph must not feel sticky or compete with the page scroll.
+
+#### 10. Tap Targets
+
+- Nodes may stay visually small.
+- Actual tap hit areas must be at least `44dp`.
+- Do not require zoom before normal node selection becomes reliable.
+
+#### 11. Non-Visual Summary Path
+
+- The explanation area below the graph remains mandatory.
+- It must carry a compact non-visual summary of:
+  - current center node
+  - one primary relationship summary
+  - one next-step hint or expansion hint
+- The graph must not be the only place where meaning exists.
+
+#### 12. Graph-Below Summary Shape
+
+- The explanation area below the graph should stay light.
+- It is fixed as a three-part summary:
+  1. current center node
+  2. one-line primary relationship summary
+  3. one next-step or expand/switch hint
+- Do not let this section grow into a second heavy information card.
+
+#### 13. Recenter Motion Model
+
+- When a neighbor becomes the new center:
+  - preserve broad direction sense from the prior frame
+  - allow local re-layout around the new center
+- Do not fully freeze node positions.
+- Do not fully regenerate the scene as an unrelated fresh composition.
+
+#### 14. End-of-Branching Tone
+
+- When a node has no further meaningful expansion, use a calm stopping line.
+- Preferred behavior: "这个知识点当前先长到这里。你可以切到别的点继续看。"
+- Avoid flat dead-end phrasing such as "没有更多连接".
+
+### Required Implementation Adjustments
+
+The implementation plan above should be interpreted with these extra constraints:
+
+1. `WebViewGraphContract.kt`
+   - replace full-ring neighbor placement with a center-cluster placement strategy
+   - keep first-frame neighbors capped at `3-5`
+   - add deterministic hidden-neighbor accounting for the secondary action below the graph
+
+2. `graph.js`
+   - stop treating all visible nodes as equally labeled
+   - apply single-family restrained styling with semantic lightness
+   - separate visual node size from actual hit area
+   - support a smooth recenter transition that preserves direction sense
+
+3. `KnowledgeGraphScreen.kt`
+   - rename `信息图谱` to `思路连接`
+   - replace graph intro and fallback text with growth-oriented copy
+   - keep the graph-below summary light and fixed-shape
+   - keep hidden-neighbor disclosure below the graph, not inside it
+
+4. Mobile behavior
+   - do not let graph panning hijack page scrolling by default
+   - retain large hidden tap zones for nodes
+
+### Not in Scope
+
+- Reworking the upstream concept graph data-generation pipeline in this review
+- Replacing the heatmap card
+- Adding freeform graph editing or graph authoring
+- Redesigning the whole graph page shell outside the graph card and its summary
+
+### What Already Exists
+
+- The page shell is already correct in broad structure:
+  - heatmap card above
+  - graph card below
+  - explanation and switch-center affordances in Compose
+- `PanelCard` and `SectionHeader` are the right shell primitives to keep
+- The `WebView + Cytoscape.js` rendering split is still the correct architectural direction
+
+### Approved Mockups
+
+No visual mockups were generated during this review because the gstack design binary was not available in this environment.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | prior review exists on branch; no new eng gate opened by this design pass |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR | score: 5/10 → 9/10, 14 decisions locked |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**UNRESOLVED:** 0
+**VERDICT:** DESIGN REVIEW CLEARED — implementation should follow the locked decisions above.
