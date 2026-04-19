@@ -14,3 +14,4 @@ PUBLISH.local.md
 /.gradle-local/
 /pics/
 /refs/
+/.worktrees/
