@@ -34,6 +34,7 @@ import com.mindflow.app.data.repository.MarkdownNoteRepository
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.ReviewChatOnDeviceRequest
 import com.mindflow.app.data.reviewchat.RoomReviewChatSavedConversationRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
@@ -186,7 +187,14 @@ class AppContainer(context: Context) {
             loadAllNotes = { noteRepository.observeAllNotes().first().filter { !it.isArchived } },
             runOnDevice = { prompt ->
                 val settings = onDeviceModelSettingsRepository.getCurrent()
-                onDeviceAiClient.generateReviewChatReply(settings, prompt)
+                onDeviceAiClient.generateReviewChatReply(
+                    settings = settings,
+                    request = ReviewChatOnDeviceRequest(
+                        sessionId = "local-knowledge-brain",
+                        prompt = prompt,
+                        resetConversation = true,
+                    ),
+                )
             },
             applicationScope = applicationScope,
         )
@@ -341,10 +349,10 @@ class AppContainer(context: Context) {
                 prompt = prompt,
             )
         },
-        runOnDevice = { prompt ->
+        runOnDevice = { request ->
             onDeviceAiClient.generateReviewChatReply(
                 settings = onDeviceModelSettingsRepository.getCurrent(),
-                prompt = prompt,
+                request = request,
             )
         },
         memoryLayerChatAssembler = memoryLayerChatAssembler,

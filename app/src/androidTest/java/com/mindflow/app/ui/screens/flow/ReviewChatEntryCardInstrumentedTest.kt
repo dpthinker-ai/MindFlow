@@ -13,9 +13,9 @@ class ReviewChatEntryCardInstrumentedTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun entryCard_submitsQuestionAndShowsLatestSavedShortcut() {
-        var submittedQuestion: String? = null
+    fun entryCard_opensChatDirectlyAndShowsLatestSavedShortcut() {
         var openLatest = false
+        var openChat = false
         composeRule.setContent {
             MindFlowTheme {
                 ReviewChatEntryCard(
@@ -26,21 +26,19 @@ class ReviewChatEntryCardInstrumentedTest {
                         messageCount = 2,
                         latestExcerpt = "核心结论",
                     ),
-                    onSubmitQuestion = { submittedQuestion = it },
+                    onOpenChat = { openChat = true },
                     onOpenLatestSaved = { openLatest = true },
                 )
             }
         }
 
         composeRule.onNodeWithText("和历史聊聊").assertIsDisplayed()
+        composeRule.onNodeWithText("进入聊天").assertIsDisplayed().performClick()
+        assertThat(openChat).isTrue()
+        composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
+        composeRule.onNodeWithText("带着问题进入").assertDoesNotExist()
         composeRule.onNodeWithText("继续上次保存").assertIsDisplayed().performClick()
         assertThat(openLatest).isTrue()
-
-        composeRule.onNode(hasSetTextAction())
-            .performTextInput("把最近两周的矛盾串一下")
-        composeRule.onNodeWithText("开始聊").performClick()
-
-        assertThat(submittedQuestion).isEqualTo("把最近两周的矛盾串一下")
     }
 
     @Test
@@ -49,7 +47,7 @@ class ReviewChatEntryCardInstrumentedTest {
             MindFlowTheme {
                 ReviewChatEntryCard(
                     latestSavedSummary = null,
-                    onSubmitQuestion = {},
+                    onOpenChat = {},
                     onOpenLatestSaved = {},
                 )
             }

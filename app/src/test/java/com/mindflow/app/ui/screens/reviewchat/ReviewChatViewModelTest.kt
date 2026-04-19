@@ -162,6 +162,37 @@ class ReviewChatViewModelTest {
         assertThat(assistant.referencedNoteId).isEqualTo(42L)
     }
 
+    @Test
+    fun sendDraft_passesStableSessionIdToPlanner() = runTest(dispatcher) {
+        val requests = mutableListOf<ReviewChatTurnRequest>()
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(requestId = 12345L),
+            answerTurn = { request ->
+                requests += request
+                ReviewChatTurnResult(
+                    answer = "收到",
+                    provider = ReviewChatProvider.ON_DEVICE,
+                    fallbackOccurred = false,
+                    providerLine = "本次由端侧完成",
+                    sessionSummary = "收到",
+                    titleSuggestion = "对话",
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        viewModel.onDraftChange("先问一个问题")
+        viewModel.sendDraft()
+        advanceUntilIdle()
+        viewModel.onDraftChange("再追问一次")
+        viewModel.sendDraft()
+        advanceUntilIdle()
+
+        assertThat(requests).hasSize(2)
+        assertThat(requests[0].sessionId).isEqualTo("12345")
+        assertThat(requests[1].sessionId).isEqualTo("12345")
+    }
+
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {
         val savedSessions = mutableListOf<SavedReviewChatSession>()
         private val latestSummary = MutableStateFlow<SavedReviewChatSessionSummary?>(null)

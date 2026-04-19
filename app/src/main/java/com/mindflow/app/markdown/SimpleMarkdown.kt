@@ -73,8 +73,15 @@ data class MarkdownSegment(
 object SimpleMarkdown {
     private val parser: Parser = Parser.builder().build()
 
+    fun normalizeForDisplay(markdown: String): String =
+        markdown
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+
     fun parse(markdown: String): List<MarkdownBlock> {
-        val normalized = markdown.replace("\r\n", "\n").trim()
+        val normalized = normalizeForDisplay(markdown)
         if (normalized.isBlank()) return emptyList()
         return parseChildren(parser.parse(normalized))
     }

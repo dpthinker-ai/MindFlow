@@ -1,7 +1,7 @@
 package com.mindflow.app.data.reviewchat
 
 object ReviewChatPromptFactory {
-    private const val ON_DEVICE_PROMPT_CHAR_BUDGET = 300
+    private const val ON_DEVICE_PROMPT_CHAR_BUDGET = 1_800
 
     fun cloud(packet: ReviewChatContextPacket): String = buildPrompt(packet)
 
@@ -53,132 +53,105 @@ object ReviewChatPromptFactory {
         appendWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "你在端侧回答一个基于个人历史记录的回看问题。",
+            line = "你是一个端侧本地历史助手，只能基于给定的个人记录、Memory Layer 和知识沉淀回答。",
         )
         appendWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "当前问题：${compactForOnDevice(packet.question, maxChars = 56)}",
+            line = "问题类型：${packet.intent.name}",
         )
         appendWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "回答要求：先答当前问题；不要重复上一轮；只基于给定材料；材料不足就直说；中文简洁。",
+            line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
+        )
+        appendWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            line = "回答要求：先直接回答当前问题，不要重复上一轮。",
+        )
+        appendWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            line = "补充要求：优先利用 Memory Thread / Digest，再用原始记录补细节；如果材料不足就明确说材料不足；如果用户明确要完整内容，优先返回完整记录。",
         )
         packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
             appendWithinBudget(
                 builder = prompt,
                 budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                line = "近期会话摘要：${compactForOnDevice(it, maxChars = 40)}",
+                line = "近期会话摘要：${compactForOnDevice(it, maxChars = 180)}",
             )
-        }
-
-        when (packet.intent) {
-            ReviewChatIntent.RECALL -> {
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "Memory",
-                    lines = packet.memoryDigestSnippets + packet.memoryThreadSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 34,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "原始记录",
-                    lines = packet.rawNoteSnippets,
-                    maxItems = 3,
-                    itemMaxChars = 40,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LLM Wiki",
-                    lines = packet.wikiSnippets,
-                    maxItems = 1,
-                    itemMaxChars = 30,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LM Knowledge Base",
-                    lines = packet.knowledgeBaseSnippets,
-                    maxItems = 1,
-                    itemMaxChars = 28,
-                )
-            }
-            ReviewChatIntent.DISCUSS -> {
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LM Knowledge Base",
-                    lines = packet.knowledgeBaseSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 30,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LLM Wiki",
-                    lines = packet.wikiSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 32,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "原始记录",
-                    lines = packet.rawNoteSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 38,
-                )
-            }
-            ReviewChatIntent.SYNTHESIZE -> {
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LLM Wiki",
-                    lines = packet.wikiSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 32,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "LM Knowledge Base",
-                    lines = packet.knowledgeBaseSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 30,
-                )
-                appendSectionWithinBudget(
-                    builder = prompt,
-                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                    title = "原始记录",
-                    lines = packet.rawNoteSnippets,
-                    maxItems = 2,
-                    itemMaxChars = 34,
-                )
-            }
         }
 
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "最近对话",
-            lines = packet.conversationSnippets.takeLast(2),
-            maxItems = 2,
-            itemMaxChars = 26,
+            title = "近期会话",
+            lines = packet.conversationSnippets.takeLast(4),
+            maxItems = 4,
+            itemMaxChars = 120,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "Memory Digest",
+            lines = packet.memoryDigestSnippets,
+            maxItems = when (packet.intent) {
+                ReviewChatIntent.RECALL -> 4
+                ReviewChatIntent.DISCUSS -> 3
+                ReviewChatIntent.SYNTHESIZE -> 3
+            },
+            itemMaxChars = 140,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "Memory Thread",
+            lines = packet.memoryThreadSnippets,
+            maxItems = when (packet.intent) {
+                ReviewChatIntent.RECALL -> 4
+                ReviewChatIntent.DISCUSS -> 4
+                ReviewChatIntent.SYNTHESIZE -> 4
+            },
+            itemMaxChars = 160,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "LM Knowledge Base",
+            lines = packet.knowledgeBaseSnippets,
+            maxItems = 3,
+            itemMaxChars = 120,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "LLM Wiki",
+            lines = packet.wikiSnippets,
+            maxItems = 4,
+            itemMaxChars = 140,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "原始记录",
+            lines = packet.rawNoteSnippets,
+            maxItems = when (packet.intent) {
+                ReviewChatIntent.RECALL -> 5
+                ReviewChatIntent.DISCUSS -> 4
+                ReviewChatIntent.SYNTHESIZE -> 4
+            },
+            itemMaxChars = 140,
         )
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "完整记录",
             lines = packet.rawNoteDetails.map { detail ->
-                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 36)}"
+                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 260)}"
             },
-            maxItems = 1,
-            itemMaxChars = 48,
+            maxItems = 2,
+            itemMaxChars = 320,
         )
 
         return prompt.toString().trim()

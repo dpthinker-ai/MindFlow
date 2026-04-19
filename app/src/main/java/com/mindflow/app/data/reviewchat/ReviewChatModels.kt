@@ -26,6 +26,7 @@ data class ReviewChatMessage(
 )
 
 data class ReviewChatTurnRequest(
+    val sessionId: String = "review-chat",
     val question: String,
     val priorMessages: List<ReviewChatMessage>,
 )
@@ -38,6 +39,12 @@ data class ReviewChatTurnResult(
     val sessionSummary: String,
     val titleSuggestion: String,
     val referencedNoteId: Long? = null,
+)
+
+data class ReviewChatOnDeviceRequest(
+    val sessionId: String,
+    val prompt: String,
+    val resetConversation: Boolean,
 )
 
 data class ReviewChatRawNoteDetail(

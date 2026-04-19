@@ -227,6 +227,15 @@ private fun FlowScreen(
                     }
                     FlowPage.REVIEW -> {
                         item {
+                            ReviewChatEntryCard(
+                                latestSavedSummary = latestSavedConversationSummary,
+                                onOpenChat = { onOpenReviewChat("") },
+                                onOpenLatestSaved = {
+                                    latestSavedConversationSummary?.sessionId?.let(onOpenLatestSavedReviewChat)
+                                },
+                            )
+                        }
+                        item {
                             SettledKnowledgeCard(
                                 direction = surface.assetDirection,
                                 provenance = surface.assetProvenance,
@@ -248,16 +257,6 @@ private fun FlowScreen(
                                 onOpenThread = onOpenThread,
                                 onOpenNote = onOpenNote,
                                 onCreateCapture = onCreateCapture,
-                            )
-                        }
-                        item {
-                            ReviewChatEntryCard(
-                                latestSavedSummary = latestSavedConversationSummary,
-                                onOpenChat = { onOpenReviewChat("") },
-                                onSubmitQuestion = onOpenReviewChat,
-                                onOpenLatestSaved = {
-                                    latestSavedConversationSummary?.sessionId?.let(onOpenLatestSavedReviewChat)
-                                },
                             )
                         }
                         item {

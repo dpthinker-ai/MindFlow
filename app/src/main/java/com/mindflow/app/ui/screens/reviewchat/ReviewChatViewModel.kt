@@ -149,6 +149,7 @@ class ReviewChatViewModel(
             runCatching {
                 answerTurn(
                     ReviewChatTurnRequest(
+                        sessionId = seed.requestId.toString(),
                         question = question,
                         priorMessages = priorMessages,
                     ),

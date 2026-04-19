@@ -24,6 +24,11 @@ private val reviewChatHistoryHints = listOf(
     "之前", "以前", "过去", "历史", "曾经", "最早", "早些", "那会", "那时候", "去年", "上次",
 )
 
+private val reviewChatScopeHints = listOf(
+    "记录", "笔记", "回看", "聊过", "提过", "写过", "那天", "那周", "某天", "完整", "全文",
+    "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread",
+)
+
 private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
 internal fun classifyReviewChatIntent(question: String): ReviewChatIntent {
@@ -304,11 +309,15 @@ class ReviewChatPlanner(
     private val isCloudConfigured: suspend () -> Boolean,
     private val isOnDeviceReady: suspend () -> Boolean,
     private val runCloud: suspend (String) -> AiChatResult,
-    private val runOnDevice: suspend (String) -> AiChatResult,
+    private val runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
     private val memoryLayerChatAssembler: MemoryLayerChatAssembler? = null,
 ) {
     suspend fun answer(request: ReviewChatTurnRequest): ReviewChatTurnResult {
         val intent = classifyReviewChatIntent(request.question)
+        val notes = loadNotes()
+        val weeklyReview = loadWeeklyReview()
+        val maintenanceSnapshot = loadMaintenanceSnapshot()
+        val wikiSnapshot = loadWikiSnapshot()
         val memoryContext = memoryLayerChatAssembler?.assemble(
             question = request.question,
             priorMessages = request.priorMessages,
@@ -338,13 +347,33 @@ class ReviewChatPlanner(
             )
         }
 
+        if (
+            !looksGroundedInHistory(
+                question = request.question,
+                notes = notes,
+                weeklyReview = weeklyReview,
+                maintenanceSnapshot = maintenanceSnapshot,
+                wikiSnapshot = wikiSnapshot,
+                memoryContext = memoryContext,
+            )
+        ) {
+            return ReviewChatTurnResult(
+                answer = buildOutOfScopeReviewChatAnswer(),
+                provider = ReviewChatProvider.LOCAL_MEMORY,
+                fallbackOccurred = false,
+                providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                sessionSummary = "范围外问题",
+                titleSuggestion = request.question.take(18),
+            )
+        }
+
         val packet = buildReviewChatContextPacket(
             question = request.question,
             intent = intent,
-            notes = loadNotes(),
-            weeklyReview = loadWeeklyReview(),
-            maintenanceSnapshot = loadMaintenanceSnapshot(),
-            wikiSnapshot = loadWikiSnapshot(),
+            notes = notes,
+            weeklyReview = weeklyReview,
+            maintenanceSnapshot = maintenanceSnapshot,
+            wikiSnapshot = wikiSnapshot,
             sessionSummary = request.priorMessages
                 .takeLast(2)
                 .joinToString("\n") { it.content.take(120) },
@@ -368,7 +397,13 @@ class ReviewChatPlanner(
                     }
                 }
                 ReviewChatProvider.ON_DEVICE -> {
-                    if (isOnDeviceReady()) runOnDevice(onDevicePrompt) else {
+                    if (isOnDeviceReady()) runOnDevice(
+                        ReviewChatOnDeviceRequest(
+                            sessionId = request.sessionId,
+                            prompt = onDevicePrompt,
+                            resetConversation = request.priorMessages.isEmpty(),
+                        )
+                    ) else {
                         AiChatResult.Failure(AiFailureReason.CONFIG, "端侧未就绪")
                     }
                 }
@@ -403,3 +438,86 @@ private fun shouldReturnRawRecordDirectly(
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
     return wantsFullRecord && memoryContext.rawNoteDetails.isNotEmpty()
 }
+
+private fun looksGroundedInHistory(
+    question: String,
+    notes: List<NoteEntity>,
+    weeklyReview: WeeklyReviewState,
+    maintenanceSnapshot: LocalKnowledgeMaintenanceSnapshot,
+    wikiSnapshot: DirectionWikiSnapshot,
+    memoryContext: MemoryLayerChatContext,
+): Boolean {
+    if (reviewChatHistoryHints.any(question::contains) || reviewChatScopeHints.any(question::contains)) {
+        return true
+    }
+    if (
+        memoryContext.memoryDigestSnippets.isNotEmpty() ||
+        memoryContext.memoryThreadSnippets.isNotEmpty() ||
+        memoryContext.rawNoteSnippets.isNotEmpty() ||
+        memoryContext.rawNoteDetails.isNotEmpty()
+    ) {
+        return true
+    }
+
+    val keywords = extractReviewChatKeywords(question)
+    if (keywords.isEmpty()) return false
+
+    val noteHit = notes.any { note ->
+        scoreQuestionMatch(
+            question = question,
+            keywords = keywords,
+            haystack = listOf(note.topic, note.content, note.folderKey.orEmpty()) + note.tags,
+        ) > 0
+    }
+    if (noteHit) return true
+
+    val weeklyHit = scoreQuestionMatch(
+        question = question,
+        keywords = keywords,
+        haystack = weeklyReview.lines,
+    ) > 0
+    if (weeklyHit) return true
+
+    val maintenanceHit = scoreQuestionMatch(
+        question = question,
+        keywords = keywords,
+        haystack = listOf(
+            maintenanceSnapshot.currentJudgement.line,
+            maintenanceSnapshot.recentAbsorption.line,
+            maintenanceSnapshot.newConnection.line,
+            maintenanceSnapshot.openQuestion.line,
+        ),
+    ) > 0
+    if (maintenanceHit) return true
+
+    return wikiSnapshot.directions.values.any { direction ->
+        scoreQuestionMatch(
+            question = question,
+            keywords = keywords,
+            haystack = listOf(
+                direction.title,
+                direction.conclusionLine,
+                direction.assetSummary,
+                direction.threadKey,
+            ),
+        ) > 0
+    } || wikiSnapshot.knowledgeItems.any { item ->
+        scoreQuestionMatch(
+            question = question,
+            keywords = keywords,
+            haystack = listOf(item.title, item.summary, item.supportLine, item.type.label),
+        ) > 0
+    }
+}
+
+private fun buildOutOfScopeReviewChatAnswer(): String = """
+这段聊天更适合基于你的历史记录、回看沉淀和图谱来聊。
+
+你刚才这句更像泛聊天问题，我手上的本地材料里没有对应上下文，所以不应该假装回答。
+
+可以换成这几类问法：
+- 我最近关于这个主题写过什么
+- 某一天/某一周我当时在想什么
+- 把某条问题线从最早到现在串一下
+- 直接把某条记录的完整内容发给我
+""".trim()

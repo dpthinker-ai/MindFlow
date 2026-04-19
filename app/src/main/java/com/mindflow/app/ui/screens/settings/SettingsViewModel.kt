@@ -105,6 +105,28 @@ data class SettingsUiState(
         )
 }
 
+internal fun SettingsUiState.toOnDeviceModelSettings(): OnDeviceModelSettings = OnDeviceModelSettings(
+    modelLabel = localModelLabel,
+    modelDownloadUrl = localModelDownloadUrl,
+    executionMode = aiExecutionMode,
+    localModelPath = localModelPath,
+    downloadedBytes = localModelDownloadedBytes,
+    downloadTargetBytes = localModelDownloadTargetBytes,
+    lastDownloadedAt = localModelLastDownloadedAt,
+    lastMessage = localModelLastMessage,
+    status = localModelStatus,
+)
+
+internal suspend fun persistAiExecutionModeSelection(
+    currentState: SettingsUiState,
+    mode: AiExecutionMode,
+    repository: OnDeviceModelSettingsRepository,
+): SettingsUiState {
+    val nextState = currentState.copy(aiExecutionMode = mode)
+    repository.save(nextState.toOnDeviceModelSettings())
+    return nextState
+}
+
 sealed interface SettingsEvent {
     data class Message(val text: String) : SettingsEvent
     data class ExportReady(val payload: ExportPayload) : SettingsEvent
@@ -279,7 +301,14 @@ class SettingsViewModel(
     }
 
     fun onAiExecutionModeChange(value: AiExecutionMode) {
-        _uiState.update { it.copy(aiExecutionMode = value) }
+        viewModelScope.launch {
+            val nextState = persistAiExecutionModeSelection(
+                currentState = _uiState.value,
+                mode = value,
+                repository = onDeviceModelSettingsRepository,
+            )
+            _uiState.value = nextState
+        }
     }
 
     fun onCloudBaseUrlChange(value: String) {
@@ -390,17 +419,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSavingLocalModel = true) }
             onDeviceModelSettingsRepository.save(
-                OnDeviceModelSettings(
-                    modelLabel = state.localModelLabel,
-                    modelDownloadUrl = state.localModelDownloadUrl,
-                    executionMode = state.aiExecutionMode,
-                    localModelPath = state.localModelPath,
-                    downloadedBytes = state.localModelDownloadedBytes,
-                    downloadTargetBytes = state.localModelDownloadTargetBytes,
-                    lastDownloadedAt = state.localModelLastDownloadedAt,
-                    lastMessage = state.localModelLastMessage,
-                    status = state.localModelStatus,
-                )
+                state.toOnDeviceModelSettings()
             )
             _uiState.update { it.copy(isSavingLocalModel = false) }
             _events.emit(SettingsEvent.Message("本地模型设置已保存"))
@@ -409,17 +428,7 @@ class SettingsViewModel(
 
     fun downloadLocalModel() {
         val state = _uiState.value
-        val settings = OnDeviceModelSettings(
-            modelLabel = state.localModelLabel,
-            modelDownloadUrl = state.localModelDownloadUrl,
-            executionMode = state.aiExecutionMode,
-            localModelPath = state.localModelPath,
-            downloadedBytes = state.localModelDownloadedBytes,
-            downloadTargetBytes = state.localModelDownloadTargetBytes,
-            lastDownloadedAt = state.localModelLastDownloadedAt,
-            lastMessage = state.localModelLastMessage,
-            status = state.localModelStatus,
-        )
+        val settings = state.toOnDeviceModelSettings()
         viewModelScope.launch {
             _uiState.update { it.copy(isDownloadingLocalModel = true) }
             onDeviceModelSettingsRepository.save(settings)
@@ -436,17 +445,7 @@ class SettingsViewModel(
 
     fun deleteLocalModel() {
         val state = _uiState.value
-        val settings = OnDeviceModelSettings(
-            modelLabel = state.localModelLabel,
-            modelDownloadUrl = state.localModelDownloadUrl,
-            executionMode = state.aiExecutionMode,
-            localModelPath = state.localModelPath,
-            downloadedBytes = state.localModelDownloadedBytes,
-            downloadTargetBytes = state.localModelDownloadTargetBytes,
-            lastDownloadedAt = state.localModelLastDownloadedAt,
-            lastMessage = state.localModelLastMessage,
-            status = state.localModelStatus,
-        )
+        val settings = state.toOnDeviceModelSettings()
         viewModelScope.launch {
             _uiState.update { it.copy(isDeletingLocalModel = true) }
             onDeviceModelManager.deleteModel(settings)
@@ -491,17 +490,7 @@ class SettingsViewModel(
 
     fun testLocalModel() {
         val state = _uiState.value
-        val settings = OnDeviceModelSettings(
-            modelLabel = state.localModelLabel,
-            modelDownloadUrl = state.localModelDownloadUrl,
-            executionMode = state.aiExecutionMode,
-            localModelPath = state.localModelPath,
-            downloadedBytes = state.localModelDownloadedBytes,
-            downloadTargetBytes = state.localModelDownloadTargetBytes,
-            lastDownloadedAt = state.localModelLastDownloadedAt,
-            lastMessage = state.localModelLastMessage,
-            status = state.localModelStatus,
-        )
+        val settings = state.toOnDeviceModelSettings()
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingLocalModel = true) }
             val result = onDeviceAiClient.testModel(settings)

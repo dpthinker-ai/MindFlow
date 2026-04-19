@@ -5,6 +5,7 @@ import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.knowledgebrain.MemoryDigest
 import com.mindflow.app.data.knowledgebrain.MemoryDigestScopeType
 import com.mindflow.app.data.knowledgebrain.MemoryFragment
+import com.mindflow.app.data.knowledgebrain.MemoryLayerChatContext
 import com.mindflow.app.data.knowledgebrain.MemoryLayerChatAssembler
 import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
 import com.mindflow.app.data.knowledgebrain.MemoryThread
@@ -157,7 +158,7 @@ class ReviewChatPlannerTest {
 
         val result = planner.answer(
             ReviewChatTurnRequest(
-                question = "把最近的问题串起来",
+                question = "把我之前写过的问题串起来",
                 priorMessages = emptyList(),
             ),
         )
@@ -270,6 +271,42 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_outOfScopeQuestion_returnsGroundedGuidanceWithoutCallingProviders() = runTest {
+        var cloudCalled = false
+        var onDeviceCalled = false
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "产品方向", "这条记录只在讨论推荐链路和增长")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.ON_DEVICE_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = {
+                cloudCalled = true
+                AiChatResult.Success("不应该调用云侧")
+            },
+            runOnDevice = {
+                onDeviceCalled = true
+                AiChatResult.Success("不应该调用端侧")
+            },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "今天天气不错，有什么好玩的？",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalled).isFalse()
+        assertThat(onDeviceCalled).isFalse()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
+        assertThat(result.answer).contains("这段聊天更适合基于你的历史记录")
+        assertThat(result.answer).contains("可以换成")
+    }
+
+    @Test
     fun onDevicePrompt_isCondensedAndKeepsCurrentQuestion() {
         val packet = buildReviewChatContextPacket(
             question = "把我过去几个月关于产品方向的分歧串起来",
@@ -312,18 +349,27 @@ class ReviewChatPlannerTest {
                     createdAt = 2L,
                 ),
             ),
+            memoryContext = MemoryLayerChatContext(
+                memoryDigestSnippets = listOf("Digest｜过去三个月里反复在纠结定位和增长"),
+                memoryThreadSnippets = listOf("Thread｜产品方向问题线｜一直在摇摆定位和节奏"),
+                rawNoteSnippets = emptyList(),
+                rawNoteDetails = emptyList(),
+            ),
         )
 
         val prompt = ReviewChatPromptFactory.onDevice(packet)
 
         assertThat(prompt).contains("当前问题：把我过去几个月关于产品方向的分歧串起来")
-        assertThat(prompt).contains("回答要求：先答当前问题；不要重复上一轮；只基于给定材料；材料不足就直说；中文简洁。")
-        assertThat(prompt).doesNotContain("结论｜结论5｜沉淀5")
-        assertThat(prompt.length).isAtMost(300)
+        assertThat(prompt).contains("回答要求：先直接回答当前问题，不要重复上一轮。")
+        assertThat(prompt).contains("近期会话：")
+        assertThat(prompt).contains("Memory Thread：")
+        assertThat(prompt).contains("LM Knowledge Base：")
+        assertThat(prompt.length).isGreaterThan(300)
+        assertThat(prompt.length).isAtMost(1_800)
     }
 
     @Test
-    fun onDevicePrompt_longInputsStillStayWithinBudget() {
+    fun onDevicePrompt_longInputsUseExpandedBudgetAndKeepMultipleSources() {
         val packet = buildReviewChatContextPacket(
             question = "我们想看一下现在 leakspace 这种技术对抖音是不是有优化指导意义，以及这件事和过去讨论过的增长、内容分发、推荐链路到底有没有一条稳定主线",
             intent = ReviewChatIntent.DISCUSS,
@@ -376,7 +422,11 @@ class ReviewChatPlannerTest {
         val prompt = ReviewChatPromptFactory.onDevice(packet)
 
         assertThat(prompt).contains("当前问题：")
-        assertThat(prompt.length).isAtMost(300)
+        assertThat(prompt).contains("LM Knowledge Base：")
+        assertThat(prompt).contains("LLM Wiki：")
+        assertThat(prompt).contains("原始记录：")
+        assertThat(prompt.length).isGreaterThan(300)
+        assertThat(prompt.length).isAtMost(1_800)
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(
