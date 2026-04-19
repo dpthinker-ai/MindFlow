@@ -17,6 +17,8 @@ import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.localmodel.LiteRtLmOnDeviceAiClient
+import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
+import com.mindflow.app.data.knowledgebrain.RoomMemoryLayerRepository
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
@@ -69,6 +71,18 @@ import kotlinx.coroutines.flow.first
 class AppContainer(context: Context) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cloudNoteDocumentCodec = CloudNoteDocumentCodec()
+    private val database = Room.databaseBuilder(
+        context.applicationContext,
+        com.mindflow.app.data.local.MindFlowDatabase::class.java,
+        "mindflow.db",
+    ).addMigrations(
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_1_2,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_2_3,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_3_4,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_4_5,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_5_6,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_6_7,
+    ).build()
 
     val aiSettingsRepository: AiSettingsRepository = PreferencesAiSettingsRepository(
         context = context.applicationContext,
@@ -172,6 +186,10 @@ class AppContainer(context: Context) {
         markdownImportParser = MarkdownImportParser(),
         cloudNoteDocumentCodec = cloudNoteDocumentCodec,
         applicationScope = applicationScope,
+    )
+
+    val memoryLayerRepository: MemoryLayerRepository = RoomMemoryLayerRepository(
+        dao = database.memoryLayerDao(),
     )
 
     val cloudBackupCoordinator = CloudBackupCoordinator(
