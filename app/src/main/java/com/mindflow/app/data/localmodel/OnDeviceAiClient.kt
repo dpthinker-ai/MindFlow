@@ -24,6 +24,7 @@ interface OnDeviceAiClient {
     suspend fun generateLocalKnowledgeShape(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateLocalOpenQuestion(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateEditorRecall(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
+    suspend fun generateReviewChatReply(settings: OnDeviceModelSettings, prompt: String): AiChatResult
     suspend fun extractTopic(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun extractTags(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun classifyFolder(settings: OnDeviceModelSettings, content: String): AiChatResult
@@ -97,6 +98,11 @@ class LiteRtLmOnDeviceAiClient(
         settings: OnDeviceModelSettings,
         contextSummary: String,
     ): AiChatResult = runPrompt(settings, FlowOnDevicePromptFactory.editorRecall(contextSummary))
+
+    override suspend fun generateReviewChatReply(
+        settings: OnDeviceModelSettings,
+        prompt: String,
+    ): AiChatResult = runPrompt(settings, prompt)
 
     override suspend fun extractTopic(
         settings: OnDeviceModelSettings,

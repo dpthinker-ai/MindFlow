@@ -300,6 +300,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun generateReviewChatReply(
+        settings: AiSettings,
+        prompt: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = prompt.take(6_000),
+            systemPrompt = "You are answering questions about a person's historical notes and structured personal knowledge. Reply in Chinese. Prioritize synthesis, discussion, and recall based only on the supplied material. Do not pretend to know facts outside the provided context. Keep the answer clear, concrete, and non-generic.",
+            maxTokens = 720,
+            temperature = 0.55,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun extractConceptGraphConcepts(
         settings: AiSettings,
         contextSummary: String,
