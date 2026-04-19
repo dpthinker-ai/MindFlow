@@ -1,6 +1,8 @@
 package com.mindflow.app.data.reviewchat
 
 import com.mindflow.app.data.ai.AiExecutionMode
+import com.mindflow.app.data.knowledgebrain.MemoryLayerChatAssembler
+import com.mindflow.app.data.knowledgebrain.MemoryLayerChatContext
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.review.WeeklyReviewState
@@ -9,11 +11,20 @@ import com.mindflow.app.data.topic.AiFailureReason
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
     "关于", "这个", "那个", "最近两周", "最近一周", "我们", "你们", "我的", "你的", "时候",
 )
+
+private val reviewChatHistoryHints = listOf(
+    "之前", "以前", "过去", "历史", "曾经", "最早", "早些", "那会", "那时候", "去年", "上次",
+)
+
+private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
 internal fun classifyReviewChatIntent(question: String): ReviewChatIntent {
     val normalized = question.lowercase()
@@ -32,6 +43,13 @@ internal fun buildReviewChatContextPacket(
     maintenanceSnapshot: LocalKnowledgeMaintenanceSnapshot,
     wikiSnapshot: DirectionWikiSnapshot,
     sessionSummary: String,
+    priorMessages: List<ReviewChatMessage> = emptyList(),
+    memoryContext: MemoryLayerChatContext = MemoryLayerChatContext(
+        memoryDigestSnippets = emptyList(),
+        memoryThreadSnippets = emptyList(),
+        rawNoteSnippets = emptyList(),
+        rawNoteDetails = emptyList(),
+    ),
 ): ReviewChatContextPacket {
     val keywords = extractReviewChatKeywords(question)
     val knowledgeBaseSnippets = buildKnowledgeBaseSnippets(
@@ -56,9 +74,13 @@ internal fun buildReviewChatContextPacket(
         intent = intent,
         question = question,
         sessionSummary = sessionSummary,
+        conversationSnippets = buildConversationSnippets(priorMessages),
+        memoryDigestSnippets = memoryContext.memoryDigestSnippets,
+        memoryThreadSnippets = memoryContext.memoryThreadSnippets,
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
-        rawNoteSnippets = rawSnippets,
+        rawNoteSnippets = (memoryContext.rawNoteSnippets + rawSnippets).distinct(),
+        rawNoteDetails = memoryContext.rawNoteDetails,
         structuredSnippets = structuredSnippets,
     )
 }
@@ -162,10 +184,11 @@ private fun buildRawNoteSnippets(
         ReviewChatIntent.DISCUSS -> 5
         ReviewChatIntent.RECALL -> 6
     }
-    return notes
-        .sortedWith(
-            compareByDescending<NoteEntity> { note ->
-                scoreQuestionMatch(
+    val ranked = notes
+        .map { note ->
+            RankedReviewChatNote(
+                note = note,
+                score = scoreQuestionMatch(
                     question = question,
                     keywords = keywords,
                     haystack = listOf(
@@ -173,14 +196,85 @@ private fun buildRawNoteSnippets(
                         note.content,
                         note.folderKey.orEmpty(),
                     ) + note.tags,
-                )
-            }.thenByDescending { it.updatedAt },
-        )
-        .take(limit)
-        .map { note ->
-            "记录｜${note.topic.ifBlank { "未命名记录" }}｜${note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)}"
+                ),
+            )
         }
+        .sortedWith(
+            compareByDescending<RankedReviewChatNote> { it.score }
+                .thenByDescending { it.note.updatedAt },
+        )
+
+    val directMatches = ranked.filter { it.score > 0 }.take(limit)
+    if (directMatches.size >= limit) {
+        return directMatches.map { it.note.toReviewChatSnippet() }
+    }
+
+    val supplemental = buildSupplementalRawSnippets(
+        intent = intent,
+        question = question,
+        ranked = ranked.filterNot { candidate -> directMatches.any { it.note.id == candidate.note.id } },
+        limit = limit - directMatches.size,
+    )
+
+    return (directMatches.map { it.note } + supplemental)
+        .distinctBy(NoteEntity::id)
+        .take(limit)
+        .map(NoteEntity::toReviewChatSnippet)
 }
+
+private fun buildConversationSnippets(
+    priorMessages: List<ReviewChatMessage>,
+): List<String> = priorMessages
+    .takeLast(4)
+    .map { message ->
+        val role = if (message.role == ReviewChatMessageRole.USER) "用户" else "助手"
+        "$role｜${message.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(140)}"
+    }
+
+private fun buildSupplementalRawSnippets(
+    intent: ReviewChatIntent,
+    question: String,
+    ranked: List<RankedReviewChatNote>,
+    limit: Int,
+): List<NoteEntity> {
+    if (limit <= 0 || ranked.isEmpty()) return emptyList()
+
+    val shouldDiversifyAcrossTimeline =
+        intent == ReviewChatIntent.RECALL ||
+            ranked.firstOrNull()?.score == 0 ||
+            reviewChatHistoryHints.any { question.contains(it) }
+
+    if (!shouldDiversifyAcrossTimeline) {
+        return ranked.take(limit).map(RankedReviewChatNote::note)
+    }
+
+    val sortedByTime = ranked
+        .sortedBy { it.note.updatedAt }
+        .map(RankedReviewChatNote::note)
+    if (sortedByTime.size <= limit) return sortedByTime
+
+    return (0 until limit)
+        .map { index ->
+            val fraction = if (limit == 1) 0.0 else index.toDouble() / (limit - 1).toDouble()
+            val targetIndex = (fraction * (sortedByTime.lastIndex)).toInt()
+            sortedByTime[targetIndex]
+        }
+        .distinctBy(NoteEntity::id)
+}
+
+private fun NoteEntity.toReviewChatSnippet(): String {
+    val date = Instant.ofEpochMilli(updatedAt)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .format(reviewChatDateFormatter)
+    val compactContent = content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)
+    return "记录｜$date｜${topic.ifBlank { "未命名记录" }}｜$compactContent"
+}
+
+private data class RankedReviewChatNote(
+    val note: NoteEntity,
+    val score: Int,
+)
 
 private fun scoreQuestionMatch(
     question: String,
@@ -211,9 +305,39 @@ class ReviewChatPlanner(
     private val isOnDeviceReady: suspend () -> Boolean,
     private val runCloud: suspend (String) -> AiChatResult,
     private val runOnDevice: suspend (String) -> AiChatResult,
+    private val memoryLayerChatAssembler: MemoryLayerChatAssembler? = null,
 ) {
     suspend fun answer(request: ReviewChatTurnRequest): ReviewChatTurnResult {
         val intent = classifyReviewChatIntent(request.question)
+        val memoryContext = memoryLayerChatAssembler?.assemble(
+            question = request.question,
+            priorMessages = request.priorMessages,
+        ) ?: MemoryLayerChatContext(
+            memoryDigestSnippets = emptyList(),
+            memoryThreadSnippets = emptyList(),
+            rawNoteSnippets = emptyList(),
+            rawNoteDetails = emptyList(),
+        )
+
+        if (shouldReturnRawRecordDirectly(request.question, memoryContext)) {
+            val detail = memoryContext.rawNoteDetails.first()
+            val title = "${detail.dateLabel}｜${detail.title}"
+            val answer = buildString {
+                appendLine(title)
+                appendLine()
+                append(detail.fullContent)
+            }
+            return ReviewChatTurnResult(
+                answer = answer.trim(),
+                provider = ReviewChatProvider.LOCAL_MEMORY,
+                fallbackOccurred = false,
+                providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                sessionSummary = "${request.question.take(40)}｜${detail.title}",
+                titleSuggestion = request.question.take(18),
+                referencedNoteId = detail.noteId,
+            )
+        }
+
         val packet = buildReviewChatContextPacket(
             question = request.question,
             intent = intent,
@@ -224,6 +348,8 @@ class ReviewChatPlanner(
             sessionSummary = request.priorMessages
                 .takeLast(2)
                 .joinToString("\n") { it.content.take(120) },
+            priorMessages = request.priorMessages,
+            memoryContext = memoryContext,
         )
         val cloudPrompt = ReviewChatPromptFactory.cloud(packet)
         val onDevicePrompt = ReviewChatPromptFactory.onDevice(packet)
@@ -233,6 +359,7 @@ class ReviewChatPlanner(
             AiExecutionMode.ON_DEVICE_ONLY -> listOf(ReviewChatProvider.ON_DEVICE)
         }
 
+        var lastFailure: AiChatResult.Failure? = null
         attempts.forEachIndexed { index, provider ->
             val result = when (provider) {
                 ReviewChatProvider.CLOUD -> {
@@ -245,6 +372,9 @@ class ReviewChatPlanner(
                         AiChatResult.Failure(AiFailureReason.CONFIG, "端侧未就绪")
                     }
                 }
+                ReviewChatProvider.LOCAL_MEMORY -> {
+                    AiChatResult.Failure(AiFailureReason.CONFIG, "本地知识层仅支持直接记录展开")
+                }
             }
             if (result is AiChatResult.Success) {
                 val fallbackOccurred = index > 0
@@ -255,9 +385,21 @@ class ReviewChatPlanner(
                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred),
                     sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                     titleSuggestion = request.question.take(18),
+                    referencedNoteId = memoryContext.rawNoteDetails.firstOrNull()?.noteId,
                 )
             }
+            if (result is AiChatResult.Failure) {
+                lastFailure = result
+            }
         }
-        error("No provider returned a usable review chat answer")
+        error(lastFailure?.message ?: "No provider returned a usable review chat answer")
     }
+}
+
+private fun shouldReturnRawRecordDirectly(
+    question: String,
+    memoryContext: MemoryLayerChatContext,
+): Boolean {
+    val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
+    return wantsFullRecord && memoryContext.rawNoteDetails.isNotEmpty()
 }

@@ -1,15 +1,30 @@
 package com.mindflow.app.data.reviewchat
 
 object ReviewChatPromptFactory {
+    private const val ON_DEVICE_PROMPT_CHAR_BUDGET = 300
+
     fun cloud(packet: ReviewChatContextPacket): String = buildPrompt(packet)
 
-    fun onDevice(packet: ReviewChatContextPacket): String = buildPrompt(packet)
+    fun onDevice(packet: ReviewChatContextPacket): String = buildOnDevicePrompt(packet)
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
+        appendLine("你正在回答一个基于个人历史记录的回看问题。")
         appendLine("问题类型：${packet.intent.name}")
         appendLine("当前问题：${packet.question}")
         packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
             appendLine("近期会话摘要：$it")
+        }
+        if (packet.conversationSnippets.isNotEmpty()) {
+            appendLine("近期会话：")
+            packet.conversationSnippets.forEach(::appendLine)
+        }
+        if (packet.memoryDigestSnippets.isNotEmpty()) {
+            appendLine("Memory Digest：")
+            packet.memoryDigestSnippets.forEach(::appendLine)
+        }
+        if (packet.memoryThreadSnippets.isNotEmpty()) {
+            appendLine("Memory Thread：")
+            packet.memoryThreadSnippets.forEach(::appendLine)
         }
         appendLine("LM Knowledge Base：")
         packet.knowledgeBaseSnippets.forEach(::appendLine)
@@ -17,6 +32,204 @@ object ReviewChatPromptFactory {
         packet.wikiSnippets.forEach(::appendLine)
         appendLine("原始记录：")
         packet.rawNoteSnippets.forEach(::appendLine)
-        appendLine("回答要求：优先基于上面的本地知识压缩和结构化沉淀回答，再用原始记录补充细节。不要假装看过不存在的材料。")
+        if (packet.rawNoteDetails.isNotEmpty()) {
+            appendLine("完整记录：")
+            packet.rawNoteDetails.forEach { detail ->
+                appendLine("- noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${detail.fullContent}")
+            }
+        }
+        appendLine("回答要求：")
+        appendLine("1. 先直接回答“当前问题”，不要重复上一轮回答。")
+        appendLine("2. 优先基于 Memory Layer、本地知识压缩和结构化沉淀回答，再用原始记录补细节。")
+        appendLine("3. 如果材料跨了不同时间，点出时间变化，不要只盯最近两天。")
+        appendLine("4. 如果用户明确要完整内容，优先返回完整记录内容，而不是只做摘要。")
+        appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
+        appendLine("6. 用中文回答，结构清楚，避免空话。")
+    }
+
+    private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): String {
+        val prompt = StringBuilder()
+
+        appendWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            line = "你在端侧回答一个基于个人历史记录的回看问题。",
+        )
+        appendWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            line = "当前问题：${compactForOnDevice(packet.question, maxChars = 56)}",
+        )
+        appendWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            line = "回答要求：先答当前问题；不要重复上一轮；只基于给定材料；材料不足就直说；中文简洁。",
+        )
+        packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
+            appendWithinBudget(
+                builder = prompt,
+                budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                line = "近期会话摘要：${compactForOnDevice(it, maxChars = 40)}",
+            )
+        }
+
+        when (packet.intent) {
+            ReviewChatIntent.RECALL -> {
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "Memory",
+                    lines = packet.memoryDigestSnippets + packet.memoryThreadSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 34,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "原始记录",
+                    lines = packet.rawNoteSnippets,
+                    maxItems = 3,
+                    itemMaxChars = 40,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LLM Wiki",
+                    lines = packet.wikiSnippets,
+                    maxItems = 1,
+                    itemMaxChars = 30,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LM Knowledge Base",
+                    lines = packet.knowledgeBaseSnippets,
+                    maxItems = 1,
+                    itemMaxChars = 28,
+                )
+            }
+            ReviewChatIntent.DISCUSS -> {
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LM Knowledge Base",
+                    lines = packet.knowledgeBaseSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 30,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LLM Wiki",
+                    lines = packet.wikiSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 32,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "原始记录",
+                    lines = packet.rawNoteSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 38,
+                )
+            }
+            ReviewChatIntent.SYNTHESIZE -> {
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LLM Wiki",
+                    lines = packet.wikiSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 32,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "LM Knowledge Base",
+                    lines = packet.knowledgeBaseSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 30,
+                )
+                appendSectionWithinBudget(
+                    builder = prompt,
+                    budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+                    title = "原始记录",
+                    lines = packet.rawNoteSnippets,
+                    maxItems = 2,
+                    itemMaxChars = 34,
+                )
+            }
+        }
+
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "最近对话",
+            lines = packet.conversationSnippets.takeLast(2),
+            maxItems = 2,
+            itemMaxChars = 26,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "完整记录",
+            lines = packet.rawNoteDetails.map { detail ->
+                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 36)}"
+            },
+            maxItems = 1,
+            itemMaxChars = 48,
+        )
+
+        return prompt.toString().trim()
+    }
+
+    private fun appendSectionWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        title: String,
+        lines: List<String>,
+        maxItems: Int,
+        itemMaxChars: Int,
+    ) {
+        val normalized = lines
+            .asSequence()
+            .map { compactForOnDevice(it, maxChars = itemMaxChars) }
+            .filter { it.isNotBlank() }
+            .take(maxItems)
+            .toList()
+        if (normalized.isEmpty()) return
+
+        val section = buildString {
+            append(title)
+            append("：")
+            append(normalized.joinToString("；"))
+        }
+        appendWithinBudget(builder = builder, budget = budget, line = section)
+    }
+
+    private fun appendWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        line: String,
+    ) {
+        if (line.isBlank()) return
+        val candidate = if (builder.isEmpty()) line else "${builder}\n$line"
+        if (candidate.length <= budget) {
+            if (builder.isNotEmpty()) builder.append('\n')
+            builder.append(line)
+        }
+    }
+
+    private fun compactForOnDevice(
+        text: String,
+        maxChars: Int,
+    ): String {
+        val normalized = text
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (normalized.length <= maxChars) return normalized
+        return normalized.take(maxChars - 1).trimEnd() + "…"
     }
 }

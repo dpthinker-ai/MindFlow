@@ -12,6 +12,7 @@ enum class ReviewChatMessageRole {
 }
 
 enum class ReviewChatProvider {
+    LOCAL_MEMORY,
     CLOUD,
     ON_DEVICE,
 }
@@ -21,6 +22,7 @@ data class ReviewChatMessage(
     val content: String,
     val provider: ReviewChatProvider? = null,
     val createdAt: Long,
+    val referencedNoteId: Long? = null,
 )
 
 data class ReviewChatTurnRequest(
@@ -35,15 +37,27 @@ data class ReviewChatTurnResult(
     val providerLine: String,
     val sessionSummary: String,
     val titleSuggestion: String,
+    val referencedNoteId: Long? = null,
+)
+
+data class ReviewChatRawNoteDetail(
+    val noteId: Long,
+    val title: String,
+    val dateLabel: String,
+    val fullContent: String,
 )
 
 data class ReviewChatContextPacket(
     val intent: ReviewChatIntent,
     val question: String,
     val sessionSummary: String,
+    val conversationSnippets: List<String>,
+    val memoryDigestSnippets: List<String>,
+    val memoryThreadSnippets: List<String>,
     val knowledgeBaseSnippets: List<String>,
     val wikiSnippets: List<String>,
     val rawNoteSnippets: List<String>,
+    val rawNoteDetails: List<ReviewChatRawNoteDetail>,
     val structuredSnippets: List<String>,
 )
 
@@ -51,6 +65,7 @@ fun buildReviewChatProviderLine(
     provider: ReviewChatProvider,
     fallbackOccurred: Boolean,
 ): String = when {
+    provider == ReviewChatProvider.LOCAL_MEMORY -> "本次由本地知识层完成"
     provider == ReviewChatProvider.CLOUD -> "本次由云侧完成"
     fallbackOccurred -> "云侧不可用，已回退端侧"
     else -> "本次由端侧完成"

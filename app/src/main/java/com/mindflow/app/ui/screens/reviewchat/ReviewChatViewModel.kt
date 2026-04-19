@@ -164,6 +164,7 @@ class ReviewChatViewModel(
                             content = result.answer,
                             provider = result.provider,
                             createdAt = System.currentTimeMillis(),
+                            referencedNoteId = result.referencedNoteId,
                         ),
                         isSending = false,
                         providerLine = result.providerLine,
