@@ -183,6 +183,7 @@ class AppContainer(context: Context) {
         LocalKnowledgeBrainPlanner(
             memoryLayerRepository = memoryLayerRepository,
             loadNoteById = { noteId -> noteRepository.getNote(noteId) },
+            loadAllNotes = { noteRepository.observeAllNotes().first().filter { !it.isArchived } },
             runOnDevice = { prompt ->
                 val settings = onDeviceModelSettingsRepository.getCurrent()
                 onDeviceAiClient.generateReviewChatReply(settings, prompt)

@@ -13,13 +13,28 @@ private val memoryDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern(
 class LocalKnowledgeBrainPlanner(
     private val memoryLayerRepository: MemoryLayerRepository,
     private val loadNoteById: suspend (Long) -> NoteEntity?,
+    private val loadAllNotes: suspend () -> List<NoteEntity>,
     private val runOnDevice: suspend (String) -> AiChatResult,
     private val applicationScope: CoroutineScope,
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     fun enqueueNoteIngestion(noteId: Long) {
         applicationScope.launch {
+            refreshNow(noteId)
+        }
+    }
+
+    fun enqueueRebuild() {
+        applicationScope.launch {
+            rebuildAll()
+        }
+    }
+
+    suspend fun refreshNow(noteId: Long? = null) {
+        if (noteId != null) {
             ingestNote(noteId)
+        } else {
+            rebuildAll()
         }
     }
 
@@ -33,6 +48,13 @@ class LocalKnowledgeBrainPlanner(
         memoryLayerRepository.upsertFragment(parsed.fragment)
         memoryLayerRepository.upsertThread(parsed.thread)
         memoryLayerRepository.upsertDigest(parsed.dayDigest)
+    }
+
+    suspend fun rebuildAll() {
+        memoryLayerRepository.clearAll()
+        loadAllNotes()
+            .sortedBy(NoteEntity::updatedAt)
+            .forEach { note -> ingestNote(note.id) }
     }
 
     private fun parseFragmentResult(

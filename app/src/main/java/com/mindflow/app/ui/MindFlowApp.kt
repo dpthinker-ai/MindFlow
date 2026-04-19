@@ -68,6 +68,7 @@ import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
@@ -128,6 +129,7 @@ fun MindFlowApp(
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
+    localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner,
     reviewChatPlanner: ReviewChatPlanner,
     reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository,
     launchRequest: MindFlowLaunchRequest?,
@@ -152,6 +154,7 @@ fun MindFlowApp(
             externalResearchPlanner = externalResearchPlanner,
             directionWikiCoordinator = directionWikiCoordinator,
             localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+            localKnowledgeBrainPlanner = localKnowledgeBrainPlanner,
         ),
     )
 

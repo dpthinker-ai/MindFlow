@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
         val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
         val localKnowledgeMaintenancePlanner = appContainer.localKnowledgeMaintenancePlanner
+        val localKnowledgeBrainPlanner = appContainer.localKnowledgeBrainPlanner
         val reviewChatPlanner: ReviewChatPlanner = appContainer.reviewChatPlanner
         val reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository =
             appContainer.reviewChatSavedConversationRepository
@@ -111,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     onDeviceAiClient = onDeviceAiClient,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+                    localKnowledgeBrainPlanner = localKnowledgeBrainPlanner,
                     reviewChatPlanner = reviewChatPlanner,
                     reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
                     launchRequest = launchRequestState.value,

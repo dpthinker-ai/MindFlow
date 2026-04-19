@@ -1,8 +1,7 @@
 package com.mindflow.app.ui.screens.reviewchat
 
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
@@ -41,6 +40,7 @@ class ReviewChatScreenInstrumentedTest {
                     planner = samplePlanner(),
                     savedConversationRepository = FakeSavedConversationRepository(),
                     onBack = {},
+                    onOpenRecord = {},
                 )
             }
         }
@@ -48,6 +48,26 @@ class ReviewChatScreenInstrumentedTest {
         composeRule.onNodeWithText("把最近两周的矛盾串一下").assertIsDisplayed()
         composeRule.onNodeWithText("你最近在增长和定位之间反复摇摆。").assertIsDisplayed()
         composeRule.onNodeWithText("本次由云侧完成").assertIsDisplayed()
+    }
+
+    @Test
+    fun route_rendersAssistantMarkdownInsteadOfRawSyntax() {
+        composeRule.setContent {
+            MindFlowTheme {
+                ReviewChatRoute(
+                    seed = ReviewChatSeed(initialQuestion = "帮我看一下前天我都写了什么内容。"),
+                    planner = markdownPlanner(),
+                    savedConversationRepository = FakeSavedConversationRepository(),
+                    onBack = {},
+                    onOpenRecord = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("1. 工作与工具", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Codex 远程连接", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("### 1. 工作与工具", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("**Codex 远程连接**", substring = true).assertDoesNotExist()
     }
 
     private fun samplePlanner() = ReviewChatPlanner(
@@ -59,6 +79,26 @@ class ReviewChatScreenInstrumentedTest {
         isCloudConfigured = { true },
         isOnDeviceReady = { true },
         runCloud = { AiChatResult.Success("你最近在增长和定位之间反复摇摆。") },
+        runOnDevice = { AiChatResult.Success("端侧回答") },
+    )
+
+    private fun markdownPlanner() = ReviewChatPlanner(
+        loadNotes = { listOf(sampleNote()) },
+        loadWeeklyReview = { WeeklyReviewState(lines = listOf("主线")) },
+        loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+        loadWikiSnapshot = { DirectionWikiSnapshot() },
+        resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
+        isCloudConfigured = { true },
+        isOnDeviceReady = { true },
+        runCloud = {
+            AiChatResult.Success(
+                """
+                ### 1. 工作与工具
+                - **Codex 远程连接**：你记录了通过 SSH 连接远程开发环境。
+                - **iWhisper 体验反馈**：你提到了输入框的问题。
+                """.trimIndent()
+            )
+        },
         runOnDevice = { AiChatResult.Success("端侧回答") },
     )
 

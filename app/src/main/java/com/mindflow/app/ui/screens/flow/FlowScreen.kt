@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -103,6 +104,7 @@ fun FlowRoute(
         latestSavedConversationSummary = latestSavedConversationSummary,
         focus = initialFocus,
         onRefreshMainline = viewModel::refreshMainline,
+        onRefreshLocalKnowledgeBrain = viewModel::refreshLocalKnowledgeBrain,
         onMarkSettledFeedback = viewModel::markSettledFeedback,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
@@ -132,6 +134,7 @@ private fun FlowScreen(
     latestSavedConversationSummary: SavedReviewChatSessionSummary?,
     focus: FlowFocus?,
     onRefreshMainline: () -> Unit,
+    onRefreshLocalKnowledgeBrain: () -> Unit,
     onMarkSettledFeedback: (Boolean) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -162,7 +165,9 @@ private fun FlowScreen(
                 .statusBarsPadding(),
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding(),
                 contentPadding = PaddingValues(
                     start = ScreenHorizontalPadding,
                     top = 8.dp,
@@ -248,11 +253,23 @@ private fun FlowScreen(
                         item {
                             ReviewChatEntryCard(
                                 latestSavedSummary = latestSavedConversationSummary,
+                                onOpenChat = { onOpenReviewChat("") },
                                 onSubmitQuestion = onOpenReviewChat,
                                 onOpenLatestSaved = {
                                     latestSavedConversationSummary?.sessionId?.let(onOpenLatestSavedReviewChat)
                                 },
                             )
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                GhostActionButton(
+                                    text = "刷新本地知识层",
+                                    onClick = onRefreshLocalKnowledgeBrain,
+                                )
+                            }
                         }
                     }
                 }

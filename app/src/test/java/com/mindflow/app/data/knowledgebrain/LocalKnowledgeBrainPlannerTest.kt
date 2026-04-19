@@ -24,6 +24,9 @@ class LocalKnowledgeBrainPlannerTest {
         val planner = LocalKnowledgeBrainPlanner(
             memoryLayerRepository = repository,
             loadNoteById = { sampleNote(id = 7L, topic = "leakspace", content = "讨论 leakspace 对推荐链路是否有帮助") },
+            loadAllNotes = {
+                listOf(sampleNote(id = 7L, topic = "leakspace", content = "讨论 leakspace 对推荐链路是否有帮助"))
+            },
             runOnDevice = {
                 AiChatResult.Success(
                     "fragmentSummary=这条记录在追问 leakspace 是否能优化推荐\n" +
@@ -42,6 +45,50 @@ class LocalKnowledgeBrainPlannerTest {
         assertThat(repository.fragments.single().topicKey).isEqualTo("topic/leakspace")
         assertThat(repository.threads.single().title).contains("leakspace")
         assertThat(repository.digests.single().scopeType).isEqualTo(MemoryDigestScopeType.DAY)
+        scope.cancel()
+    }
+
+    @Test
+    fun rebuildAll_clearsExistingMemoryLayerThenReingestsNotes() = runTest {
+        val repository = FakeMemoryLayerRepository().apply {
+            fragments += MemoryFragment(
+                id = "stale",
+                sourceNoteIds = listOf(1L),
+                topicKey = "topic/stale",
+                questionKey = "",
+                summary = "旧数据",
+                salience = 0.3,
+                timeSpanStart = 1L,
+                timeSpanEnd = 1L,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val older = sampleNote(id = 11L, topic = "更早记录", content = "第一条")
+        val newer = sampleNote(id = 12L, topic = "更新记录", content = "第二条").copy(updatedAt = older.updatedAt + 1000L)
+        val planner = LocalKnowledgeBrainPlanner(
+            memoryLayerRepository = repository,
+            loadNoteById = { noteId -> listOf(older, newer).firstOrNull { it.id == noteId } },
+            loadAllNotes = { listOf(newer, older) },
+            runOnDevice = { prompt ->
+                val summary = if (prompt.contains("更新记录")) "第二条摘要" else "第一条摘要"
+                AiChatResult.Success(
+                    "fragmentSummary=$summary\n" +
+                        "topicKey=topic/rebuild\n" +
+                        "questionKey=\n" +
+                        "salience=0.7",
+                )
+            },
+            applicationScope = scope,
+            now = { 1710000000000L },
+        )
+
+        planner.rebuildAll()
+
+        assertThat(repository.clearAllCalled).isTrue()
+        assertThat(repository.fragments).hasSize(2)
+        assertThat(repository.fragments.map { it.sourceNoteIds.single() }).containsExactly(11L, 12L).inOrder()
         scope.cancel()
     }
 
@@ -66,6 +113,7 @@ class LocalKnowledgeBrainPlannerTest {
         val fragments = mutableListOf<MemoryFragment>()
         val threads = mutableListOf<MemoryThread>()
         val digests = mutableListOf<MemoryDigest>()
+        var clearAllCalled: Boolean = false
 
         override suspend fun upsertFragment(fragment: MemoryFragment) {
             fragments.removeAll { it.id == fragment.id }
@@ -92,6 +140,7 @@ class LocalKnowledgeBrainPlannerTest {
             fragments.filter { fragment -> fragment.sourceNoteIds.any(noteIds::contains) }
 
         override suspend fun clearAll() {
+            clearAllCalled = true
             fragments.clear()
             threads.clear()
             digests.clear()

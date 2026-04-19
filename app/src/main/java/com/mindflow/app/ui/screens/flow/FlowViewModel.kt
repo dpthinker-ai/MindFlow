@@ -22,6 +22,7 @@ import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectState
+import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
@@ -180,6 +181,7 @@ class FlowViewModel(
     private val externalResearchPlanner: ExternalResearchPlanner,
     private val directionWikiCoordinator: DirectionWikiCoordinator,
     private val localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
+    private val localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner,
 ) : ViewModel() {
     private data class DirectionState(
         val followedDirections: List<FollowedDirectionSummary> = emptyList(),
@@ -867,6 +869,12 @@ class FlowViewModel(
         gapRefreshNonce.value = gapRefreshNonce.value + 1
     }
 
+    fun refreshLocalKnowledgeBrain() {
+        viewModelScope.launch {
+            localKnowledgeBrainPlanner.rebuildAll()
+        }
+    }
+
     fun markSettledFeedback(helpful: Boolean) {
         settledFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
     }
@@ -992,6 +1000,7 @@ class FlowViewModel(
             externalResearchPlanner: ExternalResearchPlanner,
             directionWikiCoordinator: DirectionWikiCoordinator,
             localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
+            localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FlowViewModel(
@@ -1007,6 +1016,7 @@ class FlowViewModel(
                     externalResearchPlanner = externalResearchPlanner,
                     directionWikiCoordinator = directionWikiCoordinator,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+                    localKnowledgeBrainPlanner = localKnowledgeBrainPlanner,
                 )
             }
         }
