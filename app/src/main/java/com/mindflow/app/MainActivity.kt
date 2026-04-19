@@ -10,6 +10,8 @@ import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.topic.ContentPolishPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
@@ -78,6 +80,9 @@ class MainActivity : ComponentActivity() {
         val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
         val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
         val localKnowledgeMaintenancePlanner = appContainer.localKnowledgeMaintenancePlanner
+        val reviewChatPlanner: ReviewChatPlanner = appContainer.reviewChatPlanner
+        val reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository =
+            appContainer.reviewChatSavedConversationRepository
         setContent {
             MindFlowTheme {
                 MindFlowApp(
@@ -106,6 +111,8 @@ class MainActivity : ComponentActivity() {
                     onDeviceAiClient = onDeviceAiClient,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+                    reviewChatPlanner = reviewChatPlanner,
+                    reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
                     launchRequest = launchRequestState.value,
                     onLaunchRequestConsumed = { requestId ->
                         if (launchRequestState.value?.requestId == requestId) {

@@ -1,6 +1,7 @@
 package com.mindflow.app.di
 
 import android.content.Context
+import androidx.room.Room
 import com.mindflow.app.data.backup.CloudBackupCoordinator
 import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.backup.PreferencesCloudBackupIndexRepository
@@ -20,12 +21,16 @@ import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
+import com.mindflow.app.data.local.reviewchat.ReviewChatDatabase
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.repository.MarkdownNoteRepository
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.reviewchat.ReviewChatPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.RoomReviewChatSavedConversationRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
@@ -59,6 +64,7 @@ import com.mindflow.app.data.wiki.ConceptGraphPlanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 
 class AppContainer(context: Context) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -252,6 +258,53 @@ class AppContainer(context: Context) {
         onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
         onDeviceAiClient = onDeviceAiClient,
         applicationScope = applicationScope,
+    )
+
+    private val reviewChatDatabase: ReviewChatDatabase = Room.databaseBuilder(
+        context.applicationContext,
+        ReviewChatDatabase::class.java,
+        "review-chat.db",
+    ).fallbackToDestructiveMigration(dropAllTables = true).build()
+
+    val reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository =
+        RoomReviewChatSavedConversationRepository(
+            dao = reviewChatDatabase.reviewChatDao(),
+        )
+
+    val reviewChatPlanner = ReviewChatPlanner(
+        loadNotes = {
+            noteRepository.observeAllNotes().first().filter { !it.isArchived }
+        },
+        loadWeeklyReview = {
+            weeklyReviewPlanner.state.first()
+        },
+        loadMaintenanceSnapshot = {
+            localKnowledgeMaintenancePlanner.snapshot.value
+        },
+        loadWikiSnapshot = {
+            directionWikiCoordinator.snapshot.value
+        },
+        resolveExecutionMode = {
+            onDeviceModelSettingsRepository.getCurrent().executionMode
+        },
+        isCloudConfigured = {
+            aiSettingsRepository.getCurrent().let { it.aiEnabled && it.isConfigured }
+        },
+        isOnDeviceReady = {
+            onDeviceModelSettingsRepository.getCurrent().isReady
+        },
+        runCloud = { prompt ->
+            aiServiceClient.generateReviewChatReply(
+                settings = aiSettingsRepository.getCurrent(),
+                prompt = prompt,
+            )
+        },
+        runOnDevice = { prompt ->
+            onDeviceAiClient.generateReviewChatReply(
+                settings = onDeviceModelSettingsRepository.getCurrent(),
+                prompt = prompt,
+            )
+        },
     )
 
     val reminderScheduler = ReminderScheduler(
