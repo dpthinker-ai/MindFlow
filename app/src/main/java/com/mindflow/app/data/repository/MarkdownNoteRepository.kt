@@ -56,6 +56,7 @@ class MarkdownNoteRepository(
     private val markdownImportParser: MarkdownImportParser,
     private val cloudNoteDocumentCodec: CloudNoteDocumentCodec,
     private val applicationScope: CoroutineScope,
+    private val onNoteMutated: (Long) -> Unit = {},
 ) : NoteRepository {
     private val storageMutex = Mutex()
     private val notesDir = File(appContext.filesDir, NOTES_DIR_NAME)
@@ -194,6 +195,7 @@ class MarkdownNoteRepository(
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)
+            onNoteMutated(document.note.id)
             refreshWidget()
         }
 
@@ -278,8 +280,11 @@ class MarkdownNoteRepository(
             applicationScope.launch {
                 val result = refreshFolderIfPossible(noteId, updateTimestamp = false)
                 result.notice?.let(::emitSystemNotice)
+                onNoteMutated(noteId)
                 refreshWidget()
             }
+        } else {
+            onNoteMutated(noteId)
         }
         refreshWidget()
     }

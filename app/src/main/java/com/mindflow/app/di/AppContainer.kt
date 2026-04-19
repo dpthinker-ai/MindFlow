@@ -16,6 +16,7 @@ import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
+import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LiteRtLmOnDeviceAiClient
 import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
 import com.mindflow.app.data.knowledgebrain.RoomMemoryLayerRepository
@@ -177,6 +178,18 @@ class AppContainer(context: Context) {
         ruleBasedFolderClassifier = RuleBasedFolderClassifier(),
     )
 
+    val localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner by lazy {
+        LocalKnowledgeBrainPlanner(
+            memoryLayerRepository = memoryLayerRepository,
+            loadNoteById = { noteId -> noteRepository.getNote(noteId) },
+            runOnDevice = { prompt ->
+                val settings = onDeviceModelSettingsRepository.getCurrent()
+                onDeviceAiClient.generateReviewChatReply(settings, prompt)
+            },
+            applicationScope = applicationScope,
+        )
+    }
+
     val noteRepository: NoteRepository = MarkdownNoteRepository(
         appContext = context.applicationContext,
         topicExtractor = topicExtractor,
@@ -186,6 +199,7 @@ class AppContainer(context: Context) {
         markdownImportParser = MarkdownImportParser(),
         cloudNoteDocumentCodec = cloudNoteDocumentCodec,
         applicationScope = applicationScope,
+        onNoteMutated = { noteId -> localKnowledgeBrainPlanner.enqueueNoteIngestion(noteId) },
     )
 
     val memoryLayerRepository: MemoryLayerRepository = RoomMemoryLayerRepository(
