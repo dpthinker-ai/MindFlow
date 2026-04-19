@@ -428,6 +428,7 @@ fun MindFlowApp(
                     planner = reviewChatPlanner,
                     savedConversationRepository = reviewChatSavedConversationRepository,
                     onBack = { navController.popBackStack() },
+                    onOpenRecord = openNoteSafely,
                 )
             }
 

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,8 +22,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,11 +40,14 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.markdown.SimpleMarkdown
 import com.mindflow.app.ui.components.ActionButton
+import com.mindflow.app.ui.components.ComposerTextField
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.InsightBlock
 import com.mindflow.app.ui.components.InsightChip
+import com.mindflow.app.ui.components.MarkdownText
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -55,6 +57,7 @@ import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.ui.navigation.ReviewChatSeed
+import androidx.compose.ui.text.input.ImeAction
 
 @Composable
 fun ReviewChatRoute(
@@ -62,6 +65,7 @@ fun ReviewChatRoute(
     planner: ReviewChatPlanner,
     savedConversationRepository: ReviewChatSavedConversationRepository,
     onBack: () -> Unit,
+    onOpenRecord: (Long) -> Unit,
 ) {
     val viewModel: ReviewChatViewModel = viewModel(
         key = "review-chat-${seed.requestId}",
@@ -79,6 +83,7 @@ fun ReviewChatRoute(
         onSend = viewModel::sendDraft,
         onRetry = viewModel::retry,
         onSave = viewModel::saveConversation,
+        onOpenRecord = onOpenRecord,
     )
 }
 
@@ -90,6 +95,7 @@ private fun ReviewChatScreen(
     onSend: () -> Unit,
     onRetry: () -> Unit,
     onSave: () -> Unit,
+    onOpenRecord: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
 
@@ -170,6 +176,7 @@ private fun ReviewChatScreen(
                         } else {
                             ""
                         },
+                        onOpenRecord = onOpenRecord,
                     )
                 }
                 if (uiState.isSending) {
@@ -206,7 +213,9 @@ private fun ReviewChatScreen(
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.96f),
                     border = BorderStroke(1.dp, BorderSoft),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .imePadding(),
                 ) {
                     Column(
                         modifier = Modifier
@@ -214,23 +223,17 @@ private fun ReviewChatScreen(
                             .padding(horizontal = ScreenHorizontalPadding, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        OutlinedTextField(
+                        ComposerTextField(
                             value = uiState.draft,
                             onValueChange = onDraftChange,
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                             maxLines = 5,
-                            placeholder = {
-                                Text(
-                                    text = "继续追问，或者换个角度聊。",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSoft,
-                                )
+                            imeAction = ImeAction.Default,
+                            placeholder = "继续追问，或者换个角度聊。",
+                            onImeAction = {
+                                if (uiState.canSend) onSend()
                             },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentBlue.copy(alpha = 0.6f),
-                                unfocusedBorderColor = BorderSoft,
-                            ),
                         )
                         ActionButton(
                             text = if (uiState.isSending) "生成中" else "发送",
@@ -249,6 +252,7 @@ private fun ReviewChatScreen(
 private fun ReviewChatMessageBubble(
     message: ReviewChatMessage,
     providerLine: String,
+    onOpenRecord: (Long) -> Unit,
 ) {
     val isUser = message.role == ReviewChatMessageRole.USER
     Row(
@@ -270,13 +274,12 @@ private fun ReviewChatMessageBubble(
                 )
             }
         } else {
+            val normalizedContent = SimpleMarkdown.normalizeForDisplay(message.content)
             PanelCard(
                 modifier = Modifier.widthIn(max = 360.dp),
             ) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMain,
+                MarkdownText(
+                    markdown = normalizedContent,
                 )
                 val providerLabel = when {
                     providerLine.isNotBlank() -> providerLine
@@ -286,6 +289,12 @@ private fun ReviewChatMessageBubble(
                 }
                 if (providerLabel.isNotBlank()) {
                     InsightChip(text = providerLabel)
+                }
+                message.referencedNoteId?.let { noteId ->
+                    GhostActionButton(
+                        text = "打开原记录",
+                        onClick = { onOpenRecord(noteId) },
+                    )
                 }
             }
         }

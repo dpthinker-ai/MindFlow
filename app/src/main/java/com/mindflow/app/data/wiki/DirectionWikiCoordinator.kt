@@ -13,6 +13,8 @@ import com.mindflow.app.data.connect.ResearchEvidenceAnalyzer
 import com.mindflow.app.data.connect.ResearchEvidenceType
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.connect.ThreadWeeklyReviewAnalyzer
+import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
+import com.mindflow.app.data.knowledgebrain.MemoryThread
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
@@ -227,6 +229,34 @@ internal fun buildConceptGraphCandidates(
                 .thenByDescending { it.updatedAt }
                 .thenBy { it.title },
         )
+
+internal fun applyMemoryThreadCenterBoost(
+    conceptGraph: ConceptGraphSnapshot,
+    threadHints: List<MemoryThread>,
+): ConceptGraphSnapshot {
+    if (conceptGraph.nodes.isEmpty() || threadHints.isEmpty()) return conceptGraph
+    val boostedCenterNodeId = threadHints
+        .asSequence()
+        .mapNotNull { threadHint ->
+            val normalizedTitle = stableConceptIdentityKey(threadHint.title)
+            if (normalizedTitle.isBlank()) return@mapNotNull null
+            conceptGraph.nodes.firstOrNull { node ->
+                sequenceOf(node.label)
+                    .plus(node.aliases.asSequence())
+                    .map(::stableConceptIdentityKey)
+                    .filter(String::isNotBlank)
+                    .any { candidate ->
+                        candidate.contains(normalizedTitle) || normalizedTitle.contains(candidate)
+                    }
+            }?.conceptId
+        }
+        .firstOrNull()
+    return if (boostedCenterNodeId.isNullOrBlank()) {
+        conceptGraph
+    } else {
+        conceptGraph.copy(defaultCenterNodeId = boostedCenterNodeId)
+    }
+}
 
 internal fun buildConceptBuckets(
     summaries: List<DirectionWikiDirectionSummary>,
@@ -813,6 +843,7 @@ class DirectionWikiCoordinator(
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
     private val conceptGraphPlanner: ConceptGraphPlanner,
+    private val memoryLayerRepository: MemoryLayerRepository,
     private val applicationScope: CoroutineScope,
 ) {
     private val legacyRootDir = File(context.filesDir, "direction-wiki")
@@ -1242,8 +1273,14 @@ class DirectionWikiCoordinator(
             conceptEntries = conceptEntries,
             candidates = objectCandidates,
         )
-        val conceptGraph = conceptGraphPlanner.summarize(
-            candidates = buildConceptGraphCandidates(conceptBuckets, objectCandidates),
+        val conceptGraph = applyMemoryThreadCenterBoost(
+            conceptGraph = conceptGraphPlanner.summarize(
+                candidates = buildConceptGraphCandidates(conceptBuckets, objectCandidates),
+            ),
+            threadHints = memoryLayerRepository.loadThreadsForQuery(
+                keywords = emptyList(),
+                limit = 6,
+            ),
         )
         File(rootDir, "wiki/graph.md").writeText(
             buildConceptGraphMarkdown(

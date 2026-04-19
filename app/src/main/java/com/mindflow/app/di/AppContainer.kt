@@ -288,6 +288,7 @@ class AppContainer(context: Context) {
         threadExecutionPlanner = threadExecutionPlanner,
         externalResearchPlanner = externalResearchPlanner,
         conceptGraphPlanner = conceptGraphPlanner,
+        memoryLayerRepository = memoryLayerRepository,
         applicationScope = applicationScope,
     )
 

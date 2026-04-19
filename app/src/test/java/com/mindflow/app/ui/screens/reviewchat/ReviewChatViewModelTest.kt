@@ -137,6 +137,31 @@ class ReviewChatViewModelTest {
         assertThat(state.messages).hasSize(2)
     }
 
+    @Test
+    fun answerWithReferencedRecord_preservesNoteIdForOpenRecordAction() = runTest(dispatcher) {
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "把 4 月 10 号那条完整记录给我"),
+            answerTurn = {
+                ReviewChatTurnResult(
+                    answer = "这是那条记录的完整内容。",
+                    provider = ReviewChatProvider.LOCAL_MEMORY,
+                    fallbackOccurred = false,
+                    providerLine = "本次由本地知识层完成",
+                    sessionSummary = "完整记录",
+                    titleSuggestion = "4 月 10 号记录",
+                    referencedNoteId = 42L,
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.messages.last()
+        assertThat(assistant.role).isEqualTo(ReviewChatMessageRole.ASSISTANT)
+        assertThat(assistant.referencedNoteId).isEqualTo(42L)
+    }
+
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {
         val savedSessions = mutableListOf<SavedReviewChatSession>()
         private val latestSummary = MutableStateFlow<SavedReviewChatSessionSummary?>(null)
