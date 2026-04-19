@@ -64,9 +64,49 @@ class ReviewChatPlannerTest {
             sessionSummary = "上一轮在讨论方向冲突",
         )
 
-        assertThat(packet.rawNoteSnippets).hasSize(6)
+        assertThat(packet.rawNoteSnippets).hasSize(4)
+        assertThat(packet.knowledgeBaseSnippets.first()).contains("当前判断")
+        assertThat(packet.wikiSnippets.joinToString("\n")).contains("关键结论")
         assertThat(packet.structuredSnippets.joinToString("\n")).contains("当前判断")
         assertThat(packet.structuredSnippets.joinToString("\n")).contains("关键结论")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_recall_prioritizesRawNotesAndStableWiki() {
+        val packet = buildReviewChatContextPacket(
+            question = "我之前什么时候提过产品方向",
+            intent = ReviewChatIntent.RECALL,
+            notes = List(12) { index -> sampleNote(index.toLong() + 1L, "产品方向$index", "正文$index") },
+            weeklyReview = WeeklyReviewState(lines = listOf("主线", "推进")),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(
+                currentJudgement = LocalMaintainerCard(line = "当前判断", support = "判断依据"),
+                recentAbsorption = LocalMaintainerCard(line = "最近吸收", support = "吸收依据"),
+                openQuestion = LocalMaintainerCard(line = "待厘清问题", support = "问题依据"),
+            ),
+            wikiSnapshot = DirectionWikiSnapshot(
+                directions = mapOf(
+                    "product" to DirectionWikiDirectionSummary(
+                        threadKey = "product",
+                        slug = "product",
+                        title = "产品方向",
+                        conclusionLine = "一个关键结论",
+                    ),
+                ),
+                knowledgeItems = listOf(
+                    KnowledgeLayerSearchItem(
+                        id = "k1",
+                        type = KnowledgeLayerSearchType.CONCLUSION,
+                        title = "产品方向判断",
+                        summary = "已经被沉淀下来的判断",
+                    ),
+                ),
+            ),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.rawNoteSnippets).hasSize(6)
+        assertThat(packet.wikiSnippets.first()).contains("产品方向")
+        assertThat(packet.knowledgeBaseSnippets).contains("待厘清问题｜待厘清问题")
     }
 
     @Test

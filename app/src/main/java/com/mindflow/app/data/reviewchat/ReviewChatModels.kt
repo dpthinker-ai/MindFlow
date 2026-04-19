@@ -41,6 +41,8 @@ data class ReviewChatContextPacket(
     val intent: ReviewChatIntent,
     val question: String,
     val sessionSummary: String,
+    val knowledgeBaseSnippets: List<String>,
+    val wikiSnippets: List<String>,
     val rawNoteSnippets: List<String>,
     val structuredSnippets: List<String>,
 )

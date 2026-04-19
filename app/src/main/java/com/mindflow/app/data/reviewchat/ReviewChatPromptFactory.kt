@@ -11,9 +11,12 @@ object ReviewChatPromptFactory {
         packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
             appendLine("近期会话摘要：$it")
         }
+        appendLine("LM Knowledge Base：")
+        packet.knowledgeBaseSnippets.forEach(::appendLine)
+        appendLine("LLM Wiki：")
+        packet.wikiSnippets.forEach(::appendLine)
         appendLine("原始记录：")
         packet.rawNoteSnippets.forEach(::appendLine)
-        appendLine("已沉淀结构：")
-        packet.structuredSnippets.forEach(::appendLine)
+        appendLine("回答要求：优先基于上面的本地知识压缩和结构化沉淀回答，再用原始记录补充细节。不要假装看过不存在的材料。")
     }
 }
