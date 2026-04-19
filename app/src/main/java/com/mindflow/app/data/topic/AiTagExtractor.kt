@@ -1,5 +1,6 @@
 package com.mindflow.app.data.topic
 
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.ai.AiTaskInput
 import com.mindflow.app.data.ai.AiTaskPayload
 import com.mindflow.app.data.ai.AiTaskRequest
@@ -13,7 +14,10 @@ import kotlinx.coroutines.withContext
 class AiTagExtractor(
     private val aiTaskRouter: AiTaskRouter,
 ) {
-    suspend fun extract(content: String): AiTagResult = withContext(Dispatchers.IO) {
+    suspend fun extract(
+        content: String,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): AiTagResult = withContext(Dispatchers.IO) {
         val cacheKey = buildCacheKey(content)
         getCached(cacheKey)?.let { cachedTags ->
             return@withContext AiTagResult(tags = cachedTags)
@@ -24,6 +28,7 @@ class AiTagExtractor(
                 AiTaskRequest(
                     type = AiTaskType.EXTRACT_TAGS,
                     input = AiTaskInput.NoteText(content),
+                    automaticPreference = automaticPreference,
                     validate = { payload ->
                         val tags = payload as AiTaskPayload.Tags
                         tags.tags.isNotEmpty()

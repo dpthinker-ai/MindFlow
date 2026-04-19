@@ -159,7 +159,7 @@ internal fun buildEditorAiModeSummary(
 ): String = when (mode) {
     AiExecutionMode.AUTOMATIC -> {
         if (onDeviceReady) {
-            "当前策略：自动。先端侧，失败后回退云侧。"
+            "当前策略：自动。编辑页会先云侧，失败后回退端侧。"
         } else {
             "当前策略：自动。端侧未就绪，这次会直接走云侧。"
         }
@@ -194,7 +194,7 @@ internal fun buildEditorAiRunFeedback(
         AiProvider.CLOUD -> "云侧"
     }
     return if (fallbackOccurred) {
-        "本次${actionLabel}由${providerLabel}完成，端侧没有给出可用结果。"
+        "本次${actionLabel}由${providerLabel}完成，另一侧没有给出可用结果。"
     } else {
         "本次${actionLabel}由${providerLabel}完成。"
     }

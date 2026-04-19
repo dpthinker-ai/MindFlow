@@ -1,5 +1,6 @@
 package com.mindflow.app.data.topic
 
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.ai.AiTaskInput
 import com.mindflow.app.data.ai.AiTaskPayload
 import com.mindflow.app.data.ai.AiTaskRequest
@@ -13,7 +14,10 @@ import kotlinx.coroutines.withContext
 class AiTopicExtractor(
     private val aiTaskRouter: AiTaskRouter,
 ) {
-    suspend fun extract(content: String): AiTopicResult = withContext(Dispatchers.IO) {
+    suspend fun extract(
+        content: String,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): AiTopicResult = withContext(Dispatchers.IO) {
         val cacheKey = buildCacheKey(content)
         getCached(cacheKey)?.let { cachedTopic ->
             return@withContext AiTopicResult(topic = cachedTopic)
@@ -24,6 +28,7 @@ class AiTopicExtractor(
                 AiTaskRequest(
                     type = AiTaskType.EXTRACT_TOPIC,
                     input = AiTaskInput.NoteText(content),
+                    automaticPreference = automaticPreference,
                     validate = { payload ->
                         val topic = payload as AiTaskPayload.Topic
                         topic.topic.isNotBlank() && topic.topic !in setOf("记录", "想法", "学习", "随想")

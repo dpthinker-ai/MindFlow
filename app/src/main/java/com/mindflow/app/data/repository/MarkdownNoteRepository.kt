@@ -2,6 +2,7 @@ package com.mindflow.app.data.repository
 
 import android.content.Context
 import com.mindflow.app.QuickCaptureWidgetProvider
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.importing.ImportedNote
 import com.mindflow.app.data.importing.ImportedStatusHistory
@@ -330,13 +331,28 @@ class MarkdownNoteRepository(
     }
 
     override suspend fun retriggerFolderClassification(noteId: Long): FolderRefreshResult =
-        refreshFolderIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshFolderIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun retriggerTopicExtraction(noteId: Long): TopicRefreshResult =
-        refreshTopicIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshTopicIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun retriggerTagExtraction(noteId: Long): TagRefreshResult =
-        refreshTagsIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshTagsIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun exportAllNotes(): ExportPayload {
         val generatedAt = System.currentTimeMillis()
@@ -399,89 +415,143 @@ class MarkdownNoteRepository(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
-    ): TopicRefreshResult = storageMutex.withLock {
-        val existing = storeState.value[noteId] ?: return TopicRefreshResult()
-        if (!force && existing.note.topicSource == TopicSource.MANUAL) {
-            return TopicRefreshResult()
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): TopicRefreshResult {
+        val snapshot = storageMutex.withLock {
+            val existing = storeState.value[noteId] ?: return TopicRefreshResult()
+            if (!force && existing.note.topicSource == TopicSource.MANUAL) {
+                return TopicRefreshResult()
+            }
+            existing
         }
 
-        val extraction = topicExtractor.extract(existing.note.content)
+        val extraction = topicExtractor.extract(snapshot.note.content, automaticPreference)
         val suggestion = extraction.suggestion
-        val topicChanged =
-            suggestion.topic != existing.note.topic || suggestion.source != existing.note.topicSource
-        if (!topicChanged && !force) {
-            return TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
-        }
+        return storageMutex.withLock {
+            val latest = storeState.value[noteId] ?: return TopicRefreshResult()
+            if (
+                !shouldApplyAiRefreshResult(
+                    extractedFromContent = snapshot.note.content,
+                    latestContent = latest.note.content,
+                    latestSourceIsManual = latest.note.topicSource == TopicSource.MANUAL,
+                    force = force,
+                )
+            ) {
+                return TopicRefreshResult(notice = STALE_REFRESH_NOTICE)
+            }
 
-        upsertLocked(
-            existing.copy(
-                note = existing.note.copy(
-                    topic = suggestion.topic,
-                    topicSource = suggestion.source,
-                    updatedAt = if (updateTimestamp) System.currentTimeMillis() else existing.note.updatedAt,
-                ),
+            val topicChanged =
+                suggestion.topic != latest.note.topic || suggestion.source != latest.note.topicSource
+            if (!topicChanged && !force) {
+                return TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            }
+
+            upsertLocked(
+                latest.copy(
+                    note = latest.note.copy(
+                        topic = suggestion.topic,
+                        topicSource = suggestion.source,
+                        updatedAt = if (updateTimestamp) System.currentTimeMillis() else latest.note.updatedAt,
+                    ),
+                )
             )
-        )
-        TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
+        }
     }
 
     private suspend fun refreshFolderIfPossible(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
-    ): FolderRefreshResult = storageMutex.withLock {
-        val existing = storeState.value[noteId] ?: return FolderRefreshResult()
-        if (!force && existing.note.folderSource == FolderSource.MANUAL) {
-            return FolderRefreshResult()
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): FolderRefreshResult {
+        val snapshot = storageMutex.withLock {
+            val existing = storeState.value[noteId] ?: return FolderRefreshResult()
+            if (!force && existing.note.folderSource == FolderSource.MANUAL) {
+                return FolderRefreshResult()
+            }
+            existing
         }
 
-        val extraction = folderClassifier.classify(existing.note.content)
+        val extraction = folderClassifier.classify(snapshot.note.content, automaticPreference)
         val suggestion = extraction.suggestion
-        val folderChanged =
-            suggestion.folderKey != existing.note.folderKey || suggestion.source != existing.note.folderSource
-        if (!folderChanged && !force) {
-            return FolderRefreshResult(suggestion = suggestion, notice = extraction.notice)
-        }
+        return storageMutex.withLock {
+            val latest = storeState.value[noteId] ?: return FolderRefreshResult()
+            if (
+                !shouldApplyAiRefreshResult(
+                    extractedFromContent = snapshot.note.content,
+                    latestContent = latest.note.content,
+                    latestSourceIsManual = latest.note.folderSource == FolderSource.MANUAL,
+                    force = force,
+                )
+            ) {
+                return FolderRefreshResult(notice = STALE_REFRESH_NOTICE)
+            }
 
-        upsertLocked(
-            existing.copy(
-                note = existing.note.copy(
-                    folderKey = suggestion.folderKey,
-                    folderSource = suggestion.source,
-                    updatedAt = if (updateTimestamp) System.currentTimeMillis() else existing.note.updatedAt,
-                ),
+            val folderChanged =
+                suggestion.folderKey != latest.note.folderKey || suggestion.source != latest.note.folderSource
+            if (!folderChanged && !force) {
+                return FolderRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            }
+
+            upsertLocked(
+                latest.copy(
+                    note = latest.note.copy(
+                        folderKey = suggestion.folderKey,
+                        folderSource = suggestion.source,
+                        updatedAt = if (updateTimestamp) System.currentTimeMillis() else latest.note.updatedAt,
+                    ),
+                )
             )
-        )
-        FolderRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            FolderRefreshResult(suggestion = suggestion, notice = extraction.notice)
+        }
     }
 
     private suspend fun refreshTagsIfPossible(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
-    ): TagRefreshResult = storageMutex.withLock {
-        val existing = storeState.value[noteId] ?: return TagRefreshResult()
-        if (!force && existing.note.tagSource == TagSource.MANUAL) {
-            return TagRefreshResult()
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): TagRefreshResult {
+        val snapshot = storageMutex.withLock {
+            val existing = storeState.value[noteId] ?: return TagRefreshResult()
+            if (!force && existing.note.tagSource == TagSource.MANUAL) {
+                return TagRefreshResult()
+            }
+            existing
         }
 
-        val extraction = tagExtractor.extract(existing.note.content)
+        val extraction = tagExtractor.extract(snapshot.note.content, automaticPreference)
         val suggestion = extraction.suggestion
-        val tagsChanged = suggestion.tags != existing.note.tags || suggestion.source != existing.note.tagSource
-        if (!tagsChanged && !force) {
-            return TagRefreshResult(suggestion = suggestion, notice = extraction.notice)
-        }
+        return storageMutex.withLock {
+            val latest = storeState.value[noteId] ?: return TagRefreshResult()
+            if (
+                !shouldApplyAiRefreshResult(
+                    extractedFromContent = snapshot.note.content,
+                    latestContent = latest.note.content,
+                    latestSourceIsManual = latest.note.tagSource == TagSource.MANUAL,
+                    force = force,
+                )
+            ) {
+                return TagRefreshResult(notice = STALE_REFRESH_NOTICE)
+            }
 
-        upsertLocked(
-            existing.copy(
-                note = existing.note.copy(
-                    tags = suggestion.tags,
-                    tagSource = suggestion.source,
-                    updatedAt = if (updateTimestamp) System.currentTimeMillis() else existing.note.updatedAt,
-                ),
+            val tagsChanged = suggestion.tags != latest.note.tags || suggestion.source != latest.note.tagSource
+            if (!tagsChanged && !force) {
+                return TagRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            }
+
+            upsertLocked(
+                latest.copy(
+                    note = latest.note.copy(
+                        tags = suggestion.tags,
+                        tagSource = suggestion.source,
+                        updatedAt = if (updateTimestamp) System.currentTimeMillis() else latest.note.updatedAt,
+                    ),
+                )
             )
-        )
-        TagRefreshResult(suggestion = suggestion, notice = extraction.notice)
+            TagRefreshResult(suggestion = suggestion, notice = extraction.notice)
+        }
     }
 
     private suspend fun storeImportedNotes(
@@ -702,6 +772,14 @@ class MarkdownNoteRepository(
     )
 
     private companion object {
+        const val STALE_REFRESH_NOTICE = "这条记录刚刚有变化，本次 AI 结果没有自动覆盖。"
         const val NOTES_DIR_NAME = "notes"
     }
 }
+
+internal fun shouldApplyAiRefreshResult(
+    extractedFromContent: String,
+    latestContent: String,
+    latestSourceIsManual: Boolean,
+    force: Boolean,
+): Boolean = extractedFromContent == latestContent && (force || !latestSourceIsManual)

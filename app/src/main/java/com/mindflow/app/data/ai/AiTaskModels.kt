@@ -10,6 +10,11 @@ enum class AiTaskType {
     GRAPH_GENERATE_RELATIONS,
 }
 
+enum class AiAutomaticPreference {
+    PREFER_ON_DEVICE,
+    PREFER_CLOUD,
+}
+
 sealed interface AiTaskInput {
     data class NoteText(val content: String) : AiTaskInput
     data class GraphContext(val contextSummary: String) : AiTaskInput
@@ -57,6 +62,7 @@ class AiTaskRoutingException(
 data class AiTaskRequest<T : AiTaskPayload>(
     val type: AiTaskType,
     val input: AiTaskInput,
+    val automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
     val validate: (T) -> Boolean,
 )
 

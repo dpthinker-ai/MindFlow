@@ -62,6 +62,35 @@ class AiTaskRouterTest {
         assertThat(result.meta.fallbackReason).isEqualTo("quality_gate_failed")
     }
 
+    @Test
+    fun `automatic mode can prefer cloud first for interactive requests`() = runTest {
+        val router = AiTaskRouter(
+            resolveMode = { AiExecutionMode.AUTOMATIC },
+            onDeviceProvider = FakeProvider(
+                AiTaskPayload.Topic(topic = "端侧标题", confidence = 0.81f),
+            ),
+            cloudProvider = FakeProvider(
+                AiTaskPayload.Topic(topic = "云侧标题", confidence = 0.93f),
+            ),
+        )
+
+        val result = router.run(
+            AiTaskRequest(
+                type = AiTaskType.EXTRACT_TOPIC,
+                input = AiTaskInput.NoteText("编辑页重提取主题"),
+                automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+                validate = { payload ->
+                    val topic = payload as AiTaskPayload.Topic
+                    topic.topic.isNotBlank()
+                },
+            ),
+        )
+
+        assertThat((result.payload as AiTaskPayload.Topic).topic).isEqualTo("云侧标题")
+        assertThat(result.meta.providerUsed).isEqualTo(AiProvider.CLOUD)
+        assertThat(result.meta.fallbackOccurred).isFalse()
+    }
+
     private class FakeProvider(
         private val payload: AiTaskPayload?,
     ) : AiTaskProvider {

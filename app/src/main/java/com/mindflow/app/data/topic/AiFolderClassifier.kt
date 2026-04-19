@@ -1,5 +1,6 @@
 package com.mindflow.app.data.topic
 
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.ai.AiTaskInput
 import com.mindflow.app.data.ai.AiTaskPayload
 import com.mindflow.app.data.ai.AiTaskRequest
@@ -14,7 +15,10 @@ import kotlinx.coroutines.withContext
 class AiFolderClassifier(
     private val aiTaskRouter: AiTaskRouter,
 ) {
-    suspend fun classify(content: String): AiFolderResult = withContext(Dispatchers.IO) {
+    suspend fun classify(
+        content: String,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    ): AiFolderResult = withContext(Dispatchers.IO) {
         val cacheKey = buildCacheKey(content)
         getCached(cacheKey)?.let { cachedFolder ->
             return@withContext AiFolderResult(folderKey = cachedFolder)
@@ -25,6 +29,7 @@ class AiFolderClassifier(
                 AiTaskRequest(
                     type = AiTaskType.CLASSIFY_CATEGORY,
                     input = AiTaskInput.NoteText(content),
+                    automaticPreference = automaticPreference,
                     validate = { payload ->
                         val folder = payload as AiTaskPayload.Folder
                         normalize(folder.folderKey) != null

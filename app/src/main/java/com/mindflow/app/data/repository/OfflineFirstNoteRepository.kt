@@ -3,6 +3,7 @@ package com.mindflow.app.data.repository
 import android.content.Context
 import androidx.room.withTransaction
 import com.mindflow.app.QuickCaptureWidgetProvider
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.local.MindFlowDatabase
@@ -268,13 +269,28 @@ class OfflineFirstNoteRepository(
     }
 
     override suspend fun retriggerFolderClassification(noteId: Long): FolderRefreshResult =
-        refreshFolderIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshFolderIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun retriggerTopicExtraction(noteId: Long): TopicRefreshResult =
-        refreshTopicIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshTopicIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun retriggerTagExtraction(noteId: Long): TagRefreshResult =
-        refreshTagsIfPossible(noteId, force = true, updateTimestamp = true)
+        refreshTagsIfPossible(
+            noteId = noteId,
+            force = true,
+            updateTimestamp = true,
+            automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+        )
 
     override suspend fun exportAllNotes(): ExportPayload {
         val generatedAt = System.currentTimeMillis()
@@ -349,13 +365,14 @@ class OfflineFirstNoteRepository(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
     ): TopicRefreshResult {
         val existing = noteDao.getNoteById(noteId) ?: return TopicRefreshResult()
         if (!force && existing.topicSource == TopicSource.MANUAL) {
             return TopicRefreshResult()
         }
 
-        val extraction = topicExtractor.extract(existing.content)
+        val extraction = topicExtractor.extract(existing.content, automaticPreference)
         val suggestion = extraction.suggestion
         val topicChanged = suggestion.topic != existing.topic || suggestion.source != existing.topicSource
         if (!topicChanged && !force) {
@@ -376,13 +393,14 @@ class OfflineFirstNoteRepository(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
     ): FolderRefreshResult {
         val existing = noteDao.getNoteById(noteId) ?: return FolderRefreshResult()
         if (!force && existing.folderSource == FolderSource.MANUAL) {
             return FolderRefreshResult()
         }
 
-        val extraction = folderClassifier.classify(existing.content)
+        val extraction = folderClassifier.classify(existing.content, automaticPreference)
         val suggestion = extraction.suggestion
         val folderChanged =
             suggestion.folderKey != existing.folderKey || suggestion.source != existing.folderSource
@@ -404,13 +422,14 @@ class OfflineFirstNoteRepository(
         noteId: Long,
         force: Boolean = false,
         updateTimestamp: Boolean,
+        automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
     ): TagRefreshResult {
         val existing = noteDao.getNoteById(noteId) ?: return TagRefreshResult()
         if (!force && existing.tagSource == TagSource.MANUAL) {
             return TagRefreshResult()
         }
 
-        val extraction = tagExtractor.extract(existing.content)
+        val extraction = tagExtractor.extract(existing.content, automaticPreference)
         val suggestion = extraction.suggestion
         val tagsChanged = suggestion.tags != existing.tags || suggestion.source != existing.tagSource
         if (!tagsChanged && !force) {

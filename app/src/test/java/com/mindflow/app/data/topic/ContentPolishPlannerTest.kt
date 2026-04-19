@@ -1,6 +1,7 @@
 package com.mindflow.app.data.topic
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.ai.AiTaskPayload
 import com.mindflow.app.data.ai.AiTaskProvider
@@ -35,6 +36,32 @@ class ContentPolishPlannerTest {
         assertThat(success.summary).isEqualTo("修掉重复")
     }
 
+    @Test
+    fun `polish planner prefers cloud first in automatic mode`() = runTest {
+        val requests = mutableListOf<AiTaskRequest<*>>()
+        val planner = ContentPolishPlanner(
+            aiTaskRouter = AiTaskRouter(
+                resolveMode = { AiExecutionMode.AUTOMATIC },
+                onDeviceProvider = RecordingProvider(
+                    requests = requests,
+                    payload = AiTaskPayload.Polish(polishedText = "端侧润色", changeSummary = "端侧"),
+                ),
+                cloudProvider = RecordingProvider(
+                    requests = requests,
+                    payload = AiTaskPayload.Polish(polishedText = "云侧润色", changeSummary = "云侧"),
+                ),
+            ),
+        )
+
+        val result = planner.polish("原文")
+
+        assertThat(result).isInstanceOf(ContentPolishResult.Success::class.java)
+        val success = result as ContentPolishResult.Success
+        assertThat(success.polishedText).isEqualTo("云侧润色")
+        assertThat(requests).isNotEmpty()
+        assertThat(requests.single().automaticPreference).isEqualTo(AiAutomaticPreference.PREFER_CLOUD)
+    }
+
     private fun routerWith(payload: AiTaskPayload): AiTaskRouter = AiTaskRouter(
         resolveMode = { AiExecutionMode.AUTOMATIC },
         onDeviceProvider = FakeProvider(payload),
@@ -46,5 +73,16 @@ class ContentPolishPlannerTest {
     ) : AiTaskProvider {
         @Suppress("UNCHECKED_CAST")
         override suspend fun <T : AiTaskPayload> run(request: AiTaskRequest<T>): T? = payload as T?
+    }
+
+    private class RecordingProvider(
+        private val requests: MutableList<AiTaskRequest<*>>,
+        private val payload: AiTaskPayload?,
+    ) : AiTaskProvider {
+        @Suppress("UNCHECKED_CAST")
+        override suspend fun <T : AiTaskPayload> run(request: AiTaskRequest<T>): T? {
+            requests += request
+            return payload as T?
+        }
     }
 }

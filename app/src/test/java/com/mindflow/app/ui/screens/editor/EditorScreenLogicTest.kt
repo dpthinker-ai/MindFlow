@@ -117,7 +117,7 @@ class EditorScreenLogicTest {
                 mode = AiExecutionMode.AUTOMATIC,
                 onDeviceReady = true,
             ),
-        ).isEqualTo("当前策略：自动。先端侧，失败后回退云侧。")
+        ).isEqualTo("当前策略：自动。编辑页会先云侧，失败后回退端侧。")
 
         assertThat(
             buildEditorAiModeSummary(
@@ -150,7 +150,7 @@ class EditorScreenLogicTest {
                 provider = AiProvider.CLOUD,
                 fallbackOccurred = true,
             ),
-        ).isEqualTo("本次整理标签由云侧完成，端侧没有给出可用结果。")
+        ).isEqualTo("本次整理标签由云侧完成，另一侧没有给出可用结果。")
     }
 
     @Test

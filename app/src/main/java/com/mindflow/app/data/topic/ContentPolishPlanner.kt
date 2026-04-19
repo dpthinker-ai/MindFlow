@@ -1,6 +1,7 @@
 package com.mindflow.app.data.topic
 
 import com.mindflow.app.data.ai.AiExecutionMode
+import com.mindflow.app.data.ai.AiAutomaticPreference
 import com.mindflow.app.data.ai.AiTaskInput
 import com.mindflow.app.data.ai.AiTaskPayload
 import com.mindflow.app.data.ai.AiTaskRequest
@@ -23,6 +24,7 @@ class ContentPolishPlanner(
                 AiTaskRequest(
                     type = AiTaskType.POLISH_CONTENT,
                     input = AiTaskInput.NoteText(content),
+                    automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
                     validate = { payload ->
                         val polish = payload as AiTaskPayload.Polish
                         polish.polishedText.isNotBlank()
