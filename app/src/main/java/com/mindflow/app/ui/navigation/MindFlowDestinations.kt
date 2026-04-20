@@ -17,6 +17,8 @@ object MindFlowDestinations {
     const val SETTINGS = "settings"
     const val CAPTURE = "capture/{captureSeedId}"
     const val CAPTURE_ARG = "captureSeedId"
+    const val REVIEW_CHAT = "review-chat/{reviewChatSeedId}"
+    const val REVIEW_CHAT_ARG = "reviewChatSeedId"
     const val FOLDER = "folder/{folderKey}"
     const val FOLDER_ARG = "folderKey"
     const val UNCATEGORIZED_FOLDER = "__uncategorized__"
@@ -28,6 +30,7 @@ object MindFlowDestinations {
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
     fun graphRoute(): String = FLOW_GRAPH
     fun captureRoute(seedId: Long): String = "capture/$seedId"
+    fun reviewChatRoute(seedId: Long): String = "review-chat/$seedId"
     fun flowRoute(focus: FlowFocus? = null): String =
         when (focus) {
             FlowFocus.REVIEW,

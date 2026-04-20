@@ -3,6 +3,8 @@ package com.mindflow.app.data.wiki
 import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.connect.ResearchEvidenceType
+import com.mindflow.app.data.knowledgebrain.MemoryThread
+import com.mindflow.app.data.knowledgebrain.MemoryThreadType
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.FolderSource
 import com.mindflow.app.data.model.KnowledgeTrust
@@ -13,6 +15,40 @@ import com.mindflow.app.data.model.TopicSource
 import org.junit.Test
 
 class DirectionWikiCoordinatorConceptGraphTest {
+    @Test
+    fun `memory thread hint can boost concept graph default center`() {
+        val boosted = applyMemoryThreadCenterBoost(
+            conceptGraph = ConceptGraphSnapshot(
+                defaultCenterNodeId = "concept:review",
+                nodes = listOf(
+                    ConceptGraphNode(
+                        conceptId = "concept:review",
+                        label = "复盘",
+                    ),
+                    ConceptGraphNode(
+                        conceptId = "concept:recommend",
+                        label = "推荐链路优化",
+                        aliases = listOf("推荐链路"),
+                    ),
+                ),
+            ),
+            threadHints = listOf(
+                MemoryThread(
+                    id = "thread-1",
+                    title = "推荐链路",
+                    type = MemoryThreadType.QUESTION,
+                    fragmentIds = listOf("fragment-1"),
+                    summary = "最近持续在讨论推荐链路优化。",
+                    currentState = "正在收口",
+                    openQuestions = emptyList(),
+                    updatedAt = 10L,
+                ),
+            ),
+        )
+
+        assertThat(boosted.defaultCenterNodeId).isEqualTo("concept:recommend")
+    }
+
     @Test
     fun `direction wiki snapshot exposes conceptGraph as the only production graph field`() {
         val fields = DirectionWikiSnapshot::class.java.declaredFields.map { it.name }

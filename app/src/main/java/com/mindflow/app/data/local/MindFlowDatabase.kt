@@ -5,20 +5,31 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.mindflow.app.data.local.dao.MemoryLayerDao
 import com.mindflow.app.data.local.dao.NoteDao
 import com.mindflow.app.data.local.dao.NoteStatusHistoryDao
+import com.mindflow.app.data.local.entity.MemoryDigestEntity
+import com.mindflow.app.data.local.entity.MemoryFragmentEntity
+import com.mindflow.app.data.local.entity.MemoryThreadEntity
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
 
 @Database(
-    entities = [NoteEntity::class, NoteStatusHistoryEntity::class],
-    version = 6,
+    entities = [
+        NoteEntity::class,
+        NoteStatusHistoryEntity::class,
+        MemoryFragmentEntity::class,
+        MemoryThreadEntity::class,
+        MemoryDigestEntity::class,
+    ],
+    version = 7,
     exportSchema = false,
 )
 @TypeConverters(MindFlowConverters::class)
 abstract class MindFlowDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun noteStatusHistoryDao(): NoteStatusHistoryDao
+    abstract fun memoryLayerDao(): MemoryLayerDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -60,6 +71,54 @@ abstract class MindFlowDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN knowledgeTrust TEXT NOT NULL DEFAULT 'NONE'")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS memory_fragments (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        sourceNoteIds TEXT NOT NULL,
+                        topicKey TEXT NOT NULL,
+                        questionKey TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        salience REAL NOT NULL,
+                        timeSpanStart INTEGER NOT NULL,
+                        timeSpanEnd INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS memory_threads (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        fragmentIds TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        currentState TEXT NOT NULL,
+                        openQuestions TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS memory_digests (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        scopeType TEXT NOT NULL,
+                        scopeKey TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        highlights TEXT NOT NULL,
+                        sourceFragmentIds TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
             }
         }
     }

@@ -44,4 +44,13 @@ class MindFlowConverters {
 
     @TypeConverter
     fun fromTags(value: List<String>?): String = NoteTagCodec.encode(value.orEmpty())
+
+    @TypeConverter
+    fun toLongList(value: String?): List<Long> = value
+        ?.split(',')
+        ?.mapNotNull { token -> token.trim().toLongOrNull() }
+        .orEmpty()
+
+    @TypeConverter
+    fun fromLongList(value: List<Long>?): String = value.orEmpty().joinToString(",")
 }

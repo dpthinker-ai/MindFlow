@@ -57,6 +57,8 @@ import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.review.WeeklyReviewPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
@@ -66,6 +68,7 @@ import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
+import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
@@ -75,12 +78,14 @@ import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
+import com.mindflow.app.ui.navigation.ReviewChatSeed
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.FlowRoute
 import com.mindflow.app.ui.screens.flow.FlowViewModel
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
+import com.mindflow.app.ui.screens.reviewchat.ReviewChatRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
 import com.mindflow.app.ui.screens.settings.SettingsRoute
 import com.mindflow.app.ui.screens.thread.ThreadRoute
@@ -124,6 +129,9 @@ fun MindFlowApp(
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
+    localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner,
+    reviewChatPlanner: ReviewChatPlanner,
+    reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository,
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
 ) {
@@ -131,6 +139,7 @@ fun MindFlowApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val captureSeeds = remember { mutableStateMapOf<Long, CaptureSeed>() }
+    val reviewChatSeeds = remember { mutableStateMapOf<Long, ReviewChatSeed>() }
     val sharedFlowViewModel: FlowViewModel = viewModel(
         factory = FlowViewModel.factory(
             noteRepository = noteRepository,
@@ -145,12 +154,20 @@ fun MindFlowApp(
             externalResearchPlanner = externalResearchPlanner,
             directionWikiCoordinator = directionWikiCoordinator,
             localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,
+            localKnowledgeBrainPlanner = localKnowledgeBrainPlanner,
         ),
     )
 
     fun openCapture(seed: CaptureSeed = CaptureSeed()) {
         captureSeeds[seed.requestId] = seed
         navController.navigate(MindFlowDestinations.captureRoute(seed.requestId))
+    }
+
+    fun openReviewChat(seed: ReviewChatSeed) {
+        reviewChatSeeds[seed.requestId] = seed
+        navController.navigate(MindFlowDestinations.reviewChatRoute(seed.requestId)) {
+            launchSingleTop = true
+        }
     }
 
     fun openTopLevel(route: String) {
@@ -251,22 +268,34 @@ fun MindFlowApp(
             composable(MindFlowDestinations.FLOW_TODAY) {
                 FlowRoute(
                     viewModel = sharedFlowViewModel,
+                    reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
                     initialFocus = FlowFocus.TODAY,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
-                    onOpenSearch = { navController.navigate(MindFlowDestinations.SEARCH_BASE) },
+                    onOpenReviewChat = { question ->
+                        openReviewChat(ReviewChatSeed(initialQuestion = question))
+                    },
+                    onOpenLatestSavedReviewChat = { sessionId ->
+                        openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
+                    },
                 )
             }
 
             composable(MindFlowDestinations.FLOW_REVIEW) {
                 FlowRoute(
                     viewModel = sharedFlowViewModel,
+                    reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
                     initialFocus = FlowFocus.REVIEW,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
-                    onOpenSearch = { navController.navigate(MindFlowDestinations.SEARCH_BASE) },
+                    onOpenReviewChat = { question ->
+                        openReviewChat(ReviewChatSeed(initialQuestion = question))
+                    },
+                    onOpenLatestSavedReviewChat = { sessionId ->
+                        openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
+                    },
                 )
             }
 
@@ -388,6 +417,21 @@ fun MindFlowApp(
                             launchSingleTop = true
                         }
                     },
+                )
+            }
+
+            composable(
+                route = MindFlowDestinations.REVIEW_CHAT,
+                arguments = listOf(navArgument(MindFlowDestinations.REVIEW_CHAT_ARG) { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val seedId = backStackEntry.arguments?.getLong(MindFlowDestinations.REVIEW_CHAT_ARG) ?: 0L
+                val seed = reviewChatSeeds.remove(seedId) ?: ReviewChatSeed(requestId = seedId)
+                ReviewChatRoute(
+                    seed = seed,
+                    planner = reviewChatPlanner,
+                    savedConversationRepository = reviewChatSavedConversationRepository,
+                    onBack = { navController.popBackStack() },
+                    onOpenRecord = openNoteSafely,
                 )
             }
 

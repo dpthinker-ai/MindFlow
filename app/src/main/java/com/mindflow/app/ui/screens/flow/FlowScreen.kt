@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,6 +53,8 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.review.WeeklyReviewItem
 import com.mindflow.app.data.review.WeeklyReviewPlanner
+import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.components.ActionButton
@@ -84,22 +87,30 @@ import kotlinx.coroutines.launch
 @Composable
 fun FlowRoute(
     viewModel: FlowViewModel,
+    reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository,
     initialFocus: FlowFocus? = null,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
-    onOpenSearch: () -> Unit,
+    onOpenReviewChat: (String) -> Unit,
+    onOpenLatestSavedReviewChat: (Long) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val latestSavedConversationSummary by reviewChatSavedConversationRepository
+        .observeLatestSavedSessionSummary()
+        .collectAsStateWithLifecycle(initialValue = null)
     FlowScreen(
         uiState = uiState,
+        latestSavedConversationSummary = latestSavedConversationSummary,
         focus = initialFocus,
         onRefreshMainline = viewModel::refreshMainline,
+        onRefreshLocalKnowledgeBrain = viewModel::refreshLocalKnowledgeBrain,
         onMarkSettledFeedback = viewModel::markSettledFeedback,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
         onCreateCapture = onCreateCapture,
-        onOpenSearch = onOpenSearch,
+        onOpenReviewChat = onOpenReviewChat,
+        onOpenLatestSavedReviewChat = onOpenLatestSavedReviewChat,
     )
 }
 
@@ -120,13 +131,16 @@ private fun FlowFocus?.toPage(): FlowPage = when (this) {
 @Composable
 private fun FlowScreen(
     uiState: FlowUiState,
+    latestSavedConversationSummary: SavedReviewChatSessionSummary?,
     focus: FlowFocus?,
     onRefreshMainline: () -> Unit,
+    onRefreshLocalKnowledgeBrain: () -> Unit,
     onMarkSettledFeedback: (Boolean) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
-    onOpenSearch: () -> Unit,
+    onOpenReviewChat: (String) -> Unit,
+    onOpenLatestSavedReviewChat: (Long) -> Unit,
 ) {
     val maintainerSnapshot = uiState.localMaintainerSnapshot
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
@@ -151,7 +165,9 @@ private fun FlowScreen(
                 .statusBarsPadding(),
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding(),
                 contentPadding = PaddingValues(
                     start = ScreenHorizontalPadding,
                     top = 8.dp,
@@ -211,6 +227,15 @@ private fun FlowScreen(
                     }
                     FlowPage.REVIEW -> {
                         item {
+                            ReviewChatEntryCard(
+                                latestSavedSummary = latestSavedConversationSummary,
+                                onOpenChat = { onOpenReviewChat("") },
+                                onOpenLatestSaved = {
+                                    latestSavedConversationSummary?.sessionId?.let(onOpenLatestSavedReviewChat)
+                                },
+                            )
+                        }
+                        item {
                             SettledKnowledgeCard(
                                 direction = surface.assetDirection,
                                 provenance = surface.assetProvenance,
@@ -235,59 +260,19 @@ private fun FlowScreen(
                             )
                         }
                         item {
-                            SearchRecordsCard(
-                                onOpenSearch = onOpenSearch,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                GhostActionButton(
+                                    text = "刷新本地知识层",
+                                    onClick = onRefreshLocalKnowledgeBrain,
+                                )
+                            }
                         }
                     }
                 }
 
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchRecordsCard(
-    onOpenSearch: () -> Unit,
-) {
-    Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
-        shape = PanelShape,
-        border = BorderStroke(1.dp, BorderSoft),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = "搜索记录",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextMain,
-                    )
-                    Text(
-                        text = "想主动翻旧内容，就从这里进。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                GhostActionButton(
-                    text = "去搜索",
-                    onClick = onOpenSearch,
-                )
             }
         }
     }
