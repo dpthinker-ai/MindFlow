@@ -5,11 +5,23 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessage
 import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatRawNoteDetail
 import java.time.Instant
+import java.time.LocalDate
+import java.time.MonthDay
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val chatAssemblerDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val fullRecordHints = listOf("完整", "全文", "原文", "全部内容")
+private enum class RequestedDateScope {
+    RELATIVE_DAY,
+    MONTH_DAY,
+}
+
+private data class RequestedDateConstraint(
+    val scope: RequestedDateScope,
+    val localDate: LocalDate? = null,
+    val monthDay: MonthDay? = null,
+)
 
 data class MemoryLayerChatContext(
     val memoryDigestSnippets: List<String>,
@@ -27,9 +39,15 @@ class MemoryLayerChatAssembler(
         priorMessages: List<ReviewChatMessage>,
     ): MemoryLayerChatContext {
         val notes = loadNotes()
-        val digest = loadDayDigestIfRequested(question, notes)
+        val requestedDate = resolveRequestedDate(question)
+        val digest = loadDayDigestIfRequested(question, notes, requestedDate)
         val threads = memoryLayerRepository.loadThreadsForQuery(extractKeywords(question), limit = 4)
-        val rawMatches = loadMatchingNotes(question, notes, requireFullContent = wantsFullContent(question))
+        val rawMatches = loadMatchingNotes(
+            question = question,
+            notes = notes,
+            requireFullContent = wantsFullContent(question),
+            requestedDate = requestedDate,
+        )
 
         return MemoryLayerChatContext(
             memoryDigestSnippets = listOfNotNull(digest?.summary),
@@ -37,7 +55,7 @@ class MemoryLayerChatAssembler(
             rawNoteSnippets = rawMatches.map { note ->
                 "记录｜${formatDate(note.updatedAt)}｜${note.topic.ifBlank { "未命名记录" }}｜${compact(note.content, 120)}"
             },
-            rawNoteDetails = if (wantsFullContent(question)) {
+            rawNoteDetails = if (wantsFullContent(question) || requestedDate != null) {
                 rawMatches.map { note ->
                     ReviewChatRawNoteDetail(
                         noteId = note.id,
@@ -55,11 +73,12 @@ class MemoryLayerChatAssembler(
     private suspend fun loadDayDigestIfRequested(
         question: String,
         notes: List<NoteEntity>,
+        requestedDate: RequestedDateConstraint? = resolveRequestedDate(question),
     ): MemoryDigest? {
-        val requested = extractMonthDay(question) ?: return null
+        val resolvedDate = requestedDate ?: return null
         val matchingNote = notes.firstOrNull { note ->
             val localDate = Instant.ofEpochMilli(note.updatedAt).atZone(ZoneId.systemDefault()).toLocalDate()
-            localDate.monthValue == requested.first && localDate.dayOfMonth == requested.second
+            matchesRequestedDate(localDate, resolvedDate)
         } ?: return null
         val scopeKey = formatDate(matchingNote.updatedAt)
         return memoryLayerRepository.loadDigest(MemoryDigestScopeType.DAY, scopeKey)
@@ -69,19 +88,33 @@ class MemoryLayerChatAssembler(
         question: String,
         notes: List<NoteEntity>,
         requireFullContent: Boolean,
+        requestedDate: RequestedDateConstraint?,
     ): List<NoteEntity> {
         val keywords = extractKeywords(question)
         val ranked = notes
+            .asSequence()
+            .filter { note ->
+                requestedDate == null ||
+                    matchesRequestedDate(
+                        Instant.ofEpochMilli(note.updatedAt).atZone(ZoneId.systemDefault()).toLocalDate(),
+                        requestedDate,
+                    )
+            }
             .map { note ->
                 note to scoreMatch(question, keywords, listOf(note.topic, note.content, note.folderKey.orEmpty()) + note.tags)
             }
             .sortedWith(compareByDescending<Pair<NoteEntity, Int>> { it.second }.thenByDescending { it.first.updatedAt })
 
-        val limit = if (requireFullContent) 2 else 4
+        val limit = when {
+            requestedDate != null -> Int.MAX_VALUE
+            requireFullContent -> 2
+            else -> 4
+        }
         return ranked
             .filter { (_, score) -> score > 0 || requireFullContent }
             .map { it.first }
             .take(limit)
+            .toList()
     }
 
     private fun wantsFullContent(question: String): Boolean = fullRecordHints.any(question::contains)
@@ -91,6 +124,39 @@ class MemoryLayerChatAssembler(
         val month = match.groupValues[1].toIntOrNull() ?: return null
         val day = match.groupValues[2].toIntOrNull() ?: return null
         return month to day
+    }
+
+    private fun resolveRequestedDate(question: String): RequestedDateConstraint? {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        return when {
+            "今天" in question -> RequestedDateConstraint(
+                scope = RequestedDateScope.RELATIVE_DAY,
+                localDate = today,
+            )
+            "昨天" in question || "昨日" in question -> RequestedDateConstraint(
+                scope = RequestedDateScope.RELATIVE_DAY,
+                localDate = today.minusDays(1),
+            )
+            "前天" in question -> RequestedDateConstraint(
+                scope = RequestedDateScope.RELATIVE_DAY,
+                localDate = today.minusDays(2),
+            )
+            else -> {
+                val monthDay = extractMonthDay(question) ?: return null
+                RequestedDateConstraint(
+                    scope = RequestedDateScope.MONTH_DAY,
+                    monthDay = MonthDay.of(monthDay.first, monthDay.second),
+                )
+            }
+        }
+    }
+
+    private fun matchesRequestedDate(
+        noteDate: LocalDate,
+        requestedDate: RequestedDateConstraint,
+    ): Boolean = when (requestedDate.scope) {
+        RequestedDateScope.RELATIVE_DAY -> requestedDate.localDate == noteDate
+        RequestedDateScope.MONTH_DAY -> requestedDate.monthDay == MonthDay.from(noteDate)
     }
 
     private fun extractKeywords(question: String): List<String> =

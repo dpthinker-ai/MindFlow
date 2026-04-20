@@ -26,6 +26,8 @@ import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -352,6 +354,122 @@ class ReviewChatPlannerTest {
         assertThat(cloudCalled).isTrue()
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("最近主要在推进推荐链路验证")
+    }
+
+    @Test
+    fun answer_todayScopedQuestion_returnsOnlyTodayRecordsFromLocalMemory() = runTest {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val todayStart = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val yesterdayStart = today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+        val assembler = MemoryLayerChatAssembler(
+            memoryLayerRepository = object : MemoryLayerRepository {
+                override suspend fun upsertFragment(fragment: MemoryFragment) = Unit
+                override suspend fun upsertThread(thread: MemoryThread) = Unit
+                override suspend fun upsertDigest(digest: MemoryDigest) = Unit
+                override suspend fun loadDigest(scopeType: MemoryDigestScopeType, scopeKey: String): MemoryDigest? = null
+                override suspend fun loadThreadsForQuery(keywords: List<String>, limit: Int): List<MemoryThread> = emptyList()
+                override suspend fun loadFragmentsForNotes(noteIds: List<Long>): List<MemoryFragment> = emptyList()
+                override suspend fun clearAll() = Unit
+            },
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "今天主题A", "今天第一条记录").copy(updatedAt = todayStart + 1_000L),
+                    sampleNote(2L, "今天主题B", "今天第二条记录").copy(updatedAt = todayStart + 2_000L),
+                    sampleNote(3L, "昨天主题", "昨天的记录").copy(updatedAt = yesterdayStart + 3_000L),
+                )
+            },
+        )
+        val planner = ReviewChatPlanner(
+            loadNotes = { emptyList() },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { AiChatResult.Success("云侧不应该被调用") },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+            memoryLayerChatAssembler = assembler,
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我只看今天的",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
+        assertThat(result.answer).contains("今天你记录了 2 条")
+        assertThat(result.answer).contains("今天主题A")
+        assertThat(result.answer).contains("今天主题B")
+        assertThat(result.answer).doesNotContain("昨天主题")
+    }
+
+    @Test
+    fun answer_dayFullRecordQuestion_returnsAllMatchedRecordsForThatDay() = runTest {
+        val assembler = MemoryLayerChatAssembler(
+            memoryLayerRepository = object : MemoryLayerRepository {
+                override suspend fun upsertFragment(fragment: MemoryFragment) = Unit
+                override suspend fun upsertThread(thread: MemoryThread) = Unit
+                override suspend fun upsertDigest(digest: MemoryDigest) = Unit
+                override suspend fun loadDigest(scopeType: MemoryDigestScopeType, scopeKey: String): MemoryDigest? =
+                    MemoryDigest(
+                        id = "day-2026-04-10",
+                        scopeType = MemoryDigestScopeType.DAY,
+                        scopeKey = "2026-04-10",
+                        summary = "4 月 10 号主要在讨论 leakspace 和推荐链路。",
+                        highlights = listOf("完整原文可直接展开"),
+                        sourceFragmentIds = listOf("fragment-1"),
+                        updatedAt = 1L,
+                    )
+
+                override suspend fun loadThreadsForQuery(keywords: List<String>, limit: Int): List<MemoryThread> = emptyList()
+                override suspend fun loadFragmentsForNotes(noteIds: List<Long>): List<MemoryFragment> = emptyList()
+                override suspend fun clearAll() = Unit
+            },
+            loadNotes = {
+                listOf(
+                    sampleNote(
+                        id = 42L,
+                        topic = "4 月 10 号讨论A",
+                        content = "这是 4 月 10 号的第一条完整原文。",
+                    ).copy(updatedAt = 1_712_707_200_000L),
+                    sampleNote(
+                        id = 43L,
+                        topic = "4 月 10 号讨论B",
+                        content = "这是 4 月 10 号的第二条完整原文。",
+                    ).copy(updatedAt = 1_712_707_300_000L),
+                )
+            },
+        )
+        val planner = ReviewChatPlanner(
+            loadNotes = { emptyList() },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { AiChatResult.Success("云侧不应该被调用") },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+            memoryLayerChatAssembler = assembler,
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "把 4 月 10 号那天的完整内容发给我",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
+        assertThat(result.answer).contains("4 月 10 号讨论A")
+        assertThat(result.answer).contains("4 月 10 号讨论B")
+        assertThat(result.answer).contains("第一条完整原文")
+        assertThat(result.answer).contains("第二条完整原文")
+        assertThat(result.referencedNoteId).isNull()
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -354,21 +355,26 @@ class ReviewChatPlanner(
         )
 
         if (shouldReturnRawRecordDirectly(request.question, memoryContext)) {
-            val detail = memoryContext.rawNoteDetails.first()
-            val title = "${detail.dateLabel}｜${detail.title}"
-            val answer = buildString {
-                appendLine(title)
-                appendLine()
-                append(detail.fullContent)
-            }
+            val answer = buildFullRecordAnswer(memoryContext.rawNoteDetails)
             return ReviewChatTurnResult(
                 answer = answer.trim(),
                 provider = ReviewChatProvider.LOCAL_MEMORY,
                 fallbackOccurred = false,
                 providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
-                sessionSummary = "${request.question.take(40)}｜${detail.title}",
+                sessionSummary = "${request.question.take(40)}｜${memoryContext.rawNoteDetails.first().title}",
                 titleSuggestion = request.question.take(18),
-                referencedNoteId = detail.noteId,
+                referencedNoteId = memoryContext.rawNoteDetails.singleOrNull()?.noteId,
+            )
+        }
+
+        if (shouldReturnScopedRecordListDirectly(request.question, intent, memoryContext)) {
+            return ReviewChatTurnResult(
+                answer = buildScopedRecordListAnswer(request.question, memoryContext.rawNoteDetails),
+                provider = ReviewChatProvider.LOCAL_MEMORY,
+                fallbackOccurred = false,
+                providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                sessionSummary = "${request.question.take(40)}｜${memoryContext.rawNoteDetails.size} 条记录",
+                titleSuggestion = request.question.take(18),
             )
         }
 
@@ -455,6 +461,17 @@ private fun shouldReturnRawRecordDirectly(
     return wantsFullRecord && memoryContext.rawNoteDetails.isNotEmpty()
 }
 
+private fun shouldReturnScopedRecordListDirectly(
+    question: String,
+    intent: ReviewChatIntent,
+    memoryContext: MemoryLayerChatContext,
+): Boolean {
+    return intent == ReviewChatIntent.RECALL &&
+        requestedDateForReviewChat(question) != null &&
+        memoryContext.rawNoteDetails.isNotEmpty() &&
+        !listOf("完整", "全文", "原文", "全部内容").any(question::contains)
+}
+
 private fun looksClearlyOutsideHistoryScope(
     question: String,
 ): Boolean {
@@ -475,3 +492,55 @@ private fun buildOutOfScopeReviewChatAnswer(): String = """
 - 把某条问题线从最早到现在串一下
 - 直接把某条记录的完整内容发给我
 """.trim()
+
+private fun requestedDateForReviewChat(question: String): LocalDate? {
+    val today = LocalDate.now(ZoneId.systemDefault())
+    return when {
+        "今天" in question -> today
+        "昨天" in question || "昨日" in question -> today.minusDays(1)
+        "前天" in question -> today.minusDays(2)
+        else -> {
+            val match = Regex("(\\d{1,2})\\s*月\\s*(\\d{1,2})").find(question) ?: return null
+            val month = match.groupValues[1].toIntOrNull() ?: return null
+            val day = match.groupValues[2].toIntOrNull() ?: return null
+            LocalDate.of(today.year, month, day)
+        }
+    }
+}
+
+private fun buildFullRecordAnswer(details: List<ReviewChatRawNoteDetail>): String = buildString {
+    details.forEachIndexed { index, detail ->
+        appendLine("${detail.dateLabel}｜${detail.title}")
+        appendLine()
+        appendLine(detail.fullContent.trim())
+        if (index != details.lastIndex) {
+            appendLine()
+            appendLine("——")
+            appendLine()
+        }
+    }
+}.trim()
+
+private fun buildScopedRecordListAnswer(
+    question: String,
+    details: List<ReviewChatRawNoteDetail>,
+): String {
+    val scopeLabel = when {
+        "今天" in question -> "今天"
+        "昨天" in question || "昨日" in question -> "昨天"
+        "前天" in question -> "前天"
+        else -> details.firstOrNull()?.dateLabel ?: "这一天"
+    }
+    return buildString {
+        appendLine("${scopeLabel}你记录了 ${details.size} 条：")
+        appendLine()
+        details.forEach { detail ->
+            val compactContent = detail.fullContent
+                .replace("\n", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .let { if (it.length <= 120) it else it.take(119).trimEnd() + "…" }
+            appendLine("- ${detail.dateLabel}｜${detail.title}｜$compactContent")
+        }
+    }.trim()
+}
