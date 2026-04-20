@@ -29,7 +29,22 @@ private val reviewChatScopeHints = listOf(
     "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread",
 )
 
+private val reviewChatExternalHints = listOf(
+    "天气", "气温", "下雨", "台风", "新闻", "热搜", "股价", "股票", "汇率", "彩票",
+    "体育比赛", "球赛", "nba", "足球", "电影票房", "明星八卦", "实时路况", "航班", "高铁",
+)
+
 private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+internal fun extractReviewChatKeywords(question: String): List<String> =
+    Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
+        .findAll(question)
+        .flatMap { match ->
+            tokenizeReviewChatQueryChunk(match.value).asSequence()
+        }
+        .filter { token -> token.isNotBlank() && token !in reviewChatStopWords }
+        .distinct()
+        .toList()
 
 internal fun classifyReviewChatIntent(question: String): ReviewChatIntent {
     val normalized = question.lowercase()
@@ -90,12 +105,22 @@ internal fun buildReviewChatContextPacket(
     )
 }
 
-private fun extractReviewChatKeywords(question: String): List<String> =
-    Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
-        .findAll(question)
-        .map { it.value.trim() }
-        .filter { token -> token.isNotBlank() && token !in reviewChatStopWords }
-        .toList()
+private fun tokenizeReviewChatQueryChunk(token: String): List<String> {
+    val normalized = token.trim().lowercase()
+    if (normalized.isBlank()) return emptyList()
+    val isHan = normalized.all { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+    if (!isHan || normalized.length <= 4) return listOf(normalized)
+
+    val pieces = linkedSetOf<String>()
+    for (window in 2..4) {
+        if (normalized.length < window) continue
+        for (index in 0..normalized.length - window) {
+            pieces += normalized.substring(index, index + window)
+        }
+    }
+    pieces += normalized
+    return pieces.toList()
+}
 
 private fun buildKnowledgeBaseSnippets(
     intent: ReviewChatIntent,
@@ -347,16 +372,7 @@ class ReviewChatPlanner(
             )
         }
 
-        if (
-            !looksGroundedInHistory(
-                question = request.question,
-                notes = notes,
-                weeklyReview = weeklyReview,
-                maintenanceSnapshot = maintenanceSnapshot,
-                wikiSnapshot = wikiSnapshot,
-                memoryContext = memoryContext,
-            )
-        ) {
+        if (looksClearlyOutsideHistoryScope(request.question)) {
             return ReviewChatTurnResult(
                 answer = buildOutOfScopeReviewChatAnswer(),
                 provider = ReviewChatProvider.LOCAL_MEMORY,
@@ -439,75 +455,13 @@ private fun shouldReturnRawRecordDirectly(
     return wantsFullRecord && memoryContext.rawNoteDetails.isNotEmpty()
 }
 
-private fun looksGroundedInHistory(
+private fun looksClearlyOutsideHistoryScope(
     question: String,
-    notes: List<NoteEntity>,
-    weeklyReview: WeeklyReviewState,
-    maintenanceSnapshot: LocalKnowledgeMaintenanceSnapshot,
-    wikiSnapshot: DirectionWikiSnapshot,
-    memoryContext: MemoryLayerChatContext,
 ): Boolean {
     if (reviewChatHistoryHints.any(question::contains) || reviewChatScopeHints.any(question::contains)) {
-        return true
+        return false
     }
-    if (
-        memoryContext.memoryDigestSnippets.isNotEmpty() ||
-        memoryContext.memoryThreadSnippets.isNotEmpty() ||
-        memoryContext.rawNoteSnippets.isNotEmpty() ||
-        memoryContext.rawNoteDetails.isNotEmpty()
-    ) {
-        return true
-    }
-
-    val keywords = extractReviewChatKeywords(question)
-    if (keywords.isEmpty()) return false
-
-    val noteHit = notes.any { note ->
-        scoreQuestionMatch(
-            question = question,
-            keywords = keywords,
-            haystack = listOf(note.topic, note.content, note.folderKey.orEmpty()) + note.tags,
-        ) > 0
-    }
-    if (noteHit) return true
-
-    val weeklyHit = scoreQuestionMatch(
-        question = question,
-        keywords = keywords,
-        haystack = weeklyReview.lines,
-    ) > 0
-    if (weeklyHit) return true
-
-    val maintenanceHit = scoreQuestionMatch(
-        question = question,
-        keywords = keywords,
-        haystack = listOf(
-            maintenanceSnapshot.currentJudgement.line,
-            maintenanceSnapshot.recentAbsorption.line,
-            maintenanceSnapshot.newConnection.line,
-            maintenanceSnapshot.openQuestion.line,
-        ),
-    ) > 0
-    if (maintenanceHit) return true
-
-    return wikiSnapshot.directions.values.any { direction ->
-        scoreQuestionMatch(
-            question = question,
-            keywords = keywords,
-            haystack = listOf(
-                direction.title,
-                direction.conclusionLine,
-                direction.assetSummary,
-                direction.threadKey,
-            ),
-        ) > 0
-    } || wikiSnapshot.knowledgeItems.any { item ->
-        scoreQuestionMatch(
-            question = question,
-            keywords = keywords,
-            haystack = listOf(item.title, item.summary, item.supportLine, item.type.label),
-        ) > 0
-    }
+    return reviewChatExternalHints.any(question::contains)
 }
 
 private fun buildOutOfScopeReviewChatAnswer(): String = """

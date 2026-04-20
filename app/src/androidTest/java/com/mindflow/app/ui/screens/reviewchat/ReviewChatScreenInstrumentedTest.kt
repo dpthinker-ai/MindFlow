@@ -70,6 +70,30 @@ class ReviewChatScreenInstrumentedTest {
         composeRule.onNodeWithText("**Codex 远程连接**", substring = true).assertDoesNotExist()
     }
 
+    @Test
+    fun route_keepsCopyActionOutOfDefaultLayout_andShowsCopyMenuOnLongPress() {
+        composeRule.setContent {
+            MindFlowTheme {
+                ReviewChatRoute(
+                    seed = ReviewChatSeed(initialQuestion = "把 4 月 10 号那条完整记录发给我。"),
+                    planner = samplePlanner(),
+                    savedConversationRepository = FakeSavedConversationRepository(),
+                    onBack = {},
+                    onOpenRecord = {},
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithText("复制全文").assertCountEquals(0)
+        composeRule
+            .onNodeWithText("你最近在增长和定位之间反复摇摆。")
+            .performTouchInput { longClick(center) }
+
+        composeRule.onNodeWithText("复制这条回复").assertIsDisplayed()
+        composeRule.onNodeWithText("复制全文").assertIsDisplayed()
+        composeRule.onNodeWithText("选择文本").assertIsDisplayed()
+    }
+
     private fun samplePlanner() = ReviewChatPlanner(
         loadNotes = { listOf(sampleNote()) },
         loadWeeklyReview = { WeeklyReviewState(lines = listOf("主线")) },

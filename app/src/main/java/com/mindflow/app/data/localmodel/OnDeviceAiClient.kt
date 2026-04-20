@@ -42,7 +42,7 @@ class LiteRtLmOnDeviceAiClient(
         // Gemma 4 E4B supports a much larger architectural context window.
         // This value is the mobile runtime budget we hand to LiteRT for
         // input + output tokens, not the model card maximum.
-        const val RUNTIME_MAX_TOKENS = 4096
+        const val RUNTIME_MAX_TOKENS = 2048
     }
 
     private data class CachedEngine(
@@ -51,16 +51,8 @@ class LiteRtLmOnDeviceAiClient(
         val engine: Engine,
     )
 
-    private data class CachedReviewChatConversation(
-        val modelPath: String,
-        val sessionId: String,
-        val backendName: String,
-        val conversation: com.google.ai.edge.litertlm.Conversation,
-    )
-
     private val engineMutex = Mutex()
     private var cachedEngine: CachedEngine? = null
-    private var cachedReviewChatConversation: CachedReviewChatConversation? = null
     private val cacheDir by lazy {
         File(context.cacheDir, "litert-lm").apply { mkdirs() }
     }
@@ -210,29 +202,30 @@ class LiteRtLmOnDeviceAiClient(
 
         engineMutex.withLock {
             runCatching {
-                val (engine, conversation) = acquireReviewChatConversation(
-                    modelPath = modelPath,
-                    sessionId = request.sessionId,
-                    resetConversation = request.resetConversation,
-                )
-                conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                val engine = acquireEngine(modelPath)
+                engine.engine.createConversation(
+                    reviewChatConversationConfig(engine.backendName)
+                ).use { conversation ->
+                    conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                }
             }.recoverCatching { error ->
                 if (!shouldRetryReviewChatOnCpu(error)) throw error
                 invalidateEngine()
-                invalidateReviewChatConversation()
-                val (engine, conversation) = acquireReviewChatConversation(
+                val engine = acquireEngine(
                     modelPath = modelPath,
-                    sessionId = request.sessionId,
-                    resetConversation = true,
                     forcedBackendName = "cpu",
                 )
-                conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                engine.engine.createConversation(
+                    reviewChatConversationConfig(engine.backendName)
+                ).use { conversation ->
+                    conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                }
             }.fold(
                 onSuccess = { (content, backendName) ->
-                    if (content.isBlank()) {
+                    if (!isUsableReviewChatContent(content)) {
                         AiChatResult.Failure(
                             reason = AiFailureReason.OTHER,
-                            message = "本地模型没有返回可用内容",
+                            message = "本地模型没有返回可用回答",
                         )
                     } else {
                         AiChatResult.Success(
@@ -248,36 +241,6 @@ class LiteRtLmOnDeviceAiClient(
                 },
             )
         }
-    }
-
-    private fun acquireReviewChatConversation(
-        modelPath: String,
-        sessionId: String,
-        resetConversation: Boolean,
-        forcedBackendName: String? = null,
-    ): Pair<CachedEngine, com.google.ai.edge.litertlm.Conversation> {
-        val cachedEngine = acquireEngine(modelPath, forcedBackendName)
-        if (!resetConversation) {
-            cachedReviewChatConversation
-                ?.takeIf {
-                    it.modelPath == modelPath &&
-                        it.sessionId == sessionId &&
-                        it.backendName == cachedEngine.backendName
-                }
-                ?.let { return cachedEngine to it.conversation }
-        }
-
-        invalidateReviewChatConversation()
-        val conversation = cachedEngine.engine.createConversation(
-            reviewChatConversationConfig(cachedEngine.backendName)
-        )
-        cachedReviewChatConversation = CachedReviewChatConversation(
-            modelPath = modelPath,
-            sessionId = sessionId,
-            backendName = cachedEngine.backendName,
-            conversation = conversation,
-        )
-        return cachedEngine to conversation
     }
 
     private fun acquireEngine(
@@ -323,7 +286,6 @@ class LiteRtLmOnDeviceAiClient(
         forcedBackendName: String? = null,
     ): List<Pair<String, Backend>> {
         val candidates = listOf(
-            "npu" to Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir),
             "gpu" to Backend.GPU(),
             "cpu" to Backend.CPU(),
         )
@@ -335,21 +297,21 @@ class LiteRtLmOnDeviceAiClient(
         return listOf(
             "opencl",
             "gpu",
-            "npu",
             "delegate",
             "cdsprpc",
         ).any(message::contains)
     }
 
     private fun invalidateEngine() {
-        invalidateReviewChatConversation()
         cachedEngine?.engine?.close()
         cachedEngine = null
     }
 
-    private fun invalidateReviewChatConversation() {
-        cachedReviewChatConversation?.conversation?.close()
-        cachedReviewChatConversation = null
+    private fun isUsableReviewChatContent(content: String): Boolean {
+        val normalized = content
+            .replace(Regex("[\\p{Punct}\\p{P}\\s]+"), "")
+            .trim()
+        return normalized.length >= 4
     }
 
     private fun defaultConversationConfig(): ConversationConfig = ConversationConfig(
@@ -364,15 +326,11 @@ class LiteRtLmOnDeviceAiClient(
     private fun reviewChatConversationConfig(
         backendName: String,
     ): ConversationConfig = ConversationConfig(
-        samplerConfig = if (backendName == "npu") {
-            null
-        } else {
-            SamplerConfig(
-                topK = 64,
-                topP = 0.95,
-                temperature = 0.9,
-                seed = 0,
-            )
-        }
+        samplerConfig = SamplerConfig(
+            topK = 64,
+            topP = 0.95,
+            temperature = 0.9,
+            seed = 0,
+        )
     )
 }

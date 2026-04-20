@@ -143,6 +143,24 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun buildReviewChatContextPacket_chineseSentenceQuestionStillFindsShortKeywords() {
+        val packet = buildReviewChatContextPacket(
+            question = "帮我看一下抖音有哪些事情可以做",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "抖音文案记录", "这里记录了抖音选题、脚本和转化思路"),
+                sampleNote(2L, "别的主题", "和抖音无关"),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("抖音文案记录")
+    }
+
+    @Test
     fun answer_automaticModePrefersCloudThenFallsBackToOnDevice() = runTest {
         val planner = ReviewChatPlanner(
             loadNotes = { listOf(sampleNote(1L, "主题", "一条正文")) },
@@ -307,6 +325,36 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_genericHistoryQuestion_isNotBlockedByOutOfScopeGuard() = runTest {
+        var cloudCalled = false
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "产品方向", "最近一直在讨论推荐链路和增长")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = listOf("最近主要在推进推荐链路验证")) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = {
+                cloudCalled = true
+                AiChatResult.Success("最近主要在推进推荐链路验证。")
+            },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我最近在忙什么",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalled).isTrue()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("最近主要在推进推荐链路验证")
+    }
+
+    @Test
     fun onDevicePrompt_isCondensedAndKeepsCurrentQuestion() {
         val packet = buildReviewChatContextPacket(
             question = "把我过去几个月关于产品方向的分歧串起来",
@@ -361,8 +409,11 @@ class ReviewChatPlannerTest {
 
         assertThat(prompt).contains("当前问题：把我过去几个月关于产品方向的分歧串起来")
         assertThat(prompt).contains("回答要求：先直接回答当前问题，不要重复上一轮。")
-        assertThat(prompt).contains("近期会话：")
+        assertThat(prompt).contains("最近问题：")
+        assertThat(prompt).contains("用户｜上一轮问题")
+        assertThat(prompt).doesNotContain("上一轮回答")
         assertThat(prompt).contains("Memory Thread：")
+        assertThat(prompt.indexOf("原始记录：")).isLessThan(prompt.indexOf("LM Knowledge Base："))
         assertThat(prompt).contains("LM Knowledge Base：")
         assertThat(prompt.length).isGreaterThan(300)
         assertThat(prompt.length).isAtMost(1_800)

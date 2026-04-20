@@ -49,6 +49,9 @@ object ReviewChatPromptFactory {
 
     private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): String {
         val prompt = StringBuilder()
+        val recentUserSnippets = packet.conversationSnippets
+            .filter { it.startsWith("用户｜") }
+            .takeLast(2)
 
         appendWithinBudget(
             builder = prompt,
@@ -73,35 +76,38 @@ object ReviewChatPromptFactory {
         appendWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "补充要求：优先利用 Memory Thread / Digest，再用原始记录补细节；如果材料不足就明确说材料不足；如果用户明确要完整内容，优先返回完整记录。",
+            line = "补充要求：如果已经命中原始记录，优先围绕这些记录回答，不要只复述通用知识层；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。",
         )
-        packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
-            appendWithinBudget(
-                builder = prompt,
-                budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-                line = "近期会话摘要：${compactForOnDevice(it, maxChars = 180)}",
-            )
-        }
 
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "近期会话",
-            lines = packet.conversationSnippets.takeLast(4),
-            maxItems = 4,
-            itemMaxChars = 120,
+            title = "最近问题",
+            lines = recentUserSnippets,
+            maxItems = 2,
+            itemMaxChars = 80,
         )
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "Memory Digest",
-            lines = packet.memoryDigestSnippets,
-            maxItems = when (packet.intent) {
-                ReviewChatIntent.RECALL -> 4
-                ReviewChatIntent.DISCUSS -> 3
-                ReviewChatIntent.SYNTHESIZE -> 3
+            title = "完整记录",
+            lines = packet.rawNoteDetails.map { detail ->
+                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 320)}"
             },
-            itemMaxChars = 140,
+            maxItems = 2,
+            itemMaxChars = 380,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "原始记录",
+            lines = packet.rawNoteSnippets,
+            maxItems = when (packet.intent) {
+                ReviewChatIntent.RECALL -> 5
+                ReviewChatIntent.DISCUSS -> 4
+                ReviewChatIntent.SYNTHESIZE -> 4
+            },
+            itemMaxChars = 150,
         )
         appendSectionWithinBudget(
             builder = prompt,
@@ -118,9 +124,21 @@ object ReviewChatPromptFactory {
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "Memory Digest",
+            lines = packet.memoryDigestSnippets,
+            maxItems = when (packet.intent) {
+                ReviewChatIntent.RECALL -> 4
+                ReviewChatIntent.DISCUSS -> 3
+                ReviewChatIntent.SYNTHESIZE -> 3
+            },
+            itemMaxChars = 140,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "LM Knowledge Base",
             lines = packet.knowledgeBaseSnippets,
-            maxItems = 3,
+            maxItems = 2,
             itemMaxChars = 120,
         )
         appendSectionWithinBudget(
@@ -128,30 +146,8 @@ object ReviewChatPromptFactory {
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "LLM Wiki",
             lines = packet.wikiSnippets,
-            maxItems = 4,
+            maxItems = 3,
             itemMaxChars = 140,
-        )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "原始记录",
-            lines = packet.rawNoteSnippets,
-            maxItems = when (packet.intent) {
-                ReviewChatIntent.RECALL -> 5
-                ReviewChatIntent.DISCUSS -> 4
-                ReviewChatIntent.SYNTHESIZE -> 4
-            },
-            itemMaxChars = 140,
-        )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "完整记录",
-            lines = packet.rawNoteDetails.map { detail ->
-                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 260)}"
-            },
-            maxItems = 2,
-            itemMaxChars = 320,
         )
 
         return prompt.toString().trim()

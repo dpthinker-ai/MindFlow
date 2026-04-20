@@ -96,9 +96,29 @@ class MemoryLayerChatAssembler(
     private fun extractKeywords(question: String): List<String> =
         Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
             .findAll(question)
-            .map { it.value.trim() }
+            .flatMap { match ->
+                tokenizeAssemblerQueryChunk(match.value).asSequence()
+            }
             .filter { it.isNotBlank() }
+            .distinct()
             .toList()
+
+    private fun tokenizeAssemblerQueryChunk(token: String): List<String> {
+        val normalized = token.trim().lowercase()
+        if (normalized.isBlank()) return emptyList()
+        val isHan = normalized.all { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+        if (!isHan || normalized.length <= 4) return listOf(normalized)
+
+        val pieces = linkedSetOf<String>()
+        for (window in 2..4) {
+            if (normalized.length < window) continue
+            for (index in 0..normalized.length - window) {
+                pieces += normalized.substring(index, index + window)
+            }
+        }
+        pieces += normalized
+        return pieces.toList()
+    }
 
     private fun scoreMatch(
         question: String,

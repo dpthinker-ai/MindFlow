@@ -1,5 +1,8 @@
 package com.mindflow.app.ui.screens.reviewchat
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,9 +20,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,8 +33,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,6 +110,7 @@ private fun ReviewChatScreen(
     onOpenRecord: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    var copySheet by remember { mutableStateOf<ReviewChatCopySheetState?>(null) }
 
     LaunchedEffect(uiState.messages.size, uiState.isSending) {
         val targetIndex = when {
@@ -177,6 +190,12 @@ private fun ReviewChatScreen(
                             ""
                         },
                         onOpenRecord = onOpenRecord,
+                        onRequestCopy = { payload ->
+                            copySheet = ReviewChatCopySheetState(
+                                message = payload,
+                                mode = ReviewChatCopySheetMode.Menu,
+                            )
+                        },
                     )
                 }
                 if (uiState.isSending) {
@@ -246,15 +265,67 @@ private fun ReviewChatScreen(
             }
         }
     }
+
+    copySheet?.let { sheet ->
+        when (sheet.mode) {
+            ReviewChatCopySheetMode.Menu -> {
+                ReviewChatCopyMenuDialog(
+                    message = sheet.message,
+                    onDismiss = { copySheet = null },
+                    onCopyAll = {
+                        copySheet = ReviewChatCopySheetState(
+                            message = sheet.message,
+                            mode = ReviewChatCopySheetMode.Copied,
+                        )
+                    },
+                    onSelectText = {
+                        copySheet = ReviewChatCopySheetState(
+                            message = sheet.message,
+                            mode = ReviewChatCopySheetMode.SelectText,
+                        )
+                    },
+                )
+            }
+
+            ReviewChatCopySheetMode.SelectText -> {
+                ReviewChatSelectTextDialog(
+                    message = sheet.message,
+                    onDismiss = { copySheet = null },
+                )
+            }
+
+            ReviewChatCopySheetMode.Copied -> {
+                val clipboardManager = LocalClipboardManager.current
+                val context = LocalContext.current
+                LaunchedEffect(sheet.message.content) {
+                    clipboardManager.setText(AnnotatedString(sheet.message.content))
+                    Toast.makeText(context, "已复制全文", Toast.LENGTH_SHORT).show()
+                    copySheet = null
+                }
+            }
+        }
+    }
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ReviewChatMessageBubble(
     message: ReviewChatMessage,
     providerLine: String,
     onOpenRecord: (Long) -> Unit,
+    onRequestCopy: (ReviewChatCopyMessage) -> Unit,
 ) {
     val isUser = message.role == ReviewChatMessageRole.USER
+    val normalizedContent = if (isUser) {
+        message.content.trim()
+    } else {
+        SimpleMarkdown.normalizeForDisplay(message.content)
+    }
+    val copyPayload = ReviewChatCopyMessage(
+        title = if (isUser) "复制你的消息" else "复制这条回复",
+        content = normalizedContent,
+        renderAsMarkdown = !isUser,
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -264,7 +335,12 @@ private fun ReviewChatMessageBubble(
                 color = AccentBlue.copy(alpha = 0.12f),
                 shape = MaterialTheme.shapes.large,
                 border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.18f)),
-                modifier = Modifier.widthIn(max = 320.dp),
+                modifier = Modifier
+                    .widthIn(max = 320.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { onRequestCopy(copyPayload) },
+                    ),
             ) {
                 Text(
                     text = message.content,
@@ -274,9 +350,13 @@ private fun ReviewChatMessageBubble(
                 )
             }
         } else {
-            val normalizedContent = SimpleMarkdown.normalizeForDisplay(message.content)
             PanelCard(
-                modifier = Modifier.widthIn(max = 360.dp),
+                modifier = Modifier
+                    .widthIn(max = 360.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { onRequestCopy(copyPayload) },
+                    ),
             ) {
                 MarkdownText(
                     markdown = normalizedContent,
@@ -299,4 +379,96 @@ private fun ReviewChatMessageBubble(
             }
         }
     }
+}
+
+@Composable
+private fun ReviewChatCopyMenuDialog(
+    message: ReviewChatCopyMessage,
+    onDismiss: () -> Unit,
+    onCopyAll: () -> Unit,
+    onSelectText: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = message.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextMain,
+            )
+        },
+        text = {
+            Text(
+                text = "长内容默认不露出复制按钮。长按消息后，在这里选“复制全文”或“选择文本”。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSoft,
+            )
+        },
+        confirmButton = {
+            ActionButton(
+                text = "复制全文",
+                onClick = onCopyAll,
+                icon = Icons.Outlined.ContentCopy,
+            )
+        },
+        dismissButton = {
+            GhostActionButton(
+                text = "选择文本",
+                onClick = onSelectText,
+            )
+        },
+    )
+}
+
+@Composable
+private fun ReviewChatSelectTextDialog(
+    message: ReviewChatCopyMessage,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "选择文本",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextMain,
+            )
+        },
+        text = {
+            SelectionContainer {
+                if (message.renderAsMarkdown) {
+                    MarkdownText(markdown = message.content)
+                } else {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMain,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            GhostActionButton(
+                text = "关闭",
+                onClick = onDismiss,
+            )
+        },
+    )
+}
+
+private data class ReviewChatCopyMessage(
+    val title: String,
+    val content: String,
+    val renderAsMarkdown: Boolean,
+)
+
+private data class ReviewChatCopySheetState(
+    val message: ReviewChatCopyMessage,
+    val mode: ReviewChatCopySheetMode,
+)
+
+private enum class ReviewChatCopySheetMode {
+    Menu,
+    SelectText,
+    Copied,
 }

@@ -64,6 +64,36 @@ class MemoryLayerChatAssemblerTest {
         assertThat(context.rawNoteDetails.single().noteId).isEqualTo(42L)
     }
 
+    @Test
+    fun assemble_chineseSentenceQuestionStillMatchesRelevantNotes() = runTest {
+        val assembler = MemoryLayerChatAssembler(
+            memoryLayerRepository = FakeMemoryLayerRepository(),
+            loadNotes = {
+                listOf(
+                    sampleNote(
+                        id = 7L,
+                        topic = "抖音文案记录",
+                        content = "这里整理了抖音选题、脚本和转化路径。",
+                        updatedAt = dayTimestamp("2026-04-18"),
+                    ),
+                    sampleNote(
+                        id = 8L,
+                        topic = "别的方向",
+                        content = "和短视频无关。",
+                        updatedAt = dayTimestamp("2026-04-19"),
+                    ),
+                )
+            },
+        )
+
+        val context = assembler.assemble(
+            question = "帮我看一下抖音有哪些事情可以做",
+            priorMessages = emptyList(),
+        )
+
+        assertThat(context.rawNoteSnippets.joinToString("\n")).contains("抖音文案记录")
+    }
+
     private fun sampleNote(id: Long, topic: String, content: String, updatedAt: Long): NoteEntity = NoteEntity(
         id = id,
         content = content,
