@@ -92,7 +92,6 @@ fun buildReviewChatProviderLine(
     provider: ReviewChatProvider,
     fallbackOccurred: Boolean,
 ): String = when {
-    provider == ReviewChatProvider.LOCAL_MEMORY -> "本次由本地知识层完成"
     provider == ReviewChatProvider.CLOUD -> "本次由云侧完成"
     fallbackOccurred -> "云侧不可用，已回退端侧"
     else -> "本次由端侧完成"

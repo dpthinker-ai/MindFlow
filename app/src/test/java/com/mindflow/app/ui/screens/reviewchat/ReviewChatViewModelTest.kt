@@ -156,9 +156,9 @@ class ReviewChatViewModelTest {
                     ReviewChatTurnEvent.Complete(
                         ReviewChatTurnResult(
                     answer = "这是那条记录的完整内容。",
-                    provider = ReviewChatProvider.LOCAL_MEMORY,
+                    provider = ReviewChatProvider.CLOUD,
                     fallbackOccurred = false,
-                    providerLine = "本次由本地知识层完成",
+                    providerLine = "本次由云侧完成",
                     sessionSummary = "完整记录",
                     titleSuggestion = "4 月 10 号记录",
                     referencedNoteId = 42L,

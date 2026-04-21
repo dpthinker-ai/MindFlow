@@ -2,14 +2,6 @@ package com.mindflow.app.data.reviewchat
 
 import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.ai.AiExecutionMode
-import com.mindflow.app.data.knowledgebrain.MemoryDigest
-import com.mindflow.app.data.knowledgebrain.MemoryDigestScopeType
-import com.mindflow.app.data.knowledgebrain.MemoryFragment
-import com.mindflow.app.data.knowledgebrain.MemoryLayerChatContext
-import com.mindflow.app.data.knowledgebrain.MemoryLayerChatAssembler
-import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
-import com.mindflow.app.data.knowledgebrain.MemoryThread
-import com.mindflow.app.data.knowledgebrain.MemoryThreadType
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.localmodel.LocalMaintainerCard
@@ -221,61 +213,35 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_fullRecordQuestion_returnsRawRecordDirectly() = runTest {
-        val assembler = MemoryLayerChatAssembler(
-            memoryLayerRepository = object : MemoryLayerRepository {
-                override suspend fun upsertFragment(fragment: MemoryFragment) = Unit
-                override suspend fun upsertThread(thread: MemoryThread) = Unit
-                override suspend fun upsertDigest(digest: MemoryDigest) = Unit
-                override suspend fun loadDigest(scopeType: MemoryDigestScopeType, scopeKey: String): MemoryDigest? =
-                    MemoryDigest(
-                        id = "day-2026-04-10",
-                        scopeType = MemoryDigestScopeType.DAY,
-                        scopeKey = "2026-04-10",
-                        summary = "4 月 10 号主要在讨论 leakspace 和推荐链路。",
-                        highlights = listOf("完整原文可直接展开"),
-                        sourceFragmentIds = listOf("fragment-1"),
-                        updatedAt = 1L,
-                    )
-
-                override suspend fun loadThreadsForQuery(keywords: List<String>, limit: Int): List<MemoryThread> =
-                    listOf(
-                        MemoryThread(
-                            id = "thread-1",
-                            title = "推荐优化问题线",
-                            type = MemoryThreadType.QUESTION,
-                            fragmentIds = listOf("fragment-1"),
-                            summary = "最近在反复追问 leakspace 是否能指导推荐优化。",
-                            currentState = "待验证",
-                            openQuestions = emptyList(),
-                            updatedAt = 2L,
-                        ),
-                    )
-
-                override suspend fun loadFragmentsForNotes(noteIds: List<Long>): List<MemoryFragment> = emptyList()
-                override suspend fun clearAll() = Unit
-            },
+    fun answer_fullRecordQuestion_routesToModelWithRawRecordContext() = runTest {
+        val april10Timestamp = LocalDate.now(ZoneId.systemDefault())
+            .withMonth(4)
+            .withDayOfMonth(10)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
                     sampleNote(
                         id = 42L,
                         topic = "4 月 10 号讨论",
                         content = "这是 4 月 10 号的完整原文，里面详细讨论了 leakspace 和推荐链路。",
-                    ).copy(updatedAt = 1_712_707_200_000L)
+                    ).copy(updatedAt = april10Timestamp)
                 )
             },
-        )
-        val planner = ReviewChatPlanner(
-            loadNotes = { emptyList() },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
             loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
             loadWikiSnapshot = { DirectionWikiSnapshot() },
             resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
-            runCloud = { AiChatResult.Success("云侧不应该被调用") },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("基于 4 月 10 号原始记录整理后的回答。")
+            },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
-            memoryLayerChatAssembler = assembler,
         )
 
         val result = planner.answer(
@@ -285,31 +251,29 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
-        assertThat(result.answer).contains("完整原文")
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("基于 4 月 10 号原始记录整理后的回答")
         assertThat(result.referencedNoteId).isEqualTo(42L)
+        assertThat(capturedPrompt).contains("完整记录：")
+        assertThat(capturedPrompt).contains("这是 4 月 10 号的完整原文")
     }
 
     @Test
-    fun answer_outOfScopeQuestion_returnsGroundedGuidanceWithoutCallingProviders() = runTest {
+    fun answer_outOfScopeQuestion_stillRoutesToModel() = runTest {
         var cloudCalled = false
-        var onDeviceCalled = false
         val planner = ReviewChatPlanner(
             loadNotes = { listOf(sampleNote(1L, "产品方向", "这条记录只在讨论推荐链路和增长")) },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
             loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
             loadWikiSnapshot = { DirectionWikiSnapshot() },
-            resolveExecutionMode = { AiExecutionMode.ON_DEVICE_ONLY },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = {
                 cloudCalled = true
-                AiChatResult.Success("不应该调用云侧")
+                AiChatResult.Success("现有历史材料里没有和天气直接相关的记录。")
             },
-            runOnDevice = {
-                onDeviceCalled = true
-                AiChatResult.Success("不应该调用端侧")
-            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
 
         val result = planner.answer(
@@ -319,11 +283,9 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        assertThat(cloudCalled).isFalse()
-        assertThat(onDeviceCalled).isFalse()
-        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
-        assertThat(result.answer).contains("这段聊天更适合基于你的历史记录")
-        assertThat(result.answer).contains("可以换成")
+        assertThat(cloudCalled).isTrue()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("现有历史材料里没有和天气直接相关的记录")
     }
 
     @Test
@@ -357,21 +319,13 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_todayScopedQuestion_returnsOnlyTodayRecordsFromLocalMemory() = runTest {
+    fun answer_todayScopedQuestion_routesToModelWithTodayRecordsInContext() = runTest {
         val today = LocalDate.now(ZoneId.systemDefault())
         val todayStart = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val yesterdayStart = today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        var capturedPrompt = ""
 
-        val assembler = MemoryLayerChatAssembler(
-            memoryLayerRepository = object : MemoryLayerRepository {
-                override suspend fun upsertFragment(fragment: MemoryFragment) = Unit
-                override suspend fun upsertThread(thread: MemoryThread) = Unit
-                override suspend fun upsertDigest(digest: MemoryDigest) = Unit
-                override suspend fun loadDigest(scopeType: MemoryDigestScopeType, scopeKey: String): MemoryDigest? = null
-                override suspend fun loadThreadsForQuery(keywords: List<String>, limit: Int): List<MemoryThread> = emptyList()
-                override suspend fun loadFragmentsForNotes(noteIds: List<Long>): List<MemoryFragment> = emptyList()
-                override suspend fun clearAll() = Unit
-            },
+        val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
                     sampleNote(1L, "今天主题A", "今天第一条记录").copy(updatedAt = todayStart + 1_000L),
@@ -379,18 +333,17 @@ class ReviewChatPlannerTest {
                     sampleNote(3L, "昨天主题", "昨天的记录").copy(updatedAt = yesterdayStart + 3_000L),
                 )
             },
-        )
-        val planner = ReviewChatPlanner(
-            loadNotes = { emptyList() },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
             loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
             loadWikiSnapshot = { DirectionWikiSnapshot() },
             resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
-            runCloud = { AiChatResult.Success("云侧不应该被调用") },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("今天主要记录了今天主题A和今天主题B。")
+            },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
-            memoryLayerChatAssembler = assembler,
         )
 
         val result = planner.answer(
@@ -400,61 +353,50 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
-        assertThat(result.answer).contains("今天你记录了 2 条")
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("今天主题A")
         assertThat(result.answer).contains("今天主题B")
-        assertThat(result.answer).doesNotContain("昨天主题")
+        assertThat(capturedPrompt).contains("完整记录：")
+        assertThat(capturedPrompt).contains("今天主题A")
+        assertThat(capturedPrompt).contains("今天主题B")
+        assertThat(capturedPrompt).doesNotContain("昨天主题")
     }
 
     @Test
-    fun answer_dayFullRecordQuestion_returnsAllMatchedRecordsForThatDay() = runTest {
-        val assembler = MemoryLayerChatAssembler(
-            memoryLayerRepository = object : MemoryLayerRepository {
-                override suspend fun upsertFragment(fragment: MemoryFragment) = Unit
-                override suspend fun upsertThread(thread: MemoryThread) = Unit
-                override suspend fun upsertDigest(digest: MemoryDigest) = Unit
-                override suspend fun loadDigest(scopeType: MemoryDigestScopeType, scopeKey: String): MemoryDigest? =
-                    MemoryDigest(
-                        id = "day-2026-04-10",
-                        scopeType = MemoryDigestScopeType.DAY,
-                        scopeKey = "2026-04-10",
-                        summary = "4 月 10 号主要在讨论 leakspace 和推荐链路。",
-                        highlights = listOf("完整原文可直接展开"),
-                        sourceFragmentIds = listOf("fragment-1"),
-                        updatedAt = 1L,
-                    )
-
-                override suspend fun loadThreadsForQuery(keywords: List<String>, limit: Int): List<MemoryThread> = emptyList()
-                override suspend fun loadFragmentsForNotes(noteIds: List<Long>): List<MemoryFragment> = emptyList()
-                override suspend fun clearAll() = Unit
-            },
+    fun answer_dayFullRecordQuestion_routesToModelWithAllMatchedRecords() = runTest {
+        val april10Start = LocalDate.now(ZoneId.systemDefault())
+            .withMonth(4)
+            .withDayOfMonth(10)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
                     sampleNote(
                         id = 42L,
                         topic = "4 月 10 号讨论A",
                         content = "这是 4 月 10 号的第一条完整原文。",
-                    ).copy(updatedAt = 1_712_707_200_000L),
+                    ).copy(updatedAt = april10Start),
                     sampleNote(
                         id = 43L,
                         topic = "4 月 10 号讨论B",
                         content = "这是 4 月 10 号的第二条完整原文。",
-                    ).copy(updatedAt = 1_712_707_300_000L),
+                    ).copy(updatedAt = april10Start + 100_000L),
                 )
             },
-        )
-        val planner = ReviewChatPlanner(
-            loadNotes = { emptyList() },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
             loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
             loadWikiSnapshot = { DirectionWikiSnapshot() },
             resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
-            runCloud = { AiChatResult.Success("云侧不应该被调用") },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("4 月 10 号当天有两条相关记录。")
+            },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
-            memoryLayerChatAssembler = assembler,
         )
 
         val result = planner.answer(
@@ -464,11 +406,13 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        assertThat(result.provider).isEqualTo(ReviewChatProvider.LOCAL_MEMORY)
-        assertThat(result.answer).contains("4 月 10 号讨论A")
-        assertThat(result.answer).contains("4 月 10 号讨论B")
-        assertThat(result.answer).contains("第一条完整原文")
-        assertThat(result.answer).contains("第二条完整原文")
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("两条相关记录")
+        assertThat(capturedPrompt).contains("完整记录：")
+        assertThat(capturedPrompt).contains("4 月 10 号讨论A")
+        assertThat(capturedPrompt).contains("4 月 10 号讨论B")
+        assertThat(capturedPrompt).contains("第一条完整原文")
+        assertThat(capturedPrompt).contains("第二条完整原文")
         assertThat(result.referencedNoteId).isNull()
     }
 
@@ -515,12 +459,6 @@ class ReviewChatPlannerTest {
                     createdAt = 2L,
                 ),
             ),
-            memoryContext = MemoryLayerChatContext(
-                memoryDigestSnippets = listOf("Digest｜过去三个月里反复在纠结定位和增长"),
-                memoryThreadSnippets = listOf("Thread｜产品方向问题线｜一直在摇摆定位和节奏"),
-                rawNoteSnippets = emptyList(),
-                rawNoteDetails = emptyList(),
-            ),
         )
 
         val prompt = ReviewChatPromptFactory.onDevice(packet)
@@ -530,9 +468,9 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("最近问题：")
         assertThat(prompt.userMessage).contains("用户｜上一轮问题")
         assertThat(prompt.userMessage).doesNotContain("上一轮回答")
-        assertThat(prompt.userMessage).contains("Memory Thread：")
         assertThat(prompt.userMessage.indexOf("原始记录：")).isLessThan(prompt.userMessage.indexOf("LM Knowledge Base："))
         assertThat(prompt.userMessage).contains("LM Knowledge Base：")
+        assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
     }

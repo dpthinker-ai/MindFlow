@@ -16,7 +16,6 @@ import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
 import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
-import com.mindflow.app.data.knowledgebrain.MemoryLayerChatAssembler
 import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LiteRtLmOnDeviceAiClient
 import com.mindflow.app.data.knowledgebrain.MemoryLayerRepository
@@ -216,13 +215,6 @@ class AppContainer(context: Context) {
         dao = database.memoryLayerDao(),
     )
 
-    val memoryLayerChatAssembler = MemoryLayerChatAssembler(
-        memoryLayerRepository = memoryLayerRepository,
-        loadNotes = {
-            noteRepository.observeAllNotes().first().filter { !it.isArchived }
-        },
-    )
-
     val cloudBackupCoordinator = CloudBackupCoordinator(
         noteRepository = noteRepository,
         cloudBackupSettingsRepository = cloudBackupSettingsRepository,
@@ -361,7 +353,6 @@ class AppContainer(context: Context) {
                 request = request,
             )
         },
-        memoryLayerChatAssembler = memoryLayerChatAssembler,
     )
 
     val reminderScheduler = ReminderScheduler(

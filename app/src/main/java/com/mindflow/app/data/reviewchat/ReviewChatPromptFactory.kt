@@ -40,7 +40,7 @@ object ReviewChatPromptFactory {
         }
         appendLine("回答要求：")
         appendLine("1. 先直接回答“当前问题”，不要重复上一轮回答。")
-        appendLine("2. 优先基于 Memory Layer、本地知识压缩和结构化沉淀回答，再用原始记录补细节。")
+        appendLine("2. 优先基于已给出的原始记录、LM Knowledge Base 和 LLM Wiki 回答，再用原始记录补细节。")
         appendLine("3. 如果材料跨了不同时间，点出时间变化，不要只盯最近两天。")
         appendLine("4. 如果用户明确要完整内容，优先返回完整记录内容，而不是只做摘要。")
         appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
@@ -92,30 +92,6 @@ object ReviewChatPromptFactory {
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "Memory Thread",
-            lines = packet.memoryThreadSnippets,
-            maxItems = when (packet.intent) {
-                ReviewChatIntent.RECALL -> 4
-                ReviewChatIntent.DISCUSS -> 4
-                ReviewChatIntent.SYNTHESIZE -> 4
-            },
-            itemMaxChars = 160,
-        )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "Memory Digest",
-            lines = packet.memoryDigestSnippets,
-            maxItems = when (packet.intent) {
-                ReviewChatIntent.RECALL -> 4
-                ReviewChatIntent.DISCUSS -> 3
-                ReviewChatIntent.SYNTHESIZE -> 3
-            },
-            itemMaxChars = 140,
-        )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "LM Knowledge Base",
             lines = packet.knowledgeBaseSnippets,
             maxItems = 2,
@@ -132,17 +108,16 @@ object ReviewChatPromptFactory {
 
         return ReviewChatOnDevicePrompt(
             systemInstruction = buildString {
-                appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、Memory Layer 和知识沉淀回答。")
+                appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、LM Knowledge Base 和 LLM Wiki 回答。")
                 appendLine("问题类型：${packet.intent.name}")
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
-                appendLine("补充要求：如果已经命中原始记录，优先围绕这些记录回答，不要只复述通用知识层；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。")
+                appendLine("补充要求：如果已经命中原始记录，优先围绕这些记录回答；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。")
             }.trim(),
             userMessage = prompt.toString().trim(),
             extraContext = mapOf(
                 "intent" to packet.intent.name,
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
-                "memory_thread_count" to packet.memoryThreadSnippets.size.toString(),
-                "memory_digest_count" to packet.memoryDigestSnippets.size.toString(),
+                "raw_note_count" to packet.rawNoteSnippets.size.toString(),
             ),
         )
     }
