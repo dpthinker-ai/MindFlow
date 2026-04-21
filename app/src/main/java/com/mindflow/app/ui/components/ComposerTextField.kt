@@ -42,7 +42,7 @@ fun ComposerTextField(
     val scope = rememberCoroutineScope()
 
     val keyboardOptions = when (imeAction) {
-        ImeAction.Default -> KeyboardOptions.Default
+        ImeAction.Default, ImeAction.None -> KeyboardOptions.Default
         else -> KeyboardOptions.Default.copy(imeAction = imeAction)
     }
     val keyboardActions = if (onImeAction == null || imeAction == ImeAction.Default || imeAction == ImeAction.None) {

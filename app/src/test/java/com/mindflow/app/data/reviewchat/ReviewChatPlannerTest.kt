@@ -259,6 +259,8 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("基于 4 月 10 号原始记录整理后的回答")
         assertThat(result.referencedNoteId).isEqualTo(42L)
+        assertThat(result.referencedNotes).hasSize(1)
+        assertThat(result.referencedNotes.single().noteId).isEqualTo(42L)
         assertThat(capturedPrompt).contains("完整记录：")
         assertThat(capturedPrompt).contains("这是 4 月 10 号的完整原文")
     }
@@ -361,6 +363,7 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("今天主题A")
         assertThat(result.answer).contains("今天主题B")
+        assertThat(result.referencedNotes.map { it.noteId }).containsExactly(1L, 2L)
         assertThat(capturedPrompt).contains("完整记录：")
         assertThat(capturedPrompt).contains("今天主题A")
         assertThat(capturedPrompt).contains("今天主题B")
@@ -454,6 +457,7 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(capturedPrompt).contains("历史锚点：")
         assertThat(capturedPrompt).contains("最早记录｜记录｜1970-01-01｜最早记录")
+        assertThat(result.referencedNotes.map { it.noteId }).containsExactly(1L, 2L)
     }
 
     @Test

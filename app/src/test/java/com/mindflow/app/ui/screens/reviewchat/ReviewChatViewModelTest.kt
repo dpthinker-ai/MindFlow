@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.reviewchat.ReviewChatMessage
 import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
+import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
@@ -155,13 +156,20 @@ class ReviewChatViewModelTest {
                 flowOf(
                     ReviewChatTurnEvent.Complete(
                         ReviewChatTurnResult(
-                    answer = "这是那条记录的完整内容。",
-                    provider = ReviewChatProvider.CLOUD,
-                    fallbackOccurred = false,
-                    providerLine = "本次由云侧完成",
-                    sessionSummary = "完整记录",
-                    titleSuggestion = "4 月 10 号记录",
-                    referencedNoteId = 42L,
+                            answer = "这是那条记录的完整内容。",
+                            provider = ReviewChatProvider.CLOUD,
+                            fallbackOccurred = false,
+                            providerLine = "本次由云侧完成",
+                            sessionSummary = "完整记录",
+                            titleSuggestion = "4 月 10 号记录",
+                            referencedNoteId = 42L,
+                            referencedNotes = listOf(
+                                ReviewChatReferencedNote(
+                                    noteId = 42L,
+                                    title = "4 月 10 号记录",
+                                    dateLabel = "2026-04-10",
+                                )
+                            ),
                         )
                     )
                 )
@@ -174,6 +182,7 @@ class ReviewChatViewModelTest {
         val assistant = viewModel.uiState.value.messages.last()
         assertThat(assistant.role).isEqualTo(ReviewChatMessageRole.ASSISTANT)
         assertThat(assistant.referencedNoteId).isEqualTo(42L)
+        assertThat(assistant.referencedNotes.single().noteId).isEqualTo(42L)
     }
 
     @Test

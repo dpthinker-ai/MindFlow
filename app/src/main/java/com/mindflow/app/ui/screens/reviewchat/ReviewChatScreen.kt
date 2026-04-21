@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -51,6 +53,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessage
 import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
+import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.markdown.SimpleMarkdown
 import com.mindflow.app.ui.components.ActionButton
@@ -267,7 +270,7 @@ private fun ReviewChatScreen(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                             maxLines = 5,
-                            imeAction = ImeAction.None,
+                            imeAction = ImeAction.Default,
                             placeholder = "继续追问，或者换个角度聊。",
                         )
                         ActionButton(
@@ -324,7 +327,7 @@ private fun ReviewChatScreen(
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 private fun ReviewChatMessageBubble(
     message: ReviewChatMessage,
     providerLine: String,
@@ -386,14 +389,41 @@ private fun ReviewChatMessageBubble(
                 if (providerLabel.isNotBlank()) {
                     InsightChip(text = providerLabel)
                 }
-                message.referencedNoteId?.let { noteId ->
-                    GhostActionButton(
-                        text = "打开原记录",
-                        onClick = { onOpenRecord(noteId) },
+                val referencedNotes = when {
+                    message.referencedNotes.isNotEmpty() -> message.referencedNotes
+                    message.referencedNoteId != null -> listOf(
+                        ReviewChatReferencedNote(
+                            noteId = message.referencedNoteId,
+                            title = "原记录",
+                            dateLabel = "",
+                        )
                     )
+                    else -> emptyList()
+                }
+                if (referencedNotes.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        referencedNotes.forEach { referencedNote ->
+                            GhostActionButton(
+                                text = buildReferencedNoteLabel(referencedNote),
+                                onClick = { onOpenRecord(referencedNote.noteId) },
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+private fun buildReferencedNoteLabel(note: ReviewChatReferencedNote): String {
+    val title = note.title.ifBlank { "打开记录" }
+    return if (note.dateLabel.isBlank()) {
+        title
+    } else {
+        "${note.dateLabel}｜$title"
     }
 }
 

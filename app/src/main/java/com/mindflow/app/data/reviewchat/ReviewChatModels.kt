@@ -23,6 +23,7 @@ data class ReviewChatMessage(
     val provider: ReviewChatProvider? = null,
     val createdAt: Long,
     val referencedNoteId: Long? = null,
+    val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
 )
 
 data class ReviewChatTurnRequest(
@@ -39,6 +40,7 @@ data class ReviewChatTurnResult(
     val sessionSummary: String,
     val titleSuggestion: String,
     val referencedNoteId: Long? = null,
+    val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
 )
 
 sealed interface ReviewChatTurnEvent {
@@ -72,6 +74,12 @@ data class ReviewChatRawNoteDetail(
     val title: String,
     val dateLabel: String,
     val fullContent: String,
+)
+
+data class ReviewChatReferencedNote(
+    val noteId: Long,
+    val title: String,
+    val dateLabel: String,
 )
 
 data class ReviewChatContextPacket(

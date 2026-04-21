@@ -415,6 +415,7 @@ class ReviewChatPlanner(
                     sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                     titleSuggestion = request.question.take(18),
                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                    referencedNotes = prepared.referencedNotes,
                 )
             }
             if (result is AiChatResult.Failure) {
@@ -455,6 +456,7 @@ class ReviewChatPlanner(
                                     sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                                     titleSuggestion = request.question.take(18),
                                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                                    referencedNotes = prepared.referencedNotes,
                                 )
                             )
                         )
@@ -507,6 +509,7 @@ class ReviewChatPlanner(
                                             sessionSummary = "${request.question.take(40)}｜${content.take(80)}",
                                             titleSuggestion = request.question.take(18),
                                             referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                                            referencedNotes = prepared.referencedNotes,
                                         )
                                     )
                                 )
@@ -543,6 +546,7 @@ class ReviewChatPlanner(
                                         sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                                         titleSuggestion = request.question.take(18),
                                         referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                                        referencedNotes = prepared.referencedNotes,
                                     )
                                 )
                             )
@@ -573,6 +577,12 @@ class ReviewChatPlanner(
             question = request.question,
             notes = notes,
         )
+        val referencedNotes = buildReferencedNotes(
+            question = request.question,
+            intent = intent,
+            notes = notes,
+            directRawNoteDetails = directRawNoteDetails,
+        )
         val packet = buildReviewChatContextPacket(
             question = request.question,
             intent = intent,
@@ -590,6 +600,7 @@ class ReviewChatPlanner(
             intent = intent,
             packet = packet,
             directRawNoteDetails = directRawNoteDetails,
+            referencedNotes = referencedNotes,
         )
     }
 }
@@ -598,6 +609,7 @@ private data class PreparedReviewChatContext(
     val intent: ReviewChatIntent,
     val packet: ReviewChatContextPacket,
     val directRawNoteDetails: List<ReviewChatRawNoteDetail>,
+    val referencedNotes: List<ReviewChatReferencedNote>,
 )
 
 private fun isUsableReviewChatAnswer(content: String): Boolean {
@@ -648,6 +660,80 @@ private fun buildDirectRawNoteDetails(
         )
     }
 }
+
+private fun buildReferencedNotes(
+    question: String,
+    intent: ReviewChatIntent,
+    notes: List<NoteEntity>,
+    directRawNoteDetails: List<ReviewChatRawNoteDetail>,
+): List<ReviewChatReferencedNote> {
+    if (directRawNoteDetails.isNotEmpty()) {
+        return directRawNoteDetails.map { detail ->
+            ReviewChatReferencedNote(
+                noteId = detail.noteId,
+                title = detail.title,
+                dateLabel = detail.dateLabel,
+            )
+        }
+    }
+
+    val requestedDate = requestedDateForReviewChat(question)
+    if (requestedDate != null) {
+        return notes.asSequence()
+            .filter { it.createdLocalDate() == requestedDate }
+            .sortedBy(NoteEntity::createdAt)
+            .take(3)
+            .map { it.toReferencedNote() }
+            .toList()
+    }
+
+    val wantsEarliest = listOf("第一条", "第一次", "最早", "最初", "一开始").any(question::contains)
+    if (wantsEarliest) {
+        return notes.sortedBy(NoteEntity::createdAt)
+            .take(3)
+            .map(NoteEntity::toReferencedNote)
+    }
+
+    val keywords = extractReviewChatKeywords(question)
+    val ranked = notes.map { note ->
+        RankedReviewChatNote(
+            note = note,
+            score = scoreQuestionMatch(
+                question = question,
+                keywords = keywords,
+                haystack = listOf(
+                    note.topic,
+                    note.content,
+                    note.folderKey.orEmpty(),
+                ) + note.tags,
+            ),
+        )
+    }.sortedWith(
+        compareByDescending<RankedReviewChatNote> { it.score }
+            .thenByDescending { it.note.createdAt }
+    )
+
+    val directMatches = ranked.filter { it.score > 0 }.take(3).map(RankedReviewChatNote::note)
+    val selected = when {
+        directMatches.isNotEmpty() -> directMatches
+        intent == ReviewChatIntent.RECALL || reviewChatHistoryHints.any { question.contains(it) } ->
+            buildSupplementalRawSnippets(
+                intent = intent,
+                question = question,
+                ranked = ranked,
+                limit = 3,
+            )
+        else -> emptyList()
+    }
+    return selected.distinctBy(NoteEntity::id).map(NoteEntity::toReferencedNote)
+}
+
+private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
+    ReviewChatReferencedNote(
+        noteId = id,
+        title = topic.ifBlank { "未命名记录" },
+        dateLabel = createdLocalDate().format(reviewChatDateFormatter),
+    )
 
 private fun requestedDateForReviewChat(question: String): LocalDate? {
     val today = LocalDate.now(ZoneId.systemDefault())
