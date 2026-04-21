@@ -15,6 +15,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
@@ -336,6 +339,7 @@ class ReviewChatPlanner(
     private val isOnDeviceReady: suspend () -> Boolean,
     private val runCloud: suspend (String) -> AiChatResult,
     private val runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
+    private val streamOnDevice: (suspend (ReviewChatOnDeviceRequest) -> Flow<String>)? = null,
     private val memoryLayerChatAssembler: MemoryLayerChatAssembler? = null,
 ) {
     suspend fun answer(request: ReviewChatTurnRequest): ReviewChatTurnResult {
@@ -422,7 +426,9 @@ class ReviewChatPlanner(
                     if (isOnDeviceReady()) runOnDevice(
                         ReviewChatOnDeviceRequest(
                             sessionId = request.sessionId,
-                            prompt = onDevicePrompt,
+                            prompt = onDevicePrompt.userMessage,
+                            systemInstruction = onDevicePrompt.systemInstruction,
+                            extraContext = onDevicePrompt.extraContext,
                             resetConversation = request.priorMessages.isEmpty(),
                         )
                     ) else {
@@ -451,6 +457,230 @@ class ReviewChatPlanner(
         }
         error(lastFailure?.message ?: "No provider returned a usable review chat answer")
     }
+
+    fun answerStream(request: ReviewChatTurnRequest): Flow<ReviewChatTurnEvent> = flow {
+        val intent = classifyReviewChatIntent(request.question)
+        val notes = loadNotes()
+        val weeklyReview = loadWeeklyReview()
+        val maintenanceSnapshot = loadMaintenanceSnapshot()
+        val wikiSnapshot = loadWikiSnapshot()
+        val memoryContext = memoryLayerChatAssembler?.assemble(
+            question = request.question,
+            priorMessages = request.priorMessages,
+        ) ?: MemoryLayerChatContext(
+            memoryDigestSnippets = emptyList(),
+            memoryThreadSnippets = emptyList(),
+            rawNoteSnippets = emptyList(),
+            rawNoteDetails = emptyList(),
+        )
+
+        if (shouldReturnRawRecordDirectly(request.question, memoryContext)) {
+            emit(
+                ReviewChatTurnEvent.Complete(
+                    ReviewChatTurnResult(
+                        answer = buildFullRecordAnswer(memoryContext.rawNoteDetails).trim(),
+                        provider = ReviewChatProvider.LOCAL_MEMORY,
+                        fallbackOccurred = false,
+                        providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                        sessionSummary = "${request.question.take(40)}｜${memoryContext.rawNoteDetails.first().title}",
+                        titleSuggestion = request.question.take(18),
+                        referencedNoteId = memoryContext.rawNoteDetails.singleOrNull()?.noteId,
+                    )
+                )
+            )
+            return@flow
+        }
+
+        if (shouldReturnScopedRecordListDirectly(request.question, intent, memoryContext)) {
+            emit(
+                ReviewChatTurnEvent.Complete(
+                    ReviewChatTurnResult(
+                        answer = buildScopedRecordListAnswer(request.question, memoryContext.rawNoteDetails),
+                        provider = ReviewChatProvider.LOCAL_MEMORY,
+                        fallbackOccurred = false,
+                        providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                        sessionSummary = "${request.question.take(40)}｜${memoryContext.rawNoteDetails.size} 条记录",
+                        titleSuggestion = request.question.take(18),
+                    )
+                )
+            )
+            return@flow
+        }
+
+        if (looksClearlyOutsideHistoryScope(request.question)) {
+            emit(
+                ReviewChatTurnEvent.Complete(
+                    ReviewChatTurnResult(
+                        answer = buildOutOfScopeReviewChatAnswer(),
+                        provider = ReviewChatProvider.LOCAL_MEMORY,
+                        fallbackOccurred = false,
+                        providerLine = buildReviewChatProviderLine(ReviewChatProvider.LOCAL_MEMORY, fallbackOccurred = false),
+                        sessionSummary = "范围外问题",
+                        titleSuggestion = request.question.take(18),
+                    )
+                )
+            )
+            return@flow
+        }
+
+        val packet = buildReviewChatContextPacket(
+            question = request.question,
+            intent = intent,
+            notes = notes,
+            weeklyReview = weeklyReview,
+            maintenanceSnapshot = maintenanceSnapshot,
+            wikiSnapshot = wikiSnapshot,
+            sessionSummary = request.priorMessages
+                .takeLast(2)
+                .joinToString("\n") { it.content.take(120) },
+            priorMessages = request.priorMessages,
+            memoryContext = memoryContext,
+        )
+        val cloudPrompt = ReviewChatPromptFactory.cloud(packet)
+        val onDevicePrompt = ReviewChatPromptFactory.onDevice(packet)
+        val attempts = when (resolveExecutionMode()) {
+            AiExecutionMode.AUTOMATIC -> listOf(ReviewChatProvider.CLOUD, ReviewChatProvider.ON_DEVICE)
+            AiExecutionMode.CLOUD_ONLY -> listOf(ReviewChatProvider.CLOUD)
+            AiExecutionMode.ON_DEVICE_ONLY -> listOf(ReviewChatProvider.ON_DEVICE)
+        }
+
+        var lastFailure: AiChatResult.Failure? = null
+        attempts.forEachIndexed { index, provider ->
+            when (provider) {
+                ReviewChatProvider.CLOUD -> {
+                    val result = if (isCloudConfigured()) {
+                        runCloud(cloudPrompt)
+                    } else {
+                        AiChatResult.Failure(AiFailureReason.CONFIG, "云侧未配置")
+                    }
+                    if (result is AiChatResult.Success) {
+                        emit(
+                            ReviewChatTurnEvent.Complete(
+                                ReviewChatTurnResult(
+                                    answer = result.content.trim(),
+                                    provider = provider,
+                                    fallbackOccurred = index > 0,
+                                    providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0),
+                                    sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
+                                    titleSuggestion = request.question.take(18),
+                                    referencedNoteId = memoryContext.rawNoteDetails.firstOrNull()?.noteId,
+                                )
+                            )
+                        )
+                        return@flow
+                    }
+                    if (result is AiChatResult.Failure) {
+                        lastFailure = result
+                    }
+                }
+
+                ReviewChatProvider.ON_DEVICE -> {
+                    if (!isOnDeviceReady()) {
+                        lastFailure = AiChatResult.Failure(AiFailureReason.CONFIG, "端侧未就绪")
+                        return@forEachIndexed
+                    }
+
+                    val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
+                    if (streamOnDevice != null) {
+                        val buffer = StringBuilder()
+                        runCatching {
+                            streamOnDevice.invoke(
+                                ReviewChatOnDeviceRequest(
+                                    sessionId = request.sessionId,
+                                    prompt = onDevicePrompt.userMessage,
+                                    systemInstruction = onDevicePrompt.systemInstruction,
+                                    extraContext = onDevicePrompt.extraContext,
+                                    resetConversation = request.priorMessages.isEmpty(),
+                                )
+                            ).collect { chunk ->
+                                if (chunk.isBlank()) return@collect
+                                buffer.append(chunk)
+                                emit(
+                                    ReviewChatTurnEvent.Partial(
+                                        content = buffer.toString(),
+                                        provider = provider,
+                                        providerLine = providerLine,
+                                    )
+                                )
+                            }
+                        }.onSuccess {
+                            val content = buffer.toString().trim()
+                            if (isUsableReviewChatAnswer(content)) {
+                                emit(
+                                    ReviewChatTurnEvent.Complete(
+                                        ReviewChatTurnResult(
+                                            answer = content,
+                                            provider = provider,
+                                            fallbackOccurred = index > 0,
+                                            providerLine = providerLine,
+                                            sessionSummary = "${request.question.take(40)}｜${content.take(80)}",
+                                            titleSuggestion = request.question.take(18),
+                                            referencedNoteId = memoryContext.rawNoteDetails.firstOrNull()?.noteId,
+                                        )
+                                    )
+                                )
+                                return@flow
+                            }
+                            lastFailure = AiChatResult.Failure(
+                                reason = AiFailureReason.OTHER,
+                                message = "本地模型没有返回可用回答",
+                            )
+                        }.onFailure { error ->
+                            lastFailure = AiChatResult.Failure(
+                                reason = AiFailureReason.OTHER,
+                                message = error.message ?: "本地模型推理失败：请稍后再试",
+                            )
+                        }
+                    } else {
+                        val result = runOnDevice(
+                            ReviewChatOnDeviceRequest(
+                                sessionId = request.sessionId,
+                                prompt = onDevicePrompt.userMessage,
+                                systemInstruction = onDevicePrompt.systemInstruction,
+                                extraContext = onDevicePrompt.extraContext,
+                                resetConversation = request.priorMessages.isEmpty(),
+                            )
+                        )
+                        if (result is AiChatResult.Success) {
+                            emit(
+                                ReviewChatTurnEvent.Complete(
+                                    ReviewChatTurnResult(
+                                        answer = result.content.trim(),
+                                        provider = provider,
+                                        fallbackOccurred = index > 0,
+                                        providerLine = providerLine,
+                                        sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
+                                        titleSuggestion = request.question.take(18),
+                                        referencedNoteId = memoryContext.rawNoteDetails.firstOrNull()?.noteId,
+                                    )
+                                )
+                            )
+                            return@flow
+                        }
+                        if (result is AiChatResult.Failure) {
+                            lastFailure = result
+                        }
+                    }
+                }
+
+                ReviewChatProvider.LOCAL_MEMORY -> {
+                    lastFailure = AiChatResult.Failure(
+                        reason = AiFailureReason.CONFIG,
+                        message = "本地知识层仅支持直接记录展开",
+                    )
+                }
+            }
+        }
+
+        error(lastFailure?.message ?: "No provider returned a usable review chat answer")
+    }
+}
+
+private fun isUsableReviewChatAnswer(content: String): Boolean {
+    val normalized = content
+        .replace(Regex("[\\p{Punct}\\p{P}\\s]+"), "")
+        .trim()
+    return normalized.length >= 4
 }
 
 private fun shouldReturnRawRecordDirectly(

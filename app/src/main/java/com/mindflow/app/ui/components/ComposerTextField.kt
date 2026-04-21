@@ -41,6 +41,19 @@ fun ComposerTextField(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
 
+    val keyboardOptions = when (imeAction) {
+        ImeAction.Default -> KeyboardOptions.Default
+        else -> KeyboardOptions.Default.copy(imeAction = imeAction)
+    }
+    val keyboardActions = if (onImeAction == null || imeAction == ImeAction.Default || imeAction == ImeAction.None) {
+        KeyboardActions()
+    } else {
+        KeyboardActions(
+            onDone = { onImeAction.invoke() },
+            onSend = { onImeAction.invoke() },
+        )
+    }
+
     Surface(
         modifier = modifier,
         color = WhiteGlass.copy(alpha = 0.92f),
@@ -68,11 +81,8 @@ fun ComposerTextField(
                     color = TextSoft,
                 )
             },
-            keyboardOptions = KeyboardOptions.Default.copy(imeAction = imeAction),
-            keyboardActions = KeyboardActions(
-                onDone = { onImeAction?.invoke() },
-                onSend = { onImeAction?.invoke() },
-            ),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
                 unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),

@@ -355,6 +355,12 @@ class AppContainer(context: Context) {
                 request = request,
             )
         },
+        streamOnDevice = { request ->
+            onDeviceAiClient.streamReviewChatReply(
+                settings = onDeviceModelSettingsRepository.getCurrent(),
+                request = request,
+            )
+        },
         memoryLayerChatAssembler = memoryLayerChatAssembler,
     )
 

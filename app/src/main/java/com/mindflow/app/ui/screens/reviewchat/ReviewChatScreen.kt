@@ -83,7 +83,7 @@ fun ReviewChatRoute(
         key = "review-chat-${seed.requestId}",
         factory = ReviewChatViewModel.factory(
             seed = seed,
-            answerTurn = planner::answer,
+            answerTurnStream = planner::answerStream,
             savedConversationRepository = savedConversationRepository,
         ),
     )
@@ -200,12 +200,31 @@ private fun ReviewChatScreen(
                 }
                 if (uiState.isSending) {
                     item("thinking") {
-                        PanelCard {
-                            Text(
-                                text = "正在整理这次回答…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextMain,
+                        if (uiState.streamingAnswer.isNotBlank()) {
+                            ReviewChatMessageBubble(
+                                message = ReviewChatMessage(
+                                    role = ReviewChatMessageRole.ASSISTANT,
+                                    content = uiState.streamingAnswer,
+                                    provider = uiState.streamingProvider,
+                                    createdAt = System.currentTimeMillis(),
+                                ),
+                                providerLine = uiState.providerLine,
+                                onOpenRecord = onOpenRecord,
+                                onRequestCopy = { payload ->
+                                    copySheet = ReviewChatCopySheetState(
+                                        message = payload,
+                                        mode = ReviewChatCopySheetMode.Menu,
+                                    )
+                                },
                             )
+                        } else {
+                            PanelCard {
+                                Text(
+                                    text = "正在整理这次回答…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextMain,
+                                )
+                            }
                         }
                     }
                 }
@@ -248,11 +267,8 @@ private fun ReviewChatScreen(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                             maxLines = 5,
-                            imeAction = ImeAction.Default,
+                            imeAction = ImeAction.None,
                             placeholder = "继续追问，或者换个角度聊。",
-                            onImeAction = {
-                                if (uiState.canSend) onSend()
-                            },
                         )
                         ActionButton(
                             text = if (uiState.isSending) "生成中" else "发送",

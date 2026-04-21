@@ -41,10 +41,30 @@ data class ReviewChatTurnResult(
     val referencedNoteId: Long? = null,
 )
 
+sealed interface ReviewChatTurnEvent {
+    data class Partial(
+        val content: String,
+        val provider: ReviewChatProvider,
+        val providerLine: String,
+    ) : ReviewChatTurnEvent
+
+    data class Complete(
+        val result: ReviewChatTurnResult,
+    ) : ReviewChatTurnEvent
+}
+
 data class ReviewChatOnDeviceRequest(
     val sessionId: String,
     val prompt: String,
+    val systemInstruction: String = "",
+    val extraContext: Map<String, String> = emptyMap(),
     val resetConversation: Boolean,
+)
+
+data class ReviewChatOnDevicePrompt(
+    val systemInstruction: String,
+    val userMessage: String,
+    val extraContext: Map<String, String> = emptyMap(),
 )
 
 data class ReviewChatRawNoteDetail(

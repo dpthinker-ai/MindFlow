@@ -525,16 +525,16 @@ class ReviewChatPlannerTest {
 
         val prompt = ReviewChatPromptFactory.onDevice(packet)
 
-        assertThat(prompt).contains("当前问题：把我过去几个月关于产品方向的分歧串起来")
-        assertThat(prompt).contains("回答要求：先直接回答当前问题，不要重复上一轮。")
-        assertThat(prompt).contains("最近问题：")
-        assertThat(prompt).contains("用户｜上一轮问题")
-        assertThat(prompt).doesNotContain("上一轮回答")
-        assertThat(prompt).contains("Memory Thread：")
-        assertThat(prompt.indexOf("原始记录：")).isLessThan(prompt.indexOf("LM Knowledge Base："))
-        assertThat(prompt).contains("LM Knowledge Base：")
-        assertThat(prompt.length).isGreaterThan(300)
-        assertThat(prompt.length).isAtMost(1_800)
+        assertThat(prompt.userMessage).contains("当前问题：把我过去几个月关于产品方向的分歧串起来")
+        assertThat(prompt.systemInstruction).contains("回答要求：先直接回答当前问题，不要重复上一轮。")
+        assertThat(prompt.userMessage).contains("最近问题：")
+        assertThat(prompt.userMessage).contains("用户｜上一轮问题")
+        assertThat(prompt.userMessage).doesNotContain("上一轮回答")
+        assertThat(prompt.userMessage).contains("Memory Thread：")
+        assertThat(prompt.userMessage.indexOf("原始记录：")).isLessThan(prompt.userMessage.indexOf("LM Knowledge Base："))
+        assertThat(prompt.userMessage).contains("LM Knowledge Base：")
+        assertThat(prompt.userMessage.length).isGreaterThan(300)
+        assertThat(prompt.userMessage.length).isAtMost(1_800)
     }
 
     @Test
@@ -590,12 +590,12 @@ class ReviewChatPlannerTest {
 
         val prompt = ReviewChatPromptFactory.onDevice(packet)
 
-        assertThat(prompt).contains("当前问题：")
-        assertThat(prompt).contains("LM Knowledge Base：")
-        assertThat(prompt).contains("LLM Wiki：")
-        assertThat(prompt).contains("原始记录：")
-        assertThat(prompt.length).isGreaterThan(300)
-        assertThat(prompt.length).isAtMost(1_800)
+        assertThat(prompt.userMessage).contains("当前问题：")
+        assertThat(prompt.userMessage).contains("LM Knowledge Base：")
+        assertThat(prompt.userMessage).contains("LLM Wiki：")
+        assertThat(prompt.userMessage).contains("原始记录：")
+        assertThat(prompt.userMessage.length).isGreaterThan(300)
+        assertThat(prompt.userMessage.length).isAtMost(1_800)
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(

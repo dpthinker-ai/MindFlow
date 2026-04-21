@@ -3,6 +3,7 @@ package com.mindflow.app.data.localmodel
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
@@ -13,6 +14,11 @@ import com.mindflow.app.data.topic.AiConnectionResult
 import com.mindflow.app.data.topic.AiFailureReason
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -26,6 +32,7 @@ interface OnDeviceAiClient {
     suspend fun generateLocalOpenQuestion(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateEditorRecall(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateReviewChatReply(settings: OnDeviceModelSettings, request: ReviewChatOnDeviceRequest): AiChatResult
+    fun streamReviewChatReply(settings: OnDeviceModelSettings, request: ReviewChatOnDeviceRequest): Flow<String>
     suspend fun extractTopic(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun extractTags(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun classifyFolder(settings: OnDeviceModelSettings, content: String): AiChatResult
@@ -111,6 +118,36 @@ class LiteRtLmOnDeviceAiClient(
         settings: OnDeviceModelSettings,
         request: ReviewChatOnDeviceRequest,
     ): AiChatResult = runReviewChatPrompt(settings, request)
+
+    override fun streamReviewChatReply(
+        settings: OnDeviceModelSettings,
+        request: ReviewChatOnDeviceRequest,
+    ): Flow<String> = callbackFlow {
+        val modelPath = settings.localModelPath.takeIf { it.isNotBlank() && File(it).exists() }
+            ?: run {
+                close(
+                    IllegalStateException("本地模型还没准备好")
+                )
+                return@callbackFlow
+            }
+
+        val job = launch(Dispatchers.IO) {
+            runCatching {
+                streamReviewChatPrompt(
+                    modelPath = modelPath,
+                    request = request,
+                    emitChunk = { chunk ->
+                        trySend(chunk).getOrThrow()
+                    },
+                )
+            }.onSuccess {
+                close()
+            }.onFailure { error ->
+                close(error)
+            }
+        }
+        awaitClose { job.cancel() }
+    }
 
     override suspend fun extractTopic(
         settings: OnDeviceModelSettings,
@@ -204,9 +241,11 @@ class LiteRtLmOnDeviceAiClient(
             runCatching {
                 val engine = acquireEngine(modelPath)
                 engine.engine.createConversation(
-                    reviewChatConversationConfig(engine.backendName)
+                    reviewChatConversationConfig(
+                        systemInstruction = request.systemInstruction,
+                    )
                 ).use { conversation ->
-                    conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                    conversation.sendMessage(request.prompt, request.extraContext).toString().trim() to engine.backendName
                 }
             }.recoverCatching { error ->
                 if (!shouldRetryReviewChatOnCpu(error)) throw error
@@ -216,9 +255,11 @@ class LiteRtLmOnDeviceAiClient(
                     forcedBackendName = "cpu",
                 )
                 engine.engine.createConversation(
-                    reviewChatConversationConfig(engine.backendName)
+                    reviewChatConversationConfig(
+                        systemInstruction = request.systemInstruction,
+                    )
                 ).use { conversation ->
-                    conversation.sendMessage(request.prompt, emptyMap()).toString().trim() to engine.backendName
+                    conversation.sendMessage(request.prompt, request.extraContext).toString().trim() to engine.backendName
                 }
             }.fold(
                 onSuccess = { (content, backendName) ->
@@ -241,6 +282,59 @@ class LiteRtLmOnDeviceAiClient(
                 },
             )
         }
+    }
+
+    private suspend fun streamReviewChatPrompt(
+        modelPath: String,
+        request: ReviewChatOnDeviceRequest,
+        emitChunk: suspend (String) -> Unit,
+    ) {
+        engineMutex.withLock {
+            var emittedAnyChunk = false
+            try {
+                val engine = acquireEngine(modelPath)
+                emittedAnyChunk = streamReviewChatWithEngine(
+                    engine = engine,
+                    request = request,
+                    emitChunk = emitChunk,
+                )
+            } catch (error: Throwable) {
+                if (emittedAnyChunk || !shouldRetryReviewChatOnCpu(error)) {
+                    throw error
+                }
+                invalidateEngine()
+                val engine = acquireEngine(
+                    modelPath = modelPath,
+                    forcedBackendName = "cpu",
+                )
+                streamReviewChatWithEngine(
+                    engine = engine,
+                    request = request,
+                    emitChunk = emitChunk,
+                )
+            }
+        }
+    }
+
+    private suspend fun streamReviewChatWithEngine(
+        engine: CachedEngine,
+        request: ReviewChatOnDeviceRequest,
+        emitChunk: suspend (String) -> Unit,
+    ): Boolean {
+        var emittedAnyChunk = false
+        engine.engine.createConversation(
+            reviewChatConversationConfig(
+                systemInstruction = request.systemInstruction,
+            )
+        ).use { conversation ->
+            conversation.sendMessageAsync(request.prompt, request.extraContext).collect { message ->
+                val chunk = message.toString()
+                if (chunk.isBlank()) return@collect
+                emittedAnyChunk = true
+                emitChunk(chunk)
+            }
+        }
+        return emittedAnyChunk
     }
 
     private fun acquireEngine(
@@ -324,8 +418,11 @@ class LiteRtLmOnDeviceAiClient(
     )
 
     private fun reviewChatConversationConfig(
-        backendName: String,
+        systemInstruction: String,
     ): ConversationConfig = ConversationConfig(
+        systemInstruction = systemInstruction
+            .takeIf { it.isNotBlank() }
+            ?.let(Contents::of),
         samplerConfig = SamplerConfig(
             topK = 64,
             topP = 0.95,

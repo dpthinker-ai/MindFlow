@@ -7,11 +7,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mindflow.app.data.reviewchat.ReviewChatMessage
 import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
+import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
-import com.mindflow.app.data.reviewchat.ReviewChatTurnResult
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -24,6 +26,8 @@ data class ReviewChatUiState(
     val isSaving: Boolean = false,
     val isReadOnly: Boolean = false,
     val providerLine: String = "",
+    val streamingAnswer: String = "",
+    val streamingProvider: ReviewChatProvider? = null,
     val errorMessage: String? = null,
     val savedSessionId: Long? = null,
 ) {
@@ -36,7 +40,7 @@ data class ReviewChatUiState(
 
 class ReviewChatViewModel(
     private val seed: ReviewChatSeed,
-    private val answerTurn: suspend (ReviewChatTurnRequest) -> ReviewChatTurnResult,
+    private val answerTurnStream: (ReviewChatTurnRequest) -> Flow<ReviewChatTurnEvent>,
     private val savedConversationRepository: ReviewChatSavedConversationRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ReviewChatUiState())
@@ -133,6 +137,8 @@ class ReviewChatViewModel(
                     ),
                     draft = "",
                     isSending = true,
+                    streamingAnswer = "",
+                    streamingProvider = null,
                     errorMessage = null,
                 )
             }
@@ -140,6 +146,8 @@ class ReviewChatViewModel(
             _uiState.update {
                 it.copy(
                     isSending = true,
+                    streamingAnswer = "",
+                    streamingProvider = null,
                     errorMessage = null,
                 )
             }
@@ -147,35 +155,55 @@ class ReviewChatViewModel(
 
         viewModelScope.launch {
             runCatching {
-                answerTurn(
+                answerTurnStream(
                     ReviewChatTurnRequest(
                         sessionId = seed.requestId.toString(),
                         question = question,
                         priorMessages = priorMessages,
-                    ),
-                )
-            }.onSuccess { result ->
-                pendingQuestion = null
-                pendingPriorMessages = emptyList()
-                _uiState.update { state ->
-                    state.copy(
-                        title = state.title.takeIf { it != "和历史聊聊" } ?: result.titleSuggestion.ifBlank { state.title },
-                        messages = state.messages + ReviewChatMessage(
-                            role = ReviewChatMessageRole.ASSISTANT,
-                            content = result.answer,
-                            provider = result.provider,
-                            createdAt = System.currentTimeMillis(),
-                            referencedNoteId = result.referencedNoteId,
-                        ),
-                        isSending = false,
-                        providerLine = result.providerLine,
-                        errorMessage = null,
                     )
+                ).collect { event ->
+                    when (event) {
+                        is ReviewChatTurnEvent.Partial -> {
+                            _uiState.update { state ->
+                                state.copy(
+                                    streamingAnswer = event.content,
+                                    streamingProvider = event.provider,
+                                    providerLine = event.providerLine,
+                                    errorMessage = null,
+                                )
+                            }
+                        }
+
+                        is ReviewChatTurnEvent.Complete -> {
+                            val result = event.result
+                            pendingQuestion = null
+                            pendingPriorMessages = emptyList()
+                            _uiState.update { state ->
+                                state.copy(
+                                    title = state.title.takeIf { it != "和历史聊聊" } ?: result.titleSuggestion.ifBlank { state.title },
+                                    messages = state.messages + ReviewChatMessage(
+                                        role = ReviewChatMessageRole.ASSISTANT,
+                                        content = result.answer,
+                                        provider = result.provider,
+                                        createdAt = System.currentTimeMillis(),
+                                        referencedNoteId = result.referencedNoteId,
+                                    ),
+                                    isSending = false,
+                                    providerLine = result.providerLine,
+                                    streamingAnswer = "",
+                                    streamingProvider = null,
+                                    errorMessage = null,
+                                )
+                            }
+                        }
+                    }
                 }
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
                         isSending = false,
+                        streamingAnswer = "",
+                        streamingProvider = null,
                         errorMessage = error.message ?: "生成回答失败，请重试。",
                     )
                 }
@@ -186,13 +214,13 @@ class ReviewChatViewModel(
     companion object {
         fun factory(
             seed: ReviewChatSeed,
-            answerTurn: suspend (ReviewChatTurnRequest) -> ReviewChatTurnResult,
+            answerTurnStream: (ReviewChatTurnRequest) -> Flow<ReviewChatTurnEvent>,
             savedConversationRepository: ReviewChatSavedConversationRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ReviewChatViewModel(
                     seed = seed,
-                    answerTurn = answerTurn,
+                    answerTurnStream = answerTurnStream,
                     savedConversationRepository = savedConversationRepository,
                 )
             }

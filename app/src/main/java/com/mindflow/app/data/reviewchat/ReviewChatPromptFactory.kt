@@ -5,7 +5,7 @@ object ReviewChatPromptFactory {
 
     fun cloud(packet: ReviewChatContextPacket): String = buildPrompt(packet)
 
-    fun onDevice(packet: ReviewChatContextPacket): String = buildOnDevicePrompt(packet)
+    fun onDevice(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt = buildOnDevicePrompt(packet)
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
         appendLine("你正在回答一个基于个人历史记录的回看问题。")
@@ -47,7 +47,7 @@ object ReviewChatPromptFactory {
         appendLine("6. 用中文回答，结构清楚，避免空话。")
     }
 
-    private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): String {
+    private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt {
         val prompt = StringBuilder()
         val recentUserSnippets = packet.conversationSnippets
             .filter { it.startsWith("用户｜") }
@@ -56,27 +56,7 @@ object ReviewChatPromptFactory {
         appendWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "你是一个端侧本地历史助手，只能基于给定的个人记录、Memory Layer 和知识沉淀回答。",
-        )
-        appendWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "问题类型：${packet.intent.name}",
-        )
-        appendWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
-        )
-        appendWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "回答要求：先直接回答当前问题，不要重复上一轮。",
-        )
-        appendWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            line = "补充要求：如果已经命中原始记录，优先围绕这些记录回答，不要只复述通用知识层；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。",
         )
 
         appendSectionWithinBudget(
@@ -150,7 +130,21 @@ object ReviewChatPromptFactory {
             itemMaxChars = 140,
         )
 
-        return prompt.toString().trim()
+        return ReviewChatOnDevicePrompt(
+            systemInstruction = buildString {
+                appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、Memory Layer 和知识沉淀回答。")
+                appendLine("问题类型：${packet.intent.name}")
+                appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
+                appendLine("补充要求：如果已经命中原始记录，优先围绕这些记录回答，不要只复述通用知识层；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。")
+            }.trim(),
+            userMessage = prompt.toString().trim(),
+            extraContext = mapOf(
+                "intent" to packet.intent.name,
+                "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
+                "memory_thread_count" to packet.memoryThreadSnippets.size.toString(),
+                "memory_digest_count" to packet.memoryDigestSnippets.size.toString(),
+            ),
+        )
     }
 
     private fun appendSectionWithinBudget(

@@ -5,6 +5,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessage
 import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
 import com.mindflow.app.data.reviewchat.ReviewChatTurnResult
 import com.mindflow.app.data.reviewchat.SavedReviewChatSession
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -42,14 +44,18 @@ class ReviewChatViewModelTest {
     fun seedQuestion_sendsImmediatelyAndAppendsAssistantReply() = runTest(dispatcher) {
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(initialQuestion = "把最近的矛盾串一下"),
-            answerTurn = {
-                ReviewChatTurnResult(
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
                     answer = "你在增长和定位之间反复摇摆。",
                     provider = ReviewChatProvider.CLOUD,
                     fallbackOccurred = false,
                     providerLine = "本次由云侧完成",
                     sessionSummary = "矛盾串联摘要",
                     titleSuggestion = "产品方向矛盾",
+                        )
+                    )
                 )
             },
             savedConversationRepository = FakeSavedConversationRepository(),
@@ -70,14 +76,18 @@ class ReviewChatViewModelTest {
         val repository = FakeSavedConversationRepository()
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(initialQuestion = "我最近的主线是什么"),
-            answerTurn = {
-                ReviewChatTurnResult(
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
                     answer = "你最近围绕发布节奏在收口。",
                     provider = ReviewChatProvider.ON_DEVICE,
                     fallbackOccurred = false,
                     providerLine = "本次由端侧完成",
                     sessionSummary = "发布节奏",
                     titleSuggestion = "发布节奏回看",
+                        )
+                    )
                 )
             },
             savedConversationRepository = repository,
@@ -121,7 +131,7 @@ class ReviewChatViewModelTest {
         var called = false
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(savedSessionId = 7L),
-            answerTurn = {
+            answerTurnStream = {
                 called = true
                 error("should not run")
             },
@@ -141,8 +151,10 @@ class ReviewChatViewModelTest {
     fun answerWithReferencedRecord_preservesNoteIdForOpenRecordAction() = runTest(dispatcher) {
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(initialQuestion = "把 4 月 10 号那条完整记录给我"),
-            answerTurn = {
-                ReviewChatTurnResult(
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
                     answer = "这是那条记录的完整内容。",
                     provider = ReviewChatProvider.LOCAL_MEMORY,
                     fallbackOccurred = false,
@@ -150,6 +162,8 @@ class ReviewChatViewModelTest {
                     sessionSummary = "完整记录",
                     titleSuggestion = "4 月 10 号记录",
                     referencedNoteId = 42L,
+                        )
+                    )
                 )
             },
             savedConversationRepository = FakeSavedConversationRepository(),
@@ -167,15 +181,19 @@ class ReviewChatViewModelTest {
         val requests = mutableListOf<ReviewChatTurnRequest>()
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(requestId = 12345L),
-            answerTurn = { request ->
+            answerTurnStream = { request ->
                 requests += request
-                ReviewChatTurnResult(
-                    answer = "收到",
-                    provider = ReviewChatProvider.ON_DEVICE,
-                    fallbackOccurred = false,
-                    providerLine = "本次由端侧完成",
-                    sessionSummary = "收到",
-                    titleSuggestion = "对话",
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = "收到",
+                            provider = ReviewChatProvider.ON_DEVICE,
+                            fallbackOccurred = false,
+                            providerLine = "本次由端侧完成",
+                            sessionSummary = "收到",
+                            titleSuggestion = "对话",
+                        )
+                    )
                 )
             },
             savedConversationRepository = FakeSavedConversationRepository(),
@@ -191,6 +209,54 @@ class ReviewChatViewModelTest {
         assertThat(requests).hasSize(2)
         assertThat(requests[0].sessionId).isEqualTo("12345")
         assertThat(requests[1].sessionId).isEqualTo("12345")
+    }
+
+    @Test
+    fun sendDraft_streamingAnswerShowsPartialThenCommitsFinalAssistantMessage() = runTest(dispatcher) {
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(),
+            answerTurnStream = {
+                flow {
+                    emit(
+                        ReviewChatTurnEvent.Partial(
+                            content = "第一段",
+                            provider = ReviewChatProvider.ON_DEVICE,
+                            providerLine = "本次由端侧完成",
+                        )
+                    )
+                    emit(
+                        ReviewChatTurnEvent.Partial(
+                            content = "第一段第二段",
+                            provider = ReviewChatProvider.ON_DEVICE,
+                            providerLine = "本次由端侧完成",
+                        )
+                    )
+                    emit(
+                        ReviewChatTurnEvent.Complete(
+                            ReviewChatTurnResult(
+                                answer = "第一段第二段",
+                                provider = ReviewChatProvider.ON_DEVICE,
+                                fallbackOccurred = false,
+                                providerLine = "本次由端侧完成",
+                                sessionSummary = "流式结果",
+                                titleSuggestion = "流式对话",
+                            )
+                        )
+                    )
+                }
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        viewModel.onDraftChange("先来一条流式问题")
+        viewModel.sendDraft()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.streamingAnswer).isEmpty()
+        assertThat(state.messages).hasSize(2)
+        assertThat(state.messages.last().content).isEqualTo("第一段第二段")
+        assertThat(state.providerLine).isEqualTo("本次由端侧完成")
     }
 
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {
