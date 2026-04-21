@@ -34,6 +34,8 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.TIMELINE_ANCHOR)
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
             .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
+        assertThat(buildReviewChatQuestionProfile("今天天气怎么样").mode)
+            .isEqualTo(ReviewChatQuestionMode.EXTERNAL)
         assertThat(buildReviewChatQuestionProfile("今天天气怎么样").isExternalQuestion).isTrue()
     }
 
@@ -383,9 +385,11 @@ class ReviewChatPlannerTest {
         assertThat(result.answer).contains("今天主题A")
         assertThat(result.answer).contains("今天主题B")
         assertThat(result.referencedNotes.map { it.noteId }).containsExactly(1L, 2L)
-        assertThat(capturedPrompt).contains("完整记录：")
+        assertThat(capturedPrompt).contains("原始记录：")
+        assertThat(capturedPrompt).contains("记录｜")
         assertThat(capturedPrompt).contains("今天主题A")
         assertThat(capturedPrompt).contains("今天主题B")
+        assertThat(capturedPrompt).doesNotContain("完整记录：")
         assertThat(capturedPrompt).doesNotContain("昨天主题")
         assertThat(capturedPrompt).doesNotContain("LM Knowledge Base：")
         assertThat(capturedPrompt).doesNotContain("LLM Wiki：")
@@ -539,7 +543,7 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
-        assertThat(prompt.systemInstruction).contains("格式要求：默认用简洁 Markdown")
+        assertThat(prompt.systemInstruction).contains("输出格式：`结论`、`依据`、`下一步` 三段")
     }
 
     @Test
@@ -645,6 +649,45 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
         assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
         assertThat(prompt.userMessage).doesNotContain("最近问题：")
+        assertThat(prompt.userMessage).doesNotContain("完整记录：")
+        assertThat(prompt.userMessage).contains("原始记录：")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_externalQuestion_skipsHistoryMaterials() {
+        val packet = buildReviewChatContextPacket(
+            question = "今天天气怎么样",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(sampleNote(1L, "产品方向", "今天讨论了推荐链路")),
+            weeklyReview = WeeklyReviewState(lines = listOf("不该出现")),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(
+                currentJudgement = LocalMaintainerCard(line = "当前判断", support = "判断依据"),
+            ),
+            wikiSnapshot = DirectionWikiSnapshot(
+                knowledgeItems = listOf(
+                    KnowledgeLayerSearchItem(
+                        id = "k1",
+                        type = KnowledgeLayerSearchType.CONCLUSION,
+                        title = "不该出现",
+                        summary = "不该出现",
+                    )
+                )
+            ),
+            sessionSummary = "不该出现",
+            priorMessages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "上一轮问题",
+                    createdAt = 1L,
+                )
+            ),
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.EXTERNAL)
+        assertThat(packet.rawNoteSnippets).isEmpty()
+        assertThat(packet.knowledgeBaseSnippets).isEmpty()
+        assertThat(packet.wikiSnippets).isEmpty()
+        assertThat(packet.conversationSnippets).isEmpty()
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(

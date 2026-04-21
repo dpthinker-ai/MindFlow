@@ -7,6 +7,7 @@ enum class ReviewChatIntent {
 }
 
 enum class ReviewChatQuestionMode {
+    EXTERNAL,
     RECORD_LOOKUP,
     FULL_RECORD,
     TIMELINE_ANCHOR,

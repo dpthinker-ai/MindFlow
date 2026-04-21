@@ -74,7 +74,7 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
     val isExternalQuestion = reviewChatExternalHints.any(question::contains)
     val intent = classifyReviewChatIntent(question)
     val mode = when {
-        isExternalQuestion -> ReviewChatQuestionMode.ANALYSIS
+        isExternalQuestion -> ReviewChatQuestionMode.EXTERNAL
         wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
         wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
         requestedDate != null || listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
@@ -108,7 +108,7 @@ internal fun buildReviewChatContextPacket(
         question = question,
         notes = notes,
     )
-    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS && !profile.isExternalQuestion) {
+    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
             intent = intent,
             weeklyReview = weeklyReview,
@@ -117,7 +117,7 @@ internal fun buildReviewChatContextPacket(
     } else {
         emptyList()
     }
-    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS && !profile.isExternalQuestion) {
+    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildWikiSnippets(
             intent = intent,
             question = question,
@@ -128,6 +128,7 @@ internal fun buildReviewChatContextPacket(
         emptyList()
     }
     val rawSnippets = buildRawNoteSnippets(
+        mode = profile.mode,
         intent = intent,
         question = question,
         keywords = keywords,
@@ -262,6 +263,7 @@ private fun buildWikiSnippets(
 }
 
 private fun buildRawNoteSnippets(
+    mode: ReviewChatQuestionMode,
     intent: ReviewChatIntent,
     question: String,
     keywords: List<String>,
@@ -272,6 +274,13 @@ private fun buildRawNoteSnippets(
             note.createdLocalDate() == requestedDate
         }
     } ?: notes
+    if (mode == ReviewChatQuestionMode.EXTERNAL) return emptyList()
+    if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && requestedDateForReviewChat(question) != null) {
+        return scopedNotes
+            .sortedBy(NoteEntity::createdAt)
+            .take(12)
+            .map(NoteEntity::toReviewChatSnippet)
+    }
     val limit = when (intent) {
         ReviewChatIntent.SYNTHESIZE -> 4
         ReviewChatIntent.DISCUSS -> 5
@@ -628,10 +637,11 @@ class ReviewChatPlanner(
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
-        val directRawNoteDetails = buildDirectRawNoteDetails(
-            question = request.question,
-            notes = notes,
-        )
+    val directRawNoteDetails = buildDirectRawNoteDetails(
+        question = request.question,
+        mode = profile.mode,
+        notes = notes,
+    )
         val referencedNotes = buildReferencedNotes(
             question = request.question,
             intent = profile.intent,
@@ -676,8 +686,10 @@ private fun isUsableReviewChatAnswer(content: String): Boolean {
 
 private fun buildDirectRawNoteDetails(
     question: String,
+    mode: ReviewChatQuestionMode,
     notes: List<NoteEntity>,
 ): List<ReviewChatRawNoteDetail> {
+    if (mode != ReviewChatQuestionMode.FULL_RECORD) return emptyList()
     val requestedDate = requestedDateForReviewChat(question)
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
     if (requestedDate == null && !wantsFullRecord) return emptyList()

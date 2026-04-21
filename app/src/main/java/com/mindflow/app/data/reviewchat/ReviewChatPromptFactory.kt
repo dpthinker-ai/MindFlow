@@ -8,82 +8,60 @@ object ReviewChatPromptFactory {
     fun onDevice(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt = buildOnDevicePrompt(packet)
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
-        if (packet.isExternalQuestion) {
-            appendLine("你正在回答一个通用问题，不要假装拥有实时外部信息。")
-        } else {
-            appendLine("你正在回答一个基于个人历史记录的回看问题。")
-        }
+        appendLine(
+            when (packet.questionMode) {
+                ReviewChatQuestionMode.EXTERNAL -> "你正在回答一个通用问题，不要假装拥有实时外部信息。"
+                else -> "你正在回答一个基于个人历史记录的回看问题。"
+            }
+        )
+        appendLine("当前问题：${packet.question}")
         appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
-        appendLine("当前问题：${packet.question}")
-        packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
-            appendLine("近期会话摘要：$it")
-        }
-        if (packet.conversationSnippets.isNotEmpty()) {
-            appendLine("近期会话：")
-            packet.conversationSnippets.forEach(::appendLine)
-        }
-        if (packet.historyAnchorSnippets.isNotEmpty()) {
-            appendLine("历史锚点：")
-            packet.historyAnchorSnippets.forEach(::appendLine)
-        }
-        if (packet.memoryDigestSnippets.isNotEmpty()) {
-            appendLine("Memory Digest：")
-            packet.memoryDigestSnippets.forEach(::appendLine)
-        }
-        if (packet.memoryThreadSnippets.isNotEmpty()) {
-            appendLine("Memory Thread：")
-            packet.memoryThreadSnippets.forEach(::appendLine)
-        }
-        if (packet.knowledgeBaseSnippets.isNotEmpty()) {
-            appendLine("LM Knowledge Base：")
-            packet.knowledgeBaseSnippets.forEach(::appendLine)
-        }
-        if (packet.wikiSnippets.isNotEmpty()) {
-            appendLine("LLM Wiki：")
-            packet.wikiSnippets.forEach(::appendLine)
-        }
-        if (packet.rawNoteSnippets.isNotEmpty()) {
-            appendLine("原始记录：")
-            packet.rawNoteSnippets.forEach(::appendLine)
-        }
+
+        appendPromptSection(this, "近期会话摘要", packet.sessionSummary.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty())
+        appendPromptSection(this, "近期会话", packet.conversationSnippets)
+        appendPromptSection(this, "历史锚点", packet.historyAnchorSnippets)
+        appendPromptSection(this, "LM Knowledge Base", packet.knowledgeBaseSnippets)
+        appendPromptSection(this, "LLM Wiki", packet.wikiSnippets)
+        appendPromptSection(this, "原始记录", packet.rawNoteSnippets)
         if (packet.rawNoteDetails.isNotEmpty()) {
             appendLine("完整记录：")
             packet.rawNoteDetails.forEach { detail ->
-                appendLine("- noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${detail.fullContent}")
+                appendLine("### ${detail.dateLabel}｜${detail.title}")
+                appendLine(detail.fullContent)
             }
         }
+
         appendLine("回答要求：")
-        appendLine("1. 先直接回答“当前问题”，不要重复上一轮回答。")
-        if (packet.isExternalQuestion) {
-            appendLine("2. 这是外部或通用问题，不要引用个人历史记录，不要附带历史记录链接。")
-            appendLine("3. 如果问题需要实时外部信息，比如天气、新闻、股价，要直接说明你无法获取实时信息；如果能给通用建议，就给简短通用建议。")
-            appendLine("4. 不要用基于历史材料的拒答口径，也不要把历史记录硬套进回答。")
-            appendLine("5. 用中文回答，结构清楚，避免空话。")
-            appendLine("6. 默认使用清晰的 Markdown 排版。")
-            return@buildString
-        }
+        appendLine("1. 先直接回答当前问题，不要重复上一轮。")
         when (packet.questionMode) {
+            ReviewChatQuestionMode.EXTERNAL -> {
+                appendLine("2. 这是外部或通用问题，不要引用个人历史记录，也不要附历史记录链接。")
+                appendLine("3. 如果问题需要实时天气、新闻、股价等信息，要直接说明你无法获取实时数据；如果能回答，就给简短通用建议。")
+                appendLine("4. 默认使用 Markdown；如果有多点内容，用项目列表逐条换行。")
+            }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
-                appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展成分析。")
-                appendLine("3. 如果命中了多条记录，用项目列表逐条列出，按时间顺序写。")
+                appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
+                appendLine("3. 输出格式固定为：先一句总览，然后用项目列表逐条列出，每条单独一行，按时间顺序写。")
+                appendLine("4. 不要引用未命中的日期或记录。")
             }
             ReviewChatQuestionMode.FULL_RECORD -> {
-                appendLine("2. 这是完整内容问题，优先返回命中的完整记录内容，不要先做摘要。")
-                appendLine("3. 如果命中了多条记录，按时间顺序逐条展开。")
+                appendLine("2. 这是完整内容问题，优先返回命中的完整记录，不要先做摘要。")
+                appendLine("3. 输出格式固定为：先一句说明命中了几条，然后每条用三级标题分开，再贴对应内容。")
             }
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
-                appendLine("2. 这是时间线锚点问题，优先根据历史锚点和原始记录日期回答。")
-                appendLine("3. 回答里必须直接点出最早时间或开始时间，不要泛泛总结。")
+                appendLine("2. 这是时间线锚点问题，第一句必须直接回答最早时间或开始时间。")
+                appendLine("3. 如果需要补充依据，用项目列表列 1 到 3 个关键时间锚点。")
             }
             ReviewChatQuestionMode.ANALYSIS -> {
-                appendLine("2. 这是分析问题，优先基于原始记录、LM Knowledge Base 和 LLM Wiki 回答。")
-                appendLine("3. 如果材料跨了不同时间，点出时间变化，不要只盯最近两天。")
+                appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
+                appendLine("3. 输出格式固定为：`## 结论`、`## 依据`、`## 下一步` 三段。")
+                appendLine("4. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
             }
         }
-        appendLine("4. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
-        appendLine("5. 用中文回答，结构清楚，避免空话。")
-        appendLine("6. 默认使用清晰的 Markdown 排版：先给一两句结论；如果涉及多条记录或多个时间点，用项目列表，每条单独一行。")
+        if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {
+            appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
+        }
     }
 
     private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt {
@@ -119,7 +97,7 @@ object ReviewChatPromptFactory {
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "完整记录",
             lines = packet.rawNoteDetails.map { detail ->
-                "noteId=${detail.noteId}｜${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 320)}"
+                "${detail.dateLabel}｜${detail.title}｜${compactForOnDevice(detail.fullContent, maxChars = 320)}"
             },
             maxItems = 2,
             itemMaxChars = 380,
@@ -155,37 +133,41 @@ object ReviewChatPromptFactory {
 
         return ReviewChatOnDevicePrompt(
             systemInstruction = buildString {
-                if (packet.isExternalQuestion) {
-                    appendLine("你是一个通用助手，但没有联网和实时外部信息能力。")
-                } else {
-                    appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、LM Knowledge Base 和 LLM Wiki 回答。")
-                }
+                appendLine(
+                    when (packet.questionMode) {
+                        ReviewChatQuestionMode.EXTERNAL -> "你是一个通用助手，但没有联网和实时外部信息能力。"
+                        else -> "你是一个端侧本地历史助手，只能基于给定材料回答。"
+                    }
+                )
                 appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
-                if (packet.isExternalQuestion) {
-                    appendLine("补充要求：这是外部或通用问题，不要引用个人历史记录，不要给历史记录链接。")
-                    appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
-                    appendLine("不要使用基于历史材料的拒答口径。")
-                    appendLine("格式要求：默认用简洁 Markdown。")
-                    return@buildString
-                }
                 when (packet.questionMode) {
+                    ReviewChatQuestionMode.EXTERNAL -> {
+                        appendLine("补充要求：不要引用个人历史记录，也不要给历史记录链接。")
+                        appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
+                        appendLine("输出格式：一到两段清晰中文，不要使用基于历史材料的拒答口径。")
+                    }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
+                        appendLine("输出格式：先一句总览，再用项目列表逐条换行。")
                     }
                     ReviewChatQuestionMode.FULL_RECORD -> {
                         appendLine("补充要求：这是完整内容问题，优先返回命中的完整记录，不要只给摘要。")
+                        appendLine("输出格式：先一句说明命中了几条，再逐条分段展开。")
                     }
                     ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                         appendLine("补充要求：这是时间线锚点问题，优先回答最早时间或开始时间。")
+                        appendLine("输出格式：第一句直接回答时间，再补 1 到 3 个时间锚点。")
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
                         appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
+                        appendLine("输出格式：`结论`、`依据`、`下一步` 三段，默认用简洁 Markdown。")
                     }
                 }
-                appendLine("材料不足时直接说明材料不足。")
-                appendLine("格式要求：默认用简洁 Markdown；如果涉及多条记录或多个时间点，用项目列表逐条换行。")
+                if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {
+                    appendLine("材料不足时直接说明材料不足。")
+                }
             }.trim(),
             userMessage = prompt.toString().trim(),
             extraContext = mapOf(
@@ -196,6 +178,16 @@ object ReviewChatPromptFactory {
                 "raw_note_count" to packet.rawNoteSnippets.size.toString(),
             ),
         )
+    }
+
+    private fun appendPromptSection(
+        builder: StringBuilder,
+        title: String,
+        lines: List<String>,
+    ) {
+        if (lines.isEmpty()) return
+        builder.appendLine("$title：")
+        lines.forEach(builder::appendLine)
     }
 
     private fun appendSectionWithinBudget(
@@ -215,11 +207,12 @@ object ReviewChatPromptFactory {
         if (normalized.isEmpty()) return
 
         val section = buildString {
-            append(title)
-            append("：")
-            append(normalized.joinToString("；"))
+            appendLine("$title：")
+            normalized.forEach { item ->
+                appendLine("- $item")
+            }
         }
-        appendWithinBudget(builder = builder, budget = budget, line = section)
+        appendWithinBudget(builder = builder, budget = budget, line = section.trimEnd())
     }
 
     private fun appendWithinBudget(
