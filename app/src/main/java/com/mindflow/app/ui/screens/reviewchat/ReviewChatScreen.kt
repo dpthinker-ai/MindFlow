@@ -54,6 +54,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
+import com.mindflow.app.data.reviewchat.normalizeReviewChatAnswerForDisplay
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.markdown.SimpleMarkdown
 import com.mindflow.app.ui.components.ActionButton
@@ -338,7 +339,7 @@ private fun ReviewChatMessageBubble(
     val normalizedContent = if (isUser) {
         message.content.trim()
     } else {
-        SimpleMarkdown.normalizeForDisplay(message.content)
+        normalizeReviewChatAnswerForDisplay(message.content)
     }
     val copyPayload = ReviewChatCopyMessage(
         title = if (isUser) "复制你的消息" else "复制这条回复",

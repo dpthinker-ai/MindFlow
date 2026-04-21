@@ -165,9 +165,10 @@ class ReviewChatViewModel(
                 ).collect { event ->
                     when (event) {
                         is ReviewChatTurnEvent.Partial -> {
+                            val normalizedPartial = normalizeReviewChatAnswerForDisplay(event.content)
                             _uiState.update { state ->
                                 state.copy(
-                                    streamingAnswer = event.content,
+                                    streamingAnswer = normalizedPartial,
                                     streamingProvider = event.provider,
                                     providerLine = event.providerLine,
                                     errorMessage = null,
