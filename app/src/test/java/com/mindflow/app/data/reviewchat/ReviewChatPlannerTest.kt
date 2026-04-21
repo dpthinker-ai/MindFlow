@@ -754,7 +754,7 @@ class ReviewChatPlannerTest {
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
         assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("1970-01-01")
         assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("1970-01-01")
-        assertThat(packet.rawNoteEvidence).isNotEmpty()
+        assertThat(packet.rawNoteEvidence).isEmpty()
     }
 
     @Test
@@ -780,6 +780,30 @@ class ReviewChatPlannerTest {
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(packet.collectionOverview?.scopeLabel).isEqualTo("3月")
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(2)
+        assertThat(packet.rawNoteEvidence).isEmpty()
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_collectionOverview_addsExamplesOnlyWhenExplicitlyRequested() {
+        val year = LocalDate.now(ZoneId.systemDefault()).year
+        val march1 = LocalDate.of(year, 3, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val march20 = LocalDate.of(year, 3, 20).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val april5 = LocalDate.of(year, 4, 5).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "列出3月份命中的记录，一共有多少条？",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "三月主题A", "三月内容A").copy(createdAt = march1, updatedAt = march1 + 1_000L),
+                sampleNote(2L, "三月主题B", "三月内容B").copy(createdAt = march20, updatedAt = march20 + 1_000L),
+                sampleNote(3L, "四月主题", "四月内容").copy(createdAt = april5, updatedAt = april5 + 1_000L),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(packet.rawNoteEvidence.map { it.title }).contains("三月主题A")
         assertThat(packet.rawNoteEvidence.map { it.title }).contains("三月主题B")
         assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("四月主题")

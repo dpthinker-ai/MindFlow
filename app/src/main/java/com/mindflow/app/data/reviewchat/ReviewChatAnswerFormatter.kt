@@ -3,13 +3,16 @@ package com.mindflow.app.data.reviewchat
 import com.mindflow.app.markdown.SimpleMarkdown
 
 internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
-    var normalized = normalizeMarkdownTables(SimpleMarkdown.normalizeForDisplay(content))
+    var normalized = normalizeEvidenceEchoes(
+        normalizeMarkdownTables(SimpleMarkdown.normalizeForDisplay(content))
+    )
     if (normalized.isBlank()) return normalized
 
     normalized = normalized
         .replace(Regex("(?<!\\n)(#{1,6}\\s)"), "\n$1")
         .replace(Regex("(?<!\\n)(\\d+\\.\\s+)"), "\n$1")
         .replace(Regex("(?<!\\n)(\\d+[、）)]\\s*)"), "\n$1")
+        .replace(Regex("(?<!\\n)(-\\s+\\d{4}-\\d{2}-\\d{2}《)"), "\n$1")
         .replace(Regex("(?<!\\n)([-*•]\\s+)"), "\n$1")
         .replace(Regex("(?<!\\n)([一二三四五六七八九十]+、)"), "\n$1")
         .replace(Regex("([；;])(?=(另外|同时|其次|然后|最后|补充|还有|\\d+[、）)]\\s*|\\d+\\.\\s+|[-*•]\\s+|[一二三四五六七八九十]+、))"), "$1\n")
@@ -29,6 +32,22 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
     }
 
     return normalized
+}
+
+private fun normalizeEvidenceEchoes(content: String): String {
+    if (!content.contains("记录｜")) return content
+
+    val separated = content
+        .replace(Regex("([：。！？；])(?=-?记录｜)"), "$1\n")
+        .replace(Regex("(?<!\\n)(-?记录｜)"), "\n$1")
+        .trim()
+
+    val evidenceRegex = Regex("(?m)^-?记录｜([^｜\\n]+)｜([^｜\\n]+)｜")
+    return evidenceRegex.replace(separated) { match ->
+        val date = match.groupValues[1].trim()
+        val title = match.groupValues[2].trim()
+        "- $date《$title》\n  摘要："
+    }.trim()
 }
 
 private fun normalizeMarkdownTables(content: String): String {

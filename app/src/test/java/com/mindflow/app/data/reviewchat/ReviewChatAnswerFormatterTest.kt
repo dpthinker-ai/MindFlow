@@ -50,4 +50,17 @@ class ReviewChatAnswerFormatterTest {
         assertThat(formatted).contains("- 日期：2026-04-21；主题：产品方向")
         assertThat(formatted).contains("- 日期：2026-04-22；主题：推荐链路")
     }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_rewritesInlineEvidenceEchoesIntoList() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "3月份共计有31 条记录，以下是命中的记录：-记录｜2026-03-28｜应用启动页设计｜帮忙给这个应用增加一个启动页面。-记录｜2026-03-28｜MindFlow还要增加一个功能｜MindFlow还要增加一个功能。",
+        )
+
+        assertThat(formatted).contains("3月份共计有31 条记录，以下是命中的记录：")
+        assertThat(formatted).contains("- 2026-03-28《应用启动页设计》")
+        assertThat(formatted).contains("摘要：帮忙给这个应用增加一个启动页面。")
+        assertThat(formatted).contains("- 2026-03-28《MindFlow还要增加一个功能》")
+        assertThat(formatted).doesNotContain("-记录｜2026-03-28｜")
+    }
 }

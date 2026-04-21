@@ -44,7 +44,8 @@ object ReviewChatPromptFactory {
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                 appendLine("2. 这是全局统计或整体概览问题，优先使用“集合概览”和时间范围信息直接回答。")
                 appendLine("3. 如果问题在问数量、总数或时间范围，第一句必须直接给出准确数字或准确时间。")
-                appendLine("4. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格，也不要照抄证据里的字段标签。")
+                appendLine("4. 如果用户没有明确要求“列出记录/举例/展示命中的记录”，就不要罗列示例记录。")
+                appendLine("5. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格，也不要照抄证据里的字段标签，更不要输出 `-记录｜日期｜标题｜摘要` 这种证据格式。")
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
@@ -162,7 +163,8 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                         appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
-                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格，也不要照抄证据字段标签。")
+                        appendLine("如果用户没有明确要求列出记录，就不要罗列示例记录。")
+                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格，也不要照抄证据字段标签，更不要输出 `-记录｜日期｜标题｜摘要` 这种证据格式。")
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")

@@ -37,6 +37,10 @@ private val reviewChatCountHints = listOf(
     "多少条", "几条", "总共", "一共", "总数", "总量", "全部记录", "所有记录", "整个历史", "从开始到现在",
 )
 
+private val reviewChatListHints = listOf(
+    "列出", "列一下", "给我看", "有哪些", "哪几条", "命中的记录", "举例", "示例", "样例", "分别是",
+)
+
 private val reviewChatExternalHints = listOf(
     "天气", "气温", "下雨", "台风", "新闻", "热搜", "股价", "股票", "汇率", "彩票",
     "体育比赛", "球赛", "nba", "足球", "电影票房", "明星八卦", "实时路况", "航班", "高铁",
@@ -105,6 +109,9 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         isExternalQuestion = isExternalQuestion,
     )
 }
+
+private fun wantsReviewChatListExamples(question: String): Boolean =
+    reviewChatListHints.any(question::contains)
 
 internal fun buildReviewChatContextPacket(
     question: String,
@@ -297,6 +304,7 @@ private fun buildRawNoteEvidence(
     val scopedNotes = filterNotesForRequestedScope(question, notes)
     if (mode == ReviewChatQuestionMode.EXTERNAL) return emptyList()
     if (mode == ReviewChatQuestionMode.COLLECTION_OVERVIEW) {
+        if (!wantsReviewChatListExamples(question)) return emptyList()
         val recentQuestion = listOf("最近", "这段时间", "近期").any(question::contains)
         return if (recentQuestion) {
             scopedNotes
