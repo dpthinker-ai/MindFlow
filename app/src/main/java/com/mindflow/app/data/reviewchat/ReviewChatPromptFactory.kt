@@ -9,6 +9,7 @@ object ReviewChatPromptFactory {
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
         appendLine("你正在回答一个基于个人历史记录的回看问题。")
+        appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
         appendLine("当前问题：${packet.question}")
         packet.sessionSummary.takeIf { it.isNotBlank() }?.let {
@@ -30,12 +31,18 @@ object ReviewChatPromptFactory {
             appendLine("Memory Thread：")
             packet.memoryThreadSnippets.forEach(::appendLine)
         }
-        appendLine("LM Knowledge Base：")
-        packet.knowledgeBaseSnippets.forEach(::appendLine)
-        appendLine("LLM Wiki：")
-        packet.wikiSnippets.forEach(::appendLine)
-        appendLine("原始记录：")
-        packet.rawNoteSnippets.forEach(::appendLine)
+        if (packet.knowledgeBaseSnippets.isNotEmpty()) {
+            appendLine("LM Knowledge Base：")
+            packet.knowledgeBaseSnippets.forEach(::appendLine)
+        }
+        if (packet.wikiSnippets.isNotEmpty()) {
+            appendLine("LLM Wiki：")
+            packet.wikiSnippets.forEach(::appendLine)
+        }
+        if (packet.rawNoteSnippets.isNotEmpty()) {
+            appendLine("原始记录：")
+            packet.rawNoteSnippets.forEach(::appendLine)
+        }
         if (packet.rawNoteDetails.isNotEmpty()) {
             appendLine("完整记录：")
             packet.rawNoteDetails.forEach { detail ->
@@ -44,13 +51,27 @@ object ReviewChatPromptFactory {
         }
         appendLine("回答要求：")
         appendLine("1. 先直接回答“当前问题”，不要重复上一轮回答。")
-        appendLine("2. 优先基于已给出的原始记录、LM Knowledge Base 和 LLM Wiki 回答，再用原始记录补细节。")
-        appendLine("3. 如果材料跨了不同时间，点出时间变化，不要只盯最近两天。")
-        appendLine("4. 如果用户明确要完整内容，优先返回完整记录内容，而不是只做摘要。")
-        appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
-        appendLine("6. 用中文回答，结构清楚，避免空话。")
-        appendLine("7. 默认使用清晰的 Markdown 排版：先给一两句结论；如果涉及多条记录或多个时间点，用项目列表，每条单独一行。")
-        appendLine("8. 如果用户在问第一条、最早、什么时候开始，优先根据“历史锚点”和原始记录里的日期来回答。")
+        when (packet.questionMode) {
+            ReviewChatQuestionMode.RECORD_LOOKUP -> {
+                appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展成分析。")
+                appendLine("3. 如果命中了多条记录，用项目列表逐条列出，按时间顺序写。")
+            }
+            ReviewChatQuestionMode.FULL_RECORD -> {
+                appendLine("2. 这是完整内容问题，优先返回命中的完整记录内容，不要先做摘要。")
+                appendLine("3. 如果命中了多条记录，按时间顺序逐条展开。")
+            }
+            ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
+                appendLine("2. 这是时间线锚点问题，优先根据历史锚点和原始记录日期回答。")
+                appendLine("3. 回答里必须直接点出最早时间或开始时间，不要泛泛总结。")
+            }
+            ReviewChatQuestionMode.ANALYSIS -> {
+                appendLine("2. 这是分析问题，优先基于原始记录、LM Knowledge Base 和 LLM Wiki 回答。")
+                appendLine("3. 如果材料跨了不同时间，点出时间变化，不要只盯最近两天。")
+            }
+        }
+        appendLine("4. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
+        appendLine("5. 用中文回答，结构清楚，避免空话。")
+        appendLine("6. 默认使用清晰的 Markdown 排版：先给一两句结论；如果涉及多条记录或多个时间点，用项目列表，每条单独一行。")
     }
 
     private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt {
@@ -123,14 +144,29 @@ object ReviewChatPromptFactory {
         return ReviewChatOnDevicePrompt(
             systemInstruction = buildString {
                 appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、LM Knowledge Base 和 LLM Wiki 回答。")
+                appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
-                appendLine("补充要求：如果已经命中原始记录，优先围绕这些记录回答；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。")
+                when (packet.questionMode) {
+                    ReviewChatQuestionMode.RECORD_LOOKUP -> {
+                        appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
+                    }
+                    ReviewChatQuestionMode.FULL_RECORD -> {
+                        appendLine("补充要求：这是完整内容问题，优先返回命中的完整记录，不要只给摘要。")
+                    }
+                    ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
+                        appendLine("补充要求：这是时间线锚点问题，优先回答最早时间或开始时间。")
+                    }
+                    ReviewChatQuestionMode.ANALYSIS -> {
+                        appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
+                    }
+                }
+                appendLine("材料不足时直接说明材料不足。")
                 appendLine("格式要求：默认用简洁 Markdown；如果涉及多条记录或多个时间点，用项目列表逐条换行。")
-                appendLine("历史要求：如果用户在问第一条、最早、什么时候开始，优先根据历史锚点和原始记录日期回答。")
             }.trim(),
             userMessage = prompt.toString().trim(),
             extraContext = mapOf(
+                "question_mode" to packet.questionMode.name,
                 "intent" to packet.intent.name,
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
                 "raw_note_count" to packet.rawNoteSnippets.size.toString(),

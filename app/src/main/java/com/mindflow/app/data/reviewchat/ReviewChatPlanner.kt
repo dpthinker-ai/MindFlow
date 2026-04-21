@@ -58,6 +58,35 @@ internal fun classifyReviewChatIntent(question: String): ReviewChatIntent {
     }
 }
 
+internal data class ReviewChatQuestionProfile(
+    val mode: ReviewChatQuestionMode,
+    val intent: ReviewChatIntent,
+    val requestedDate: LocalDate?,
+    val keywords: List<String>,
+    val wantsTimelineAnchor: Boolean,
+)
+
+internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestionProfile {
+    val requestedDate = requestedDateForReviewChat(question)
+    val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
+    val wantsTimelineAnchor = listOf("第一条", "第一次", "最早", "最初", "一开始", "什么时候开始").any(question::contains)
+    val intent = classifyReviewChatIntent(question)
+    val mode = when {
+        wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
+        wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
+        requestedDate != null || listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
+            ReviewChatQuestionMode.RECORD_LOOKUP
+        else -> ReviewChatQuestionMode.ANALYSIS
+    }
+    return ReviewChatQuestionProfile(
+        mode = mode,
+        intent = intent,
+        requestedDate = requestedDate,
+        keywords = extractReviewChatKeywords(question),
+        wantsTimelineAnchor = wantsTimelineAnchor,
+    )
+}
+
 internal fun buildReviewChatContextPacket(
     question: String,
     intent: ReviewChatIntent,
@@ -69,22 +98,31 @@ internal fun buildReviewChatContextPacket(
     priorMessages: List<ReviewChatMessage> = emptyList(),
     rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
 ): ReviewChatContextPacket {
-    val keywords = extractReviewChatKeywords(question)
+    val profile = buildReviewChatQuestionProfile(question)
+    val keywords = profile.keywords
     val historyAnchorSnippets = buildHistoryAnchorSnippets(
         question = question,
         notes = notes,
     )
-    val knowledgeBaseSnippets = buildKnowledgeBaseSnippets(
-        intent = intent,
-        weeklyReview = weeklyReview,
-        maintenanceSnapshot = maintenanceSnapshot,
-    )
-    val wikiSnippets = buildWikiSnippets(
-        intent = intent,
-        question = question,
-        keywords = keywords,
-        wikiSnapshot = wikiSnapshot,
-    )
+    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+        buildKnowledgeBaseSnippets(
+            intent = intent,
+            weeklyReview = weeklyReview,
+            maintenanceSnapshot = maintenanceSnapshot,
+        )
+    } else {
+        emptyList()
+    }
+    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+        buildWikiSnippets(
+            intent = intent,
+            question = question,
+            keywords = keywords,
+            wikiSnapshot = wikiSnapshot,
+        )
+    } else {
+        emptyList()
+    }
     val rawSnippets = buildRawNoteSnippets(
         intent = intent,
         question = question,
@@ -93,11 +131,23 @@ internal fun buildReviewChatContextPacket(
     )
     val structuredSnippets = knowledgeBaseSnippets + wikiSnippets
     return ReviewChatContextPacket(
+        questionMode = profile.mode,
         intent = intent,
         question = question,
-        sessionSummary = sessionSummary,
-        conversationSnippets = buildConversationSnippets(priorMessages),
-        historyAnchorSnippets = historyAnchorSnippets,
+        sessionSummary = sessionSummary.takeIf { profile.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
+        conversationSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+            buildConversationSnippets(priorMessages)
+        } else {
+            emptyList()
+        },
+        historyAnchorSnippets = if (
+            profile.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
+            (profile.mode == ReviewChatQuestionMode.ANALYSIS && historyAnchorSnippets.isNotEmpty())
+        ) {
+            historyAnchorSnippets
+        } else {
+            emptyList()
+        },
         memoryDigestSnippets = emptyList(),
         memoryThreadSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
@@ -568,7 +618,7 @@ class ReviewChatPlanner(
     private suspend fun prepareReviewChatContext(
         request: ReviewChatTurnRequest,
     ): PreparedReviewChatContext {
-        val intent = classifyReviewChatIntent(request.question)
+        val profile = buildReviewChatQuestionProfile(request.question)
         val notes = loadNotes()
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
@@ -579,13 +629,13 @@ class ReviewChatPlanner(
         )
         val referencedNotes = buildReferencedNotes(
             question = request.question,
-            intent = intent,
+            intent = profile.intent,
             notes = notes,
             directRawNoteDetails = directRawNoteDetails,
         )
         val packet = buildReviewChatContextPacket(
             question = request.question,
-            intent = intent,
+            intent = profile.intent,
             notes = notes,
             weeklyReview = weeklyReview,
             maintenanceSnapshot = maintenanceSnapshot,
@@ -597,7 +647,7 @@ class ReviewChatPlanner(
             rawNoteDetails = directRawNoteDetails,
         )
         return PreparedReviewChatContext(
-            intent = intent,
+            intent = profile.intent,
             packet = packet,
             directRawNoteDetails = directRawNoteDetails,
             referencedNotes = referencedNotes,

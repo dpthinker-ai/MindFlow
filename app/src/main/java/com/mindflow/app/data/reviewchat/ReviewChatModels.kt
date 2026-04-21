@@ -6,6 +6,13 @@ enum class ReviewChatIntent {
     RECALL,
 }
 
+enum class ReviewChatQuestionMode {
+    RECORD_LOOKUP,
+    FULL_RECORD,
+    TIMELINE_ANCHOR,
+    ANALYSIS,
+}
+
 enum class ReviewChatMessageRole {
     USER,
     ASSISTANT,
@@ -83,6 +90,7 @@ data class ReviewChatReferencedNote(
 )
 
 data class ReviewChatContextPacket(
+    val questionMode: ReviewChatQuestionMode,
     val intent: ReviewChatIntent,
     val question: String,
     val sessionSummary: String,

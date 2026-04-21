@@ -25,6 +25,18 @@ import org.junit.Test
 
 class ReviewChatPlannerTest {
     @Test
+    fun buildReviewChatQuestionProfile_routesQuestionsIntoClearModes() {
+        assertThat(buildReviewChatQuestionProfile("我只看今天的").mode)
+            .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(buildReviewChatQuestionProfile("把 4 月 10 号那天的完整内容发给我").mode)
+            .isEqualTo(ReviewChatQuestionMode.FULL_RECORD)
+        assertThat(buildReviewChatQuestionProfile("我第一条记录是什么时候").mode)
+            .isEqualTo(ReviewChatQuestionMode.TIMELINE_ANCHOR)
+        assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
+            .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
+    }
+
+    @Test
     fun classifyReviewChatIntent_prioritizesSynthesisLanguage() {
         assertThat(classifyReviewChatIntent("把工作和副项目里的共同主题串一下"))
             .isEqualTo(ReviewChatIntent.SYNTHESIZE)
@@ -368,6 +380,8 @@ class ReviewChatPlannerTest {
         assertThat(capturedPrompt).contains("今天主题A")
         assertThat(capturedPrompt).contains("今天主题B")
         assertThat(capturedPrompt).doesNotContain("昨天主题")
+        assertThat(capturedPrompt).doesNotContain("LM Knowledge Base：")
+        assertThat(capturedPrompt).doesNotContain("LLM Wiki：")
     }
 
     @Test
@@ -580,6 +594,50 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
+    }
+
+    @Test
+    fun onDevicePrompt_recordLookupDoesNotInjectAnalysisSections() {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val packet = buildReviewChatContextPacket(
+            question = "我只看今天的",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "今天主题", "今天内容").copy(
+                    createdAt = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                )
+            ),
+            weeklyReview = WeeklyReviewState(lines = listOf("不该出现")),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(
+                currentJudgement = LocalMaintainerCard(line = "当前判断", support = "判断依据"),
+            ),
+            wikiSnapshot = DirectionWikiSnapshot(
+                knowledgeItems = listOf(
+                    KnowledgeLayerSearchItem(
+                        id = "k1",
+                        type = KnowledgeLayerSearchType.CONCLUSION,
+                        title = "不该出现",
+                        summary = "不该出现",
+                    )
+                )
+            ),
+            sessionSummary = "上一轮也不该出现",
+            priorMessages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "上一轮问题",
+                    createdAt = 1L,
+                )
+            ),
+        )
+
+        val prompt = ReviewChatPromptFactory.onDevice(packet)
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(prompt.systemInstruction).contains("只列命中的记录")
+        assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
+        assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
+        assertThat(prompt.userMessage).doesNotContain("最近问题：")
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(
