@@ -87,7 +87,8 @@ class ReviewChatPlannerTest {
             sessionSummary = "上一轮在讨论方向冲突",
         )
 
-        assertThat(packet.rawNoteSnippets).hasSize(4)
+        assertThat(packet.rawNoteEvidence).hasSize(4)
+        assertThat(packet.rawNoteEvidence.first().title).contains("主题")
         assertThat(packet.knowledgeBaseSnippets.first()).contains("当前判断")
         assertThat(packet.wikiSnippets.joinToString("\n")).contains("关键结论")
         assertThat(packet.structuredSnippets.joinToString("\n")).contains("当前判断")
@@ -127,11 +128,11 @@ class ReviewChatPlannerTest {
             sessionSummary = "",
         )
 
-        assertThat(packet.rawNoteSnippets).hasSize(6)
-        assertThat(packet.historyAnchorSnippets).containsAtLeast(
-            "时间范围｜最早 1970-01-01｜最近 1970-01-01｜共 12 条记录",
-            "最早记录｜记录｜1970-01-01｜产品方向0｜正文0",
-        )
+        assertThat(packet.rawNoteEvidence).hasSize(6)
+        assertThat(packet.historyAnchors).hasSize(2)
+        assertThat(packet.historyAnchors.first().label).isEqualTo("最早记录")
+        assertThat(packet.historyAnchors.first().item.dateLabel).isEqualTo("1970-01-01")
+        assertThat(packet.historyAnchors.first().item.title).isEqualTo("产品方向0")
         assertThat(packet.wikiSnippets.first()).contains("产品方向")
         assertThat(packet.knowledgeBaseSnippets).contains("待厘清问题｜待厘清问题")
     }
@@ -157,9 +158,9 @@ class ReviewChatPlannerTest {
             sessionSummary = "",
         )
 
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("最早主题")
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("最近主题B")
-        assertThat(packet.historyAnchorSnippets.joinToString("\n")).contains("最早记录｜记录｜1970-01-01｜最早主题")
+        assertThat(packet.rawNoteEvidence.map { it.title }).contains("最早主题")
+        assertThat(packet.rawNoteEvidence.map { it.title }).contains("最近主题B")
+        assertThat(packet.historyAnchors.first().item.title).isEqualTo("最早主题")
     }
 
     @Test
@@ -177,7 +178,7 @@ class ReviewChatPlannerTest {
             sessionSummary = "",
         )
 
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("抖音文案记录")
+        assertThat(packet.rawNoteEvidence.map { it.title }).contains("抖音文案记录")
     }
 
     @Test
@@ -391,7 +392,9 @@ class ReviewChatPlannerTest {
         assertThat(result.answer).contains("今天主题B")
         assertThat(result.referencedNotes).isEmpty()
         assertThat(capturedPrompt).contains("原始记录：")
-        assertThat(capturedPrompt).contains("记录｜")
+        assertThat(capturedPrompt).contains("今天主题A")
+        assertThat(capturedPrompt).contains("摘要：今天第一条记录")
+        assertThat(capturedPrompt).doesNotContain("记录｜")
         assertThat(capturedPrompt).contains("今天主题A")
         assertThat(capturedPrompt).contains("今天主题B")
         assertThat(capturedPrompt).doesNotContain("完整记录：")
@@ -486,7 +489,8 @@ class ReviewChatPlannerTest {
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(capturedPrompt).contains("历史锚点：")
-        assertThat(capturedPrompt).contains("最早记录｜记录｜1970-01-01｜最早记录")
+        assertThat(capturedPrompt).contains("- 最早记录：1970-01-01《最早记录》")
+        assertThat(capturedPrompt).doesNotContain("记录｜")
         assertThat(result.referencedNotes).isEmpty()
     }
 
@@ -724,7 +728,7 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.EXTERNAL)
-        assertThat(packet.rawNoteSnippets).isEmpty()
+        assertThat(packet.rawNoteEvidence).isEmpty()
         assertThat(packet.knowledgeBaseSnippets).isEmpty()
         assertThat(packet.wikiSnippets).isEmpty()
         assertThat(packet.conversationSnippets).isEmpty()
@@ -747,9 +751,10 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
-        assertThat(packet.collectionOverviewSnippets).contains("记录总数｜共 3 条记录")
-        assertThat(packet.collectionOverviewSnippets.joinToString("\n")).contains("时间范围｜最早 1970-01-01｜最近 1970-01-01")
-        assertThat(packet.rawNoteSnippets).isNotEmpty()
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
+        assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("1970-01-01")
+        assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("1970-01-01")
+        assertThat(packet.rawNoteEvidence).isNotEmpty()
     }
 
     @Test
@@ -773,11 +778,11 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
-        assertThat(packet.collectionOverviewSnippets).contains("统计范围｜3月")
-        assertThat(packet.collectionOverviewSnippets).contains("记录总数｜共 2 条记录")
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("三月主题A")
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("三月主题B")
-        assertThat(packet.rawNoteSnippets.joinToString("\n")).doesNotContain("四月主题")
+        assertThat(packet.collectionOverview?.scopeLabel).isEqualTo("3月")
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(2)
+        assertThat(packet.rawNoteEvidence.map { it.title }).contains("三月主题A")
+        assertThat(packet.rawNoteEvidence.map { it.title }).contains("三月主题B")
+        assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("四月主题")
     }
 
     @Test
@@ -815,7 +820,8 @@ class ReviewChatPlannerTest {
         assertThat(result.answer).contains("3 条记录")
         assertThat(result.referencedNotes).isEmpty()
         assertThat(capturedPrompt).contains("集合概览：")
-        assertThat(capturedPrompt).contains("记录总数｜共 3 条记录")
+        assertThat(capturedPrompt).contains("- 记录总数：共 3 条记录")
+        assertThat(capturedPrompt).doesNotContain("记录总数｜")
     }
 
     @Test
@@ -849,7 +855,7 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.answer).contains("2 条记录")
-        assertThat(capturedPrompt).contains("记录总数｜共 2 条记录")
+        assertThat(capturedPrompt).contains("- 记录总数：共 2 条记录")
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(

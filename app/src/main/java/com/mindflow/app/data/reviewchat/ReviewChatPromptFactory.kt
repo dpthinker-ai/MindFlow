@@ -19,12 +19,12 @@ object ReviewChatPromptFactory {
         appendLine("问题类型：${packet.intent.name}")
 
         appendPromptSection(this, "近期会话摘要", packet.sessionSummary.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty())
-        appendPromptSection(this, "集合概览", packet.collectionOverviewSnippets)
+        appendCollectionOverviewSection(this, packet.collectionOverview)
         appendPromptSection(this, "近期会话", packet.conversationSnippets)
-        appendPromptSection(this, "历史锚点", packet.historyAnchorSnippets)
+        appendHistoryAnchorSection(this, packet.historyAnchors)
         appendPromptSection(this, "LM Knowledge Base", packet.knowledgeBaseSnippets)
         appendPromptSection(this, "LLM Wiki", packet.wikiSnippets)
-        appendPromptSection(this, "原始记录", packet.rawNoteSnippets)
+        appendEvidenceSection(this, "原始记录", packet.rawNoteEvidence)
         if (packet.rawNoteDetails.isNotEmpty()) {
             appendLine("完整记录：")
             packet.rawNoteDetails.forEach { detail ->
@@ -44,12 +44,12 @@ object ReviewChatPromptFactory {
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                 appendLine("2. 这是全局统计或整体概览问题，优先使用“集合概览”和时间范围信息直接回答。")
                 appendLine("3. 如果问题在问数量、总数或时间范围，第一句必须直接给出准确数字或准确时间。")
-                appendLine("4. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格。")
+                appendLine("4. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格，也不要照抄证据里的字段标签。")
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
                 appendLine("3. 输出格式固定为：先一句总览，然后用项目列表逐条列出，每条单独一行，按时间顺序写。")
-                appendLine("4. 不要引用未命中的日期或记录，也不要输出 Markdown 表格。")
+                appendLine("4. 不要引用未命中的日期或记录，也不要输出 Markdown 表格。不要逐字复述证据中的前缀或分隔格式，要改写成自然中文。")
             }
             ReviewChatQuestionMode.FULL_RECORD -> {
                 appendLine("2. 这是完整内容问题，优先返回命中的完整记录，不要先做摘要。")
@@ -83,22 +83,18 @@ object ReviewChatPromptFactory {
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
         )
 
-        appendSectionWithinBudget(
+        appendCollectionOverviewWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "集合概览",
-            lines = packet.collectionOverviewSnippets,
-            maxItems = 4,
-            itemMaxChars = 100,
+            overview = packet.collectionOverview,
         )
 
-        appendSectionWithinBudget(
+        appendHistoryAnchorsWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "历史锚点",
-            lines = packet.historyAnchorSnippets,
+            anchors = packet.historyAnchors,
             maxItems = 3,
-            itemMaxChars = 110,
+            itemMaxChars = 130,
         )
         appendSectionWithinBudget(
             builder = prompt,
@@ -118,17 +114,17 @@ object ReviewChatPromptFactory {
             maxItems = 2,
             itemMaxChars = 380,
         )
-        appendSectionWithinBudget(
+        appendEvidenceItemsWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             title = "原始记录",
-            lines = packet.rawNoteSnippets,
+            items = packet.rawNoteEvidence,
             maxItems = when (packet.intent) {
                 ReviewChatIntent.RECALL -> 5
                 ReviewChatIntent.DISCUSS -> 4
                 ReviewChatIntent.SYNTHESIZE -> 4
             },
-            itemMaxChars = 150,
+            itemMaxChars = 180,
         )
         appendSectionWithinBudget(
             builder = prompt,
@@ -166,11 +162,11 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                         appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
-                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格。")
+                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格，也不要照抄证据字段标签。")
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
-                        appendLine("输出格式：先一句总览，再用项目列表逐条换行，不要输出表格。")
+                        appendLine("输出格式：先一句总览，再用项目列表逐条换行，不要输出表格，也不要逐字复述证据前缀。")
                     }
                     ReviewChatQuestionMode.FULL_RECORD -> {
                         appendLine("补充要求：这是完整内容问题，优先返回命中的完整记录，不要只给摘要。")
@@ -195,7 +191,7 @@ object ReviewChatPromptFactory {
                 "intent" to packet.intent.name,
                 "is_external_question" to packet.isExternalQuestion.toString(),
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
-                "raw_note_count" to packet.rawNoteSnippets.size.toString(),
+                "raw_note_count" to packet.rawNoteEvidence.size.toString(),
             ),
         )
     }
@@ -208,6 +204,47 @@ object ReviewChatPromptFactory {
         if (lines.isEmpty()) return
         builder.appendLine("$title：")
         lines.forEach(builder::appendLine)
+    }
+
+    private fun appendCollectionOverviewSection(
+        builder: StringBuilder,
+        overview: ReviewChatCollectionOverview?,
+    ) {
+        if (overview == null) return
+        builder.appendLine("集合概览：")
+        builder.appendLine("- 统计范围：${overview.scopeLabel}")
+        builder.appendLine("- 记录总数：共 ${overview.totalCount} 条记录")
+        if (overview.earliestDateLabel != null && overview.latestDateLabel != null) {
+            builder.appendLine("- 时间范围：最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
+        }
+        if (overview.last7DaysCount != null && overview.last30DaysCount != null) {
+            builder.appendLine("- 近期分布：最近 7 天 ${overview.last7DaysCount} 条，最近 30 天 ${overview.last30DaysCount} 条")
+        }
+    }
+
+    private fun appendHistoryAnchorSection(
+        builder: StringBuilder,
+        anchors: List<ReviewChatTimelineAnchor>,
+    ) {
+        if (anchors.isEmpty()) return
+        builder.appendLine("历史锚点：")
+        anchors.forEach { anchor ->
+            builder.appendLine("- ${anchor.label}：${anchor.item.dateLabel}《${anchor.item.title}》")
+            builder.appendLine("  摘要：${anchor.item.summary}")
+        }
+    }
+
+    private fun appendEvidenceSection(
+        builder: StringBuilder,
+        title: String,
+        items: List<ReviewChatEvidenceItem>,
+    ) {
+        if (items.isEmpty()) return
+        builder.appendLine("$title：")
+        items.forEach { item ->
+            builder.appendLine("- ${item.dateLabel}《${item.title}》")
+            builder.appendLine("  摘要：${item.summary}")
+        }
     }
 
     private fun appendSectionWithinBudget(
@@ -233,6 +270,65 @@ object ReviewChatPromptFactory {
             }
         }
         appendWithinBudget(builder = builder, budget = budget, line = section.trimEnd())
+    }
+
+    private fun appendCollectionOverviewWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        overview: ReviewChatCollectionOverview?,
+    ) {
+        if (overview == null) return
+        val section = buildString {
+            appendLine("集合概览：")
+            appendLine("- 统计范围：${overview.scopeLabel}")
+            appendLine("- 记录总数：共 ${overview.totalCount} 条记录")
+            if (overview.earliestDateLabel != null && overview.latestDateLabel != null) {
+                appendLine("- 时间范围：最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
+            }
+            if (overview.last7DaysCount != null && overview.last30DaysCount != null) {
+                appendLine("- 近期分布：最近 7 天 ${overview.last7DaysCount} 条，最近 30 天 ${overview.last30DaysCount} 条")
+            }
+        }.trimEnd()
+        appendWithinBudget(builder = builder, budget = budget, line = section)
+    }
+
+    private fun appendHistoryAnchorsWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        anchors: List<ReviewChatTimelineAnchor>,
+        maxItems: Int,
+        itemMaxChars: Int,
+    ) {
+        if (anchors.isEmpty()) return
+        val section = buildString {
+            appendLine("历史锚点：")
+            anchors.take(maxItems).forEach { anchor ->
+                val summary = compactForOnDevice(anchor.item.summary, maxChars = itemMaxChars)
+                appendLine("- ${anchor.label}：${anchor.item.dateLabel}《${anchor.item.title}》")
+                appendLine("  摘要：$summary")
+            }
+        }.trimEnd()
+        appendWithinBudget(builder = builder, budget = budget, line = section)
+    }
+
+    private fun appendEvidenceItemsWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        title: String,
+        items: List<ReviewChatEvidenceItem>,
+        maxItems: Int,
+        itemMaxChars: Int,
+    ) {
+        if (items.isEmpty()) return
+        val section = buildString {
+            appendLine("$title：")
+            items.take(maxItems).forEach { item ->
+                val summary = compactForOnDevice(item.summary, maxChars = itemMaxChars)
+                appendLine("- ${item.dateLabel}《${item.title}》")
+                appendLine("  摘要：$summary")
+            }
+        }.trimEnd()
+        appendWithinBudget(builder = builder, budget = budget, line = section)
     }
 
     private fun appendWithinBudget(

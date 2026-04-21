@@ -85,6 +85,27 @@ data class ReviewChatRawNoteDetail(
     val fullContent: String,
 )
 
+data class ReviewChatCollectionOverview(
+    val scopeLabel: String,
+    val totalCount: Int,
+    val earliestDateLabel: String? = null,
+    val latestDateLabel: String? = null,
+    val last7DaysCount: Int? = null,
+    val last30DaysCount: Int? = null,
+)
+
+data class ReviewChatEvidenceItem(
+    val noteId: Long,
+    val dateLabel: String,
+    val title: String,
+    val summary: String,
+)
+
+data class ReviewChatTimelineAnchor(
+    val label: String,
+    val item: ReviewChatEvidenceItem,
+)
+
 data class ReviewChatReferencedNote(
     val noteId: Long,
     val title: String,
@@ -98,14 +119,14 @@ data class ReviewChatContextPacket(
     val isExternalQuestion: Boolean,
     val wantsCount: Boolean,
     val sessionSummary: String,
-    val collectionOverviewSnippets: List<String>,
+    val collectionOverview: ReviewChatCollectionOverview?,
     val conversationSnippets: List<String>,
-    val historyAnchorSnippets: List<String>,
+    val historyAnchors: List<ReviewChatTimelineAnchor>,
     val memoryDigestSnippets: List<String>,
     val memoryThreadSnippets: List<String>,
     val knowledgeBaseSnippets: List<String>,
     val wikiSnippets: List<String>,
-    val rawNoteSnippets: List<String>,
+    val rawNoteEvidence: List<ReviewChatEvidenceItem>,
     val rawNoteDetails: List<ReviewChatRawNoteDetail>,
     val structuredSnippets: List<String>,
 )

@@ -119,18 +119,17 @@ internal fun buildReviewChatContextPacket(
 ): ReviewChatContextPacket {
     val profile = buildReviewChatQuestionProfile(question)
     val keywords = profile.keywords
-    val historyAnchorSnippets = buildHistoryAnchorSnippets(
+    val historyAnchors = buildHistoryAnchors(
         question = question,
         notes = notes,
     )
-    val collectionOverviewSnippets = if (!profile.isExternalQuestion) {
-        buildCollectionOverviewSnippets(
+    val collectionOverview = if (!profile.isExternalQuestion) {
+        buildCollectionOverview(
             question = question,
-            requestedDate = profile.requestedDate,
             notes = notes,
         )
     } else {
-        emptyList()
+        null
     }
     val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
@@ -151,7 +150,7 @@ internal fun buildReviewChatContextPacket(
     } else {
         emptyList()
     }
-    val rawSnippets = buildRawNoteSnippets(
+    val rawNoteEvidence = buildRawNoteEvidence(
         mode = profile.mode,
         intent = intent,
         question = question,
@@ -166,17 +165,17 @@ internal fun buildReviewChatContextPacket(
         isExternalQuestion = profile.isExternalQuestion,
         wantsCount = profile.wantsCount,
         sessionSummary = sessionSummary.takeIf { profile.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
-        collectionOverviewSnippets = collectionOverviewSnippets,
+        collectionOverview = collectionOverview,
         conversationSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
             buildConversationSnippets(priorMessages)
         } else {
             emptyList()
         },
-        historyAnchorSnippets = if (
+        historyAnchors = if (
             profile.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
-            (profile.mode == ReviewChatQuestionMode.ANALYSIS && historyAnchorSnippets.isNotEmpty())
+            (profile.mode == ReviewChatQuestionMode.ANALYSIS && historyAnchors.isNotEmpty())
         ) {
-            historyAnchorSnippets
+            historyAnchors
         } else {
             emptyList()
         },
@@ -184,7 +183,7 @@ internal fun buildReviewChatContextPacket(
         memoryThreadSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
-        rawNoteSnippets = rawSnippets,
+        rawNoteEvidence = rawNoteEvidence,
         rawNoteDetails = rawNoteDetails,
         structuredSnippets = structuredSnippets,
     )
@@ -288,13 +287,13 @@ private fun buildWikiSnippets(
     return directions + knowledgeItems
 }
 
-private fun buildRawNoteSnippets(
+private fun buildRawNoteEvidence(
     mode: ReviewChatQuestionMode,
     intent: ReviewChatIntent,
     question: String,
     keywords: List<String>,
     notes: List<NoteEntity>,
-): List<String> {
+): List<ReviewChatEvidenceItem> {
     val scopedNotes = filterNotesForRequestedScope(question, notes)
     if (mode == ReviewChatQuestionMode.EXTERNAL) return emptyList()
     if (mode == ReviewChatQuestionMode.COLLECTION_OVERVIEW) {
@@ -303,7 +302,7 @@ private fun buildRawNoteSnippets(
             scopedNotes
                 .sortedByDescending(NoteEntity::createdAt)
                 .take(6)
-                .map(NoteEntity::toReviewChatSnippet)
+                .map(NoteEntity::toReviewChatEvidence)
         } else {
             buildSupplementalRawSnippets(
                 intent = intent,
@@ -312,14 +311,14 @@ private fun buildRawNoteSnippets(
                     .sortedBy { it.createdAt }
                     .map { RankedReviewChatNote(note = it, score = 0) },
                 limit = 6,
-            ).map(NoteEntity::toReviewChatSnippet)
+            ).map(NoteEntity::toReviewChatEvidence)
         }
     }
     if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && hasRequestedTimeScope(question)) {
         return scopedNotes
             .sortedBy(NoteEntity::createdAt)
             .take(12)
-            .map(NoteEntity::toReviewChatSnippet)
+            .map(NoteEntity::toReviewChatEvidence)
     }
     val limit = when (intent) {
         ReviewChatIntent.SYNTHESIZE -> 4
@@ -348,7 +347,7 @@ private fun buildRawNoteSnippets(
 
     val directMatches = ranked.filter { it.score > 0 }.take(limit)
     if (directMatches.size >= limit) {
-        return directMatches.map { it.note.toReviewChatSnippet() }
+        return directMatches.map { it.note.toReviewChatEvidence() }
     }
 
     val supplemental = buildSupplementalRawSnippets(
@@ -361,7 +360,7 @@ private fun buildRawNoteSnippets(
     return (directMatches.map { it.note } + supplemental)
         .distinctBy(NoteEntity::id)
         .take(limit)
-        .map(NoteEntity::toReviewChatSnippet)
+        .map(NoteEntity::toReviewChatEvidence)
 }
 
 private fun buildConversationSnippets(
@@ -404,16 +403,23 @@ private fun buildSupplementalRawSnippets(
         .distinctBy(NoteEntity::id)
 }
 
-private fun NoteEntity.toReviewChatSnippet(): String {
+private fun NoteEntity.toReviewChatEvidence(
+    summaryMaxChars: Int = 120,
+): ReviewChatEvidenceItem {
     val date = createdLocalDate().format(reviewChatDateFormatter)
-    val compactContent = content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)
-    return "记录｜$date｜${topic.ifBlank { "未命名记录" }}｜$compactContent"
+    val compactContent = content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(summaryMaxChars)
+    return ReviewChatEvidenceItem(
+        noteId = id,
+        dateLabel = date,
+        title = topic.ifBlank { "未命名记录" },
+        summary = compactContent,
+    )
 }
 
-private fun buildHistoryAnchorSnippets(
+private fun buildHistoryAnchors(
     question: String,
     notes: List<NoteEntity>,
-): List<String> {
+): List<ReviewChatTimelineAnchor> {
     if (notes.isEmpty()) return emptyList()
     val wantsHistoryAnchors = reviewChatHistoryHints.any { question.contains(it) }
     if (!wantsHistoryAnchors) return emptyList()
@@ -423,33 +429,33 @@ private fun buildHistoryAnchorSnippets(
     val latest = sorted.last()
     return buildList {
         add(
-            "时间范围｜最早 ${earliest.createdLocalDate().format(reviewChatDateFormatter)}｜最近 ${
-                latest.createdLocalDate().format(reviewChatDateFormatter)
-            }｜共 ${sorted.size} 条记录"
+            ReviewChatTimelineAnchor(
+                label = "最早记录",
+                item = earliest.toReviewChatEvidence(summaryMaxChars = 100),
+            )
         )
-        add("最早记录｜${earliest.toReviewChatSnippet()}")
         if (latest.id != earliest.id) {
-            add("最近记录｜${latest.toReviewChatSnippet()}")
+            add(
+                ReviewChatTimelineAnchor(
+                    label = "最近记录",
+                    item = latest.toReviewChatEvidence(summaryMaxChars = 100),
+                )
+            )
         }
     }
 }
 
-private fun buildCollectionOverviewSnippets(
+private fun buildCollectionOverview(
     question: String,
-    requestedDate: LocalDate?,
     notes: List<NoteEntity>,
-): List<String> {
+): ReviewChatCollectionOverview {
     val scopedNotes = filterNotesForRequestedScope(question, notes)
-    val scopeLabel = requestedScopeLabel(question)
+    val scopeLabel = requestedScopeLabel(question) ?: "全部历史"
     val today = LocalDate.now(ZoneId.systemDefault())
     if (scopedNotes.isEmpty()) {
-        return listOf(
-            if (scopeLabel != null) {
-                "统计范围｜$scopeLabel"
-            } else {
-                "统计范围｜全部历史"
-            },
-            "记录总数｜共 0 条记录",
+        return ReviewChatCollectionOverview(
+            scopeLabel = scopeLabel,
+            totalCount = 0,
         )
     }
 
@@ -459,20 +465,18 @@ private fun buildCollectionOverviewSnippets(
     val last7DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(7) }
     val last30DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(30) }
 
-    return buildList {
-        add(
-            if (scopeLabel != null) {
-                "统计范围｜$scopeLabel"
-            } else {
-                "统计范围｜全部历史"
-            }
-        )
-        add("记录总数｜共 ${scopedNotes.size} 条记录")
-        add("时间范围｜最早 $earliest｜最近 $latest")
-        if (scopeLabel == null && reviewChatCountHints.any(question::contains)) {
-            add("近期分布｜最近 7 天 ${last7DaysCount} 条｜最近 30 天 ${last30DaysCount} 条")
-        }
-    }
+    return ReviewChatCollectionOverview(
+        scopeLabel = scopeLabel,
+        totalCount = scopedNotes.size,
+        earliestDateLabel = earliest,
+        latestDateLabel = latest,
+        last7DaysCount = last7DaysCount.takeIf {
+            scopeLabel == "全部历史" && reviewChatCountHints.any(question::contains)
+        },
+        last30DaysCount = last30DaysCount.takeIf {
+            scopeLabel == "全部历史" && reviewChatCountHints.any(question::contains)
+        },
+    )
 }
 
 private fun NoteEntity.createdLocalDate(): LocalDate =
