@@ -8,7 +8,11 @@ object ReviewChatPromptFactory {
     fun onDevice(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt = buildOnDevicePrompt(packet)
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
-        appendLine("你正在回答一个基于个人历史记录的回看问题。")
+        if (packet.isExternalQuestion) {
+            appendLine("你正在回答一个通用问题，不要假装拥有实时外部信息。")
+        } else {
+            appendLine("你正在回答一个基于个人历史记录的回看问题。")
+        }
         appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
         appendLine("当前问题：${packet.question}")
@@ -51,6 +55,14 @@ object ReviewChatPromptFactory {
         }
         appendLine("回答要求：")
         appendLine("1. 先直接回答“当前问题”，不要重复上一轮回答。")
+        if (packet.isExternalQuestion) {
+            appendLine("2. 这是外部或通用问题，不要引用个人历史记录，不要附带历史记录链接。")
+            appendLine("3. 如果问题需要实时外部信息，比如天气、新闻、股价，要直接说明你无法获取实时信息；如果能给通用建议，就给简短通用建议。")
+            appendLine("4. 不要用基于历史材料的拒答口径，也不要把历史记录硬套进回答。")
+            appendLine("5. 用中文回答，结构清楚，避免空话。")
+            appendLine("6. 默认使用清晰的 Markdown 排版。")
+            return@buildString
+        }
         when (packet.questionMode) {
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展成分析。")
@@ -143,10 +155,21 @@ object ReviewChatPromptFactory {
 
         return ReviewChatOnDevicePrompt(
             systemInstruction = buildString {
-                appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、LM Knowledge Base 和 LLM Wiki 回答。")
+                if (packet.isExternalQuestion) {
+                    appendLine("你是一个通用助手，但没有联网和实时外部信息能力。")
+                } else {
+                    appendLine("你是一个端侧本地历史助手，只能基于给定的个人记录、LM Knowledge Base 和 LLM Wiki 回答。")
+                }
                 appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
+                if (packet.isExternalQuestion) {
+                    appendLine("补充要求：这是外部或通用问题，不要引用个人历史记录，不要给历史记录链接。")
+                    appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
+                    appendLine("不要使用基于历史材料的拒答口径。")
+                    appendLine("格式要求：默认用简洁 Markdown。")
+                    return@buildString
+                }
                 when (packet.questionMode) {
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
@@ -168,6 +191,7 @@ object ReviewChatPromptFactory {
             extraContext = mapOf(
                 "question_mode" to packet.questionMode.name,
                 "intent" to packet.intent.name,
+                "is_external_question" to packet.isExternalQuestion.toString(),
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
                 "raw_note_count" to packet.rawNoteSnippets.size.toString(),
             ),

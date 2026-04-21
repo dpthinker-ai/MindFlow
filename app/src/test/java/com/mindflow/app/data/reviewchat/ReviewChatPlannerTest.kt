@@ -34,6 +34,7 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.TIMELINE_ANCHOR)
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
             .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
+        assertThat(buildReviewChatQuestionProfile("今天天气怎么样").isExternalQuestion).isTrue()
     }
 
     @Test
@@ -280,6 +281,7 @@ class ReviewChatPlannerTest {
     @Test
     fun answer_outOfScopeQuestion_stillRoutesToModel() = runTest {
         var cloudCalled = false
+        var capturedPrompt = ""
         val planner = ReviewChatPlanner(
             loadNotes = { listOf(sampleNote(1L, "产品方向", "这条记录只在讨论推荐链路和增长")) },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
@@ -288,8 +290,9 @@ class ReviewChatPlannerTest {
             resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
-            runCloud = {
+            runCloud = { prompt ->
                 cloudCalled = true
+                capturedPrompt = prompt
                 AiChatResult.Success("现有历史材料里没有和天气直接相关的记录。")
             },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
@@ -305,6 +308,10 @@ class ReviewChatPlannerTest {
         assertThat(cloudCalled).isTrue()
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("现有历史材料里没有和天气直接相关的记录")
+        assertThat(result.referencedNotes).isEmpty()
+        assertThat(capturedPrompt).contains("这是外部或通用问题")
+        assertThat(capturedPrompt).doesNotContain("材料不足")
+        assertThat(capturedPrompt).doesNotContain("原始记录：")
     }
 
     @Test

@@ -64,14 +64,17 @@ internal data class ReviewChatQuestionProfile(
     val requestedDate: LocalDate?,
     val keywords: List<String>,
     val wantsTimelineAnchor: Boolean,
+    val isExternalQuestion: Boolean,
 )
 
 internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestionProfile {
     val requestedDate = requestedDateForReviewChat(question)
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
     val wantsTimelineAnchor = listOf("第一条", "第一次", "最早", "最初", "一开始", "什么时候开始").any(question::contains)
+    val isExternalQuestion = reviewChatExternalHints.any(question::contains)
     val intent = classifyReviewChatIntent(question)
     val mode = when {
+        isExternalQuestion -> ReviewChatQuestionMode.ANALYSIS
         wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
         wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
         requestedDate != null || listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
@@ -84,6 +87,7 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         requestedDate = requestedDate,
         keywords = extractReviewChatKeywords(question),
         wantsTimelineAnchor = wantsTimelineAnchor,
+        isExternalQuestion = isExternalQuestion,
     )
 }
 
@@ -104,7 +108,7 @@ internal fun buildReviewChatContextPacket(
         question = question,
         notes = notes,
     )
-    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS && !profile.isExternalQuestion) {
         buildKnowledgeBaseSnippets(
             intent = intent,
             weeklyReview = weeklyReview,
@@ -113,7 +117,7 @@ internal fun buildReviewChatContextPacket(
     } else {
         emptyList()
     }
-    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS && !profile.isExternalQuestion) {
         buildWikiSnippets(
             intent = intent,
             question = question,
@@ -134,6 +138,7 @@ internal fun buildReviewChatContextPacket(
         questionMode = profile.mode,
         intent = intent,
         question = question,
+        isExternalQuestion = profile.isExternalQuestion,
         sessionSummary = sessionSummary.takeIf { profile.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
         conversationSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
             buildConversationSnippets(priorMessages)
@@ -717,6 +722,8 @@ private fun buildReferencedNotes(
     notes: List<NoteEntity>,
     directRawNoteDetails: List<ReviewChatRawNoteDetail>,
 ): List<ReviewChatReferencedNote> {
+    val questionProfile = buildReviewChatQuestionProfile(question)
+    if (questionProfile.isExternalQuestion) return emptyList()
     if (directRawNoteDetails.isNotEmpty()) {
         return directRawNoteDetails.map { detail ->
             ReviewChatReferencedNote(
@@ -766,7 +773,8 @@ private fun buildReferencedNotes(
     val directMatches = ranked.filter { it.score > 0 }.take(3).map(RankedReviewChatNote::note)
     val selected = when {
         directMatches.isNotEmpty() -> directMatches
-        intent == ReviewChatIntent.RECALL || reviewChatHistoryHints.any { question.contains(it) } ->
+        questionProfile.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
+            reviewChatHistoryHints.any { question.contains(it) } ->
             buildSupplementalRawSnippets(
                 intent = intent,
                 question = question,

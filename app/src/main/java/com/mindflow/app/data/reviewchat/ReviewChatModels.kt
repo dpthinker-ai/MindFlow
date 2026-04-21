@@ -93,6 +93,7 @@ data class ReviewChatContextPacket(
     val questionMode: ReviewChatQuestionMode,
     val intent: ReviewChatIntent,
     val question: String,
+    val isExternalQuestion: Boolean,
     val sessionSummary: String,
     val conversationSnippets: List<String>,
     val historyAnchorSnippets: List<String>,
