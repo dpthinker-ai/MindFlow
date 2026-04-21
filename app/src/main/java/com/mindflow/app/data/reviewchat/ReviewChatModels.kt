@@ -79,6 +79,7 @@ data class ReviewChatContextPacket(
     val question: String,
     val sessionSummary: String,
     val conversationSnippets: List<String>,
+    val historyAnchorSnippets: List<String>,
     val memoryDigestSnippets: List<String>,
     val memoryThreadSnippets: List<String>,
     val knowledgeBaseSnippets: List<String>,

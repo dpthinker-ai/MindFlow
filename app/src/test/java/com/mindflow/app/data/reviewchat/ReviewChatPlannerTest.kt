@@ -107,6 +107,10 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(packet.rawNoteSnippets).hasSize(6)
+        assertThat(packet.historyAnchorSnippets).containsAtLeast(
+            "时间范围｜最早 1970-01-01｜最近 1970-01-01｜共 12 条记录",
+            "最早记录｜记录｜1970-01-01｜产品方向0｜正文0",
+        )
         assertThat(packet.wikiSnippets.first()).contains("产品方向")
         assertThat(packet.knowledgeBaseSnippets).contains("待厘清问题｜待厘清问题")
     }
@@ -134,6 +138,7 @@ class ReviewChatPlannerTest {
 
         assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("最早主题")
         assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("最近主题B")
+        assertThat(packet.historyAnchorSnippets.joinToString("\n")).contains("最早记录｜记录｜1970-01-01｜最早主题")
     }
 
     @Test
@@ -228,7 +233,7 @@ class ReviewChatPlannerTest {
                         id = 42L,
                         topic = "4 月 10 号讨论",
                         content = "这是 4 月 10 号的完整原文，里面详细讨论了 leakspace 和推荐链路。",
-                    ).copy(updatedAt = april10Timestamp)
+                    ).copy(createdAt = april10Timestamp, updatedAt = april10Timestamp + 123_000L)
                 )
             },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
@@ -328,9 +333,9 @@ class ReviewChatPlannerTest {
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
-                    sampleNote(1L, "今天主题A", "今天第一条记录").copy(updatedAt = todayStart + 1_000L),
-                    sampleNote(2L, "今天主题B", "今天第二条记录").copy(updatedAt = todayStart + 2_000L),
-                    sampleNote(3L, "昨天主题", "昨天的记录").copy(updatedAt = yesterdayStart + 3_000L),
+                    sampleNote(1L, "今天主题A", "今天第一条记录").copy(createdAt = todayStart + 1_000L, updatedAt = todayStart + 11_000L),
+                    sampleNote(2L, "今天主题B", "今天第二条记录").copy(createdAt = todayStart + 2_000L, updatedAt = todayStart + 12_000L),
+                    sampleNote(3L, "昨天主题", "昨天的记录").copy(createdAt = yesterdayStart + 3_000L, updatedAt = todayStart + 13_000L),
                 )
             },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
@@ -378,12 +383,12 @@ class ReviewChatPlannerTest {
                         id = 42L,
                         topic = "4 月 10 号讨论A",
                         content = "这是 4 月 10 号的第一条完整原文。",
-                    ).copy(updatedAt = april10Start),
+                    ).copy(createdAt = april10Start, updatedAt = april10Start + 400_000L),
                     sampleNote(
                         id = 43L,
                         topic = "4 月 10 号讨论B",
                         content = "这是 4 月 10 号的第二条完整原文。",
-                    ).copy(updatedAt = april10Start + 100_000L),
+                    ).copy(createdAt = april10Start + 100_000L, updatedAt = april10Start + 500_000L),
                 )
             },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
@@ -414,6 +419,41 @@ class ReviewChatPlannerTest {
         assertThat(capturedPrompt).contains("第一条完整原文")
         assertThat(capturedPrompt).contains("第二条完整原文")
         assertThat(result.referencedNoteId).isNull()
+    }
+
+    @Test
+    fun answer_firstRecordQuestion_includesHistoryAnchorsAndUsesCreatedTimeline() = runTest {
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "最早记录", "这是最开始的一条记录").copy(createdAt = 10_000L, updatedAt = 999_000L),
+                    sampleNote(2L, "较新的记录", "这是后来的一条记录").copy(createdAt = 20_000L, updatedAt = 50_000L),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("你的第一条记录是在 1970-01-01。")
+            },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我第一条记录是什么时候",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(capturedPrompt).contains("历史锚点：")
+        assertThat(capturedPrompt).contains("最早记录｜记录｜1970-01-01｜最早记录")
     }
 
     @Test
@@ -468,11 +508,13 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("最近问题：")
         assertThat(prompt.userMessage).contains("用户｜上一轮问题")
         assertThat(prompt.userMessage).doesNotContain("上一轮回答")
+        assertThat(prompt.userMessage).contains("历史锚点：")
         assertThat(prompt.userMessage.indexOf("原始记录：")).isLessThan(prompt.userMessage.indexOf("LM Knowledge Base："))
         assertThat(prompt.userMessage).contains("LM Knowledge Base：")
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
+        assertThat(prompt.systemInstruction).contains("格式要求：默认用简洁 Markdown")
     }
 
     @Test

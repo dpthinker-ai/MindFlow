@@ -24,6 +24,7 @@ private val reviewChatStopWords = setOf(
 
 private val reviewChatHistoryHints = listOf(
     "之前", "以前", "过去", "历史", "曾经", "最早", "早些", "那会", "那时候", "去年", "上次",
+    "第一条", "第一次", "最初", "一开始", "什么时候开始",
 )
 
 private val reviewChatScopeHints = listOf(
@@ -69,6 +70,10 @@ internal fun buildReviewChatContextPacket(
     rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
 ): ReviewChatContextPacket {
     val keywords = extractReviewChatKeywords(question)
+    val historyAnchorSnippets = buildHistoryAnchorSnippets(
+        question = question,
+        notes = notes,
+    )
     val knowledgeBaseSnippets = buildKnowledgeBaseSnippets(
         intent = intent,
         weeklyReview = weeklyReview,
@@ -92,6 +97,7 @@ internal fun buildReviewChatContextPacket(
         question = question,
         sessionSummary = sessionSummary,
         conversationSnippets = buildConversationSnippets(priorMessages),
+        historyAnchorSnippets = historyAnchorSnippets,
         memoryDigestSnippets = emptyList(),
         memoryThreadSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
@@ -208,10 +214,7 @@ private fun buildRawNoteSnippets(
 ): List<String> {
     val scopedNotes = requestedDateForReviewChat(question)?.let { requestedDate ->
         notes.filter { note ->
-            val localDate = Instant.ofEpochMilli(note.updatedAt)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-            localDate == requestedDate
+            note.createdLocalDate() == requestedDate
         }
     } ?: notes
     val limit = when (intent) {
@@ -236,7 +239,7 @@ private fun buildRawNoteSnippets(
         }
         .sortedWith(
             compareByDescending<RankedReviewChatNote> { it.score }
-                .thenByDescending { it.note.updatedAt },
+                .thenByDescending { it.note.createdAt },
         )
 
     val directMatches = ranked.filter { it.score > 0 }.take(limit)
@@ -284,7 +287,7 @@ private fun buildSupplementalRawSnippets(
     }
 
     val sortedByTime = ranked
-        .sortedBy { it.note.updatedAt }
+        .sortedBy { it.note.createdAt }
         .map(RankedReviewChatNote::note)
     if (sortedByTime.size <= limit) return sortedByTime
 
@@ -298,13 +301,39 @@ private fun buildSupplementalRawSnippets(
 }
 
 private fun NoteEntity.toReviewChatSnippet(): String {
-    val date = Instant.ofEpochMilli(updatedAt)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDate()
-        .format(reviewChatDateFormatter)
+    val date = createdLocalDate().format(reviewChatDateFormatter)
     val compactContent = content.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(120)
     return "记录｜$date｜${topic.ifBlank { "未命名记录" }}｜$compactContent"
 }
+
+private fun buildHistoryAnchorSnippets(
+    question: String,
+    notes: List<NoteEntity>,
+): List<String> {
+    if (notes.isEmpty()) return emptyList()
+    val wantsHistoryAnchors = reviewChatHistoryHints.any { question.contains(it) }
+    if (!wantsHistoryAnchors) return emptyList()
+
+    val sorted = notes.sortedBy(NoteEntity::createdAt)
+    val earliest = sorted.first()
+    val latest = sorted.last()
+    return buildList {
+        add(
+            "时间范围｜最早 ${earliest.createdLocalDate().format(reviewChatDateFormatter)}｜最近 ${
+                latest.createdLocalDate().format(reviewChatDateFormatter)
+            }｜共 ${sorted.size} 条记录"
+        )
+        add("最早记录｜${earliest.toReviewChatSnippet()}")
+        if (latest.id != earliest.id) {
+            add("最近记录｜${latest.toReviewChatSnippet()}")
+        }
+    }
+}
+
+private fun NoteEntity.createdLocalDate(): LocalDate =
+    Instant.ofEpochMilli(createdAt)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
 
 private data class RankedReviewChatNote(
     val note: NoteEntity,
@@ -588,11 +617,8 @@ private fun buildDirectRawNoteDetails(
 
     val filtered = if (requestedDate != null) {
         notes.filter { note ->
-            val localDate = Instant.ofEpochMilli(note.updatedAt)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-            localDate == requestedDate
-        }.sortedByDescending(NoteEntity::updatedAt)
+            note.createdLocalDate() == requestedDate
+        }.sortedBy(NoteEntity::createdAt)
     } else {
         val keywords = extractReviewChatKeywords(question)
         notes.map { note ->
@@ -607,7 +633,7 @@ private fun buildDirectRawNoteDetails(
             )
         }.sortedWith(
             compareByDescending<Pair<NoteEntity, Int>> { it.second }
-                .thenByDescending { it.first.updatedAt }
+                .thenByDescending { it.first.createdAt }
         ).filter { it.second > 0 }
             .map { it.first }
             .take(2)
@@ -617,10 +643,7 @@ private fun buildDirectRawNoteDetails(
         ReviewChatRawNoteDetail(
             noteId = note.id,
             title = note.topic.ifBlank { "未命名记录" },
-            dateLabel = Instant.ofEpochMilli(note.updatedAt)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-                .format(reviewChatDateFormatter),
+            dateLabel = note.createdLocalDate().format(reviewChatDateFormatter),
             fullContent = note.content.trim(),
         )
     }

@@ -18,6 +18,10 @@ object ReviewChatPromptFactory {
             appendLine("近期会话：")
             packet.conversationSnippets.forEach(::appendLine)
         }
+        if (packet.historyAnchorSnippets.isNotEmpty()) {
+            appendLine("历史锚点：")
+            packet.historyAnchorSnippets.forEach(::appendLine)
+        }
         if (packet.memoryDigestSnippets.isNotEmpty()) {
             appendLine("Memory Digest：")
             packet.memoryDigestSnippets.forEach(::appendLine)
@@ -45,6 +49,8 @@ object ReviewChatPromptFactory {
         appendLine("4. 如果用户明确要完整内容，优先返回完整记录内容，而不是只做摘要。")
         appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
         appendLine("6. 用中文回答，结构清楚，避免空话。")
+        appendLine("7. 默认使用清晰的 Markdown 排版：先给一两句结论；如果涉及多条记录或多个时间点，用项目列表，每条单独一行。")
+        appendLine("8. 如果用户在问第一条、最早、什么时候开始，优先根据“历史锚点”和原始记录里的日期来回答。")
     }
 
     private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt {
@@ -59,6 +65,14 @@ object ReviewChatPromptFactory {
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
         )
 
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "历史锚点",
+            lines = packet.historyAnchorSnippets,
+            maxItems = 3,
+            itemMaxChars = 110,
+        )
         appendSectionWithinBudget(
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
@@ -112,6 +126,8 @@ object ReviewChatPromptFactory {
                 appendLine("问题类型：${packet.intent.name}")
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
                 appendLine("补充要求：如果已经命中原始记录，优先围绕这些记录回答；如果材料不足再说材料不足；如果用户明确要完整内容，优先返回完整记录。")
+                appendLine("格式要求：默认用简洁 Markdown；如果涉及多条记录或多个时间点，用项目列表逐条换行。")
+                appendLine("历史要求：如果用户在问第一条、最早、什么时候开始，优先根据历史锚点和原始记录日期回答。")
             }.trim(),
             userMessage = prompt.toString().trim(),
             extraContext = mapOf(
