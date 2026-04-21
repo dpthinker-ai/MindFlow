@@ -315,7 +315,7 @@ class AppContainer(context: Context) {
 
     val reviewChatPlanner = ReviewChatPlanner(
         loadNotes = {
-            noteRepository.observeAllNotes().first().filter { !it.isArchived }
+            noteRepository.observeAllNotes().first()
         },
         loadWeeklyReview = {
             weeklyReviewPlanner.state.first()

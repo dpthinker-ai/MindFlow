@@ -12,6 +12,7 @@ import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -78,6 +79,7 @@ internal data class ReviewChatQuestionProfile(
 
 internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestionProfile {
     val requestedDate = requestedDateForReviewChat(question)
+    val requestedMonth = requestedMonthForReviewChat(question)
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
     val wantsTimelineAnchor = listOf("第一条", "第一次", "最早", "最初", "一开始", "什么时候开始").any(question::contains)
     val wantsCount = reviewChatCountHints.any(question::contains)
@@ -88,7 +90,8 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
         wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
         wantsCount -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
-        requestedDate != null || listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
+        requestedDate != null || requestedMonth != null ||
+            listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
             ReviewChatQuestionMode.RECORD_LOOKUP
         else -> ReviewChatQuestionMode.ANALYSIS
     }
@@ -292,11 +295,7 @@ private fun buildRawNoteSnippets(
     keywords: List<String>,
     notes: List<NoteEntity>,
 ): List<String> {
-    val scopedNotes = requestedDateForReviewChat(question)?.let { requestedDate ->
-        notes.filter { note ->
-            note.createdLocalDate() == requestedDate
-        }
-    } ?: notes
+    val scopedNotes = filterNotesForRequestedScope(question, notes)
     if (mode == ReviewChatQuestionMode.EXTERNAL) return emptyList()
     if (mode == ReviewChatQuestionMode.COLLECTION_OVERVIEW) {
         val recentQuestion = listOf("最近", "这段时间", "近期").any(question::contains)
@@ -316,7 +315,7 @@ private fun buildRawNoteSnippets(
             ).map(NoteEntity::toReviewChatSnippet)
         }
     }
-    if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && requestedDateForReviewChat(question) != null) {
+    if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && hasRequestedTimeScope(question)) {
         return scopedNotes
             .sortedBy(NoteEntity::createdAt)
             .take(12)
@@ -440,14 +439,13 @@ private fun buildCollectionOverviewSnippets(
     requestedDate: LocalDate?,
     notes: List<NoteEntity>,
 ): List<String> {
-    val scopedNotes = requestedDate?.let { date ->
-        notes.filter { it.createdLocalDate() == date }
-    } ?: notes
+    val scopedNotes = filterNotesForRequestedScope(question, notes)
+    val scopeLabel = requestedScopeLabel(question)
     val today = LocalDate.now(ZoneId.systemDefault())
     if (scopedNotes.isEmpty()) {
         return listOf(
-            if (requestedDate != null) {
-                "统计范围｜${requestedDate.format(reviewChatDateFormatter)}"
+            if (scopeLabel != null) {
+                "统计范围｜$scopeLabel"
             } else {
                 "统计范围｜全部历史"
             },
@@ -463,15 +461,15 @@ private fun buildCollectionOverviewSnippets(
 
     return buildList {
         add(
-            if (requestedDate != null) {
-                "统计范围｜${requestedDate.format(reviewChatDateFormatter)}"
+            if (scopeLabel != null) {
+                "统计范围｜$scopeLabel"
             } else {
                 "统计范围｜全部历史"
             }
         )
         add("记录总数｜共 ${scopedNotes.size} 条记录")
         add("时间范围｜最早 $earliest｜最近 $latest")
-        if (requestedDate == null && reviewChatCountHints.any(question::contains)) {
+        if (scopeLabel == null && reviewChatCountHints.any(question::contains)) {
             add("近期分布｜最近 7 天 ${last7DaysCount} 条｜最近 30 天 ${last30DaysCount} 条")
         }
     }
@@ -773,14 +771,11 @@ private fun buildDirectRawNoteDetails(
     notes: List<NoteEntity>,
 ): List<ReviewChatRawNoteDetail> {
     if (mode != ReviewChatQuestionMode.FULL_RECORD) return emptyList()
-    val requestedDate = requestedDateForReviewChat(question)
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
-    if (requestedDate == null && !wantsFullRecord) return emptyList()
+    if (!hasRequestedTimeScope(question) && !wantsFullRecord) return emptyList()
 
-    val filtered = if (requestedDate != null) {
-        notes.filter { note ->
-            note.createdLocalDate() == requestedDate
-        }.sortedBy(NoteEntity::createdAt)
+    val filtered = if (hasRequestedTimeScope(question)) {
+        filterNotesForRequestedScope(question, notes).sortedBy(NoteEntity::createdAt)
     } else {
         val keywords = extractReviewChatKeywords(question)
         notes.map { note ->
@@ -831,10 +826,8 @@ private fun buildReferencedNotes(
         }
     }
 
-    val requestedDate = requestedDateForReviewChat(question)
-    if (requestedDate != null) {
-        return notes.asSequence()
-            .filter { it.createdLocalDate() == requestedDate }
+    if (hasRequestedTimeScope(question)) {
+        return filterNotesForRequestedScope(question, notes).asSequence()
             .sortedBy(NoteEntity::createdAt)
             .take(3)
             .map { it.toReferencedNote() }
@@ -907,3 +900,34 @@ private fun requestedDateForReviewChat(question: String): LocalDate? {
         }
     }
 }
+
+private fun requestedMonthForReviewChat(question: String): YearMonth? {
+    if (requestedDateForReviewChat(question) != null) return null
+    val today = LocalDate.now(ZoneId.systemDefault())
+    val match = Regex("(\\d{1,2})\\s*月(?:份)?").find(question) ?: return null
+    val month = match.groupValues[1].toIntOrNull() ?: return null
+    if (month !in 1..12) return null
+    return YearMonth.of(today.year, month)
+}
+
+private fun hasRequestedTimeScope(question: String): Boolean =
+    requestedDateForReviewChat(question) != null || requestedMonthForReviewChat(question) != null
+
+private fun filterNotesForRequestedScope(
+    question: String,
+    notes: List<NoteEntity>,
+): List<NoteEntity> {
+    val requestedDate = requestedDateForReviewChat(question)
+    if (requestedDate != null) {
+        return notes.filter { it.createdLocalDate() == requestedDate }
+    }
+    val requestedMonth = requestedMonthForReviewChat(question)
+    if (requestedMonth != null) {
+        return notes.filter { YearMonth.from(it.createdLocalDate()) == requestedMonth }
+    }
+    return notes
+}
+
+private fun requestedScopeLabel(question: String): String? =
+    requestedDateForReviewChat(question)?.format(reviewChatDateFormatter)
+        ?: requestedMonthForReviewChat(question)?.let { "${it.monthValue}月" }

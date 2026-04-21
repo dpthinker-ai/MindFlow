@@ -32,6 +32,10 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.FULL_RECORD)
         assertThat(buildReviewChatQuestionProfile("我第一条记录是什么时候").mode)
             .isEqualTo(ReviewChatQuestionMode.TIMELINE_ANCHOR)
+        assertThat(buildReviewChatQuestionProfile("我只看3月份的").mode)
+            .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(buildReviewChatQuestionProfile("我3月份一共记了多少条？").mode)
+            .isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(buildReviewChatQuestionProfile("我总共有多少条记录").mode)
             .isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
@@ -749,6 +753,34 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun buildReviewChatContextPacket_collectionOverview_monthScopeFiltersToRequestedMonth() {
+        val year = LocalDate.now(ZoneId.systemDefault()).year
+        val march1 = LocalDate.of(year, 3, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val march20 = LocalDate.of(year, 3, 20).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val april5 = LocalDate.of(year, 4, 5).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "我3月份一共记了多少条？",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "三月主题A", "三月内容A").copy(createdAt = march1, updatedAt = march1 + 1_000L),
+                sampleNote(2L, "三月主题B", "三月内容B").copy(createdAt = march20, updatedAt = march20 + 1_000L),
+                sampleNote(3L, "四月主题", "四月内容").copy(createdAt = april5, updatedAt = april5 + 1_000L),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
+        assertThat(packet.collectionOverviewSnippets).contains("统计范围｜3月")
+        assertThat(packet.collectionOverviewSnippets).contains("记录总数｜共 2 条记录")
+        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("三月主题A")
+        assertThat(packet.rawNoteSnippets.joinToString("\n")).contains("三月主题B")
+        assertThat(packet.rawNoteSnippets.joinToString("\n")).doesNotContain("四月主题")
+    }
+
+    @Test
     fun answer_collectionOverviewQuestion_routesToModelWithAccurateStats() = runTest {
         var capturedPrompt = ""
         val planner = ReviewChatPlanner(
@@ -784,6 +816,40 @@ class ReviewChatPlannerTest {
         assertThat(result.referencedNotes).isEmpty()
         assertThat(capturedPrompt).contains("集合概览：")
         assertThat(capturedPrompt).contains("记录总数｜共 3 条记录")
+    }
+
+    @Test
+    fun answer_collectionOverviewQuestion_countsArchivedNotesWhenTheyAreLoaded() = runTest {
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "活跃记录", "内容A"),
+                    sampleNote(2L, "归档记录", "内容B").copy(isArchived = true),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("你总共有 2 条记录。")
+            },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我总共有多少条记录",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.answer).contains("2 条记录")
+        assertThat(capturedPrompt).contains("记录总数｜共 2 条记录")
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(
