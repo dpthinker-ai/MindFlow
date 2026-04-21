@@ -3,7 +3,7 @@ package com.mindflow.app.data.reviewchat
 import com.mindflow.app.markdown.SimpleMarkdown
 
 internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
-    var normalized = SimpleMarkdown.normalizeForDisplay(content)
+    var normalized = normalizeMarkdownTables(SimpleMarkdown.normalizeForDisplay(content))
     if (normalized.isBlank()) return normalized
 
     normalized = normalized
@@ -30,3 +30,44 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
 
     return normalized
 }
+
+private fun normalizeMarkdownTables(content: String): String {
+    val lines = content.lines()
+    if (lines.none { it.contains('|') }) return content
+
+    val output = mutableListOf<String>()
+    var index = 0
+    while (index < lines.size) {
+        val line = lines[index]
+        val next = lines.getOrNull(index + 1).orEmpty()
+        val isHeader = line.trim().startsWith("|") && line.contains("|")
+        val isSeparator = Regex("^\\s*\\|?(\\s*:?-{3,}:?\\s*\\|)+\\s*:?-{3,}:?\\s*\\|?\\s*$").matches(next)
+        if (isHeader && isSeparator) {
+            val headers = splitTableLine(line)
+            index += 2
+            while (index < lines.size) {
+                val rowLine = lines[index]
+                if (!rowLine.trim().startsWith("|") || !rowLine.contains("|")) break
+                val cells = splitTableLine(rowLine)
+                if (cells.isNotEmpty()) {
+                    val row = headers.zip(cells).joinToString("；") { (header, cell) ->
+                        "$header：$cell"
+                    }
+                    output += "- $row"
+                }
+                index += 1
+            }
+            continue
+        }
+        output += line
+        index += 1
+    }
+    return output.joinToString("\n")
+}
+
+private fun splitTableLine(line: String): List<String> =
+    line.trim()
+        .trim('|')
+        .split('|')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }

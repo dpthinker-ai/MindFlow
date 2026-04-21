@@ -19,6 +19,7 @@ object ReviewChatPromptFactory {
         appendLine("问题类型：${packet.intent.name}")
 
         appendPromptSection(this, "近期会话摘要", packet.sessionSummary.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty())
+        appendPromptSection(this, "集合概览", packet.collectionOverviewSnippets)
         appendPromptSection(this, "近期会话", packet.conversationSnippets)
         appendPromptSection(this, "历史锚点", packet.historyAnchorSnippets)
         appendPromptSection(this, "LM Knowledge Base", packet.knowledgeBaseSnippets)
@@ -38,29 +39,35 @@ object ReviewChatPromptFactory {
             ReviewChatQuestionMode.EXTERNAL -> {
                 appendLine("2. 这是外部或通用问题，不要引用个人历史记录，也不要附历史记录链接。")
                 appendLine("3. 如果问题需要实时天气、新闻、股价等信息，要直接说明你无法获取实时数据；如果能回答，就给简短通用建议。")
-                appendLine("4. 默认使用 Markdown；如果有多点内容，用项目列表逐条换行。")
+                appendLine("4. 默认使用 Markdown；如果有多点内容，用项目列表逐条换行；不要输出 Markdown 表格。")
+            }
+            ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
+                appendLine("2. 这是全局统计或整体概览问题，优先使用“集合概览”和时间范围信息直接回答。")
+                appendLine("3. 如果问题在问数量、总数或时间范围，第一句必须直接给出准确数字或准确时间。")
+                appendLine("4. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格。")
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
                 appendLine("3. 输出格式固定为：先一句总览，然后用项目列表逐条列出，每条单独一行，按时间顺序写。")
-                appendLine("4. 不要引用未命中的日期或记录。")
+                appendLine("4. 不要引用未命中的日期或记录，也不要输出 Markdown 表格。")
             }
             ReviewChatQuestionMode.FULL_RECORD -> {
                 appendLine("2. 这是完整内容问题，优先返回命中的完整记录，不要先做摘要。")
-                appendLine("3. 输出格式固定为：先一句说明命中了几条，然后每条用三级标题分开，再贴对应内容。")
+                appendLine("3. 输出格式固定为：先一句说明命中了几条，然后每条用三级标题分开，再贴对应内容；不要输出 Markdown 表格。")
             }
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                 appendLine("2. 这是时间线锚点问题，第一句必须直接回答最早时间或开始时间。")
-                appendLine("3. 如果需要补充依据，用项目列表列 1 到 3 个关键时间锚点。")
+                appendLine("3. 如果需要补充依据，用项目列表列 1 到 3 个关键时间锚点；不要输出 Markdown 表格。")
             }
             ReviewChatQuestionMode.ANALYSIS -> {
                 appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
                 appendLine("3. 输出格式固定为：`## 结论`、`## 依据`、`## 下一步` 三段。")
                 appendLine("4. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
+                appendLine("5. 不要输出 Markdown 表格，改用项目列表或小标题。")
             }
         }
         if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {
-            appendLine("5. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
+            appendLine("6. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
         }
     }
 
@@ -74,6 +81,15 @@ object ReviewChatPromptFactory {
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
+        )
+
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "集合概览",
+            lines = packet.collectionOverviewSnippets,
+            maxItems = 4,
+            itemMaxChars = 100,
         )
 
         appendSectionWithinBudget(
@@ -146,23 +162,27 @@ object ReviewChatPromptFactory {
                     ReviewChatQuestionMode.EXTERNAL -> {
                         appendLine("补充要求：不要引用个人历史记录，也不要给历史记录链接。")
                         appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
-                        appendLine("输出格式：一到两段清晰中文，不要使用基于历史材料的拒答口径。")
+                        appendLine("输出格式：一到两段清晰中文，不要使用基于历史材料的拒答口径，也不要输出表格。")
+                    }
+                    ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
+                        appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
+                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格。")
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
-                        appendLine("输出格式：先一句总览，再用项目列表逐条换行。")
+                        appendLine("输出格式：先一句总览，再用项目列表逐条换行，不要输出表格。")
                     }
                     ReviewChatQuestionMode.FULL_RECORD -> {
                         appendLine("补充要求：这是完整内容问题，优先返回命中的完整记录，不要只给摘要。")
-                        appendLine("输出格式：先一句说明命中了几条，再逐条分段展开。")
+                        appendLine("输出格式：先一句说明命中了几条，再逐条分段展开，不要输出表格。")
                     }
                     ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                         appendLine("补充要求：这是时间线锚点问题，优先回答最早时间或开始时间。")
-                        appendLine("输出格式：第一句直接回答时间，再补 1 到 3 个时间锚点。")
+                        appendLine("输出格式：第一句直接回答时间，再补 1 到 3 个时间锚点，不要输出表格。")
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
                         appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                        appendLine("输出格式：`结论`、`依据`、`下一步` 三段，默认用简洁 Markdown。")
+                        appendLine("输出格式：`结论`、`依据`、`下一步` 三段，默认用简洁 Markdown，不要输出表格。")
                     }
                 }
                 if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {

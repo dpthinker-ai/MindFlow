@@ -34,4 +34,20 @@ class ReviewChatAnswerFormatterTest {
         assertThat(formatted).contains("结论")
         assertThat(formatted).contains("1. 第一条")
     }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_convertsMarkdownTableToBulletList() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            """
+            | 日期 | 主题 |
+            | --- | --- |
+            | 2026-04-21 | 产品方向 |
+            | 2026-04-22 | 推荐链路 |
+            """.trimIndent()
+        )
+
+        assertThat(formatted).doesNotContain("| 日期 |")
+        assertThat(formatted).contains("- 日期：2026-04-21；主题：产品方向")
+        assertThat(formatted).contains("- 日期：2026-04-22；主题：推荐链路")
+    }
 }

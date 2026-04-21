@@ -8,6 +8,7 @@ enum class ReviewChatIntent {
 
 enum class ReviewChatQuestionMode {
     EXTERNAL,
+    COLLECTION_OVERVIEW,
     RECORD_LOOKUP,
     FULL_RECORD,
     TIMELINE_ANCHOR,
@@ -95,7 +96,9 @@ data class ReviewChatContextPacket(
     val intent: ReviewChatIntent,
     val question: String,
     val isExternalQuestion: Boolean,
+    val wantsCount: Boolean,
     val sessionSummary: String,
+    val collectionOverviewSnippets: List<String>,
     val conversationSnippets: List<String>,
     val historyAnchorSnippets: List<String>,
     val memoryDigestSnippets: List<String>,

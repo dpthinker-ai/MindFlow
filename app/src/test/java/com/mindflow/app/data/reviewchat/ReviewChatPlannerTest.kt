@@ -32,6 +32,8 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.FULL_RECORD)
         assertThat(buildReviewChatQuestionProfile("我第一条记录是什么时候").mode)
             .isEqualTo(ReviewChatQuestionMode.TIMELINE_ANCHOR)
+        assertThat(buildReviewChatQuestionProfile("我总共有多少条记录").mode)
+            .isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
             .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
         assertThat(buildReviewChatQuestionProfile("今天天气怎么样").mode)
@@ -273,9 +275,8 @@ class ReviewChatPlannerTest {
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("基于 4 月 10 号原始记录整理后的回答")
-        assertThat(result.referencedNoteId).isEqualTo(42L)
-        assertThat(result.referencedNotes).hasSize(1)
-        assertThat(result.referencedNotes.single().noteId).isEqualTo(42L)
+        assertThat(result.referencedNoteId).isNull()
+        assertThat(result.referencedNotes).isEmpty()
         assertThat(capturedPrompt).contains("完整记录：")
         assertThat(capturedPrompt).contains("这是 4 月 10 号的完整原文")
     }
@@ -384,7 +385,7 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("今天主题A")
         assertThat(result.answer).contains("今天主题B")
-        assertThat(result.referencedNotes.map { it.noteId }).containsExactly(1L, 2L)
+        assertThat(result.referencedNotes).isEmpty()
         assertThat(capturedPrompt).contains("原始记录：")
         assertThat(capturedPrompt).contains("记录｜")
         assertThat(capturedPrompt).contains("今天主题A")
@@ -482,7 +483,42 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(capturedPrompt).contains("历史锚点：")
         assertThat(capturedPrompt).contains("最早记录｜记录｜1970-01-01｜最早记录")
-        assertThat(result.referencedNotes.map { it.noteId }).containsExactly(1L, 2L)
+        assertThat(result.referencedNotes).isEmpty()
+    }
+
+    @Test
+    fun answer_linkQuestion_returnsReferencedNotesOnlyWhenExplicitlyRequested() = runTest {
+        val april10Timestamp = LocalDate.now(ZoneId.systemDefault())
+            .withMonth(4)
+            .withDayOfMonth(10)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(42L, "4 月 10 号讨论", "完整原文").copy(createdAt = april10Timestamp, updatedAt = april10Timestamp + 1_000L),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { AiChatResult.Success("这里是内容，同时给你原始链接。") },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "把 4 月 10 号那条记录的原始链接发给我",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.referencedNotes).hasSize(1)
+        assertThat(result.referencedNotes.single().noteId).isEqualTo(42L)
     }
 
     @Test
@@ -688,6 +724,66 @@ class ReviewChatPlannerTest {
         assertThat(packet.knowledgeBaseSnippets).isEmpty()
         assertThat(packet.wikiSnippets).isEmpty()
         assertThat(packet.conversationSnippets).isEmpty()
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_collectionOverview_includesGlobalStats() {
+        val packet = buildReviewChatContextPacket(
+            question = "我总共有多少条记录",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "最早主题", "最早内容").copy(createdAt = 1_000L, updatedAt = 2_000L),
+                sampleNote(2L, "中间主题", "中间内容").copy(createdAt = 2_000L, updatedAt = 3_000L),
+                sampleNote(3L, "最近主题", "最近内容").copy(createdAt = 3_000L, updatedAt = 4_000L),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
+        assertThat(packet.collectionOverviewSnippets).contains("记录总数｜共 3 条记录")
+        assertThat(packet.collectionOverviewSnippets.joinToString("\n")).contains("时间范围｜最早 1970-01-01｜最近 1970-01-01")
+        assertThat(packet.rawNoteSnippets).isNotEmpty()
+    }
+
+    @Test
+    fun answer_collectionOverviewQuestion_routesToModelWithAccurateStats() = runTest {
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "最早主题", "最早内容").copy(createdAt = 1_000L, updatedAt = 2_000L),
+                    sampleNote(2L, "中间主题", "中间内容").copy(createdAt = 2_000L, updatedAt = 3_000L),
+                    sampleNote(3L, "最近主题", "最近内容").copy(createdAt = 3_000L, updatedAt = 4_000L),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("你总共有 3 条记录。")
+            },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我总共有多少条记录",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("3 条记录")
+        assertThat(result.referencedNotes).isEmpty()
+        assertThat(capturedPrompt).contains("集合概览：")
+        assertThat(capturedPrompt).contains("记录总数｜共 3 条记录")
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(

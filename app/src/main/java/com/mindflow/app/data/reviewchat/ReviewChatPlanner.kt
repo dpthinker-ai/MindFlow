@@ -32,9 +32,17 @@ private val reviewChatScopeHints = listOf(
     "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread",
 )
 
+private val reviewChatCountHints = listOf(
+    "多少条", "几条", "总共", "一共", "总数", "总量", "全部记录", "所有记录", "整个历史", "从开始到现在",
+)
+
 private val reviewChatExternalHints = listOf(
     "天气", "气温", "下雨", "台风", "新闻", "热搜", "股价", "股票", "汇率", "彩票",
     "体育比赛", "球赛", "nba", "足球", "电影票房", "明星八卦", "实时路况", "航班", "高铁",
+)
+
+private val reviewChatLinkHints = listOf(
+    "链接", "原始链接", "原文链接", "打开原记录", "打开记录", "给我链接", "发我链接",
 )
 
 private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -64,6 +72,7 @@ internal data class ReviewChatQuestionProfile(
     val requestedDate: LocalDate?,
     val keywords: List<String>,
     val wantsTimelineAnchor: Boolean,
+    val wantsCount: Boolean,
     val isExternalQuestion: Boolean,
 )
 
@@ -71,12 +80,14 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
     val requestedDate = requestedDateForReviewChat(question)
     val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
     val wantsTimelineAnchor = listOf("第一条", "第一次", "最早", "最初", "一开始", "什么时候开始").any(question::contains)
+    val wantsCount = reviewChatCountHints.any(question::contains)
     val isExternalQuestion = reviewChatExternalHints.any(question::contains)
     val intent = classifyReviewChatIntent(question)
     val mode = when {
         isExternalQuestion -> ReviewChatQuestionMode.EXTERNAL
         wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
         wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
+        wantsCount -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
         requestedDate != null || listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
             ReviewChatQuestionMode.RECORD_LOOKUP
         else -> ReviewChatQuestionMode.ANALYSIS
@@ -87,6 +98,7 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         requestedDate = requestedDate,
         keywords = extractReviewChatKeywords(question),
         wantsTimelineAnchor = wantsTimelineAnchor,
+        wantsCount = wantsCount,
         isExternalQuestion = isExternalQuestion,
     )
 }
@@ -108,6 +120,15 @@ internal fun buildReviewChatContextPacket(
         question = question,
         notes = notes,
     )
+    val collectionOverviewSnippets = if (!profile.isExternalQuestion) {
+        buildCollectionOverviewSnippets(
+            question = question,
+            requestedDate = profile.requestedDate,
+            notes = notes,
+        )
+    } else {
+        emptyList()
+    }
     val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
             intent = intent,
@@ -140,7 +161,9 @@ internal fun buildReviewChatContextPacket(
         intent = intent,
         question = question,
         isExternalQuestion = profile.isExternalQuestion,
+        wantsCount = profile.wantsCount,
         sessionSummary = sessionSummary.takeIf { profile.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
+        collectionOverviewSnippets = collectionOverviewSnippets,
         conversationSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
             buildConversationSnippets(priorMessages)
         } else {
@@ -275,6 +298,24 @@ private fun buildRawNoteSnippets(
         }
     } ?: notes
     if (mode == ReviewChatQuestionMode.EXTERNAL) return emptyList()
+    if (mode == ReviewChatQuestionMode.COLLECTION_OVERVIEW) {
+        val recentQuestion = listOf("最近", "这段时间", "近期").any(question::contains)
+        return if (recentQuestion) {
+            scopedNotes
+                .sortedByDescending(NoteEntity::createdAt)
+                .take(6)
+                .map(NoteEntity::toReviewChatSnippet)
+        } else {
+            buildSupplementalRawSnippets(
+                intent = intent,
+                question = question,
+                ranked = scopedNotes
+                    .sortedBy { it.createdAt }
+                    .map { RankedReviewChatNote(note = it, score = 0) },
+                limit = 6,
+            ).map(NoteEntity::toReviewChatSnippet)
+        }
+    }
     if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && requestedDateForReviewChat(question) != null) {
         return scopedNotes
             .sortedBy(NoteEntity::createdAt)
@@ -394,6 +435,48 @@ private fun buildHistoryAnchorSnippets(
     }
 }
 
+private fun buildCollectionOverviewSnippets(
+    question: String,
+    requestedDate: LocalDate?,
+    notes: List<NoteEntity>,
+): List<String> {
+    val scopedNotes = requestedDate?.let { date ->
+        notes.filter { it.createdLocalDate() == date }
+    } ?: notes
+    val today = LocalDate.now(ZoneId.systemDefault())
+    if (scopedNotes.isEmpty()) {
+        return listOf(
+            if (requestedDate != null) {
+                "统计范围｜${requestedDate.format(reviewChatDateFormatter)}"
+            } else {
+                "统计范围｜全部历史"
+            },
+            "记录总数｜共 0 条记录",
+        )
+    }
+
+    val sorted = scopedNotes.sortedBy(NoteEntity::createdAt)
+    val earliest = sorted.first().createdLocalDate().format(reviewChatDateFormatter)
+    val latest = sorted.last().createdLocalDate().format(reviewChatDateFormatter)
+    val last7DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(7) }
+    val last30DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(30) }
+
+    return buildList {
+        add(
+            if (requestedDate != null) {
+                "统计范围｜${requestedDate.format(reviewChatDateFormatter)}"
+            } else {
+                "统计范围｜全部历史"
+            }
+        )
+        add("记录总数｜共 ${scopedNotes.size} 条记录")
+        add("时间范围｜最早 $earliest｜最近 $latest")
+        if (requestedDate == null && reviewChatCountHints.any(question::contains)) {
+            add("近期分布｜最近 7 天 ${last7DaysCount} 条｜最近 30 天 ${last30DaysCount} 条")
+        }
+    }
+}
+
 private fun NoteEntity.createdLocalDate(): LocalDate =
     Instant.ofEpochMilli(createdAt)
         .atZone(ZoneId.systemDefault())
@@ -478,7 +561,7 @@ class ReviewChatPlanner(
                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred),
                     sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                     titleSuggestion = request.question.take(18),
-                    referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                    referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                     referencedNotes = prepared.referencedNotes,
                 )
             }
@@ -572,7 +655,7 @@ class ReviewChatPlanner(
                                             providerLine = providerLine,
                                             sessionSummary = "${request.question.take(40)}｜${content.take(80)}",
                                             titleSuggestion = request.question.take(18),
-                                            referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                                            referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                             referencedNotes = prepared.referencedNotes,
                                         )
                                     )
@@ -609,7 +692,7 @@ class ReviewChatPlanner(
                                         providerLine = providerLine,
                                         sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
                                         titleSuggestion = request.question.take(18),
-                                        referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
+                                        referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                         referencedNotes = prepared.referencedNotes,
                                     )
                                 )
@@ -734,8 +817,10 @@ private fun buildReferencedNotes(
     notes: List<NoteEntity>,
     directRawNoteDetails: List<ReviewChatRawNoteDetail>,
 ): List<ReviewChatReferencedNote> {
+    if (!wantsReviewChatLinks(question)) return emptyList()
     val questionProfile = buildReviewChatQuestionProfile(question)
     if (questionProfile.isExternalQuestion) return emptyList()
+    if (questionProfile.wantsCount) return emptyList()
     if (directRawNoteDetails.isNotEmpty()) {
         return directRawNoteDetails.map { detail ->
             ReviewChatReferencedNote(
@@ -797,6 +882,9 @@ private fun buildReferencedNotes(
     }
     return selected.distinctBy(NoteEntity::id).map(NoteEntity::toReferencedNote)
 }
+
+private fun wantsReviewChatLinks(question: String): Boolean =
+    reviewChatLinkHints.any(question::contains)
 
 private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
     ReviewChatReferencedNote(
