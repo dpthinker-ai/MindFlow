@@ -62,7 +62,7 @@ object ReviewChatPromptFactory {
             }
             ReviewChatQuestionMode.ANALYSIS -> {
                 appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                appendLine("3. 输出格式固定为：`## 结论`、`## 依据`、`## 下一步` 三段。")
+                appendLine("3. 输出格式固定为三段：`结论：`、`依据：`、`下一步：`。每段单独换行，不要使用 Markdown 标题。")
                 appendLine("4. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
                 appendLine("5. 不要输出 Markdown 表格，改用项目列表或小标题。")
             }
@@ -180,7 +180,7 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
                         appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                        appendLine("输出格式：`结论`、`依据`、`下一步` 三段，默认用简洁 Markdown，不要输出表格。")
+                        appendLine("输出格式：`结论：`、`依据：`、`下一步：` 三段，每段单独换行，不要使用 Markdown 标题，也不要输出表格。")
                     }
                 }
                 if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {

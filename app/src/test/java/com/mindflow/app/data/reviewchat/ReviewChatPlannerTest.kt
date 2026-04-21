@@ -587,7 +587,7 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
-        assertThat(prompt.systemInstruction).contains("输出格式：`结论`、`依据`、`下一步` 三段")
+        assertThat(prompt.systemInstruction).contains("输出格式：`结论：`、`依据：`、`下一步：` 三段")
     }
 
     @Test

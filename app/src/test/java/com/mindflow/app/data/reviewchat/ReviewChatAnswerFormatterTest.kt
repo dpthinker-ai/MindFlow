@@ -63,4 +63,47 @@ class ReviewChatAnswerFormatterTest {
         assertThat(formatted).contains("- 2026-03-28《MindFlow还要增加一个功能》")
         assertThat(formatted).doesNotContain("-记录｜2026-03-28｜")
     }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_doesNotBreakDatesIntoFakeBullets() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "结论根据提供的材料，关于“FitEver训练记录数据异常”的记录（2026-03-30）描述了一个问题，但最终结论是“把这个问题关闭吧”。",
+        )
+
+        assertThat(formatted).contains("（2026-03-30）")
+        assertThat(formatted).doesNotContain("2026-03\n-\n30）")
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_splitsPlainSectionLabelsIntoSeparateParagraphs() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "结论：当前没有明确未完成任务。依据：已有记录大多是已发生事件。下一步：如需追踪待办，请单独记录待办状态。",
+        )
+
+        assertThat(formatted).contains("结论：当前没有明确未完成任务。")
+        assertThat(formatted).contains("\n\n依据：已有记录大多是已发生事件。")
+        assertThat(formatted).contains("\n\n下一步：如需追踪待办，请单独记录待办状态。")
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_splitsBareSectionLabelsWithoutColon() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "结论根据提供的材料，没有明确未完成任务。依据原始记录中，这个问题已关闭。下一步如果需要追踪待办，请单独记录待办状态。",
+        )
+
+        assertThat(formatted).contains("结论：根据提供的材料，没有明确未完成任务。")
+        assertThat(formatted).contains("\n\n依据：原始记录中，这个问题已关闭。")
+        assertThat(formatted).contains("\n\n下一步：如果需要追踪待办，请单独记录待办状态。")
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_convertsInlineStarDateBulletsIntoList() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "依据：近期记录包括：*2026-04-05《注意力决定人生》：强调注意力的重要性。*2026-04-16《面对失败的正确态度》：强调不要为失败懊恼。",
+        )
+
+        assertThat(formatted).contains("依据：近期记录包括：")
+        assertThat(formatted).contains("\n- 2026-04-05《注意力决定人生》：强调注意力的重要性。")
+        assertThat(formatted).contains("\n- 2026-04-16《面对失败的正确态度》：强调不要为失败懊恼。")
+    }
 }
