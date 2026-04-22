@@ -23,34 +23,34 @@ private val reviewChatStopWords = setOf(
     "关于", "这个", "那个", "最近两周", "最近一周", "我们", "你们", "我的", "你的", "时候",
 )
 
-private val reviewChatHistoryHints = listOf(
+internal val reviewChatHistoryHints = listOf(
     "之前", "以前", "过去", "历史", "曾经", "最早", "早些", "那会", "那时候", "去年", "上次",
     "第一条", "第一次", "最初", "一开始", "什么时候开始",
 )
 
-private val reviewChatScopeHints = listOf(
+internal val reviewChatScopeHints = listOf(
     "记录", "笔记", "回看", "聊过", "提过", "写过", "那天", "那周", "某天", "完整", "全文",
     "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread",
 )
 
-private val reviewChatCountHints = listOf(
+internal val reviewChatCountHints = listOf(
     "多少条", "几条", "总共", "一共", "总数", "总量", "全部记录", "所有记录", "整个历史", "从开始到现在",
 )
 
-private val reviewChatListHints = listOf(
+internal val reviewChatListHints = listOf(
     "列出", "列一下", "给我看", "有哪些", "哪几条", "命中的记录", "举例", "示例", "样例", "分别是",
 )
 
-private val reviewChatExternalHints = listOf(
+internal val reviewChatExternalHints = listOf(
     "天气", "气温", "下雨", "台风", "新闻", "热搜", "股价", "股票", "汇率", "彩票",
     "体育比赛", "球赛", "nba", "足球", "电影票房", "明星八卦", "实时路况", "航班", "高铁",
 )
 
-private val reviewChatLinkHints = listOf(
+internal val reviewChatLinkHints = listOf(
     "链接", "原始链接", "原文链接", "打开原记录", "打开记录", "给我链接", "发我链接",
 )
 
-private val reviewChatOperationPhrases = (
+internal val reviewChatOperationPhrases = (
     reviewChatHistoryHints +
         reviewChatScopeHints +
         reviewChatCountHints +
@@ -69,11 +69,11 @@ private val reviewChatOperationPhrases = (
 ).distinct()
     .sortedByDescending(String::length)
 
-private val reviewChatEntityStopWords = reviewChatStopWords + setOf(
+internal val reviewChatEntityStopWords = reviewChatStopWords + setOf(
     "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询",
 )
 
-private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+internal val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
 internal fun extractReviewChatKeywords(question: String): List<String> =
     Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
@@ -106,42 +106,30 @@ internal data class ReviewChatQuestionProfile(
 )
 
 internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestionProfile {
-    val requestedDate = requestedDateForReviewChat(question)
-    val requestedMonth = requestedMonthForReviewChat(question)
-    val wantsFullRecord = listOf("完整", "全文", "原文", "全部内容").any(question::contains)
-    val wantsTimelineAnchor = listOf("第一条", "第一次", "最早", "最初", "一开始", "什么时候开始").any(question::contains)
-    val wantsCount = reviewChatCountHints.any(question::contains)
-    val isExternalQuestion = reviewChatExternalHints.any(question::contains)
-    val intent = classifyReviewChatIntent(question)
-    val mode = when {
-        isExternalQuestion -> ReviewChatQuestionMode.EXTERNAL
-        wantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
-        wantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
-        wantsCount -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
-        requestedDate != null || requestedMonth != null ||
-            listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
-            ReviewChatQuestionMode.RECORD_LOOKUP
-        else -> ReviewChatQuestionMode.ANALYSIS
+    val parsedQuery = ReviewChatQueryParser.parse(question)
+    val requestedDate = when (val scope = parsedQuery.timeScope) {
+        is ReviewChatTimeScope.Day -> scope.date
+        else -> null
     }
     return ReviewChatQuestionProfile(
-        mode = mode,
-        intent = intent,
+        mode = parsedQuery.mode,
+        intent = parsedQuery.intent,
         requestedDate = requestedDate,
-        keywords = extractReviewChatKeywords(question),
-        entityTerms = extractReviewChatEntityTerms(question),
-        wantsTimelineAnchor = wantsTimelineAnchor,
-        wantsCount = wantsCount,
-        isExternalQuestion = isExternalQuestion,
+        keywords = parsedQuery.keywords,
+        entityTerms = parsedQuery.entityTerms,
+        wantsTimelineAnchor = parsedQuery.wantsTimelineAnchor,
+        wantsCount = parsedQuery.wantsCount,
+        isExternalQuestion = parsedQuery.isExternalQuestion,
     )
 }
 
-private data class ReviewChatCorpusSelection(
+internal data class ReviewChatCorpusSelection(
     val scopedNotes: List<NoteEntity>,
     val queryNotes: List<NoteEntity>,
     val entityTerms: List<String>,
 )
 
-private fun wantsReviewChatListExamples(question: String): Boolean =
+internal fun wantsReviewChatListExamples(question: String): Boolean =
     reviewChatListHints.any(question::contains)
 
 internal fun buildReviewChatContextPacket(
@@ -154,28 +142,13 @@ internal fun buildReviewChatContextPacket(
     sessionSummary: String,
     priorMessages: List<ReviewChatMessage> = emptyList(),
     rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
+    parsedQueryOverride: ReviewChatParsedQuery? = null,
+    corpusContextOverride: ReviewChatCorpusContext? = null,
 ): ReviewChatContextPacket {
-    val profile = buildReviewChatQuestionProfile(question)
-    val keywords = profile.keywords
-    val corpusSelection = buildReviewChatCorpusSelection(
-        question = question,
-        mode = profile.mode,
-        notes = notes,
-        entityTerms = profile.entityTerms,
-    )
-    val historyAnchors = buildHistoryAnchors(
-        question = question,
-        notes = corpusSelection.queryNotes,
-    )
-    val collectionOverview = if (!profile.isExternalQuestion) {
-        buildCollectionOverview(
-            question = question,
-            notes = corpusSelection.queryNotes,
-        )
-    } else {
-        null
-    }
-    val knowledgeBaseSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+    val parsedQuery = (parsedQueryOverride ?: ReviewChatQueryParser.parse(question)).copy(intent = intent)
+    val corpusContext = corpusContextOverride ?: ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
+    val effectiveRawNoteDetails = rawNoteDetails.ifEmpty { corpusContext.rawNoteDetails }
+    val knowledgeBaseSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
             intent = intent,
             weeklyReview = weeklyReview,
@@ -184,42 +157,36 @@ internal fun buildReviewChatContextPacket(
     } else {
         emptyList()
     }
-    val wikiSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+    val wikiSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildWikiSnippets(
             intent = intent,
             question = question,
-            keywords = keywords,
+            keywords = parsedQuery.keywords,
             wikiSnapshot = wikiSnapshot,
         )
     } else {
         emptyList()
     }
-    val rawNoteEvidence = buildRawNoteEvidence(
-        mode = profile.mode,
-        intent = intent,
-        question = question,
-        keywords = keywords,
-        notes = corpusSelection.queryNotes,
-    )
     val structuredSnippets = knowledgeBaseSnippets + wikiSnippets
     return ReviewChatContextPacket(
-        questionMode = profile.mode,
+        questionMode = parsedQuery.mode,
         intent = intent,
         question = question,
-        isExternalQuestion = profile.isExternalQuestion,
-        wantsCount = profile.wantsCount,
-        sessionSummary = sessionSummary.takeIf { profile.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
-        collectionOverview = collectionOverview,
-        conversationSnippets = if (profile.mode == ReviewChatQuestionMode.ANALYSIS) {
+        isExternalQuestion = parsedQuery.isExternalQuestion,
+        wantsCount = parsedQuery.wantsCount,
+        querySummarySnippets = corpusContext.querySummarySnippets,
+        sessionSummary = sessionSummary.takeIf { parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
+        collectionOverview = corpusContext.collectionOverview,
+        conversationSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
             buildConversationSnippets(priorMessages)
         } else {
             emptyList()
         },
         historyAnchors = if (
-            profile.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
-            (profile.mode == ReviewChatQuestionMode.ANALYSIS && historyAnchors.isNotEmpty())
+            parsedQuery.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
+            (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS && corpusContext.historyAnchors.isNotEmpty())
         ) {
-            historyAnchors
+            corpusContext.historyAnchors
         } else {
             emptyList()
         },
@@ -227,8 +194,8 @@ internal fun buildReviewChatContextPacket(
         memoryThreadSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
-        rawNoteEvidence = rawNoteEvidence,
-        rawNoteDetails = rawNoteDetails,
+        rawNoteEvidence = corpusContext.rawNoteEvidence,
+        rawNoteDetails = effectiveRawNoteDetails,
         structuredSnippets = structuredSnippets,
     )
 }
@@ -293,7 +260,7 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .toList()
 }
 
-private fun buildReviewChatCorpusSelection(
+internal fun buildReviewChatCorpusSelection(
     question: String,
     mode: ReviewChatQuestionMode,
     notes: List<NoteEntity>,
@@ -422,7 +389,7 @@ private fun buildWikiSnippets(
     return directions + knowledgeItems
 }
 
-private fun buildRawNoteEvidence(
+internal fun buildRawNoteEvidence(
     mode: ReviewChatQuestionMode,
     intent: ReviewChatIntent,
     question: String,
@@ -552,7 +519,7 @@ private fun NoteEntity.toReviewChatEvidence(
     )
 }
 
-private fun buildHistoryAnchors(
+internal fun buildHistoryAnchors(
     question: String,
     notes: List<NoteEntity>,
 ): List<ReviewChatTimelineAnchor> {
@@ -581,7 +548,7 @@ private fun buildHistoryAnchors(
     }
 }
 
-private fun buildCollectionOverview(
+internal fun buildCollectionOverview(
     question: String,
     notes: List<NoteEntity>,
 ): ReviewChatCollectionOverview {
@@ -615,7 +582,7 @@ private fun buildCollectionOverview(
     )
 }
 
-private fun NoteEntity.createdLocalDate(): LocalDate =
+internal fun NoteEntity.createdLocalDate(): LocalDate =
     Instant.ofEpochMilli(createdAt)
         .atZone(ZoneId.systemDefault())
         .toLocalDate()
@@ -625,7 +592,7 @@ private data class RankedReviewChatNote(
     val score: Int,
 )
 
-private fun scoreQuestionMatch(
+internal fun scoreQuestionMatch(
     question: String,
     keywords: List<String>,
     haystack: List<String>,
@@ -886,31 +853,15 @@ class ReviewChatPlanner(
     private suspend fun prepareReviewChatContext(
         request: ReviewChatTurnRequest,
     ): PreparedReviewChatContext {
-        val profile = buildReviewChatQuestionProfile(request.question)
+        val parsedQuery = ReviewChatQueryParser.parse(request.question)
         val notes = loadNotes()
-        val corpusSelection = buildReviewChatCorpusSelection(
-            question = request.question,
-            mode = profile.mode,
-            notes = notes,
-            entityTerms = profile.entityTerms,
-        )
+        val corpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
-        val directRawNoteDetails = buildDirectRawNoteDetails(
-            question = request.question,
-            mode = profile.mode,
-            notes = corpusSelection.queryNotes,
-        )
-        val referencedNotes = buildReferencedNotes(
-            question = request.question,
-            intent = profile.intent,
-            notes = corpusSelection.queryNotes,
-            directRawNoteDetails = directRawNoteDetails,
-        )
         val packet = buildReviewChatContextPacket(
             question = request.question,
-            intent = profile.intent,
+            intent = parsedQuery.intent,
             notes = notes,
             weeklyReview = weeklyReview,
             maintenanceSnapshot = maintenanceSnapshot,
@@ -919,13 +870,15 @@ class ReviewChatPlanner(
                 .takeLast(2)
                 .joinToString("\n") { it.content.take(120) },
             priorMessages = request.priorMessages,
-            rawNoteDetails = directRawNoteDetails,
+            rawNoteDetails = corpusContext.rawNoteDetails,
+            parsedQueryOverride = parsedQuery,
+            corpusContextOverride = corpusContext,
         )
         return PreparedReviewChatContext(
-            intent = profile.intent,
+            intent = parsedQuery.intent,
             packet = packet,
-            directRawNoteDetails = directRawNoteDetails,
-            referencedNotes = referencedNotes,
+            directRawNoteDetails = corpusContext.rawNoteDetails,
+            referencedNotes = corpusContext.referencedNotes,
         )
     }
 }
@@ -944,7 +897,7 @@ private fun isUsableReviewChatAnswer(content: String): Boolean {
     return normalized.length >= 4
 }
 
-private fun buildDirectRawNoteDetails(
+internal fun buildDirectRawNoteDetails(
     question: String,
     mode: ReviewChatQuestionMode,
     notes: List<NoteEntity>,
@@ -985,7 +938,7 @@ private fun buildDirectRawNoteDetails(
     }
 }
 
-private fun buildReferencedNotes(
+internal fun buildReferencedNotes(
     question: String,
     intent: ReviewChatIntent,
     notes: List<NoteEntity>,
@@ -1055,7 +1008,7 @@ private fun buildReferencedNotes(
     return selected.distinctBy(NoteEntity::id).map(NoteEntity::toReferencedNote)
 }
 
-private fun wantsReviewChatLinks(question: String): Boolean =
+internal fun wantsReviewChatLinks(question: String): Boolean =
     reviewChatLinkHints.any(question::contains)
 
 private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
@@ -1065,7 +1018,7 @@ private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
         dateLabel = createdLocalDate().format(reviewChatDateFormatter),
     )
 
-private fun requestedDateForReviewChat(question: String): LocalDate? {
+internal fun requestedDateForReviewChat(question: String): LocalDate? {
     val today = LocalDate.now(ZoneId.systemDefault())
     return when {
         "今天" in question -> today
@@ -1080,7 +1033,7 @@ private fun requestedDateForReviewChat(question: String): LocalDate? {
     }
 }
 
-private fun requestedMonthForReviewChat(question: String): YearMonth? {
+internal fun requestedMonthForReviewChat(question: String): YearMonth? {
     if (requestedDateForReviewChat(question) != null) return null
     val today = LocalDate.now(ZoneId.systemDefault())
     val match = Regex("(\\d{1,2})\\s*月(?:份)?").find(question) ?: return null
@@ -1089,10 +1042,10 @@ private fun requestedMonthForReviewChat(question: String): YearMonth? {
     return YearMonth.of(today.year, month)
 }
 
-private fun hasRequestedTimeScope(question: String): Boolean =
+internal fun hasRequestedTimeScope(question: String): Boolean =
     requestedDateForReviewChat(question) != null || requestedMonthForReviewChat(question) != null
 
-private fun filterNotesForRequestedScope(
+internal fun filterNotesForRequestedScope(
     question: String,
     notes: List<NoteEntity>,
 ): List<NoteEntity> {
@@ -1107,6 +1060,6 @@ private fun filterNotesForRequestedScope(
     return notes
 }
 
-private fun requestedScopeLabel(question: String): String? =
+internal fun requestedScopeLabel(question: String): String? =
     requestedDateForReviewChat(question)?.format(reviewChatDateFormatter)
         ?: requestedMonthForReviewChat(question)?.let { "${it.monthValue}月" }

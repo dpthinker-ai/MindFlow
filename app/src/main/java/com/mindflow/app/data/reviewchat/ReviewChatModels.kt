@@ -1,5 +1,8 @@
 package com.mindflow.app.data.reviewchat
 
+import java.time.LocalDate
+import java.time.YearMonth
+
 enum class ReviewChatIntent {
     SYNTHESIZE,
     DISCUSS,
@@ -14,6 +17,39 @@ enum class ReviewChatQuestionMode {
     TIMELINE_ANCHOR,
     ANALYSIS,
 }
+
+enum class ReviewChatQueryOperation {
+    EXTERNAL,
+    COUNT,
+    LIST,
+    FULL_TEXT,
+    TIMELINE,
+    ANALYZE,
+}
+
+sealed interface ReviewChatTimeScope {
+    data object AllTime : ReviewChatTimeScope
+
+    data class Day(val date: LocalDate) : ReviewChatTimeScope
+
+    data class Month(val month: YearMonth) : ReviewChatTimeScope
+}
+
+data class ReviewChatParsedQuery(
+    val question: String,
+    val mode: ReviewChatQuestionMode,
+    val operation: ReviewChatQueryOperation,
+    val intent: ReviewChatIntent,
+    val timeScope: ReviewChatTimeScope,
+    val keywords: List<String>,
+    val entityTerms: List<String>,
+    val wantsTimelineAnchor: Boolean,
+    val wantsCount: Boolean,
+    val wantsFullRecord: Boolean,
+    val wantsLinks: Boolean,
+    val wantsExamples: Boolean,
+    val isExternalQuestion: Boolean,
+)
 
 enum class ReviewChatMessageRole {
     USER,
@@ -118,6 +154,7 @@ data class ReviewChatContextPacket(
     val question: String,
     val isExternalQuestion: Boolean,
     val wantsCount: Boolean,
+    val querySummarySnippets: List<String>,
     val sessionSummary: String,
     val collectionOverview: ReviewChatCollectionOverview?,
     val conversationSnippets: List<String>,

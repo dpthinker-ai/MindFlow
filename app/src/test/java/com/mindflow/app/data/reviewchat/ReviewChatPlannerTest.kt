@@ -46,6 +46,24 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun reviewChatQueryParser_emitsStructuredOperationAndScope() {
+        val countQuery = ReviewChatQueryParser.parse("人生态度一共有多少条记录")
+        assertThat(countQuery.operation).isEqualTo(ReviewChatQueryOperation.COUNT)
+        assertThat(countQuery.timeScope).isEqualTo(ReviewChatTimeScope.AllTime)
+        assertThat(countQuery.entityTerms).containsExactly("人生态度")
+
+        val fullTextQuery = ReviewChatQueryParser.parse("把 4 月 10 号那天的完整内容发给我")
+        assertThat(fullTextQuery.operation).isEqualTo(ReviewChatQueryOperation.FULL_TEXT)
+        assertThat(fullTextQuery.timeScope).isEqualTo(
+            ReviewChatTimeScope.Day(
+                LocalDate.now(ZoneId.systemDefault()).withMonth(4).withDayOfMonth(10)
+            )
+        )
+        assertThat(fullTextQuery.entityTerms).isEmpty()
+        assertThat(fullTextQuery.wantsLinks).isFalse()
+    }
+
+    @Test
     fun classifyReviewChatIntent_prioritizesSynthesisLanguage() {
         assertThat(classifyReviewChatIntent("把工作和副项目里的共同主题串一下"))
             .isEqualTo(ReviewChatIntent.SYNTHESIZE)
@@ -919,6 +937,9 @@ class ReviewChatPlannerTest {
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
         assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("$year-03-01")
         assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("$year-04-18")
+        assertThat(packet.querySummarySnippets).contains("操作｜统计")
+        assertThat(packet.querySummarySnippets).contains("主题｜人生态度")
+        assertThat(packet.querySummarySnippets).contains("命中｜共 3 条记录")
     }
 
     @Test

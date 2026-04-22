@@ -18,6 +18,7 @@ object ReviewChatPromptFactory {
         appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
 
+        appendPromptSection(this, "查询结果", packet.querySummarySnippets)
         appendPromptSection(this, "近期会话摘要", packet.sessionSummary.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty())
         appendCollectionOverviewSection(this, packet.collectionOverview)
         appendPromptSection(this, "近期会话", packet.conversationSnippets)
@@ -82,6 +83,14 @@ object ReviewChatPromptFactory {
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "查询结果",
+            lines = packet.querySummarySnippets,
+            maxItems = 4,
+            itemMaxChars = 80,
         )
 
         appendCollectionOverviewWithinBudget(
