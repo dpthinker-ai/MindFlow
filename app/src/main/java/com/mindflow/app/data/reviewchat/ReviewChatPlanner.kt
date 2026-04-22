@@ -50,6 +50,29 @@ private val reviewChatLinkHints = listOf(
     "链接", "原始链接", "原文链接", "打开原记录", "打开记录", "给我链接", "发我链接",
 )
 
+private val reviewChatOperationPhrases = (
+    reviewChatHistoryHints +
+        reviewChatScopeHints +
+        reviewChatCountHints +
+        reviewChatListHints +
+        reviewChatExternalHints +
+        reviewChatLinkHints +
+        listOf(
+            "今天", "昨天", "前天", "最近", "最近两周", "最近一周",
+            "完整内容", "全部内容", "完整", "全文", "原文",
+            "第一条", "第一次", "最早", "最初", "一开始",
+            "时间轴", "跨度", "统计", "查一下", "看一下", "帮我", "给我", "发我",
+            "发给我",
+            "总共有", "一共有", "多少", "几条", "全部", "所有", "只看",
+            "列出", "举例", "示例", "样例", "打开", "命中", "那条", "那几条", "发给",
+        )
+).distinct()
+    .sortedByDescending(String::length)
+
+private val reviewChatEntityStopWords = reviewChatStopWords + setOf(
+    "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询",
+)
+
 private val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
 internal fun extractReviewChatKeywords(question: String): List<String> =
@@ -76,6 +99,7 @@ internal data class ReviewChatQuestionProfile(
     val intent: ReviewChatIntent,
     val requestedDate: LocalDate?,
     val keywords: List<String>,
+    val entityTerms: List<String>,
     val wantsTimelineAnchor: Boolean,
     val wantsCount: Boolean,
     val isExternalQuestion: Boolean,
@@ -104,11 +128,18 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         intent = intent,
         requestedDate = requestedDate,
         keywords = extractReviewChatKeywords(question),
+        entityTerms = extractReviewChatEntityTerms(question),
         wantsTimelineAnchor = wantsTimelineAnchor,
         wantsCount = wantsCount,
         isExternalQuestion = isExternalQuestion,
     )
 }
+
+private data class ReviewChatCorpusSelection(
+    val scopedNotes: List<NoteEntity>,
+    val queryNotes: List<NoteEntity>,
+    val entityTerms: List<String>,
+)
 
 private fun wantsReviewChatListExamples(question: String): Boolean =
     reviewChatListHints.any(question::contains)
@@ -126,14 +157,20 @@ internal fun buildReviewChatContextPacket(
 ): ReviewChatContextPacket {
     val profile = buildReviewChatQuestionProfile(question)
     val keywords = profile.keywords
+    val corpusSelection = buildReviewChatCorpusSelection(
+        question = question,
+        mode = profile.mode,
+        notes = notes,
+        entityTerms = profile.entityTerms,
+    )
     val historyAnchors = buildHistoryAnchors(
         question = question,
-        notes = notes,
+        notes = corpusSelection.queryNotes,
     )
     val collectionOverview = if (!profile.isExternalQuestion) {
         buildCollectionOverview(
             question = question,
-            notes = notes,
+            notes = corpusSelection.queryNotes,
         )
     } else {
         null
@@ -162,7 +199,7 @@ internal fun buildReviewChatContextPacket(
         intent = intent,
         question = question,
         keywords = keywords,
-        notes = notes,
+        notes = corpusSelection.queryNotes,
     )
     val structuredSnippets = knowledgeBaseSnippets + wikiSnippets
     return ReviewChatContextPacket(
@@ -211,6 +248,97 @@ private fun tokenizeReviewChatQueryChunk(token: String): List<String> {
     }
     pieces += normalized
     return pieces.toList()
+}
+
+internal fun extractReviewChatEntityTerms(question: String): List<String> {
+    val stripped = reviewChatOperationPhrases.fold(question.lowercase()) { current, phrase ->
+        current.replace(phrase.lowercase(), " ")
+    }.replace(Regex("\\d{1,2}\\s*月\\s*\\d{0,2}(?:日|号)?"), " ")
+        .replace(Regex("\\d{1,2}\\s*月(?:份)?"), " ")
+        .replace("是什么时候", " ")
+        .replace("什么时间", " ")
+        .replace("什么时候", " ")
+        .replace("是什么", " ")
+        .replace("记了什么", " ")
+        .replace("写了什么", " ")
+        .replace("说过什么", " ")
+        .replace("记了", " ")
+        .replace("写了", " ")
+        .replace("说过", " ")
+
+    return Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
+        .findAll(stripped)
+        .map { token ->
+            token.value.trim()
+                .removePrefix("关于")
+                .removePrefix("有关")
+                .removePrefix("相关")
+                .removePrefix("这些")
+                .removePrefix("那些")
+                .removePrefix("所有")
+                .removePrefix("全部")
+                .removeSuffix("记录")
+                .removeSuffix("笔记")
+                .removeSuffix("内容")
+                .removeSuffix("问题")
+                .trim()
+        }
+        .filter { term ->
+            term.isNotBlank() &&
+                term !in reviewChatEntityStopWords &&
+                !term.matches(Regex("\\d+")) &&
+                term.any { it.isLetterOrDigit() || Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+        }
+        .distinct()
+        .toList()
+}
+
+private fun buildReviewChatCorpusSelection(
+    question: String,
+    mode: ReviewChatQuestionMode,
+    notes: List<NoteEntity>,
+    entityTerms: List<String>,
+): ReviewChatCorpusSelection {
+    val scopedNotes = filterNotesForRequestedScope(question, notes).sortedBy(NoteEntity::createdAt)
+    if (mode == ReviewChatQuestionMode.EXTERNAL || scopedNotes.isEmpty() || entityTerms.isEmpty()) {
+        return ReviewChatCorpusSelection(
+            scopedNotes = scopedNotes,
+            queryNotes = scopedNotes,
+            entityTerms = entityTerms,
+        )
+    }
+
+    val scored = scopedNotes.map { note ->
+        note to scoreEntityTermMatch(note, entityTerms)
+    }.filter { it.second > 0 }
+        .sortedWith(
+            compareByDescending<Pair<NoteEntity, Int>> { it.second }
+                .thenBy { it.first.createdAt }
+        )
+        .map { it.first }
+
+    val shouldPreferScopedDateHits =
+        hasRequestedTimeScope(question) &&
+            (mode == ReviewChatQuestionMode.FULL_RECORD || wantsReviewChatLinks(question))
+
+    val queryNotes = when {
+        scored.isEmpty() && shouldPreferScopedDateHits -> scopedNotes
+        scored.isEmpty() &&
+            mode in setOf(
+                ReviewChatQuestionMode.COLLECTION_OVERVIEW,
+                ReviewChatQuestionMode.RECORD_LOOKUP,
+                ReviewChatQuestionMode.FULL_RECORD,
+                ReviewChatQuestionMode.TIMELINE_ANCHOR,
+            ) -> emptyList()
+        scored.isNotEmpty() -> scored
+        else -> scopedNotes
+    }
+
+    return ReviewChatCorpusSelection(
+        scopedNotes = scopedNotes,
+        queryNotes = queryNotes,
+        entityTerms = entityTerms,
+    )
 }
 
 private fun buildKnowledgeBaseSnippets(
@@ -516,6 +644,39 @@ private fun scoreQuestionMatch(
     return score
 }
 
+private fun scoreEntityTermMatch(
+    note: NoteEntity,
+    entityTerms: List<String>,
+): Int {
+    if (entityTerms.isEmpty()) return 0
+
+    val title = note.topic.lowercase()
+    val content = note.content.lowercase()
+    val folder = note.folderKey.orEmpty().lowercase()
+    val tags = note.tags.map(String::lowercase)
+
+    var score = 0
+    entityTerms.forEach { term ->
+        val normalized = term.lowercase()
+        val negatedInContent = listOf(
+            "${normalized}无关",
+            "和${normalized}无关",
+            "与${normalized}无关",
+            "${normalized}没关系",
+            "和${normalized}没关系",
+            "与${normalized}没关系",
+        ).any(content::contains)
+        if (negatedInContent) return@forEach
+        when {
+            title.contains(normalized) -> score += 12
+            tags.any { it.contains(normalized) } -> score += 10
+            folder.contains(normalized) -> score += 8
+            content.contains(normalized) -> score += 5
+        }
+    }
+    return score
+}
+
 class ReviewChatPlanner(
     private val loadNotes: suspend () -> List<NoteEntity>,
     private val loadWeeklyReview: suspend () -> WeeklyReviewState,
@@ -727,18 +888,24 @@ class ReviewChatPlanner(
     ): PreparedReviewChatContext {
         val profile = buildReviewChatQuestionProfile(request.question)
         val notes = loadNotes()
+        val corpusSelection = buildReviewChatCorpusSelection(
+            question = request.question,
+            mode = profile.mode,
+            notes = notes,
+            entityTerms = profile.entityTerms,
+        )
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
-    val directRawNoteDetails = buildDirectRawNoteDetails(
-        question = request.question,
-        mode = profile.mode,
-        notes = notes,
-    )
+        val directRawNoteDetails = buildDirectRawNoteDetails(
+            question = request.question,
+            mode = profile.mode,
+            notes = corpusSelection.queryNotes,
+        )
         val referencedNotes = buildReferencedNotes(
             question = request.question,
             intent = profile.intent,
-            notes = notes,
+            notes = corpusSelection.queryNotes,
             directRawNoteDetails = directRawNoteDetails,
         )
         val packet = buildReviewChatContextPacket(

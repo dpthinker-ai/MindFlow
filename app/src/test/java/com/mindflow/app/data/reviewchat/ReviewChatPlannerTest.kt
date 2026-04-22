@@ -882,6 +882,68 @@ class ReviewChatPlannerTest {
         assertThat(capturedPrompt).contains("- 记录总数：共 2 条记录")
     }
 
+    @Test
+    fun extractReviewChatEntityTerms_removesOperationNoiseAndKeepsSubject() {
+        assertThat(extractReviewChatEntityTerms("人生态度记录的时间轴跨度"))
+            .contains("人生态度")
+        assertThat(extractReviewChatEntityTerms("关于抖音一共有多少条记录"))
+            .contains("抖音")
+        assertThat(extractReviewChatEntityTerms("把 4 月 10 号那天的完整内容发给我"))
+            .isEmpty()
+        assertThat(extractReviewChatEntityTerms("把 4 月 10 号那条记录的原始链接发给我"))
+            .isEmpty()
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_collectionOverview_countsEntityAcrossWholeHistory() {
+        val year = LocalDate.now(ZoneId.systemDefault()).year
+        val march1 = LocalDate.of(year, 3, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val march20 = LocalDate.of(year, 3, 20).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val april5 = LocalDate.of(year, 4, 5).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val april18 = LocalDate.of(year, 4, 18).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "人生态度一共有多少条记录",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "人生态度｜注意力决定人生", "关注注意力").copy(createdAt = march1, updatedAt = march1 + 1_000L),
+                sampleNote(2L, "普通工作记录", "和人生态度无关").copy(createdAt = march20, updatedAt = march20 + 1_000L),
+                sampleNote(3L, "人生态度｜面对失败的正确态度", "面对失败").copy(createdAt = april5, updatedAt = april5 + 1_000L),
+                sampleNote(4L, "人生态度｜低成本高效率的生存法则", "生存法则").copy(createdAt = april18, updatedAt = april18 + 1_000L),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
+        assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("$year-03-01")
+        assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("$year-04-18")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_timelineAnchor_usesEntityMatchedHistory() {
+        val year = LocalDate.now(ZoneId.systemDefault()).year
+        val march1 = LocalDate.of(year, 3, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val april18 = LocalDate.of(year, 4, 18).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "人生态度第一条记录是什么时候",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "普通工作记录", "与主题无关").copy(createdAt = 1_000L, updatedAt = 2_000L),
+                sampleNote(2L, "人生态度｜注意力决定人生", "最早的人生态度记录").copy(createdAt = march1, updatedAt = march1 + 1_000L),
+                sampleNote(3L, "人生态度｜低成本高效率的生存法则", "最近的人生态度记录").copy(createdAt = april18, updatedAt = april18 + 1_000L),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.historyAnchors.first().item.title).contains("人生态度")
+        assertThat(packet.historyAnchors.first().item.dateLabel).isEqualTo("$year-03-01")
+    }
+
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(
         id = id,
         content = content,
