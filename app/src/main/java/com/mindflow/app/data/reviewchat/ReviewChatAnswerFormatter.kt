@@ -49,7 +49,9 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
 }
 
 private fun normalizeLegacyReviewChatMarkdown(content: String): String = normalizeEvidenceEchoes(
-    normalizeRecordSummarySubBullets(normalizeMarkdownTables(content))
+    normalizeInlineCategorySectionBullets(
+        normalizeRecordSummarySubBullets(normalizeMarkdownTables(content))
+    )
 )
 
 private fun parseStructuredReviewChatResponse(content: String): ReviewChatStructuredResponse? {
@@ -72,7 +74,7 @@ private fun parseStructuredReviewChatResponse(content: String): ReviewChatStruct
             sectionMatch.groupValues[2]
                 .trim()
                 .takeIf(String::isNotBlank)
-                ?.let(current::appendFreeLine)
+                ?.let { current.appendStructuredLine(it) }
             return@forEach
         }
 
@@ -82,7 +84,7 @@ private fun parseStructuredReviewChatResponse(content: String): ReviewChatStruct
         if (bulletContent != null) {
             target.items += bulletContent.trim()
         } else {
-            target.appendFreeLine(trimmed)
+            target.appendStructuredLine(trimmed)
         }
     }
 
@@ -210,6 +212,47 @@ private fun normalizeRecordSummarySubBullets(content: String): String {
     return rewritten.joinToString("\n")
 }
 
+private fun normalizeInlineCategorySectionBullets(content: String): String {
+    val lines = content.lines()
+    if (lines.none { it.trimStart().startsWith("类别：") }) return content
+
+    val rewritten = mutableListOf<String>()
+    var insideCategorySection = false
+
+    lines.forEach { line ->
+        val trimmed = line.trim()
+        when {
+            trimmed.startsWith("类别：") -> {
+                insideCategorySection = true
+                rewritten += "类别："
+                val remainder = trimmed.removePrefix("类别：").trim()
+                if (remainder.isNotBlank()) {
+                    rewritten += splitInlineBulletItems(remainder).map { "- $it" }
+                }
+            }
+            insideCategorySection && trimmed.isBlank() -> {
+                insideCategorySection = false
+                rewritten += line
+            }
+            insideCategorySection && SECTION_LABEL_REGEX.matches(trimmed) -> {
+                insideCategorySection = false
+                rewritten += line
+            }
+            insideCategorySection -> {
+                val items = splitInlineBulletItems(trimmed)
+                if (items.isNotEmpty()) {
+                    rewritten += items.map { "- $it" }
+                } else {
+                    rewritten += line
+                }
+            }
+            else -> rewritten += line
+        }
+    }
+
+    return rewritten.joinToString("\n")
+}
+
 private fun splitTableLine(line: String): List<String> =
     line.trim()
         .trim('|')
@@ -241,6 +284,18 @@ private data class MutableStructuredSection(
             body += line
         }
     }
+
+    fun appendStructuredLine(line: String) {
+        if (line.isBlank()) return
+        if (title in ITEM_SECTION_TITLES) {
+            val itemsFromLine = splitInlineBulletItems(line)
+            if (itemsFromLine.isNotEmpty()) {
+                items += itemsFromLine
+                return
+            }
+        }
+        appendFreeLine(line)
+    }
 }
 
 private val STRUCTURED_SECTION_REGEX =
@@ -249,9 +304,31 @@ private val STRUCTURED_SECTION_REGEX =
         option = RegexOption.MULTILINE,
     )
 
-private val BULLET_LINE_REGEX = Regex("^[-*•]\\s+(.+)$")
+private val BULLET_LINE_REGEX = Regex("^[-*•]\\s*(.+)$")
 
 private val ORDERED_LINE_REGEX =
     Regex("^(?:\\d+[.、）)]|[一二三四五六七八九十]+、)\\s*(.+)$")
 
 private val RECORD_ITEM_REGEX = Regex("^-\\s+\\d{4}-\\d{2}-\\d{2}《.+》.*$")
+
+private val SECTION_LABEL_REGEX =
+    Regex("^(答复|结论|依据|下一步|记录|完整记录|时间线|类别)：.*$")
+
+private val ITEM_SECTION_TITLES = setOf("依据", "下一步", "记录", "完整记录", "时间线", "类别")
+
+private fun splitInlineBulletItems(content: String): List<String> {
+    val exploded = explodeInlineBulletMarkers(content).trim()
+    if (!exploded.contains('\n') && !BULLET_LINE_REGEX.matches(exploded)) return emptyList()
+
+    return exploded
+        .lines()
+        .mapNotNull { line ->
+            BULLET_LINE_REGEX.matchEntire(line.trim())?.groupValues?.get(1)?.trim()?.takeIf(String::isNotBlank)
+        }
+}
+
+private fun explodeInlineBulletMarkers(content: String): String =
+    content.replace(
+        Regex("(?<!\\n)(?<!\\d)([-*•])(?=\\s*[\\p{IsHan}A-Z《【])"),
+        "\n$1",
+    )

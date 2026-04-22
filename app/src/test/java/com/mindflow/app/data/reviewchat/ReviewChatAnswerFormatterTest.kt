@@ -167,4 +167,43 @@ class ReviewChatAnswerFormatterTest {
         val topLevelList = blocks.filterIsInstance<MarkdownBulletList>().last()
         assertThat(topLevelList.items).hasSize(2)
     }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_splitsInlineCategoryBulletsWithoutSpaces() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            """
+            类别：
+            - 应用设计与功能开发：应用启动页设计、图标及名称确定、MindFlow还要增加一个功能
+            - 技术实现与优化：前端OCR识别问题、利用RL优化GC触发水线、Java大堆Leak Space、MindFlow接入OpenCl、LLM Knowledge Ba-个人成长与效率提升：提高生产力的方法、拒绝内耗，保持精力充沛-知识与理念分享：LLM时代的创意分享、LLM构建个人知识库-规划与总结：下季度OKR规划重点、上月OKR总结
+            """.trimIndent()
+        )
+
+        assertThat(formatted).contains("类别：")
+        assertThat(formatted).contains("\n- 应用设计与功能开发：应用启动页设计、图标及名称确定、MindFlow还要增加一个功能")
+        assertThat(formatted).contains("\n- 技术实现与优化：前端OCR识别问题、利用RL优化GC触发水线、Java大堆Leak Space、MindFlow接入OpenCl、LLM Knowledge Ba")
+        assertThat(formatted).contains("\n- 个人成长与效率提升：提高生产力的方法、拒绝内耗，保持精力充沛")
+        assertThat(formatted).contains("\n- 知识与理念分享：LLM时代的创意分享、LLM构建个人知识库")
+        assertThat(formatted).contains("\n- 规划与总结：下季度OKR规划重点、上月OKR总结")
+
+        val blocks = SimpleMarkdown.parse(formatted)
+        val categoryList = blocks.filterIsInstance<MarkdownBulletList>().last()
+        assertThat(categoryList.items).hasSize(5)
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_splitsStructuredCategoryItemsOnSingleLine() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "【答复】下面是分类结果。【类别】- 应用设计与功能开发：应用启动页设计、图标及名称确定-技术实现与优化：前端OCR识别问题、利用RL优化GC触发水线-个人成长与效率提升：提高生产力的方法、拒绝内耗，保持精力充沛",
+        )
+
+        assertThat(formatted).contains("下面是分类结果。")
+        assertThat(formatted).contains("\n\n类别：")
+        assertThat(formatted).contains("\n- 应用设计与功能开发：应用启动页设计、图标及名称确定")
+        assertThat(formatted).contains("\n- 技术实现与优化：前端OCR识别问题、利用RL优化GC触发水线")
+        assertThat(formatted).contains("\n- 个人成长与效率提升：提高生产力的方法、拒绝内耗，保持精力充沛")
+
+        val blocks = SimpleMarkdown.parse(formatted)
+        val categoryList = blocks.filterIsInstance<MarkdownBulletList>().last()
+        assertThat(categoryList.items).hasSize(3)
+    }
 }
