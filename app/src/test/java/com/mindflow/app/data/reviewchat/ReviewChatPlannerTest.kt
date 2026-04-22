@@ -527,6 +527,51 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_recordLookupUsesDeterministicStructureWithoutExtraCloudCall() = runTest {
+        var cloudCalls = 0
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "今天主题A", "今天第一条记录").copy(
+                        createdAt = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
+                    ),
+                    sampleNote(2L, "今天主题B", "今天第二条记录").copy(
+                        createdAt = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 2_000L
+                    ),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = {
+                cloudCalls += 1
+                AiChatResult.Success("今天共有 2 条记录。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我只看今天的",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalls).isEqualTo(1)
+        assertThat(result.structuredAnswer).isNotNull()
+        assertThat(result.structuredAnswer!!.sections.map { it.title }).containsExactly("答复", "记录").inOrder()
+        val todayLabel = today.format(reviewChatDateFormatter)
+        assertThat(result.structuredAnswer!!.sections[1].items).containsExactly(
+            "$todayLabel《今天主题A》：今天第一条记录",
+            "$todayLabel《今天主题B》：今天第二条记录",
+        ).inOrder()
+    }
+
+    @Test
     fun answer_todayScopedQuestion_routesToModelWithTodayRecordsInContext() = runTest {
         val today = LocalDate.now(ZoneId.systemDefault())
         val todayStart = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -761,7 +806,7 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
-        assertThat(prompt.systemInstruction).contains("输出协议：固定写 `【答复】`、`【依据】`、`【下一步】` 三段")
+        assertThat(prompt.systemInstruction).contains("把总答复写进 summary；把依据写进 `依据` section 的 items；把建议写进 `下一步` section 的 items")
     }
 
     @Test
@@ -895,9 +940,9 @@ class ReviewChatPlannerTest {
 
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(packet.wantsCategories).isTrue()
-        assertThat(prompt.systemInstruction).contains("再写 `【类别】`")
+        assertThat(prompt.systemInstruction).contains("把类别写进 `类别` section 的 items")
         assertThat(prompt.systemInstruction).contains("不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别")
-        assertThat(prompt.systemInstruction).contains("不要输出 `【依据】` 或 `【下一步】`")
+        assertThat(prompt.systemInstruction).contains("不要创建额外 section")
         assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
         assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
     }

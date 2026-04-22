@@ -5,6 +5,19 @@ import org.junit.Test
 
 class ReviewChatStructuredAnswerTest {
     @Test
+    fun buildReviewChatStructuredOutputSchema_usesConcreteTemplatePerMode() {
+        val schema = buildReviewChatStructuredOutputSchema(
+            mode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            wantsCategories = true,
+        )
+
+        assertThat(schema).contains("严格使用这个模板里的 title 和顺序")
+        assertThat(schema).contains("\"title\":\"类别\"")
+        assertThat(schema).contains("\"title\":\"记录\"")
+        assertThat(schema).doesNotContain("\"title\":\"类别|记录\"")
+    }
+
+    @Test
     fun parseReviewChatStructuredAnswer_parsesJsonSchema() {
         val answer = parseReviewChatStructuredAnswer(
             """
@@ -78,5 +91,50 @@ class ReviewChatStructuredAnswerTest {
         assertThat(markdown).contains("本周末主要记录了 3 类信息。")
         assertThat(markdown).contains("\n\n类别：\n- 产品设计：启动页、图标、名称")
         assertThat(markdown).contains("\n- 技术实现：OCR、OpenCL、GC 水线")
+    }
+
+    @Test
+    fun finalizeReviewChatStructuredAnswer_addsDeterministicRecordSection() {
+        val packet = ReviewChatContextPacket(
+            questionMode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            intent = ReviewChatIntent.RECALL,
+            question = "我只看今天的",
+            isExternalQuestion = false,
+            wantsCount = false,
+            wantsCategories = false,
+            querySummarySnippets = emptyList(),
+            deterministicAnswerSnippets = emptyList(),
+            categoryDigestSnippets = emptyList(),
+            sessionSummary = "",
+            collectionOverview = null,
+            conversationSnippets = emptyList(),
+            historyAnchors = emptyList(),
+            memoryDigestSnippets = emptyList(),
+            memoryThreadSnippets = emptyList(),
+            knowledgeBaseSnippets = emptyList(),
+            wikiSnippets = emptyList(),
+            rawNoteEvidence = listOf(
+                ReviewChatEvidenceItem(
+                    noteId = 1L,
+                    dateLabel = "2026-04-13",
+                    title = "MindFlow开发问题复盘",
+                    summary = "系统卡顿并频繁闪退。",
+                ),
+            ),
+            rawNoteDetails = emptyList(),
+            structuredSnippets = emptyList(),
+        )
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = "今天共有 1 条命中记录。",
+            candidate = null,
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复", "记录").inOrder()
+        assertThat(answer.sections[1].items).containsExactly(
+            "2026-04-13《MindFlow开发问题复盘》：系统卡顿并频繁闪退。",
+        )
     }
 }

@@ -949,19 +949,42 @@ class ReviewChatPlanner(
         packet: ReviewChatContextPacket,
         rawAnswer: String,
     ): ReviewChatStructuredAnswer? {
-        parseReviewChatStructuredAnswer(rawAnswer)?.let { return it }
+        val parsedAnswer = parseReviewChatStructuredAnswer(rawAnswer)
+        val finalizedAnswer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = rawAnswer,
+            candidate = parsedAnswer,
+        )
+        if (parsedAnswer != null || doesReviewChatModeHaveDeterministicStructure(packet)) {
+            return finalizedAnswer
+        }
 
         val canUseCloudStructuring =
             resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
                 isCloudConfigured()
-        if (!canUseCloudStructuring) return null
+        if (!canUseCloudStructuring) return finalizedAnswer
 
         val structuredResult = runCloud(
             buildReviewChatStructuringPrompt(packet, rawAnswer)
         )
-        if (structuredResult !is AiChatResult.Success) return null
-        return parseReviewChatStructuredAnswer(structuredResult.content.trim())
+        if (structuredResult !is AiChatResult.Success) return finalizedAnswer
+        return finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = rawAnswer,
+            candidate = parseReviewChatStructuredAnswer(structuredResult.content.trim()),
+        )
     }
+}
+
+private fun doesReviewChatModeHaveDeterministicStructure(
+    packet: ReviewChatContextPacket,
+): Boolean = when (packet.questionMode) {
+    ReviewChatQuestionMode.COLLECTION_OVERVIEW -> !packet.wantsCategories
+    ReviewChatQuestionMode.RECORD_LOOKUP -> !packet.wantsCategories
+    ReviewChatQuestionMode.FULL_RECORD -> true
+    ReviewChatQuestionMode.TIMELINE_ANCHOR -> true
+    ReviewChatQuestionMode.EXTERNAL,
+    ReviewChatQuestionMode.ANALYSIS -> false
 }
 
 private data class PreparedReviewChatContext(
