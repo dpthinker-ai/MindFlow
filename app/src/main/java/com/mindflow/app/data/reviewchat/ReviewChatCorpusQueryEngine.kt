@@ -40,7 +40,6 @@ internal object ReviewChatCorpusQueryEngine {
             mode = query.mode,
             intent = query.intent,
             question = query.question,
-            keywords = query.keywords,
             notes = selection.queryNotes,
         )
         val rawNoteDetails = buildDirectRawNoteDetails(

@@ -64,6 +64,21 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun reviewChatRetriever_prioritizesTitleAndTagsOverBodyOnly() {
+        val query = ReviewChatQueryParser.parse("抖音有哪些记录")
+        val ranked = ReviewChatRetriever.rank(
+            query = query,
+            notes = listOf(
+                sampleNote(1L, "抖音文案记录", "主要是脚本和选题"),
+                sampleNote(2L, "增长主题", "内容里提到抖音，但不是主主题").copy(tags = listOf("抖音")),
+                sampleNote(3L, "别的主题", "正文里顺带出现一次抖音"),
+            ),
+        )
+
+        assertThat(ranked.take(3).map { it.note.id }).containsExactly(1L, 2L, 3L).inOrder()
+    }
+
+    @Test
     fun classifyReviewChatIntent_prioritizesSynthesisLanguage() {
         assertThat(classifyReviewChatIntent("把工作和副项目里的共同主题串一下"))
             .isEqualTo(ReviewChatIntent.SYNTHESIZE)

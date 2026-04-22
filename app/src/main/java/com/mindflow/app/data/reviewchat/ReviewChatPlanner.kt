@@ -393,7 +393,6 @@ internal fun buildRawNoteEvidence(
     mode: ReviewChatQuestionMode,
     intent: ReviewChatIntent,
     question: String,
-    keywords: List<String>,
     notes: List<NoteEntity>,
 ): List<ReviewChatEvidenceItem> {
     val scopedNotes = filterNotesForRequestedScope(question, notes)
@@ -428,25 +427,10 @@ internal fun buildRawNoteEvidence(
         ReviewChatIntent.DISCUSS -> 5
         ReviewChatIntent.RECALL -> 6
     }
-    val ranked = scopedNotes
-        .map { note ->
-            RankedReviewChatNote(
-                note = note,
-                score = scoreQuestionMatch(
-                    question = question,
-                    keywords = keywords,
-                    haystack = listOf(
-                        note.topic,
-                        note.content,
-                        note.folderKey.orEmpty(),
-                    ) + note.tags,
-                ),
-            )
-        }
-        .sortedWith(
-            compareByDescending<RankedReviewChatNote> { it.score }
-                .thenByDescending { it.note.createdAt },
-        )
+    val ranked = ReviewChatRetriever.rank(
+        query = ReviewChatQueryParser.parse(question).copy(intent = intent),
+        notes = scopedNotes,
+    )
 
     val directMatches = ranked.filter { it.score > 0 }.take(limit)
     if (directMatches.size >= limit) {
@@ -587,11 +571,6 @@ internal fun NoteEntity.createdLocalDate(): LocalDate =
         .atZone(ZoneId.systemDefault())
         .toLocalDate()
 
-private data class RankedReviewChatNote(
-    val note: NoteEntity,
-    val score: Int,
-)
-
 internal fun scoreQuestionMatch(
     question: String,
     keywords: List<String>,
@@ -611,7 +590,7 @@ internal fun scoreQuestionMatch(
     return score
 }
 
-private fun scoreEntityTermMatch(
+internal fun scoreEntityTermMatch(
     note: NoteEntity,
     entityTerms: List<String>,
 ): Int {
@@ -909,22 +888,11 @@ internal fun buildDirectRawNoteDetails(
     val filtered = if (hasRequestedTimeScope(question)) {
         filterNotesForRequestedScope(question, notes).sortedBy(NoteEntity::createdAt)
     } else {
-        val keywords = extractReviewChatKeywords(question)
-        notes.map { note ->
-            note to scoreQuestionMatch(
-                question = question,
-                keywords = keywords,
-                haystack = listOf(
-                    note.topic,
-                    note.content,
-                    note.folderKey.orEmpty(),
-                ) + note.tags,
-            )
-        }.sortedWith(
-            compareByDescending<Pair<NoteEntity, Int>> { it.second }
-                .thenByDescending { it.first.createdAt }
-        ).filter { it.second > 0 }
-            .map { it.first }
+        ReviewChatRetriever.rank(
+            query = ReviewChatQueryParser.parse(question),
+            notes = notes,
+        ).filter { it.score > 0 }
+            .map { it.note }
             .take(2)
     }
 
@@ -945,9 +913,9 @@ internal fun buildReferencedNotes(
     directRawNoteDetails: List<ReviewChatRawNoteDetail>,
 ): List<ReviewChatReferencedNote> {
     if (!wantsReviewChatLinks(question)) return emptyList()
-    val questionProfile = buildReviewChatQuestionProfile(question)
-    if (questionProfile.isExternalQuestion) return emptyList()
-    if (questionProfile.wantsCount) return emptyList()
+    val parsedQuery = ReviewChatQueryParser.parse(question).copy(intent = intent)
+    if (parsedQuery.isExternalQuestion) return emptyList()
+    if (parsedQuery.wantsCount) return emptyList()
     if (directRawNoteDetails.isNotEmpty()) {
         return directRawNoteDetails.map { detail ->
             ReviewChatReferencedNote(
@@ -973,29 +941,12 @@ internal fun buildReferencedNotes(
             .map(NoteEntity::toReferencedNote)
     }
 
-    val keywords = extractReviewChatKeywords(question)
-    val ranked = notes.map { note ->
-        RankedReviewChatNote(
-            note = note,
-            score = scoreQuestionMatch(
-                question = question,
-                keywords = keywords,
-                haystack = listOf(
-                    note.topic,
-                    note.content,
-                    note.folderKey.orEmpty(),
-                ) + note.tags,
-            ),
-        )
-    }.sortedWith(
-        compareByDescending<RankedReviewChatNote> { it.score }
-            .thenByDescending { it.note.createdAt }
-    )
+    val ranked = ReviewChatRetriever.rank(parsedQuery, notes)
 
     val directMatches = ranked.filter { it.score > 0 }.take(3).map(RankedReviewChatNote::note)
     val selected = when {
         directMatches.isNotEmpty() -> directMatches
-        questionProfile.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
+        parsedQuery.mode == ReviewChatQuestionMode.TIMELINE_ANCHOR ||
             reviewChatHistoryHints.any { question.contains(it) } ->
             buildSupplementalRawSnippets(
                 intent = intent,
