@@ -727,12 +727,14 @@ class ReviewChatPlanner(
             }
             if (result is AiChatResult.Success) {
                 val fallbackOccurred = index > 0
+                val normalizedAnswer = result.content.trim()
                 return ReviewChatTurnResult(
-                    answer = result.content.trim(),
+                    answer = normalizedAnswer,
+                    structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
                     provider = provider,
                     fallbackOccurred = fallbackOccurred,
                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred),
-                    sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
+                    sessionSummary = "${request.question.take(40)}｜${normalizedAnswer.take(80)}",
                     titleSuggestion = request.question.take(18),
                     referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                     referencedNotes = prepared.referencedNotes,
@@ -766,14 +768,16 @@ class ReviewChatPlanner(
                         AiChatResult.Failure(AiFailureReason.CONFIG, "云侧未配置")
                     }
                     if (result is AiChatResult.Success) {
+                        val normalizedAnswer = result.content.trim()
                         emit(
                             ReviewChatTurnEvent.Complete(
                                 ReviewChatTurnResult(
-                                    answer = result.content.trim(),
+                                    answer = normalizedAnswer,
+                                    structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
                                     provider = provider,
                                     fallbackOccurred = index > 0,
                                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0),
-                                    sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
+                                    sessionSummary = "${request.question.take(40)}｜${normalizedAnswer.take(80)}",
                                     titleSuggestion = request.question.take(18),
                                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
                                     referencedNotes = prepared.referencedNotes,
@@ -823,6 +827,7 @@ class ReviewChatPlanner(
                                     ReviewChatTurnEvent.Complete(
                                         ReviewChatTurnResult(
                                             answer = content,
+                                            structuredAnswer = parseReviewChatStructuredAnswer(content),
                                             provider = provider,
                                             fallbackOccurred = index > 0,
                                             providerLine = providerLine,
@@ -856,14 +861,16 @@ class ReviewChatPlanner(
                             )
                         )
                         if (result is AiChatResult.Success) {
+                            val normalizedAnswer = result.content.trim()
                             emit(
                                 ReviewChatTurnEvent.Complete(
                                     ReviewChatTurnResult(
-                                        answer = result.content.trim(),
+                                        answer = normalizedAnswer,
+                                        structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
                                         provider = provider,
                                         fallbackOccurred = index > 0,
                                         providerLine = providerLine,
-                                        sessionSummary = "${request.question.take(40)}｜${result.content.take(80)}",
+                                        sessionSummary = "${request.question.take(40)}｜${normalizedAnswer.take(80)}",
                                         titleSuggestion = request.question.take(18),
                                         referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                         referencedNotes = prepared.referencedNotes,

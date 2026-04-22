@@ -80,6 +80,7 @@ enum class ReviewChatProvider {
 data class ReviewChatMessage(
     val role: ReviewChatMessageRole,
     val content: String,
+    val structuredAnswer: ReviewChatStructuredAnswer? = null,
     val provider: ReviewChatProvider? = null,
     val createdAt: Long,
     val referencedNoteId: Long? = null,
@@ -94,6 +95,7 @@ data class ReviewChatTurnRequest(
 
 data class ReviewChatTurnResult(
     val answer: String,
+    val structuredAnswer: ReviewChatStructuredAnswer? = null,
     val provider: ReviewChatProvider,
     val fallbackOccurred: Boolean,
     val providerLine: String,

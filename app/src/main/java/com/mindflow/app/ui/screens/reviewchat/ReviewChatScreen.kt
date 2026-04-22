@@ -54,9 +54,10 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
+import com.mindflow.app.data.reviewchat.ReviewChatStructuredAnswer
 import com.mindflow.app.data.reviewchat.normalizeReviewChatAnswerForDisplay
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
-import com.mindflow.app.markdown.SimpleMarkdown
+import com.mindflow.app.data.reviewchat.renderReviewChatStructuredAnswerAsMarkdown
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.ComposerTextField
 import com.mindflow.app.ui.components.GhostActionButton
@@ -336,15 +337,17 @@ private fun ReviewChatMessageBubble(
     onRequestCopy: (ReviewChatCopyMessage) -> Unit,
 ) {
     val isUser = message.role == ReviewChatMessageRole.USER
+    val renderedMarkdown = message.structuredAnswer?.let(::renderReviewChatStructuredAnswerAsMarkdown)
     val normalizedContent = if (isUser) {
         message.content.trim()
     } else {
-        normalizeReviewChatAnswerForDisplay(message.content)
+        renderedMarkdown ?: normalizeReviewChatAnswerForDisplay(message.content)
     }
     val copyPayload = ReviewChatCopyMessage(
         title = if (isUser) "复制你的消息" else "复制这条回复",
         content = normalizedContent,
         renderAsMarkdown = !isUser,
+        structuredAnswer = message.structuredAnswer,
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -378,9 +381,13 @@ private fun ReviewChatMessageBubble(
                         onLongClick = { onRequestCopy(copyPayload) },
                     ),
             ) {
-                MarkdownText(
-                    markdown = normalizedContent,
-                )
+                if (message.structuredAnswer != null) {
+                    ReviewChatStructuredAnswerContent(message.structuredAnswer)
+                } else {
+                    MarkdownText(
+                        markdown = normalizedContent,
+                    )
+                }
                 val providerLabel = when {
                     providerLine.isNotBlank() -> providerLine
                     message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
@@ -415,6 +422,67 @@ private fun ReviewChatMessageBubble(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReviewChatStructuredAnswerContent(
+    answer: ReviewChatStructuredAnswer,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        answer.sections.forEach { section ->
+            if (section.title == "答复") {
+                section.body
+                    .joinToString("\n")
+                    .trim()
+                    .takeIf(String::isNotBlank)
+                    ?.let { MarkdownText(markdown = it) }
+                section.items.forEach { item ->
+                    ReviewChatStructuredBulletRow(item)
+                }
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "${section.title}：",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextMain,
+                    )
+                    section.body.forEach { paragraph ->
+                        MarkdownText(markdown = paragraph)
+                    }
+                    section.items.forEach { item ->
+                        ReviewChatStructuredBulletRow(item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewChatStructuredBulletRow(
+    item: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = "•",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMain,
+        )
+        Box(
+            modifier = Modifier.weight(1f),
+        ) {
+            MarkdownText(markdown = item)
         }
     }
 }
@@ -483,7 +551,9 @@ private fun ReviewChatSelectTextDialog(
         },
         text = {
             SelectionContainer {
-                if (message.renderAsMarkdown) {
+                if (message.structuredAnswer != null) {
+                    ReviewChatStructuredAnswerContent(message.structuredAnswer)
+                } else if (message.renderAsMarkdown) {
                     MarkdownText(markdown = message.content)
                 } else {
                     Text(
@@ -507,6 +577,7 @@ private data class ReviewChatCopyMessage(
     val title: String,
     val content: String,
     val renderAsMarkdown: Boolean,
+    val structuredAnswer: ReviewChatStructuredAnswer? = null,
 )
 
 private data class ReviewChatCopySheetState(

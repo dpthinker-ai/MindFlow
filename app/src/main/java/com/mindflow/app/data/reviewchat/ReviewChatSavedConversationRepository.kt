@@ -69,9 +69,15 @@ class RoomReviewChatSavedConversationRepository(
     override suspend fun getSession(sessionId: Long): SavedReviewChatSession? {
         val session = dao.getSession(sessionId) ?: return null
         val messages = dao.getMessages(sessionId).map { entity ->
+            val role = ReviewChatMessageRole.valueOf(entity.role)
             ReviewChatMessage(
-                role = ReviewChatMessageRole.valueOf(entity.role),
+                role = role,
                 content = entity.content,
+                structuredAnswer = if (role == ReviewChatMessageRole.ASSISTANT) {
+                    parseReviewChatStructuredAnswer(entity.content)
+                } else {
+                    null
+                },
                 provider = entity.provider?.let(ReviewChatProvider::valueOf),
                 createdAt = entity.createdAt,
             )

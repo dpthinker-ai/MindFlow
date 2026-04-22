@@ -18,8 +18,17 @@ class ReviewChatSavedConversationRepositoryTest {
         val sessionId = repository.saveSession(
             title = "产品方向的矛盾",
             messages = listOf(
-                ReviewChatMessage(ReviewChatMessageRole.USER, "最近最大的矛盾是什么", null, 1_000L),
-                ReviewChatMessage(ReviewChatMessageRole.ASSISTANT, "你在增长和定位之间反复摇摆", ReviewChatProvider.CLOUD, 1_100L),
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "最近最大的矛盾是什么",
+                    createdAt = 1_000L,
+                ),
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.ASSISTANT,
+                    content = "你在增长和定位之间反复摇摆",
+                    provider = ReviewChatProvider.CLOUD,
+                    createdAt = 1_100L,
+                ),
             ),
         )
 

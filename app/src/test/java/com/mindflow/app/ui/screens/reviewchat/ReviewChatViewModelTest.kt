@@ -6,6 +6,8 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.ReviewChatStructuredAnswer
+import com.mindflow.app.data.reviewchat.ReviewChatStructuredSection
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
 import com.mindflow.app.data.reviewchat.ReviewChatTurnResult
@@ -266,6 +268,48 @@ class ReviewChatViewModelTest {
         assertThat(state.messages).hasSize(2)
         assertThat(state.messages.last().content).isEqualTo("第一段第二段")
         assertThat(state.providerLine).isEqualTo("本次由端侧完成")
+    }
+
+    @Test
+    fun completeTurn_preservesStructuredAnswerOnAssistantMessage() = runTest(dispatcher) {
+        val structured = ReviewChatStructuredAnswer(
+            sections = listOf(
+                ReviewChatStructuredSection(
+                    title = "答复",
+                    body = listOf("本周末主要记录了 3 类信息。"),
+                    items = emptyList(),
+                ),
+                ReviewChatStructuredSection(
+                    title = "类别",
+                    body = emptyList(),
+                    items = listOf("产品设计：启动页、图标、名称"),
+                ),
+            ),
+        )
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "看一下本周末记录了哪些信息，都有哪些类别"),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = "【答复】本周末主要记录了 3 类信息。【类别】- 产品设计：启动页、图标、名称",
+                            structuredAnswer = structured,
+                            provider = ReviewChatProvider.CLOUD,
+                            fallbackOccurred = false,
+                            providerLine = "本次由云侧完成",
+                            sessionSummary = "分类结果",
+                            titleSuggestion = "周末分类",
+                        )
+                    )
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.messages.last()
+        assertThat(assistant.structuredAnswer).isEqualTo(structured)
     }
 
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {

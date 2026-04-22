@@ -184,6 +184,7 @@ class ReviewChatViewModel(
                                     messages = state.messages + ReviewChatMessage(
                                         role = ReviewChatMessageRole.ASSISTANT,
                                         content = result.answer,
+                                        structuredAnswer = result.structuredAnswer,
                                         provider = result.provider,
                                         createdAt = System.currentTimeMillis(),
                                         referencedNoteId = result.referencedNoteId,

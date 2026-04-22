@@ -6,8 +6,8 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
     val normalizedInput = SimpleMarkdown.normalizeForDisplay(content).trim()
     if (normalizedInput.isBlank()) return normalizedInput
 
-    val rendered = parseStructuredReviewChatResponse(normalizedInput)
-        ?.let(::renderStructuredReviewChatResponse)
+    val rendered = parseReviewChatStructuredAnswer(normalizedInput)
+        ?.let(::renderReviewChatStructuredAnswerAsMarkdown)
         ?: normalizedInput
 
     var normalized = normalizeLegacyReviewChatMarkdown(rendered)
@@ -53,78 +53,6 @@ private fun normalizeLegacyReviewChatMarkdown(content: String): String = normali
         normalizeRecordSummarySubBullets(normalizeMarkdownTables(content))
     )
 )
-
-private fun parseStructuredReviewChatResponse(content: String): ReviewChatStructuredResponse? {
-    val prepared = content
-        .replace(Regex("(?<!\\n)(【(?:答复|结论|依据|下一步|记录|完整记录|时间线|类别)】)"), "\n$1")
-        .trim()
-    if (!STRUCTURED_SECTION_REGEX.containsMatchIn(prepared)) return null
-
-    val sections = mutableListOf<MutableStructuredSection>()
-    var current: MutableStructuredSection? = null
-
-    prepared.lines().forEach { line ->
-        val trimmed = line.trim()
-        if (trimmed.isBlank()) return@forEach
-
-        val sectionMatch = STRUCTURED_SECTION_REGEX.matchEntire(trimmed)
-        if (sectionMatch != null) {
-            current = MutableStructuredSection(title = sectionMatch.groupValues[1])
-                .also(sections::add)
-            sectionMatch.groupValues[2]
-                .trim()
-                .takeIf(String::isNotBlank)
-                ?.let { current.appendStructuredLine(it) }
-            return@forEach
-        }
-
-        val target = current ?: return@forEach
-        val bulletContent = BULLET_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
-            ?: ORDERED_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
-        if (bulletContent != null) {
-            target.items += bulletContent.trim()
-        } else {
-            target.appendStructuredLine(trimmed)
-        }
-    }
-
-    return sections.takeIf { it.isNotEmpty() }?.let { parsed ->
-        ReviewChatStructuredResponse(
-            sections = parsed.map { section ->
-                ReviewChatStructuredSection(
-                    title = section.title,
-                    body = section.body.toList(),
-                    items = section.items.toList(),
-                )
-            },
-        )
-    }
-}
-
-private fun renderStructuredReviewChatResponse(
-    response: ReviewChatStructuredResponse,
-): String = buildString {
-    response.sections.forEachIndexed { index, section ->
-        if (index > 0) appendLine()
-        if (section.title == "答复") {
-            section.body
-                .joinToString("\n")
-                .trim()
-                .takeIf(String::isNotBlank)
-                ?.let(::appendLine)
-            if (section.items.isNotEmpty()) {
-                section.items.forEach { item -> appendLine("- $item") }
-            }
-            return@forEachIndexed
-        }
-
-        appendLine("${section.title}：")
-        section.body.forEach { paragraph ->
-            if (paragraph.isNotBlank()) appendLine(paragraph)
-        }
-        section.items.forEach { item -> appendLine("- $item") }
-    }
-}.trim()
 
 private fun normalizeEvidenceEchoes(content: String): String {
     if (!content.contains("记录｜")) return content
@@ -227,7 +155,7 @@ private fun normalizeInlineCategorySectionBullets(content: String): String {
                 rewritten += "类别："
                 val remainder = trimmed.removePrefix("类别：").trim()
                 if (remainder.isNotBlank()) {
-                    rewritten += splitInlineBulletItems(remainder).map { "- $it" }
+                    rewritten += splitInlineReviewChatBulletItems(remainder).map { "- $it" }
                 }
             }
             insideCategorySection && trimmed.isBlank() -> {
@@ -239,7 +167,7 @@ private fun normalizeInlineCategorySectionBullets(content: String): String {
                 rewritten += line
             }
             insideCategorySection -> {
-                val items = splitInlineBulletItems(trimmed)
+                val items = splitInlineReviewChatBulletItems(trimmed)
                 if (items.isNotEmpty()) {
                     rewritten += items.map { "- $it" }
                 } else {
@@ -260,75 +188,7 @@ private fun splitTableLine(line: String): List<String> =
         .map { it.trim() }
         .filter { it.isNotBlank() }
 
-private data class ReviewChatStructuredResponse(
-    val sections: List<ReviewChatStructuredSection>,
-)
-
-private data class ReviewChatStructuredSection(
-    val title: String,
-    val body: List<String>,
-    val items: List<String>,
-)
-
-private data class MutableStructuredSection(
-    val title: String,
-    val body: MutableList<String> = mutableListOf(),
-    val items: MutableList<String> = mutableListOf(),
-) {
-    fun appendFreeLine(line: String) {
-        if (line.isBlank()) return
-        if (items.isNotEmpty()) {
-            val lastIndex = items.lastIndex
-            items[lastIndex] = items[lastIndex] + " " + line
-        } else {
-            body += line
-        }
-    }
-
-    fun appendStructuredLine(line: String) {
-        if (line.isBlank()) return
-        if (title in ITEM_SECTION_TITLES) {
-            val itemsFromLine = splitInlineBulletItems(line)
-            if (itemsFromLine.isNotEmpty()) {
-                items += itemsFromLine
-                return
-            }
-        }
-        appendFreeLine(line)
-    }
-}
-
-private val STRUCTURED_SECTION_REGEX =
-    Regex(
-        pattern = "^【(答复|结论|依据|下一步|记录|完整记录|时间线|类别)】\\s*(.*)$",
-        option = RegexOption.MULTILINE,
-    )
-
-private val BULLET_LINE_REGEX = Regex("^[-*•]\\s*(.+)$")
-
-private val ORDERED_LINE_REGEX =
-    Regex("^(?:\\d+[.、）)]|[一二三四五六七八九十]+、)\\s*(.+)$")
-
 private val RECORD_ITEM_REGEX = Regex("^-\\s+\\d{4}-\\d{2}-\\d{2}《.+》.*$")
 
 private val SECTION_LABEL_REGEX =
     Regex("^(答复|结论|依据|下一步|记录|完整记录|时间线|类别)：.*$")
-
-private val ITEM_SECTION_TITLES = setOf("依据", "下一步", "记录", "完整记录", "时间线", "类别")
-
-private fun splitInlineBulletItems(content: String): List<String> {
-    val exploded = explodeInlineBulletMarkers(content).trim()
-    if (!exploded.contains('\n') && !BULLET_LINE_REGEX.matches(exploded)) return emptyList()
-
-    return exploded
-        .lines()
-        .mapNotNull { line ->
-            BULLET_LINE_REGEX.matchEntire(line.trim())?.groupValues?.get(1)?.trim()?.takeIf(String::isNotBlank)
-        }
-}
-
-private fun explodeInlineBulletMarkers(content: String): String =
-    content.replace(
-        Regex("(?<!\\n)(?<!\\d)([-*•])(?=\\s*[\\p{IsHan}A-Z《【])"),
-        "\n$1",
-    )
