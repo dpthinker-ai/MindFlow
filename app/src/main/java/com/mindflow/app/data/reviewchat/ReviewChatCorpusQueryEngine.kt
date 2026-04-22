@@ -214,32 +214,24 @@ internal object ReviewChatCorpusQueryEngine {
         selection: ReviewChatCorpusSelection,
     ): List<String> {
         if (!query.wantsCategories || selection.queryNotes.isEmpty()) return emptyList()
-
-        val sampled = selection.queryNotes
-            .sortedBy(NoteEntity::createdAt)
-            .let { sorted ->
-                if (sorted.size <= 24) sorted
-                else (0 until 24).map { index ->
-                    val fraction = if (24 == 1) 0.0 else index.toDouble() / 23.0
-                    val targetIndex = (fraction * sorted.lastIndex).toInt()
-                    sorted[targetIndex]
-                }.distinctBy(NoteEntity::id)
+        val sorted = selection.queryNotes.sortedBy(NoteEntity::createdAt)
+        return sorted.chunked(10).mapIndexed { index, chunk ->
+            val startDate = chunk.first().createdLocalDate().format(reviewChatDateFormatter)
+            val endDate = chunk.last().createdLocalDate().format(reviewChatDateFormatter)
+            val titles = chunk.joinToString("、") { note ->
+                note.topic.ifBlank { "未命名记录" }.take(16)
             }
-
-        return sampled.map { note ->
             buildString {
-                append("候选｜")
-                append(note.createdLocalDate().format(reviewChatDateFormatter))
+                append("批次")
+                append(index + 1)
                 append("｜")
-                append(note.topic.ifBlank { "未命名记录" })
-                note.folderKey?.takeIf { it.isNotBlank() }?.let {
-                    append("｜文件夹:")
-                    append(it)
+                append(startDate)
+                if (endDate != startDate) {
+                    append("~")
+                    append(endDate)
                 }
-                if (note.tags.isNotEmpty()) {
-                    append("｜标签:")
-                    append(note.tags.take(2).joinToString("、"))
-                }
+                append("｜")
+                append(titles)
             }
         }
     }

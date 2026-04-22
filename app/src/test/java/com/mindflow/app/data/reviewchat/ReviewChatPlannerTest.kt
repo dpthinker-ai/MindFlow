@@ -957,8 +957,10 @@ class ReviewChatPlannerTest {
         assertThat(packet.querySummarySnippets).contains("命中｜共 8 条记录")
         assertThat(packet.querySummarySnippets).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
         assertThat(packet.deterministicAnswerSnippets).contains("分类范围｜当前分类必须覆盖 8 条命中记录")
-        assertThat(packet.categoryDigestSnippets).hasSize(8)
-        assertThat(packet.categoryDigestSnippets.first()).contains("候选｜")
+        assertThat(packet.categoryDigestSnippets).hasSize(1)
+        assertThat(packet.categoryDigestSnippets.first()).contains("批次1｜")
+        assertThat(packet.categoryDigestSnippets.first()).contains("产品设计")
+        assertThat(packet.categoryDigestSnippets.first()).contains("精神健康")
         assertThat(packet.rawNoteEvidence).hasSize(8)
     }
 
