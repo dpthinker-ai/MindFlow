@@ -106,4 +106,36 @@ class ReviewChatAnswerFormatterTest {
         assertThat(formatted).contains("\n- 2026-04-05《注意力决定人生》：强调注意力的重要性。")
         assertThat(formatted).contains("\n- 2026-04-16《面对失败的正确态度》：强调不要为失败懊恼。")
     }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_rendersStructuredSectionTagsIntoMarkdown() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            """
+            【答复】人生态度记录的时间轴跨度从2026-03-28到2026-04-21，共129条记录。
+            【依据】
+            - 时间范围：最早记录日期为2026-03-28，最近记录日期为2026-04-21。
+            - 主题变化：近期更聚焦在注意力管理、未来规划和生存法则。
+            【下一步】
+            - 如果需要更细分类，可以继续按月份拆分。
+            """.trimIndent()
+        )
+
+        assertThat(formatted).startsWith("人生态度记录的时间轴跨度从2026-03-28到2026-04-21，共129条记录。")
+        assertThat(formatted).contains("\n\n依据：\n- 时间范围：最早记录日期为2026-03-28，最近记录日期为2026-04-21。")
+        assertThat(formatted).contains("\n\n下一步：\n- 如果需要更细分类，可以继续按月份拆分。")
+        assertThat(formatted).doesNotContain("【依据】")
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_handlesInlineStructuredTagsOnSingleLine() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            "【答复】3月份共计有31条记录。【记录】- 2026-03-28《应用启动页设计》：帮忙给这个应用增加一个启动页面。- 2026-03-28《MindFlow还要增加一个功能》：MindFlow还要增加一个功能。",
+        )
+
+        assertThat(formatted).contains("3月份共计有31条记录。")
+        assertThat(formatted).contains("\n\n记录：")
+        assertThat(formatted).contains("\n- 2026-03-28《应用启动页设计》：帮忙给这个应用增加一个启动页面。")
+        assertThat(formatted).contains("\n- 2026-03-28《MindFlow还要增加一个功能》：MindFlow还要增加一个功能。")
+        assertThat(formatted).doesNotContain("【记录】")
+    }
 }

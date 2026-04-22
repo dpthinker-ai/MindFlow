@@ -11,7 +11,6 @@ import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
-import com.mindflow.app.data.reviewchat.normalizeReviewChatAnswerForDisplay
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -165,10 +164,9 @@ class ReviewChatViewModel(
                 ).collect { event ->
                     when (event) {
                         is ReviewChatTurnEvent.Partial -> {
-                            val normalizedPartial = normalizeReviewChatAnswerForDisplay(event.content)
                             _uiState.update { state ->
                                 state.copy(
-                                    streamingAnswer = normalizedPartial,
+                                    streamingAnswer = event.content,
                                     streamingProvider = event.provider,
                                     providerLine = event.providerLine,
                                     errorMessage = null,
@@ -178,7 +176,6 @@ class ReviewChatViewModel(
 
                         is ReviewChatTurnEvent.Complete -> {
                             val result = event.result
-                            val normalizedAnswer = normalizeReviewChatAnswerForDisplay(result.answer)
                             pendingQuestion = null
                             pendingPriorMessages = emptyList()
                             _uiState.update { state ->
@@ -186,7 +183,7 @@ class ReviewChatViewModel(
                                     title = state.title.takeIf { it != "和历史聊聊" } ?: result.titleSuggestion.ifBlank { state.title },
                                     messages = state.messages + ReviewChatMessage(
                                         role = ReviewChatMessageRole.ASSISTANT,
-                                        content = normalizedAnswer,
+                                        content = result.answer,
                                         provider = result.provider,
                                         createdAt = System.currentTimeMillis(),
                                         referencedNoteId = result.referencedNoteId,

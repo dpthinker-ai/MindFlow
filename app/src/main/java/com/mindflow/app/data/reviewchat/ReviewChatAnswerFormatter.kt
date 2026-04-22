@@ -3,9 +3,14 @@ package com.mindflow.app.data.reviewchat
 import com.mindflow.app.markdown.SimpleMarkdown
 
 internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
-    var normalized = normalizeEvidenceEchoes(
-        normalizeMarkdownTables(SimpleMarkdown.normalizeForDisplay(content))
-    )
+    val normalizedInput = SimpleMarkdown.normalizeForDisplay(content).trim()
+    if (normalizedInput.isBlank()) return normalizedInput
+
+    val rendered = parseStructuredReviewChatResponse(normalizedInput)
+        ?.let(::renderStructuredReviewChatResponse)
+        ?: normalizedInput
+
+    var normalized = normalizeLegacyReviewChatMarkdown(rendered)
     if (normalized.isBlank()) return normalized
 
     normalized = normalized
@@ -42,6 +47,82 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
 
     return normalized
 }
+
+private fun normalizeLegacyReviewChatMarkdown(content: String): String = normalizeEvidenceEchoes(
+    normalizeMarkdownTables(content)
+)
+
+private fun parseStructuredReviewChatResponse(content: String): ReviewChatStructuredResponse? {
+    val prepared = content
+        .replace(Regex("(?<!\\n)(【(?:答复|结论|依据|下一步|记录|完整记录|时间线)】)"), "\n$1")
+        .trim()
+    if (!STRUCTURED_SECTION_REGEX.containsMatchIn(prepared)) return null
+
+    val sections = mutableListOf<MutableStructuredSection>()
+    var current: MutableStructuredSection? = null
+
+    prepared.lines().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) return@forEach
+
+        val sectionMatch = STRUCTURED_SECTION_REGEX.matchEntire(trimmed)
+        if (sectionMatch != null) {
+            current = MutableStructuredSection(title = sectionMatch.groupValues[1])
+                .also(sections::add)
+            sectionMatch.groupValues[2]
+                .trim()
+                .takeIf(String::isNotBlank)
+                ?.let(current::appendFreeLine)
+            return@forEach
+        }
+
+        val target = current ?: return@forEach
+        val bulletContent = BULLET_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
+            ?: ORDERED_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
+        if (bulletContent != null) {
+            target.items += bulletContent.trim()
+        } else {
+            target.appendFreeLine(trimmed)
+        }
+    }
+
+    return sections.takeIf { it.isNotEmpty() }?.let { parsed ->
+        ReviewChatStructuredResponse(
+            sections = parsed.map { section ->
+                ReviewChatStructuredSection(
+                    title = section.title,
+                    body = section.body.toList(),
+                    items = section.items.toList(),
+                )
+            },
+        )
+    }
+}
+
+private fun renderStructuredReviewChatResponse(
+    response: ReviewChatStructuredResponse,
+): String = buildString {
+    response.sections.forEachIndexed { index, section ->
+        if (index > 0) appendLine()
+        if (section.title == "答复") {
+            section.body
+                .joinToString("\n")
+                .trim()
+                .takeIf(String::isNotBlank)
+                ?.let(::appendLine)
+            if (section.items.isNotEmpty()) {
+                section.items.forEach { item -> appendLine("- $item") }
+            }
+            return@forEachIndexed
+        }
+
+        appendLine("${section.title}：")
+        section.body.forEach { paragraph ->
+            if (paragraph.isNotBlank()) appendLine(paragraph)
+        }
+        section.items.forEach { item -> appendLine("- $item") }
+    }
+}.trim()
 
 private fun normalizeEvidenceEchoes(content: String): String {
     if (!content.contains("记录｜")) return content
@@ -99,3 +180,40 @@ private fun splitTableLine(line: String): List<String> =
         .split('|')
         .map { it.trim() }
         .filter { it.isNotBlank() }
+
+private data class ReviewChatStructuredResponse(
+    val sections: List<ReviewChatStructuredSection>,
+)
+
+private data class ReviewChatStructuredSection(
+    val title: String,
+    val body: List<String>,
+    val items: List<String>,
+)
+
+private data class MutableStructuredSection(
+    val title: String,
+    val body: MutableList<String> = mutableListOf(),
+    val items: MutableList<String> = mutableListOf(),
+) {
+    fun appendFreeLine(line: String) {
+        if (line.isBlank()) return
+        if (items.isNotEmpty()) {
+            val lastIndex = items.lastIndex
+            items[lastIndex] = items[lastIndex] + " " + line
+        } else {
+            body += line
+        }
+    }
+}
+
+private val STRUCTURED_SECTION_REGEX =
+    Regex(
+        pattern = "^【(答复|结论|依据|下一步|记录|完整记录|时间线)】\\s*(.*)$",
+        option = RegexOption.MULTILINE,
+    )
+
+private val BULLET_LINE_REGEX = Regex("^[-*•]\\s+(.+)$")
+
+private val ORDERED_LINE_REGEX =
+    Regex("^(?:\\d+[.、）)]|[一二三四五六七八九十]+、)\\s*(.+)$")

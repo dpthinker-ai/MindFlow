@@ -40,36 +40,41 @@ object ReviewChatPromptFactory {
             ReviewChatQuestionMode.EXTERNAL -> {
                 appendLine("2. 这是外部或通用问题，不要引用个人历史记录，也不要附历史记录链接。")
                 appendLine("3. 如果问题需要实时天气、新闻、股价等信息，要直接说明你无法获取实时数据；如果能回答，就给简短通用建议。")
-                appendLine("4. 默认使用 Markdown；如果有多点内容，用项目列表逐条换行；不要输出 Markdown 表格。")
+                appendLine("4. 输出协议：第一段用 `【答复】` 直接回答；如果要补充建议，再用 `【下一步】`，并把每条建议单独写成 `- ` 列表。")
+                appendLine("5. 默认使用 Markdown；不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                 appendLine("2. 这是全局统计或整体概览问题，优先使用“集合概览”和时间范围信息直接回答。")
                 appendLine("3. 如果问题在问数量、总数或时间范围，第一句必须直接给出准确数字或准确时间。")
                 appendLine("4. 如果用户没有明确要求“列出记录/举例/展示命中的记录”，就不要罗列示例记录。")
-                appendLine("5. 如果需要补充说明，再用项目列表列 3 到 6 个代表性记录；不要输出 Markdown 表格，也不要照抄证据里的字段标签，更不要输出 `-记录｜日期｜标题｜摘要` 这种证据格式。")
+                appendLine("5. 输出协议：先用 `【答复】` 直接回答；如需解释原因，用 `【依据】`，每条依据单独写成 `- ` 列表。")
+                appendLine("6. 只有在用户明确要求举例或列记录时，才追加 `【记录】`，每条记录写成 `- 日期《标题》：摘要`。不要输出 Markdown 表格，也不要照抄证据里的字段标签，更不要输出 `-记录｜日期｜标题｜摘要` 这种证据格式。")
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
-                appendLine("3. 输出格式固定为：先一句总览，然后用项目列表逐条列出，每条单独一行，按时间顺序写。")
-                appendLine("4. 不要引用未命中的日期或记录，也不要输出 Markdown 表格。不要逐字复述证据中的前缀或分隔格式，要改写成自然中文。")
+                appendLine("3. 输出协议：先用 `【答复】` 做一句总览，再用 `【记录】` 按时间顺序逐条列出，每条单独一行。")
+                appendLine("4. `【记录】` 下每条都写成 `- 日期《标题》：摘要`。不要引用未命中的日期或记录，也不要输出 Markdown 表格，不要逐字复述证据中的前缀或分隔格式。")
             }
             ReviewChatQuestionMode.FULL_RECORD -> {
                 appendLine("2. 这是完整内容问题，优先返回命中的完整记录，不要先做摘要。")
-                appendLine("3. 输出格式固定为：先一句说明命中了几条，然后每条用三级标题分开，再贴对应内容；不要输出 Markdown 表格。")
+                appendLine("3. 输出协议：先用 `【答复】` 说明命中了几条，再用 `【完整记录】` 分段展开。")
+                appendLine("4. `【完整记录】` 内每条记录单独分段，先写 `日期《标题》`，下一行再贴内容；不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                 appendLine("2. 这是时间线锚点问题，第一句必须直接回答最早时间或开始时间。")
-                appendLine("3. 如果需要补充依据，用项目列表列 1 到 3 个关键时间锚点；不要输出 Markdown 表格。")
+                appendLine("3. 输出协议：先用 `【答复】` 直接回答时间；如果需要补充依据，再用 `【时间线】`，每条锚点单独写成 `- 日期《标题》：摘要`。")
+                appendLine("4. 不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.ANALYSIS -> {
                 appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                appendLine("3. 输出格式固定为三段：`结论：`、`依据：`、`下一步：`。每段单独换行，不要使用 Markdown 标题。")
-                appendLine("4. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
-                appendLine("5. 不要输出 Markdown 表格，改用项目列表或小标题。")
+                appendLine("3. 输出协议：固定使用三段 `【答复】`、`【依据】`、`【下一步】`。")
+                appendLine("4. `【依据】` 和 `【下一步】` 里的每条内容都单独写成 `- ` 列表，不要写成表格，也不要使用 Markdown 标题。")
+                appendLine("5. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
+                appendLine("6. 不要输出 Markdown 表格，改用项目列表或分段。")
             }
         }
         if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {
-            appendLine("6. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
+            appendLine("7. 如果现有材料不足以支持结论，要明确说材料不足，不要假装看过不存在的内容。")
         }
     }
 
@@ -168,28 +173,28 @@ object ReviewChatPromptFactory {
                     ReviewChatQuestionMode.EXTERNAL -> {
                         appendLine("补充要求：不要引用个人历史记录，也不要给历史记录链接。")
                         appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
-                        appendLine("输出格式：一到两段清晰中文，不要使用基于历史材料的拒答口径，也不要输出表格。")
+                        appendLine("输出协议：先写 `【答复】`；如要补充建议，再写 `【下一步】` 并用 `- ` 列表。不要使用基于历史材料的拒答口径，也不要输出表格或 Markdown 标题。")
                     }
                     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                         appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
                         appendLine("如果用户没有明确要求列出记录，就不要罗列示例记录。")
-                        appendLine("输出格式：第一句直接给准确数字或准确时间；如果要举例，再用项目列表逐条换行。不要输出表格，也不要照抄证据字段标签，更不要输出 `-记录｜日期｜标题｜摘要` 这种证据格式。")
+                        appendLine("输出协议：先写 `【答复】` 直接给准确数字或时间；如需解释，再写 `【依据】` 并用 `- ` 列表。只有明确要求举例时才加 `【记录】`。不要输出表格，也不要照抄证据字段标签。")
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
-                        appendLine("输出格式：先一句总览，再用项目列表逐条换行，不要输出表格，也不要逐字复述证据前缀。")
+                        appendLine("输出协议：先写 `【答复】`，再写 `【记录】`，每条记录都用 `- 日期《标题》：摘要`。不要输出表格，也不要逐字复述证据前缀。")
                     }
                     ReviewChatQuestionMode.FULL_RECORD -> {
                         appendLine("补充要求：这是完整内容问题，优先返回命中的完整记录，不要只给摘要。")
-                        appendLine("输出格式：先一句说明命中了几条，再逐条分段展开，不要输出表格。")
+                        appendLine("输出协议：先写 `【答复】`，再写 `【完整记录】`，逐条分段展开。不要输出表格，也不要使用 Markdown 标题。")
                     }
                     ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                         appendLine("补充要求：这是时间线锚点问题，优先回答最早时间或开始时间。")
-                        appendLine("输出格式：第一句直接回答时间，再补 1 到 3 个时间锚点，不要输出表格。")
+                        appendLine("输出协议：先写 `【答复】`，再按需写 `【时间线】`，每条锚点都用 `- 日期《标题》：摘要`。不要输出表格，也不要使用 Markdown 标题。")
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
                         appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                        appendLine("输出格式：`结论：`、`依据：`、`下一步：` 三段，每段单独换行，不要使用 Markdown 标题，也不要输出表格。")
+                        appendLine("输出协议：固定写 `【答复】`、`【依据】`、`【下一步】` 三段。`【依据】` 和 `【下一步】` 下每条都用 `- ` 列表，不要使用 Markdown 标题，也不要输出表格。")
                     }
                 }
                 if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {
