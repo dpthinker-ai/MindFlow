@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.flow
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
     "关于", "这个", "那个", "最近两周", "最近一周", "我们", "你们", "我的", "你的", "时候",
+    "分析", "总结", "归纳", "分类", "类别", "分为", "看看",
 )
 
 internal val reviewChatHistoryHints = listOf(
@@ -34,7 +35,7 @@ internal val reviewChatScopeHints = listOf(
 )
 
 internal val reviewChatCountHints = listOf(
-    "多少条", "几条", "总共", "一共", "总数", "总量", "全部记录", "所有记录", "整个历史", "从开始到现在",
+    "多少条", "几条", "总共", "一共", "总数", "总量", "有多少条", "数量",
 )
 
 internal val reviewChatListHints = listOf(
@@ -66,12 +67,20 @@ internal val reviewChatOperationPhrases = (
             "总共有", "一共有", "多少", "几条", "全部", "所有", "只看",
             "列出", "举例", "示例", "样例", "打开", "命中", "那条", "那几条", "发给",
             "本周末", "上周末", "周末", "类别", "分类",
+            "分析", "总结", "归纳", "分为",
         )
 ).distinct()
     .sortedByDescending(String::length)
 
 internal val reviewChatEntityStopWords = reviewChatStopWords + setOf(
     "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询", "类别", "分类", "周末",
+    "分析", "总结", "归纳", "分为", "所有", "全部",
+)
+
+private val reviewChatGenericEntityTerms = setOf(
+    "我这", "可以", "都有", "这些", "那些", "这个", "那个", "所有的", "全部的",
+    "历史记录", "个人历史", "全部历史", "整个历史",
+    "看看都",
 )
 
 internal val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -226,6 +235,18 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         current.replace(phrase.lowercase(), " ")
     }.replace(Regex("\\d{1,2}\\s*月\\s*\\d{0,2}(?:日|号)?"), " ")
         .replace(Regex("\\d{1,2}\\s*月(?:份)?"), " ")
+        .replace("所有的记录", " ")
+        .replace("全部的记录", " ")
+        .replace("历史的记录", " ")
+        .replace("历史记录", " ")
+        .replace("都有哪些类别", " ")
+        .replace("看看都有哪些类别", " ")
+        .replace("看看都有哪些", " ")
+        .replace("可以分为哪些类别", " ")
+        .replace("都有哪些", " ")
+        .replace("我这所有记录", " ")
+        .replace("我这全部记录", " ")
+        .replace("我这所有", " ")
         .replace("是什么时候", " ")
         .replace("什么时间", " ")
         .replace("什么时候", " ")
@@ -257,11 +278,25 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .filter { term ->
             term.isNotBlank() &&
                 term !in reviewChatEntityStopWords &&
+                !isGenericReviewChatEntityTerm(term) &&
                 !term.matches(Regex("\\d+")) &&
                 term.any { it.isLetterOrDigit() || Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
         }
         .distinct()
         .toList()
+}
+
+private fun isGenericReviewChatEntityTerm(term: String): Boolean {
+    val normalized = term.trim().lowercase()
+    if (normalized.isBlank()) return true
+    if (normalized in reviewChatGenericEntityTerms) return true
+    if (normalized.length <= 2 && normalized in setOf("我这", "都有", "可以", "这些", "那些", "这个", "那个")) {
+        return true
+    }
+    if (normalized.endsWith("记录") && normalized.length <= 4) return true
+    if (normalized.endsWith("内容") && normalized.length <= 4) return true
+    if (normalized.endsWith("信息") && normalized.length <= 4) return true
+    return false
 }
 
 internal fun buildReviewChatCorpusSelection(
@@ -419,6 +454,20 @@ internal fun buildRawNoteEvidence(
                 limit = 6,
             ).map(NoteEntity::toReviewChatEvidence)
         }
+    }
+    if (
+        mode == ReviewChatQuestionMode.RECORD_LOOKUP &&
+        wantsReviewChatCategories(question) &&
+        extractReviewChatEntityTerms(question).isEmpty()
+    ) {
+        return buildSupplementalRawSnippets(
+            intent = ReviewChatIntent.SYNTHESIZE,
+            question = question,
+            ranked = scopedNotes
+                .sortedBy { it.createdAt }
+                .map { RankedReviewChatNote(note = it, score = 0) },
+            limit = 10,
+        ).map(NoteEntity::toReviewChatEvidence)
     }
     if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && hasRequestedTimeScope(question)) {
         return scopedNotes
@@ -635,6 +684,7 @@ class ReviewChatPlanner(
     private val resolveExecutionMode: suspend () -> AiExecutionMode,
     private val isCloudConfigured: suspend () -> Boolean,
     private val isOnDeviceReady: suspend () -> Boolean,
+    private val planQueryWithCloud: (suspend (String) -> AiChatResult)? = null,
     private val runCloud: suspend (String) -> AiChatResult,
     private val runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
     private val streamOnDevice: (suspend (ReviewChatOnDeviceRequest) -> Flow<String>)? = null,
@@ -836,7 +886,7 @@ class ReviewChatPlanner(
     private suspend fun prepareReviewChatContext(
         request: ReviewChatTurnRequest,
     ): PreparedReviewChatContext {
-        val parsedQuery = ReviewChatQueryParser.parse(request.question)
+        val parsedQuery = resolveParsedQuery(request.question)
         val notes = loadNotes()
         val corpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
         val weeklyReview = loadWeeklyReview()
@@ -863,6 +913,23 @@ class ReviewChatPlanner(
             directRawNoteDetails = corpusContext.rawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
         )
+    }
+
+    private suspend fun resolveParsedQuery(question: String): ReviewChatParsedQuery {
+        val fallbackQuery = ReviewChatQueryParser.parse(question)
+        val canUseCloudPlanning =
+            planQueryWithCloud != null &&
+                resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
+                isCloudConfigured()
+        if (!canUseCloudPlanning) return fallbackQuery
+
+        val planResult = planQueryWithCloud.invoke(
+            ReviewChatModelQueryPlanner.buildPlanningPrompt(question)
+        )
+        if (planResult !is AiChatResult.Success) return fallbackQuery
+
+        val plannedQuery = ReviewChatModelQueryPlanner.parse(planResult.content) ?: return fallbackQuery
+        return ReviewChatQueryParser.parse(question, plannedQuery)
     }
 }
 
@@ -965,6 +1032,9 @@ internal fun buildReferencedNotes(
 
 internal fun wantsReviewChatLinks(question: String): Boolean =
     reviewChatLinkHints.any(question::contains)
+
+internal fun wantsReviewChatCategories(question: String): Boolean =
+    listOf("类别", "分类", "哪几类", "哪些类别", "归类").any(question::contains)
 
 private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
     ReviewChatReferencedNote(

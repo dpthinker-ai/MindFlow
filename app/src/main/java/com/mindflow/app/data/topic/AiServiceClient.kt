@@ -314,6 +314,20 @@ class AiServiceClient {
         )
     }
 
+    suspend fun planReviewChatQuery(
+        settings: AiSettings,
+        prompt: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = prompt.take(2_000),
+            systemPrompt = "You are planning a query over a person's historical notes. Return exactly one JSON object and nothing else. Output schema: {\"operation\":\"external|count|list|full_text|timeline|analyze\",\"entity_terms\":[\"string\"],\"wants_categories\":true|false,\"wants_examples\":true|false,\"wants_links\":true|false}. Prefer empty entity_terms when the user asks about all notes or all history. Do not invent extra fields.",
+            maxTokens = 220,
+            temperature = 0.1,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun extractConceptGraphConcepts(
         settings: AiSettings,
         contextSummary: String,

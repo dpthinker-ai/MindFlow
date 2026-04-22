@@ -56,6 +56,16 @@ class ReviewChatPlannerTest {
         assertThat(countQuery.timeScope).isEqualTo(ReviewChatTimeScope.AllTime)
         assertThat(countQuery.entityTerms).containsExactly("人生态度")
 
+        val categoryQuery = ReviewChatQueryParser.parse("帮我总结分析一下，我这所有记录可以分为哪些类别？")
+        assertThat(categoryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(categoryQuery.wantsCategories).isTrue()
+        assertThat(categoryQuery.entityTerms).isEmpty()
+
+        val categoryQuery2 = ReviewChatQueryParser.parse("帮我分析总结下所有的记录，看看都有哪些类别。")
+        assertThat(categoryQuery2.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(categoryQuery2.wantsCategories).isTrue()
+        assertThat(categoryQuery2.entityTerms).isEmpty()
+
         val fullTextQuery = ReviewChatQueryParser.parse("把 4 月 10 号那天的完整内容发给我")
         assertThat(fullTextQuery.operation).isEqualTo(ReviewChatQueryOperation.FULL_TEXT)
         assertThat(fullTextQuery.timeScope).isEqualTo(
@@ -71,6 +81,23 @@ class ReviewChatPlannerTest {
         assertThat(weekendQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
         assertThat((weekendQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周末")
         assertThat(weekendQuery.wantsCategories).isTrue()
+    }
+
+    @Test
+    fun reviewChatQueryParser_modelPlanOverridesEntityFilteringForAllHistoryCategoryQuery() {
+        val planned = ReviewChatQueryParser.parse(
+            question = "帮我分析总结下所有的记录，看看都有哪些类别。",
+            modelPlan = ReviewChatModelQueryPlan(
+                operation = ReviewChatQueryOperation.LIST,
+                entityTerms = emptyList(),
+                wantsCategories = true,
+            ),
+        )
+
+        assertThat(planned.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(planned.entityTerms).isEmpty()
+        assertThat(planned.wantsCategories).isTrue()
+        assertThat(planned.intent).isEqualTo(ReviewChatIntent.RECALL)
     }
 
     @Test
@@ -393,6 +420,49 @@ class ReviewChatPlannerTest {
         assertThat(cloudCalled).isTrue()
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("最近主要在推进推荐链路验证")
+    }
+
+    @Test
+    fun answer_cloudQueryPlannerUsesModelPlanBeforeCorpusSelection() = runTest {
+        var capturedPrompt = ""
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "产品设计", "启动页和图标方案"),
+                    sampleNote(2L, "精神健康", "减少消费和增加阅读"),
+                    sampleNote(3L, "AI实验", "上下文带宽和推理体验"),
+                    sampleNote(4L, "训练计划", "跑步和力量循环"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            planQueryWithCloud = {
+                AiChatResult.Success(
+                    """{"operation":"list","entity_terms":[],"wants_categories":true,"wants_examples":false,"wants_links":false}"""
+                )
+            },
+            runCloud = { prompt ->
+                capturedPrompt = prompt
+                AiChatResult.Success("可以分成四类。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "帮我分析总结下所有的记录，看看都有哪些类别。",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(capturedPrompt).contains("命中｜共 4 条记录")
+        assertThat(capturedPrompt).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
+        assertThat(capturedPrompt).doesNotContain("主题｜")
     }
 
     @Test
@@ -765,7 +835,8 @@ class ReviewChatPlannerTest {
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(packet.wantsCategories).isTrue()
         assertThat(prompt.systemInstruction).contains("再写 `【类别】`")
-        assertThat(prompt.systemInstruction).doesNotContain("`【下一步】`")
+        assertThat(prompt.systemInstruction).contains("不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别")
+        assertThat(prompt.systemInstruction).contains("不要输出 `【依据】` 或 `【下一步】`")
         assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
         assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
     }
@@ -856,6 +927,35 @@ class ReviewChatPlannerTest {
         assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("1970-01-01")
         assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("1970-01-01")
         assertThat(packet.rawNoteEvidence).isEmpty()
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_allHistoryCategoryQuery_keepsFullCorpusInsteadOfFakeEntityHits() {
+        val packet = buildReviewChatContextPacket(
+            question = "帮我分析总结下所有的记录，看看都有哪些类别。",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "产品设计", "启动页和图标方案"),
+                sampleNote(2L, "精神健康", "减少消费和增加阅读"),
+                sampleNote(3L, "AI实验", "上下文带宽和推理体验"),
+                sampleNote(4L, "训练计划", "跑步和力量循环"),
+                sampleNote(5L, "项目复盘", "系统卡顿和闪退问题"),
+                sampleNote(6L, "方法论", "注意力决定人生"),
+                sampleNote(7L, "未来规划", "虚拟机时间表"),
+                sampleNote(8L, "生存法则", "低成本高效率"),
+            ),
+            weeklyReview = WeeklyReviewState(),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(packet.wantsCategories).isTrue()
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(8)
+        assertThat(packet.querySummarySnippets).contains("命中｜共 8 条记录")
+        assertThat(packet.querySummarySnippets).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
+        assertThat(packet.rawNoteEvidence).hasSize(8)
     }
 
     @Test

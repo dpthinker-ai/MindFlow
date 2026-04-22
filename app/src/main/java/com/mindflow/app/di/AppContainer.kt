@@ -335,6 +335,12 @@ class AppContainer(context: Context) {
         isOnDeviceReady = {
             onDeviceModelSettingsRepository.getCurrent().isReady
         },
+        planQueryWithCloud = { prompt ->
+            aiServiceClient.planReviewChatQuery(
+                settings = aiSettingsRepository.getCurrent(),
+                prompt = prompt,
+            )
+        },
         runCloud = { prompt ->
             aiServiceClient.generateReviewChatReply(
                 settings = aiSettingsRepository.getCurrent(),

@@ -1,6 +1,8 @@
 package com.mindflow.app.data.reviewchat
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.markdown.MarkdownBulletList
+import com.mindflow.app.markdown.SimpleMarkdown
 import org.junit.Test
 
 class ReviewChatAnswerFormatterTest {
@@ -137,5 +139,32 @@ class ReviewChatAnswerFormatterTest {
         assertThat(formatted).contains("\n- 2026-03-28《应用启动页设计》：帮忙给这个应用增加一个启动页面。")
         assertThat(formatted).contains("\n- 2026-03-28《MindFlow还要增加一个功能》：MindFlow还要增加一个功能。")
         assertThat(formatted).doesNotContain("【记录】")
+    }
+
+    @Test
+    fun normalizeReviewChatAnswerForDisplay_keepsRecordSubBulletsNestedInsteadOfFlat() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            """
+            2026年4月13日共有2条记录，涉及MindFlow开发复盘和精神健康。
+
+            记录：
+            - 2026-04-13《MindFlow开发问题复盘》：昨日开发下一代 MindFlow 的过程颇为艰难。由于直接接入 Gstack，导致数据被清空。开发完成后，系统出现严重问题：
+            * 多数页面无法正常使用；
+            * 系统卡顿并频繁闪退；
+            * 当前输入框存在严重延迟，输入文字时尤为卡顿。
+
+            - 2026-04-13《精神健康》：You need to read more, and you need to consume less.
+            """.trimIndent()
+        )
+
+        assertThat(formatted).contains("- 2026-04-13《MindFlow开发问题复盘》")
+        assertThat(formatted).contains("\n  - 多数页面无法正常使用；")
+        assertThat(formatted).contains("\n  - 系统卡顿并频繁闪退；")
+        assertThat(formatted).contains("\n  - 当前输入框存在严重延迟，输入文字时尤为卡顿。")
+        assertThat(formatted).contains("\n\n- 2026-04-13《精神健康》")
+
+        val blocks = SimpleMarkdown.parse(formatted)
+        val topLevelList = blocks.filterIsInstance<MarkdownBulletList>().last()
+        assertThat(topLevelList.items).hasSize(2)
     }
 }

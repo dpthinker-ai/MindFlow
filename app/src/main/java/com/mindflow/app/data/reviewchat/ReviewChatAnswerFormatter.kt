@@ -22,7 +22,7 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
         .replace(Regex("(?<=[\\n：:；;。！？])(\\d+[、）)](?:[ \\t]+)?)"), "\n$1")
         .replace(Regex("(?<!\\n)(-\\s+\\d{4}-\\d{2}-\\d{2}《)"), "\n$1")
         .replace(Regex("(?<!\\n)\\*(?=\\d{4}-\\d{2}-\\d{2}《)"), "\n- ")
-        .replace(Regex("(?<!\\n)([-*•][ \\t]+)"), "\n$1")
+        .replace(Regex("(?<!\\n)(?<![ \\t])([-*•][ \\t]+)"), "\n$1")
         .replace(Regex("(?<!\\n)([一二三四五六七八九十]+、)"), "\n$1")
         .replace(Regex("([。！？；])((?:结论|依据|下一步))(?=(\\n|\\d+\\.\\s+|\\d+[、）)]|建议|如果|根据|原始|当前|需要|可以|没有|已|先))"), "$1\n\n$2：")
         .replace(Regex("(?<=[。！？；])((?:依据|下一步)(?=(原始|根据|如果|当前|需要|可以|没有|已|先)))"), "\n$1")
@@ -49,7 +49,7 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
 }
 
 private fun normalizeLegacyReviewChatMarkdown(content: String): String = normalizeEvidenceEchoes(
-    normalizeMarkdownTables(content)
+    normalizeRecordSummarySubBullets(normalizeMarkdownTables(content))
 )
 
 private fun parseStructuredReviewChatResponse(content: String): ReviewChatStructuredResponse? {
@@ -174,6 +174,42 @@ private fun normalizeMarkdownTables(content: String): String {
     return output.joinToString("\n")
 }
 
+private fun normalizeRecordSummarySubBullets(content: String): String {
+    val lines = content.lines()
+    if (lines.none { it.startsWith("* ") || it.startsWith("• ") }) return content
+
+    val rewritten = mutableListOf<String>()
+    var insideRecordItem = false
+
+    lines.forEach { line ->
+        when {
+            RECORD_ITEM_REGEX.matches(line.trim()) -> {
+                insideRecordItem = true
+                rewritten += line
+            }
+            insideRecordItem && line.startsWith("* ") -> {
+                rewritten += "  - " + line.removePrefix("* ").trim()
+            }
+            insideRecordItem && line.startsWith("• ") -> {
+                rewritten += "  - " + line.removePrefix("• ").trim()
+            }
+            line.isBlank() -> {
+                insideRecordItem = false
+                rewritten += line
+            }
+            !line.startsWith(" ") && !line.startsWith("\t") -> {
+                insideRecordItem = false
+                rewritten += line
+            }
+            else -> {
+                rewritten += line
+            }
+        }
+    }
+
+    return rewritten.joinToString("\n")
+}
+
 private fun splitTableLine(line: String): List<String> =
     line.trim()
         .trim('|')
@@ -217,3 +253,5 @@ private val BULLET_LINE_REGEX = Regex("^[-*•]\\s+(.+)$")
 
 private val ORDERED_LINE_REGEX =
     Regex("^(?:\\d+[.、）)]|[一二三四五六七八九十]+、)\\s*(.+)$")
+
+private val RECORD_ITEM_REGEX = Regex("^-\\s+\\d{4}-\\d{2}-\\d{2}《.+》.*$")

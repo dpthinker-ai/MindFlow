@@ -58,6 +58,14 @@ data class ReviewChatParsedQuery(
     val isExternalQuestion: Boolean,
 )
 
+data class ReviewChatModelQueryPlan(
+    val operation: ReviewChatQueryOperation,
+    val entityTerms: List<String> = emptyList(),
+    val wantsCategories: Boolean = false,
+    val wantsExamples: Boolean = false,
+    val wantsLinks: Boolean = false,
+)
+
 enum class ReviewChatMessageRole {
     USER,
     ASSISTANT,

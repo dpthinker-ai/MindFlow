@@ -98,6 +98,9 @@ internal object ReviewChatCorpusQueryEngine {
             if (query.entityTerms.isNotEmpty()) {
                 add("主题｜${query.entityTerms.joinToString("、")}")
             }
+            if (query.wantsCategories) {
+                add("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
+            }
             add("命中｜共 $hitCount 条记录")
             if (overview?.earliestDateLabel != null && overview.latestDateLabel != null && hitCount > 0) {
                 add("时间范围｜最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
