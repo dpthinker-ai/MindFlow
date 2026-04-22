@@ -317,7 +317,7 @@ class ReviewChatPlannerTest {
             .atStartOfDay(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -335,7 +335,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("基于 4 月 10 号原始记录整理后的回答。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -352,14 +352,14 @@ class ReviewChatPlannerTest {
         assertThat(result.answer).contains("基于 4 月 10 号原始记录整理后的回答")
         assertThat(result.referencedNoteId).isNull()
         assertThat(result.referencedNotes).isEmpty()
-        assertThat(capturedPrompt).contains("完整记录：")
-        assertThat(capturedPrompt).contains("这是 4 月 10 号的完整原文")
+        assertThat(capturedPrompts.first()).contains("完整记录：")
+        assertThat(capturedPrompts.first()).contains("这是 4 月 10 号的完整原文")
     }
 
     @Test
     fun answer_outOfScopeQuestion_stillRoutesToModel() = runTest {
         var cloudCalled = false
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = { listOf(sampleNote(1L, "产品方向", "这条记录只在讨论推荐链路和增长")) },
             loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
@@ -370,7 +370,7 @@ class ReviewChatPlannerTest {
             isOnDeviceReady = { true },
             runCloud = { prompt ->
                 cloudCalled = true
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("现有历史材料里没有和天气直接相关的记录。")
             },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
@@ -387,9 +387,9 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("现有历史材料里没有和天气直接相关的记录")
         assertThat(result.referencedNotes).isEmpty()
-        assertThat(capturedPrompt).contains("这是外部或通用问题")
-        assertThat(capturedPrompt).doesNotContain("材料不足")
-        assertThat(capturedPrompt).doesNotContain("原始记录：")
+        assertThat(capturedPrompts.first()).contains("这是外部或通用问题")
+        assertThat(capturedPrompts.first()).doesNotContain("材料不足")
+        assertThat(capturedPrompts.first()).doesNotContain("原始记录：")
     }
 
     @Test
@@ -424,7 +424,7 @@ class ReviewChatPlannerTest {
 
     @Test
     fun answer_cloudQueryPlannerUsesModelPlanBeforeCorpusSelection() = runTest {
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -446,7 +446,7 @@ class ReviewChatPlannerTest {
                 )
             },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("可以分成四类。")
             },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
@@ -460,9 +460,70 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
-        assertThat(capturedPrompt).contains("命中｜共 4 条记录")
-        assertThat(capturedPrompt).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
-        assertThat(capturedPrompt).doesNotContain("主题｜")
+        assertThat(capturedPrompts.first()).contains("命中｜共 4 条记录")
+        assertThat(capturedPrompts.first()).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
+        assertThat(capturedPrompts.first()).doesNotContain("主题｜")
+    }
+
+    @Test
+    fun answer_usesCloudStructuringFallbackWhenPrimaryAnswerIsNotStructured() = runTest {
+        var cloudCalls = 0
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "产品设计", "启动页和图标方案"),
+                    sampleNote(2L, "技术实现", "OCR 和 OpenCL"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = { prompt ->
+                cloudCalls += 1
+                when (cloudCalls) {
+                    1 -> AiChatResult.Success("本周末主要记录了两类信息：产品设计和技术实现。")
+                    2 -> {
+                        assertThat(prompt).contains("把下面这段回答整理成一个 JSON 对象")
+                        AiChatResult.Success(
+                            """
+                            {
+                              "summary": "本周末主要记录了两类信息。",
+                              "sections": [
+                                {
+                                  "title": "类别",
+                                  "items": [
+                                    "产品设计：启动页和图标方案",
+                                    "技术实现：OCR 和 OpenCL"
+                                  ]
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        )
+                    }
+                    else -> error("unexpected cloud call")
+                }
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "看一下本周末记录了哪些信息，都有哪些类别",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.structuredAnswer).isNotNull()
+        assertThat(result.structuredAnswer!!.sections.map { it.title }).contains("类别")
+        assertThat(result.structuredAnswer!!.sections.last().items).containsExactly(
+            "产品设计：启动页和图标方案",
+            "技术实现：OCR 和 OpenCL",
+        ).inOrder()
     }
 
     @Test
@@ -470,7 +531,7 @@ class ReviewChatPlannerTest {
         val today = LocalDate.now(ZoneId.systemDefault())
         val todayStart = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val yesterdayStart = today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
 
         val planner = ReviewChatPlanner(
             loadNotes = {
@@ -487,7 +548,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("今天主要记录了今天主题A和今天主题B。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -504,16 +565,16 @@ class ReviewChatPlannerTest {
         assertThat(result.answer).contains("今天主题A")
         assertThat(result.answer).contains("今天主题B")
         assertThat(result.referencedNotes).isEmpty()
-        assertThat(capturedPrompt).contains("原始记录：")
-        assertThat(capturedPrompt).contains("今天主题A")
-        assertThat(capturedPrompt).contains("摘要：今天第一条记录")
-        assertThat(capturedPrompt).doesNotContain("记录｜")
-        assertThat(capturedPrompt).contains("今天主题A")
-        assertThat(capturedPrompt).contains("今天主题B")
-        assertThat(capturedPrompt).doesNotContain("完整记录：")
-        assertThat(capturedPrompt).doesNotContain("昨天主题")
-        assertThat(capturedPrompt).doesNotContain("LM Knowledge Base：")
-        assertThat(capturedPrompt).doesNotContain("LLM Wiki：")
+        assertThat(capturedPrompts.first()).contains("原始记录：")
+        assertThat(capturedPrompts.first()).contains("今天主题A")
+        assertThat(capturedPrompts.first()).contains("摘要：今天第一条记录")
+        assertThat(capturedPrompts.first()).doesNotContain("记录｜")
+        assertThat(capturedPrompts.first()).contains("今天主题A")
+        assertThat(capturedPrompts.first()).contains("今天主题B")
+        assertThat(capturedPrompts.first()).doesNotContain("完整记录：")
+        assertThat(capturedPrompts.first()).doesNotContain("昨天主题")
+        assertThat(capturedPrompts.first()).doesNotContain("LM Knowledge Base：")
+        assertThat(capturedPrompts.first()).doesNotContain("LLM Wiki：")
     }
 
     @Test
@@ -524,7 +585,7 @@ class ReviewChatPlannerTest {
             .atStartOfDay(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -547,7 +608,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("4 月 10 号当天有两条相关记录。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -562,17 +623,17 @@ class ReviewChatPlannerTest {
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("两条相关记录")
-        assertThat(capturedPrompt).contains("完整记录：")
-        assertThat(capturedPrompt).contains("4 月 10 号讨论A")
-        assertThat(capturedPrompt).contains("4 月 10 号讨论B")
-        assertThat(capturedPrompt).contains("第一条完整原文")
-        assertThat(capturedPrompt).contains("第二条完整原文")
+        assertThat(capturedPrompts.first()).contains("完整记录：")
+        assertThat(capturedPrompts.first()).contains("4 月 10 号讨论A")
+        assertThat(capturedPrompts.first()).contains("4 月 10 号讨论B")
+        assertThat(capturedPrompts.first()).contains("第一条完整原文")
+        assertThat(capturedPrompts.first()).contains("第二条完整原文")
         assertThat(result.referencedNoteId).isNull()
     }
 
     @Test
     fun answer_firstRecordQuestion_includesHistoryAnchorsAndUsesCreatedTimeline() = runTest {
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -587,7 +648,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("你的第一条记录是在 1970-01-01。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -601,9 +662,9 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
-        assertThat(capturedPrompt).contains("历史锚点：")
-        assertThat(capturedPrompt).contains("- 最早记录：1970-01-01《最早记录》")
-        assertThat(capturedPrompt).doesNotContain("记录｜")
+        assertThat(capturedPrompts.first()).contains("历史锚点：")
+        assertThat(capturedPrompts.first()).contains("- 最早记录：1970-01-01《最早记录》")
+        assertThat(capturedPrompts.first()).doesNotContain("记录｜")
         assertThat(result.referencedNotes).isEmpty()
     }
 
@@ -1018,7 +1079,7 @@ class ReviewChatPlannerTest {
 
     @Test
     fun answer_collectionOverviewQuestion_routesToModelWithAccurateStats() = runTest {
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -1034,7 +1095,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("你总共有 3 条记录。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -1050,16 +1111,16 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("3 条记录")
         assertThat(result.referencedNotes).isEmpty()
-        assertThat(capturedPrompt).contains("确定结果：")
-        assertThat(capturedPrompt).contains("直接答案｜全部历史的记录共 3 条")
-        assertThat(capturedPrompt).contains("集合概览：")
-        assertThat(capturedPrompt).contains("- 记录总数：共 3 条记录")
-        assertThat(capturedPrompt).doesNotContain("记录总数｜")
+        assertThat(capturedPrompts.first()).contains("确定结果：")
+        assertThat(capturedPrompts.first()).contains("直接答案｜全部历史的记录共 3 条")
+        assertThat(capturedPrompts.first()).contains("集合概览：")
+        assertThat(capturedPrompts.first()).contains("- 记录总数：共 3 条记录")
+        assertThat(capturedPrompts.first()).doesNotContain("记录总数｜")
     }
 
     @Test
     fun answer_collectionOverviewQuestion_countsArchivedNotesWhenTheyAreLoaded() = runTest {
-        var capturedPrompt = ""
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -1074,7 +1135,7 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { true },
             runCloud = { prompt ->
-                capturedPrompt = prompt
+                capturedPrompts += prompt
                 AiChatResult.Success("你总共有 2 条记录。")
             },
             runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
@@ -1088,8 +1149,8 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.answer).contains("2 条记录")
-        assertThat(capturedPrompt).contains("直接答案｜全部历史的记录共 2 条")
-        assertThat(capturedPrompt).contains("- 记录总数：共 2 条记录")
+        assertThat(capturedPrompts.first()).contains("直接答案｜全部历史的记录共 2 条")
+        assertThat(capturedPrompts.first()).contains("- 记录总数：共 2 条记录")
     }
 
     @Test

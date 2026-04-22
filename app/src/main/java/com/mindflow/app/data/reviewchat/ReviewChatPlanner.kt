@@ -728,9 +728,10 @@ class ReviewChatPlanner(
             if (result is AiChatResult.Success) {
                 val fallbackOccurred = index > 0
                 val normalizedAnswer = result.content.trim()
+                val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                 return ReviewChatTurnResult(
                     answer = normalizedAnswer,
-                    structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
+                    structuredAnswer = structuredAnswer,
                     provider = provider,
                     fallbackOccurred = fallbackOccurred,
                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred),
@@ -769,11 +770,12 @@ class ReviewChatPlanner(
                     }
                     if (result is AiChatResult.Success) {
                         val normalizedAnswer = result.content.trim()
+                        val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                         emit(
                             ReviewChatTurnEvent.Complete(
                                 ReviewChatTurnResult(
                                     answer = normalizedAnswer,
-                                    structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
+                                    structuredAnswer = structuredAnswer,
                                     provider = provider,
                                     fallbackOccurred = index > 0,
                                     providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0),
@@ -823,11 +825,12 @@ class ReviewChatPlanner(
                         }.onSuccess {
                             val content = buffer.toString().trim()
                             if (isUsableReviewChatAnswer(content)) {
+                                val structuredAnswer = coerceStructuredAnswer(prepared.packet, content)
                                 emit(
                                     ReviewChatTurnEvent.Complete(
                                         ReviewChatTurnResult(
                                             answer = content,
-                                            structuredAnswer = parseReviewChatStructuredAnswer(content),
+                                            structuredAnswer = structuredAnswer,
                                             provider = provider,
                                             fallbackOccurred = index > 0,
                                             providerLine = providerLine,
@@ -862,11 +865,12 @@ class ReviewChatPlanner(
                         )
                         if (result is AiChatResult.Success) {
                             val normalizedAnswer = result.content.trim()
+                            val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                             emit(
                                 ReviewChatTurnEvent.Complete(
                                     ReviewChatTurnResult(
                                         answer = normalizedAnswer,
-                                        structuredAnswer = parseReviewChatStructuredAnswer(normalizedAnswer),
+                                        structuredAnswer = structuredAnswer,
                                         provider = provider,
                                         fallbackOccurred = index > 0,
                                         providerLine = providerLine,
@@ -939,6 +943,24 @@ class ReviewChatPlanner(
 
         val plannedQuery = ReviewChatModelQueryPlanner.parse(planResult.content) ?: return fallbackQuery
         return ReviewChatQueryParser.parse(question, plannedQuery)
+    }
+
+    private suspend fun coerceStructuredAnswer(
+        packet: ReviewChatContextPacket,
+        rawAnswer: String,
+    ): ReviewChatStructuredAnswer? {
+        parseReviewChatStructuredAnswer(rawAnswer)?.let { return it }
+
+        val canUseCloudStructuring =
+            resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
+                isCloudConfigured()
+        if (!canUseCloudStructuring) return null
+
+        val structuredResult = runCloud(
+            buildReviewChatStructuringPrompt(packet, rawAnswer)
+        )
+        if (structuredResult !is AiChatResult.Success) return null
+        return parseReviewChatStructuredAnswer(structuredResult.content.trim())
     }
 }
 

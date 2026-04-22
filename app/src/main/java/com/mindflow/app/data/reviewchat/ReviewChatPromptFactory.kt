@@ -37,6 +37,7 @@ object ReviewChatPromptFactory {
         }
 
         appendLine("回答要求：")
+        appendLine("0. ${buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories)}")
         appendLine("1. 先直接回答当前问题，不要重复上一轮。")
         when (packet.questionMode) {
             ReviewChatQuestionMode.EXTERNAL -> {
@@ -203,6 +204,7 @@ object ReviewChatPromptFactory {
                 )
                 appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
+                appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories))
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
                 when (packet.questionMode) {
                     ReviewChatQuestionMode.EXTERNAL -> {
