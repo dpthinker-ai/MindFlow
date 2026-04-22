@@ -30,7 +30,7 @@ internal val reviewChatHistoryHints = listOf(
 
 internal val reviewChatScopeHints = listOf(
     "记录", "笔记", "回看", "聊过", "提过", "写过", "那天", "那周", "某天", "完整", "全文",
-    "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread",
+    "原文", "图谱", "主题", "问题线", "方向", "知识层", "thread", "本周末", "上周末", "周末",
 )
 
 internal val reviewChatCountHints = listOf(
@@ -38,7 +38,7 @@ internal val reviewChatCountHints = listOf(
 )
 
 internal val reviewChatListHints = listOf(
-    "列出", "列一下", "给我看", "有哪些", "哪几条", "命中的记录", "举例", "示例", "样例", "分别是",
+    "列出", "列一下", "给我看", "有哪些", "哪几条", "命中的记录", "举例", "示例", "样例", "分别是", "哪些信息",
 )
 
 internal val reviewChatExternalHints = listOf(
@@ -65,12 +65,13 @@ internal val reviewChatOperationPhrases = (
             "发给我",
             "总共有", "一共有", "多少", "几条", "全部", "所有", "只看",
             "列出", "举例", "示例", "样例", "打开", "命中", "那条", "那几条", "发给",
+            "本周末", "上周末", "周末", "类别", "分类",
         )
 ).distinct()
     .sortedByDescending(String::length)
 
 internal val reviewChatEntityStopWords = reviewChatStopWords + setOf(
-    "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询",
+    "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询", "类别", "分类", "周末",
 )
 
 internal val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -102,6 +103,7 @@ internal data class ReviewChatQuestionProfile(
     val entityTerms: List<String>,
     val wantsTimelineAnchor: Boolean,
     val wantsCount: Boolean,
+    val wantsCategories: Boolean,
     val isExternalQuestion: Boolean,
 )
 
@@ -119,6 +121,7 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         entityTerms = parsedQuery.entityTerms,
         wantsTimelineAnchor = parsedQuery.wantsTimelineAnchor,
         wantsCount = parsedQuery.wantsCount,
+        wantsCategories = parsedQuery.wantsCategories,
         isExternalQuestion = parsedQuery.isExternalQuestion,
     )
 }
@@ -174,6 +177,7 @@ internal fun buildReviewChatContextPacket(
         question = question,
         isExternalQuestion = parsedQuery.isExternalQuestion,
         wantsCount = parsedQuery.wantsCount,
+        wantsCategories = parsedQuery.wantsCategories,
         querySummarySnippets = corpusContext.querySummarySnippets,
         sessionSummary = sessionSummary.takeIf { parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
         collectionOverview = corpusContext.collectionOverview,
@@ -985,7 +989,7 @@ internal fun requestedDateForReviewChat(question: String): LocalDate? {
 }
 
 internal fun requestedMonthForReviewChat(question: String): YearMonth? {
-    if (requestedDateForReviewChat(question) != null) return null
+    if (requestedDateForReviewChat(question) != null || requestedDateRangeForReviewChat(question) != null) return null
     val today = LocalDate.now(ZoneId.systemDefault())
     val match = Regex("(\\d{1,2})\\s*月(?:份)?").find(question) ?: return null
     val month = match.groupValues[1].toIntOrNull() ?: return null
@@ -993,8 +997,42 @@ internal fun requestedMonthForReviewChat(question: String): YearMonth? {
     return YearMonth.of(today.year, month)
 }
 
+internal fun requestedDateRangeForReviewChat(question: String): ReviewChatTimeScope.Range? {
+    val today = LocalDate.now(ZoneId.systemDefault())
+    return when {
+        "本周末" in question || "这个周末" in question || question.trim() == "周末" -> {
+            val saturday = when (today.dayOfWeek.value) {
+                6 -> today
+                7 -> today.minusDays(1)
+                else -> today.minusDays((today.dayOfWeek.value + 1).toLong())
+            }
+            ReviewChatTimeScope.Range(
+                start = saturday,
+                endInclusive = saturday.plusDays(1),
+                label = "本周末",
+            )
+        }
+        "上周末" in question -> {
+            val thisWeekSaturday = when (today.dayOfWeek.value) {
+                6 -> today
+                7 -> today.minusDays(1)
+                else -> today.minusDays((today.dayOfWeek.value + 1).toLong())
+            }
+            val lastSaturday = thisWeekSaturday.minusWeeks(1)
+            ReviewChatTimeScope.Range(
+                start = lastSaturday,
+                endInclusive = lastSaturday.plusDays(1),
+                label = "上周末",
+            )
+        }
+        else -> null
+    }
+}
+
 internal fun hasRequestedTimeScope(question: String): Boolean =
-    requestedDateForReviewChat(question) != null || requestedMonthForReviewChat(question) != null
+    requestedDateForReviewChat(question) != null ||
+        requestedMonthForReviewChat(question) != null ||
+        requestedDateRangeForReviewChat(question) != null
 
 internal fun filterNotesForRequestedScope(
     question: String,
@@ -1008,9 +1046,17 @@ internal fun filterNotesForRequestedScope(
     if (requestedMonth != null) {
         return notes.filter { YearMonth.from(it.createdLocalDate()) == requestedMonth }
     }
+    val requestedRange = requestedDateRangeForReviewChat(question)
+    if (requestedRange != null) {
+        return notes.filter { created ->
+            val date = created.createdLocalDate()
+            date >= requestedRange.start && date <= requestedRange.endInclusive
+        }
+    }
     return notes
 }
 
 internal fun requestedScopeLabel(question: String): String? =
     requestedDateForReviewChat(question)?.format(reviewChatDateFormatter)
         ?: requestedMonthForReviewChat(question)?.let { "${it.monthValue}月" }
+        ?: requestedDateRangeForReviewChat(question)?.label

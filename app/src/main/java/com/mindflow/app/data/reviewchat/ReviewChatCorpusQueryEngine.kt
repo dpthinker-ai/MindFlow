@@ -80,6 +80,7 @@ internal object ReviewChatCorpusQueryEngine {
             ReviewChatTimeScope.AllTime -> "全部历史"
             is ReviewChatTimeScope.Day -> scope.date.format(reviewChatDateFormatter)
             is ReviewChatTimeScope.Month -> "${scope.month.monthValue}月"
+            is ReviewChatTimeScope.Range -> scope.label
         }
         val operationLabel = when (query.operation) {
             ReviewChatQueryOperation.EXTERNAL -> "外部问题"

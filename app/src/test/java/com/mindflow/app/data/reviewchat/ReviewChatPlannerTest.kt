@@ -38,6 +38,10 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
         assertThat(buildReviewChatQuestionProfile("我总共有多少条记录").mode)
             .isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
+        assertThat(buildReviewChatQuestionProfile("看一下本周末记录了哪些信息，都有哪些类别").mode)
+            .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(buildReviewChatQuestionProfile("看一下本周末记录了哪些信息，都有哪些类别").wantsCategories)
+            .isTrue()
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
             .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
         assertThat(buildReviewChatQuestionProfile("今天天气怎么样").mode)
@@ -61,6 +65,12 @@ class ReviewChatPlannerTest {
         )
         assertThat(fullTextQuery.entityTerms).isEmpty()
         assertThat(fullTextQuery.wantsLinks).isFalse()
+
+        val weekendQuery = ReviewChatQueryParser.parse("看一下本周末记录了哪些信息，都有哪些类别")
+        assertThat(weekendQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(weekendQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
+        assertThat((weekendQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周末")
+        assertThat(weekendQuery.wantsCategories).isTrue()
     }
 
     @Test
@@ -728,6 +738,64 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).doesNotContain("最近问题：")
         assertThat(prompt.userMessage).doesNotContain("完整记录：")
         assertThat(prompt.userMessage).contains("原始记录：")
+    }
+
+    @Test
+    fun onDevicePrompt_categoryLookupUsesCategoryProtocolWithoutAnalysisSections() {
+        val weekendRange = requestedDateRangeForReviewChat("看一下本周末记录了哪些信息，都有哪些类别")
+            ?: error("weekend range missing")
+        val packet = buildReviewChatContextPacket(
+            question = "看一下本周末记录了哪些信息，都有哪些类别",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "周末记录", "周末内容").copy(
+                    createdAt = weekendRange.start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                )
+            ),
+            weeklyReview = WeeklyReviewState(lines = listOf("不该出现")),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(
+                currentJudgement = LocalMaintainerCard(line = "当前判断", support = "判断依据"),
+            ),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "上一轮也不该出现",
+        )
+
+        val prompt = ReviewChatPromptFactory.onDevice(packet)
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(packet.wantsCategories).isTrue()
+        assertThat(prompt.systemInstruction).contains("再写 `【类别】`")
+        assertThat(prompt.systemInstruction).doesNotContain("`【下一步】`")
+        assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
+        assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_weekendScopeFiltersNotesToWeekend() {
+        val weekendRange = requestedDateRangeForReviewChat("看一下本周末记录了哪些信息，都有哪些类别")
+            ?: error("weekend range missing")
+        val packet = buildReviewChatContextPacket(
+            question = "看一下本周末记录了哪些信息，都有哪些类别",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "周末记录一", "周末内容一").copy(
+                    createdAt = weekendRange.start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                ),
+                sampleNote(2L, "周末记录二", "周末内容二").copy(
+                    createdAt = weekendRange.endInclusive.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                ),
+                sampleNote(3L, "非周末记录", "不该命中").copy(
+                    createdAt = weekendRange.start.minusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                ),
+            ),
+            weeklyReview = WeeklyReviewState(),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.querySummarySnippets).contains("范围｜本周末")
+        assertThat(packet.rawNoteEvidence.map { it.noteId }).containsExactly(1L, 2L)
     }
 
     @Test

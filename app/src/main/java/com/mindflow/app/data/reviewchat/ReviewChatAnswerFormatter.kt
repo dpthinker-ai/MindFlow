@@ -54,7 +54,7 @@ private fun normalizeLegacyReviewChatMarkdown(content: String): String = normali
 
 private fun parseStructuredReviewChatResponse(content: String): ReviewChatStructuredResponse? {
     val prepared = content
-        .replace(Regex("(?<!\\n)(【(?:答复|结论|依据|下一步|记录|完整记录|时间线)】)"), "\n$1")
+        .replace(Regex("(?<!\\n)(【(?:答复|结论|依据|下一步|记录|完整记录|时间线|类别)】)"), "\n$1")
         .trim()
     if (!STRUCTURED_SECTION_REGEX.containsMatchIn(prepared)) return null
 
@@ -209,7 +209,7 @@ private data class MutableStructuredSection(
 
 private val STRUCTURED_SECTION_REGEX =
     Regex(
-        pattern = "^【(答复|结论|依据|下一步|记录|完整记录|时间线)】\\s*(.*)$",
+        pattern = "^【(答复|结论|依据|下一步|记录|完整记录|时间线|类别)】\\s*(.*)$",
         option = RegexOption.MULTILINE,
     )
 

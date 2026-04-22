@@ -33,6 +33,12 @@ sealed interface ReviewChatTimeScope {
     data class Day(val date: LocalDate) : ReviewChatTimeScope
 
     data class Month(val month: YearMonth) : ReviewChatTimeScope
+
+    data class Range(
+        val start: LocalDate,
+        val endInclusive: LocalDate,
+        val label: String,
+    ) : ReviewChatTimeScope
 }
 
 data class ReviewChatParsedQuery(
@@ -48,6 +54,7 @@ data class ReviewChatParsedQuery(
     val wantsFullRecord: Boolean,
     val wantsLinks: Boolean,
     val wantsExamples: Boolean,
+    val wantsCategories: Boolean,
     val isExternalQuestion: Boolean,
 )
 
@@ -154,6 +161,7 @@ data class ReviewChatContextPacket(
     val question: String,
     val isExternalQuestion: Boolean,
     val wantsCount: Boolean,
+    val wantsCategories: Boolean,
     val querySummarySnippets: List<String>,
     val sessionSummary: String,
     val collectionOverview: ReviewChatCollectionOverview?,
