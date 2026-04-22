@@ -19,6 +19,8 @@ object ReviewChatPromptFactory {
         appendLine("问题类型：${packet.intent.name}")
 
         appendPromptSection(this, "查询结果", packet.querySummarySnippets)
+        appendPromptSection(this, "确定结果", packet.deterministicAnswerSnippets)
+        appendPromptSection(this, "分类候选", packet.categoryDigestSnippets)
         appendPromptSection(this, "近期会话摘要", packet.sessionSummary.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty())
         appendCollectionOverviewSection(this, packet.collectionOverview)
         appendPromptSection(this, "近期会话", packet.conversationSnippets)
@@ -45,7 +47,7 @@ object ReviewChatPromptFactory {
             }
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                 appendLine("2. 这是全局统计或整体概览问题，优先使用“集合概览”和时间范围信息直接回答。")
-                appendLine("3. 如果问题在问数量、总数或时间范围，第一句必须直接给出准确数字或准确时间。")
+                appendLine("3. 如果“确定结果”里有精确数字或精确时间，必须直接使用，不要自己重算。")
                 appendLine("4. 如果用户没有明确要求“列出记录/举例/展示命中的记录”，就不要罗列示例记录。")
                 if (packet.wantsCategories) {
                     appendLine("5. 这是分类问题，输出协议：先用 `【答复】` 直接回答，再用 `【类别】` 列出主要类别，每条都单独写成 `- 类别：说明`。")
@@ -58,13 +60,14 @@ object ReviewChatPromptFactory {
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
+                appendLine("3. 如果“确定结果”里已经给出命中条数或范围，先沿用这个精确结果。")
                 if (packet.wantsCategories) {
-                    appendLine("3. 这是分类查询，输出协议：先用 `【答复】` 做一句总览，再用 `【类别】` 归纳主要类别，每条单独写成 `- 类别：包含的信息`。")
-                    appendLine("4. 类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。")
-                    appendLine("5. 如果用户没有明确要求逐条列记录，就不要追加 `【记录】`。不要输出 `【依据】` 或 `【下一步】`，也不要输出 Markdown 表格。")
+                    appendLine("4. 这是分类查询，输出协议：先用 `【答复】` 做一句总览，再用 `【类别】` 归纳主要类别，每条单独写成 `- 类别：包含的信息`。")
+                    appendLine("5. 类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别。")
+                    appendLine("6. 如果用户没有明确要求逐条列记录，就不要追加 `【记录】`。不要输出 `【依据】` 或 `【下一步】`，也不要输出 Markdown 表格。")
                 } else {
-                    appendLine("3. 输出协议：先用 `【答复】` 做一句总览，再用 `【记录】` 按时间顺序逐条列出，每条单独一行。")
-                    appendLine("4. `【记录】` 下每条都写成 `- 日期《标题》：摘要`。不要引用未命中的日期或记录，也不要输出 Markdown 表格，不要逐字复述证据中的前缀或分隔格式。")
+                    appendLine("4. 输出协议：先用 `【答复】` 做一句总览，再用 `【记录】` 按时间顺序逐条列出，每条单独一行。")
+                    appendLine("5. `【记录】` 下每条都写成 `- 日期《标题》：摘要`。不要引用未命中的日期或记录，也不要输出 Markdown 表格，不要逐字复述证据中的前缀或分隔格式。")
                 }
             }
             ReviewChatQuestionMode.FULL_RECORD -> {
@@ -74,8 +77,9 @@ object ReviewChatPromptFactory {
             }
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                 appendLine("2. 这是时间线锚点问题，第一句必须直接回答最早时间或开始时间。")
-                appendLine("3. 输出协议：先用 `【答复】` 直接回答时间；如果需要补充依据，再用 `【时间线】`，每条锚点单独写成 `- 日期《标题》：摘要`。")
-                appendLine("4. 不要输出 Markdown 表格，也不要使用 Markdown 标题。")
+                appendLine("3. 如果“确定结果”里已经给出最早时间或标题，必须直接使用，不要自己推断。")
+                appendLine("4. 输出协议：先用 `【答复】` 直接回答时间；如果需要补充依据，再用 `【时间线】`，每条锚点单独写成 `- 日期《标题》：摘要`。")
+                appendLine("5. 不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.ANALYSIS -> {
                 appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
@@ -107,6 +111,22 @@ object ReviewChatPromptFactory {
             title = "查询结果",
             lines = packet.querySummarySnippets,
             maxItems = 4,
+            itemMaxChars = 80,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "确定结果",
+            lines = packet.deterministicAnswerSnippets,
+            maxItems = 3,
+            itemMaxChars = 120,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "分类候选",
+            lines = packet.categoryDigestSnippets,
+            maxItems = 8,
             itemMaxChars = 80,
         )
 
@@ -189,6 +209,7 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                         appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
+                        appendLine("如果“确定结果”里有精确数字或精确时间，必须直接使用，不要自己重算。")
                         appendLine("如果用户没有明确要求列出记录，就不要罗列示例记录。")
                         if (packet.wantsCategories) {
                             appendLine("输出协议：先写 `【答复】`，再写 `【类别】`，每条都用 `- 类别：说明`。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。不要输出 `【依据】` 或 `【下一步】`，也不要输出表格。")
@@ -198,8 +219,9 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
+                        appendLine("如果“确定结果”里已经给出命中条数或范围，先沿用这个精确结果。")
                         if (packet.wantsCategories) {
-                            appendLine("输出协议：先写 `【答复】`，再写 `【类别】`，每条都用 `- 类别：包含的信息`。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。如果用户没有明确要求逐条列记录，就不要写 `【记录】`。不要输出 `【依据】` 或 `【下一步】`，也不要输出表格。")
+                            appendLine("输出协议：先写 `【答复】`，再写 `【类别】`，每条都用 `- 类别：包含的信息`。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别。如果用户没有明确要求逐条列记录，就不要写 `【记录】`。不要输出 `【依据】` 或 `【下一步】`，也不要输出表格。")
                         } else {
                             appendLine("输出协议：先写 `【答复】`，再写 `【记录】`，每条记录都用 `- 日期《标题》：摘要`。不要输出表格，也不要逐字复述证据前缀。")
                         }
@@ -210,6 +232,7 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.TIMELINE_ANCHOR -> {
                         appendLine("补充要求：这是时间线锚点问题，优先回答最早时间或开始时间。")
+                        appendLine("如果“确定结果”里已经给出最早时间或标题，必须直接使用，不要自己推断。")
                         appendLine("输出协议：先写 `【答复】`，再按需写 `【时间线】`，每条锚点都用 `- 日期《标题》：摘要`。不要输出表格，也不要使用 Markdown 标题。")
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {

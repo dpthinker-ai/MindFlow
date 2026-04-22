@@ -835,7 +835,7 @@ class ReviewChatPlannerTest {
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(packet.wantsCategories).isTrue()
         assertThat(prompt.systemInstruction).contains("再写 `【类别】`")
-        assertThat(prompt.systemInstruction).contains("不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别")
+        assertThat(prompt.systemInstruction).contains("不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别")
         assertThat(prompt.systemInstruction).contains("不要输出 `【依据】` 或 `【下一步】`")
         assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
         assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
@@ -926,6 +926,7 @@ class ReviewChatPlannerTest {
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
         assertThat(packet.collectionOverview?.earliestDateLabel).isEqualTo("1970-01-01")
         assertThat(packet.collectionOverview?.latestDateLabel).isEqualTo("1970-01-01")
+        assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜全部历史的记录共 3 条")
         assertThat(packet.rawNoteEvidence).isEmpty()
     }
 
@@ -955,6 +956,9 @@ class ReviewChatPlannerTest {
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(8)
         assertThat(packet.querySummarySnippets).contains("命中｜共 8 条记录")
         assertThat(packet.querySummarySnippets).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
+        assertThat(packet.deterministicAnswerSnippets).contains("分类范围｜当前分类必须覆盖 8 条命中记录")
+        assertThat(packet.categoryDigestSnippets).hasSize(8)
+        assertThat(packet.categoryDigestSnippets.first()).contains("候选｜")
         assertThat(packet.rawNoteEvidence).hasSize(8)
     }
 
@@ -1044,6 +1048,8 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(result.answer).contains("3 条记录")
         assertThat(result.referencedNotes).isEmpty()
+        assertThat(capturedPrompt).contains("确定结果：")
+        assertThat(capturedPrompt).contains("直接答案｜全部历史的记录共 3 条")
         assertThat(capturedPrompt).contains("集合概览：")
         assertThat(capturedPrompt).contains("- 记录总数：共 3 条记录")
         assertThat(capturedPrompt).doesNotContain("记录总数｜")
@@ -1080,6 +1086,7 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.answer).contains("2 条记录")
+        assertThat(capturedPrompt).contains("直接答案｜全部历史的记录共 2 条")
         assertThat(capturedPrompt).contains("- 记录总数：共 2 条记录")
     }
 
@@ -1123,6 +1130,7 @@ class ReviewChatPlannerTest {
         assertThat(packet.querySummarySnippets).contains("操作｜统计")
         assertThat(packet.querySummarySnippets).contains("主题｜人生态度")
         assertThat(packet.querySummarySnippets).contains("命中｜共 3 条记录")
+        assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜关于人生态度的记录共 3 条")
     }
 
     @Test
@@ -1146,6 +1154,7 @@ class ReviewChatPlannerTest {
 
         assertThat(packet.historyAnchors.first().item.title).contains("人生态度")
         assertThat(packet.historyAnchors.first().item.dateLabel).isEqualTo("$year-03-01")
+        assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜人生态度的最早记录在 $year-03-01，标题《人生态度｜注意力决定人生》")
     }
 
     private fun sampleNote(id: Long, topic: String, content: String): NoteEntity = NoteEntity(

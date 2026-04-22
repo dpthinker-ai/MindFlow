@@ -11,6 +11,8 @@ internal data class ReviewChatCorpusContext(
     val rawNoteDetails: List<ReviewChatRawNoteDetail>,
     val referencedNotes: List<ReviewChatReferencedNote>,
     val querySummarySnippets: List<String>,
+    val deterministicAnswerSnippets: List<String>,
+    val categoryDigestSnippets: List<String>,
 )
 
 internal object ReviewChatCorpusQueryEngine {
@@ -66,6 +68,17 @@ internal object ReviewChatCorpusQueryEngine {
                 selection = selection,
                 overview = collectionOverview,
             ),
+            deterministicAnswerSnippets = buildDeterministicAnswerSnippets(
+                query = query,
+                selection = selection,
+                overview = collectionOverview,
+                historyAnchors = historyAnchors,
+                rawNoteDetails = rawNoteDetails,
+            ),
+            categoryDigestSnippets = buildCategoryDigestSnippets(
+                query = query,
+                selection = selection,
+            ),
         )
     }
 
@@ -104,6 +117,129 @@ internal object ReviewChatCorpusQueryEngine {
             add("命中｜共 $hitCount 条记录")
             if (overview?.earliestDateLabel != null && overview.latestDateLabel != null && hitCount > 0) {
                 add("时间范围｜最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
+            }
+        }
+    }
+
+    private fun buildDeterministicAnswerSnippets(
+        query: ReviewChatParsedQuery,
+        selection: ReviewChatCorpusSelection,
+        overview: ReviewChatCollectionOverview?,
+        historyAnchors: List<ReviewChatTimelineAnchor>,
+        rawNoteDetails: List<ReviewChatRawNoteDetail>,
+    ): List<String> {
+        if (query.isExternalQuestion) return emptyList()
+
+        val scopeLabel = when (val scope = query.timeScope) {
+            ReviewChatTimeScope.AllTime -> "全部历史"
+            is ReviewChatTimeScope.Day -> scope.date.format(reviewChatDateFormatter)
+            is ReviewChatTimeScope.Month -> "${scope.month.monthValue}月"
+            is ReviewChatTimeScope.Range -> scope.label
+        }
+        val subjectLabel = query.entityTerms.takeIf { it.isNotEmpty() }?.joinToString("、")
+
+        return buildList {
+            when (query.operation) {
+                ReviewChatQueryOperation.COUNT -> {
+                    val totalCount = overview?.totalCount ?: selection.queryNotes.size
+                    add(
+                        buildString {
+                            append("直接答案｜")
+                            if (subjectLabel != null) {
+                                append("关于")
+                                append(subjectLabel)
+                                append("的记录")
+                            } else {
+                                append(scopeLabel)
+                                append("的记录")
+                            }
+                            append("共 ")
+                            append(totalCount)
+                            append(" 条")
+                        }
+                    )
+                    if (overview?.earliestDateLabel != null && overview.latestDateLabel != null && totalCount > 0) {
+                        add("精确时间范围｜最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
+                    }
+                }
+
+                ReviewChatQueryOperation.TIMELINE -> {
+                    val earliest = historyAnchors.firstOrNull { it.label == "最早记录" } ?: historyAnchors.firstOrNull()
+                    earliest?.let { anchor ->
+                        add(
+                            buildString {
+                                append("直接答案｜")
+                                if (subjectLabel != null) {
+                                    append(subjectLabel)
+                                    append("的最早记录在 ")
+                                } else {
+                                    append("最早记录在 ")
+                                }
+                                append(anchor.item.dateLabel)
+                                append("，标题《")
+                                append(anchor.item.title)
+                                append("》")
+                            }
+                        )
+                    }
+                }
+
+                ReviewChatQueryOperation.LIST -> {
+                    if (hasExplicitScopedLookup(query)) {
+                        add("直接答案｜$scopeLabel 共 ${selection.queryNotes.size} 条记录")
+                    }
+                    if (query.wantsCategories) {
+                        add("分类范围｜当前分类必须覆盖 ${selection.queryNotes.size} 条命中记录")
+                    }
+                }
+
+                ReviewChatQueryOperation.FULL_TEXT -> {
+                    if (rawNoteDetails.isNotEmpty()) {
+                        add("直接答案｜命中 ${rawNoteDetails.size} 条完整记录")
+                    }
+                }
+
+                ReviewChatQueryOperation.EXTERNAL,
+                ReviewChatQueryOperation.ANALYZE -> Unit
+            }
+        }
+    }
+
+    private fun hasExplicitScopedLookup(query: ReviewChatParsedQuery): Boolean =
+        query.timeScope != ReviewChatTimeScope.AllTime ||
+            query.entityTerms.isNotEmpty()
+
+    private fun buildCategoryDigestSnippets(
+        query: ReviewChatParsedQuery,
+        selection: ReviewChatCorpusSelection,
+    ): List<String> {
+        if (!query.wantsCategories || selection.queryNotes.isEmpty()) return emptyList()
+
+        val sampled = selection.queryNotes
+            .sortedBy(NoteEntity::createdAt)
+            .let { sorted ->
+                if (sorted.size <= 24) sorted
+                else (0 until 24).map { index ->
+                    val fraction = if (24 == 1) 0.0 else index.toDouble() / 23.0
+                    val targetIndex = (fraction * sorted.lastIndex).toInt()
+                    sorted[targetIndex]
+                }.distinctBy(NoteEntity::id)
+            }
+
+        return sampled.map { note ->
+            buildString {
+                append("候选｜")
+                append(note.createdLocalDate().format(reviewChatDateFormatter))
+                append("｜")
+                append(note.topic.ifBlank { "未命名记录" })
+                note.folderKey?.takeIf { it.isNotBlank() }?.let {
+                    append("｜文件夹:")
+                    append(it)
+                }
+                if (note.tags.isNotEmpty()) {
+                    append("｜标签:")
+                    append(note.tags.take(2).joinToString("、"))
+                }
             }
         }
     }

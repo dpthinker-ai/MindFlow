@@ -171,6 +171,8 @@ data class ReviewChatContextPacket(
     val wantsCount: Boolean,
     val wantsCategories: Boolean,
     val querySummarySnippets: List<String>,
+    val deterministicAnswerSnippets: List<String>,
+    val categoryDigestSnippets: List<String>,
     val sessionSummary: String,
     val collectionOverview: ReviewChatCollectionOverview?,
     val conversationSnippets: List<String>,

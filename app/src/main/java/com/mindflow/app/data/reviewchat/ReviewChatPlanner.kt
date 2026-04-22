@@ -188,6 +188,8 @@ internal fun buildReviewChatContextPacket(
         wantsCount = parsedQuery.wantsCount,
         wantsCategories = parsedQuery.wantsCategories,
         querySummarySnippets = corpusContext.querySummarySnippets,
+        deterministicAnswerSnippets = corpusContext.deterministicAnswerSnippets,
+        categoryDigestSnippets = corpusContext.categoryDigestSnippets,
         sessionSummary = sessionSummary.takeIf { parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS }.orEmpty(),
         collectionOverview = corpusContext.collectionOverview,
         conversationSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
