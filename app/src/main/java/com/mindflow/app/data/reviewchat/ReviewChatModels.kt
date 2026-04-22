@@ -55,6 +55,7 @@ data class ReviewChatParsedQuery(
     val wantsLinks: Boolean,
     val wantsExamples: Boolean,
     val wantsCategories: Boolean,
+    val wantsBriefAnswer: Boolean,
     val isExternalQuestion: Boolean,
 )
 
@@ -172,6 +173,7 @@ data class ReviewChatContextPacket(
     val isExternalQuestion: Boolean,
     val wantsCount: Boolean,
     val wantsCategories: Boolean,
+    val wantsBriefAnswer: Boolean,
     val querySummarySnippets: List<String>,
     val deterministicAnswerSnippets: List<String>,
     val categoryDigestSnippets: List<String>,

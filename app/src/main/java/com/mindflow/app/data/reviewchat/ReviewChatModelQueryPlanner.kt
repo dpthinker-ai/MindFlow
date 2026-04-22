@@ -33,9 +33,10 @@ internal object ReviewChatModelQueryPlanner {
         appendLine("2. 如果问题是在问“所有记录”“全部历史”“整体分类”，entity_terms 必须是空数组。")
         appendLine("3. 只有当问题明确指定了主题，例如“抖音”“人生态度”“产品方向”，才把主题放进 entity_terms。")
         appendLine("4. “有哪些类别/分类/归类” 这类问题，operation 用 list，同时 wants_categories=true。")
-        appendLine("5. “第一条/最早/什么时候开始” 用 timeline。")
-        appendLine("6. “完整内容/全文/原文” 用 full_text。")
-        appendLine("7. 外部实时问题如天气、新闻、股价，用 external。")
+        appendLine("5. “我记了哪些X，帮我总结一下/总结成几句话” 这类主题总结问题，operation 用 list，不要用 analyze。")
+        appendLine("6. “第一条/最早/什么时候开始” 用 timeline。")
+        appendLine("7. “完整内容/全文/原文” 用 full_text。")
+        appendLine("8. 外部实时问题如天气、新闻、股价，用 external。")
     }
 
     private fun parseEntityTerms(jsonText: String): List<String> {

@@ -37,7 +37,7 @@ object ReviewChatPromptFactory {
         }
 
         appendLine("回答要求：")
-        appendLine("0. ${buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories)}")
+        appendLine("0. ${buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer)}")
         appendLine("1. 先直接回答当前问题，不要重复上一轮。")
         when (packet.questionMode) {
             ReviewChatQuestionMode.EXTERNAL -> {
@@ -51,7 +51,7 @@ object ReviewChatPromptFactory {
                 appendLine("3. 如果“确定结果”里有精确数字或精确时间，必须直接使用，不要自己重算。")
                 appendLine("4. 如果用户没有明确要求“列出记录/举例/展示命中的记录”，就不要罗列示例记录。")
                 if (packet.wantsCategories) {
-                    appendLine("5. 这是分类问题：把一句总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别：说明`。")
+                    appendLine("5. 这是分类问题：把一句总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别名称：说明`。")
                     appendLine("6. 不要把多个类别塞进同一个 items 字符串。")
                     appendLine("7. 类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。")
                     appendLine("8. 不要创建 `依据` 或 `下一步` 这样的额外 section，也不要输出 Markdown 表格。")
@@ -64,11 +64,14 @@ object ReviewChatPromptFactory {
                 appendLine("2. 这是记录查询问题，只根据命中的原始记录回答，不要扩展分析。")
                 appendLine("3. 如果“确定结果”里已经给出命中条数或范围，先沿用这个精确结果。")
                 if (packet.wantsCategories) {
-                    appendLine("4. 这是分类查询：把一句总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别：包含的信息`。")
+                    appendLine("4. 这是分类查询：把一句总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别名称：包含的信息`。")
                     appendLine("5. `类别` section 里不要把多个类别塞进同一个 items 字符串。")
                     appendLine("6. 类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别。")
                     appendLine("7. 优先综合“分类候选”的所有批次，再参考原始记录，不要只根据少量示例记录下结论。")
                     appendLine("8. 如果用户没有明确要求逐条列记录，就让 `记录` section 保持空数组；不要创建 `依据` 或 `下一步` 这样的额外 section，也不要输出 Markdown 表格。")
+                } else if (packet.wantsBriefAnswer) {
+                    appendLine("4. 这是主题总结问题，用户要的是几句话的简短总结。只把简短总结写进 summary，不要创建 `依据`、`下一步` 或 `记录` section。")
+                    appendLine("5. 控制在 2 到 4 句，直接概括命中的人生建议或主题，不要展开成分析。")
                 } else {
                     appendLine("4. 把一句总览写进 summary，再把记录写进 `记录` section 的 items。")
                     appendLine("5. `记录` section 里每个 items 元素都写成 `日期《标题》：摘要`。不要引用未命中的日期或记录，也不要输出 Markdown 表格，不要逐字复述证据中的前缀或分隔格式。")
@@ -204,7 +207,7 @@ object ReviewChatPromptFactory {
                 )
                 appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
-                appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories))
+                appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer))
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
                 when (packet.questionMode) {
                     ReviewChatQuestionMode.EXTERNAL -> {
@@ -217,7 +220,7 @@ object ReviewChatPromptFactory {
                         appendLine("如果“确定结果”里有精确数字或精确时间，必须直接使用，不要自己重算。")
                         appendLine("如果用户没有明确要求列出记录，就不要罗列示例记录。")
                         if (packet.wantsCategories) {
-                            appendLine("把总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别：说明`。不要把多个类别塞进同一个 items 字符串。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。不要创建额外 section，也不要输出表格。")
+                            appendLine("把总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别名称：说明`。不要把多个类别塞进同一个 items 字符串。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。不要创建额外 section，也不要输出表格。")
                         } else {
                             appendLine("把直接答案写进 summary；如需解释，只写进 `依据` section 的 items。只有明确要求举例时才填写 `记录` section。不要输出表格，也不要照抄证据字段标签。")
                         }
@@ -226,7 +229,9 @@ object ReviewChatPromptFactory {
                         appendLine("补充要求：这是记录查询问题，只列命中的记录，不要扩展成分析。")
                         appendLine("如果“确定结果”里已经给出命中条数或范围，先沿用这个精确结果。")
                         if (packet.wantsCategories) {
-                            appendLine("把总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别：包含的信息`。不要把多个类别塞进同一个 items 字符串。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别。优先综合“分类候选”的所有批次，再参考原始记录，不要只根据少量示例记录下结论。如果用户没有明确要求逐条列记录，就让 `记录` section 为空数组。不要创建额外 section，也不要输出表格。")
+                            appendLine("把总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别名称：包含的信息`。不要把多个类别塞进同一个 items 字符串。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别。优先综合“分类候选”的所有批次，再参考原始记录，不要只根据少量示例记录下结论。如果用户没有明确要求逐条列记录，就让 `记录` section 为空数组。不要创建额外 section，也不要输出表格。")
+                        } else if (packet.wantsBriefAnswer) {
+                            appendLine("这是主题总结问题。只把简短总结写进 summary，不要创建 `依据`、`下一步` 或 `记录` section。控制在 2 到 4 句，直接概括命中的建议或主题。")
                         } else {
                             appendLine("把总览写进 summary；把记录写进 `记录` section 的 items，每个数组元素都写成 `日期《标题》：摘要`。不要输出表格，也不要逐字复述证据前缀。")
                         }

@@ -42,6 +42,10 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(buildReviewChatQuestionProfile("看一下本周末记录了哪些信息，都有哪些类别").wantsCategories)
             .isTrue()
+        assertThat(buildReviewChatQuestionProfile("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。").mode)
+            .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(buildReviewChatQuestionProfile("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。").wantsBriefAnswer)
+            .isTrue()
         assertThat(buildReviewChatQuestionProfile("把最近两周的矛盾串一下").mode)
             .isEqualTo(ReviewChatQuestionMode.ANALYSIS)
         assertThat(buildReviewChatQuestionProfile("今天天气怎么样").mode)
@@ -81,6 +85,12 @@ class ReviewChatPlannerTest {
         assertThat(weekendQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
         assertThat((weekendQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周末")
         assertThat(weekendQuery.wantsCategories).isTrue()
+
+        val briefSummaryQuery = ReviewChatQueryParser.parse("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。")
+        assertThat(briefSummaryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(briefSummaryQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(briefSummaryQuery.entityTerms).containsExactly("人生建议")
+        assertThat(briefSummaryQuery.wantsBriefAnswer).isTrue()
     }
 
     @Test
@@ -941,10 +951,60 @@ class ReviewChatPlannerTest {
         assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(packet.wantsCategories).isTrue()
         assertThat(prompt.systemInstruction).contains("把类别写进 `类别` section 的 items")
+        assertThat(prompt.systemInstruction).contains("类别名称：包含的信息")
         assertThat(prompt.systemInstruction).contains("不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”“确定结果”当成类别")
         assertThat(prompt.systemInstruction).contains("不要创建额外 section")
         assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
         assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
+    }
+
+    @Test
+    fun answer_briefTopicSummary_dropsEvidenceAndNextStepSections() = runTest {
+        var cloudCalls = 0
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "人生是多线程运行", "人生不是排队通关，而是多线程运行。"),
+                    sampleNote(2L, "守住边界", "利他的同时也要守住边界。"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = listOf("不该出现")) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = {
+                cloudCalls += 1
+                AiChatResult.Success(
+                    """
+                    人生建议的核心在于将人生视为多线程运行，即在提升价值的同时赚钱，在利他的同时守住边界，在接纳自己的基础上持续改变。
+
+                    依据：
+                    - 2026-04-05《人生是多线程运行》：人生不是排队通关，而是多线程运行。
+
+                    下一步：
+                    - 根据LM Knowledge Base和LLM Wiki的建议，继续往系统性思考推进。
+                    """.trimIndent()
+                )
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalls).isEqualTo(1)
+        assertThat(result.structuredAnswer).isNotNull()
+        assertThat(result.structuredAnswer!!.sections.map { it.title }).containsExactly("答复").inOrder()
+        val markdown = renderReviewChatStructuredAnswerAsMarkdown(result.structuredAnswer!!)
+        assertThat(markdown).contains("人生建议的核心在于将人生视为多线程运行")
+        assertThat(markdown).doesNotContain("依据：")
+        assertThat(markdown).doesNotContain("下一步：")
     }
 
     @Test

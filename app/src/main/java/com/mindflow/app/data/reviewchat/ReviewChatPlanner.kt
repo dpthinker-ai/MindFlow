@@ -42,6 +42,15 @@ internal val reviewChatListHints = listOf(
     "列出", "列一下", "给我看", "有哪些", "哪几条", "命中的记录", "举例", "示例", "样例", "分别是", "哪些信息",
 )
 
+internal val reviewChatBriefSummaryHints = listOf(
+    "简单总结", "简要总结", "总结一下", "总结成几句话", "几句话", "简单概括", "概括一下", "简单说说", "简要说说",
+)
+
+internal val reviewChatDeepAnalysisHints = listOf(
+    "为什么", "怎么看", "怎么理解", "意味着什么", "主线", "矛盾", "演变", "趋势", "原因", "关系", "冲突",
+    "影响", "下一步", "怎么办", "值不值得", "是否应该", "如何推进",
+)
+
 internal val reviewChatExternalHints = listOf(
     "天气", "气温", "下雨", "台风", "新闻", "热搜", "股价", "股票", "汇率", "彩票",
     "体育比赛", "球赛", "nba", "足球", "电影票房", "明星八卦", "实时路况", "航班", "高铁",
@@ -56,6 +65,7 @@ internal val reviewChatOperationPhrases = (
         reviewChatScopeHints +
         reviewChatCountHints +
         reviewChatListHints +
+        reviewChatBriefSummaryHints +
         reviewChatExternalHints +
         reviewChatLinkHints +
         listOf(
@@ -66,6 +76,7 @@ internal val reviewChatOperationPhrases = (
             "发给我",
             "总共有", "一共有", "多少", "几条", "全部", "所有", "只看",
             "列出", "举例", "示例", "样例", "打开", "命中", "那条", "那几条", "发给",
+            "把它们", "简单",
             "本周末", "上周末", "周末", "类别", "分类",
             "分析", "总结", "归纳", "分为",
         )
@@ -74,7 +85,7 @@ internal val reviewChatOperationPhrases = (
 
 internal val reviewChatEntityStopWords = reviewChatStopWords + setOf(
     "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询", "类别", "分类", "周末",
-    "分析", "总结", "归纳", "分为", "所有", "全部",
+    "分析", "总结", "归纳", "分为", "所有", "全部", "哪些", "它们",
 )
 
 private val reviewChatGenericEntityTerms = setOf(
@@ -113,6 +124,7 @@ internal data class ReviewChatQuestionProfile(
     val wantsTimelineAnchor: Boolean,
     val wantsCount: Boolean,
     val wantsCategories: Boolean,
+    val wantsBriefAnswer: Boolean,
     val isExternalQuestion: Boolean,
 )
 
@@ -131,6 +143,7 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         wantsTimelineAnchor = parsedQuery.wantsTimelineAnchor,
         wantsCount = parsedQuery.wantsCount,
         wantsCategories = parsedQuery.wantsCategories,
+        wantsBriefAnswer = parsedQuery.wantsBriefAnswer,
         isExternalQuestion = parsedQuery.isExternalQuestion,
     )
 }
@@ -143,6 +156,25 @@ internal data class ReviewChatCorpusSelection(
 
 internal fun wantsReviewChatListExamples(question: String): Boolean =
     reviewChatListHints.any(question::contains)
+
+internal fun wantsReviewChatBriefAnswer(question: String): Boolean =
+    reviewChatBriefSummaryHints.any(question::contains)
+
+internal fun isReviewChatTopicSummaryQuestion(
+    question: String,
+    entityTerms: List<String>,
+    wantsCount: Boolean,
+    wantsCategories: Boolean,
+    wantsFullRecord: Boolean,
+    wantsTimelineAnchor: Boolean,
+    isExternalQuestion: Boolean,
+): Boolean {
+    if (isExternalQuestion || wantsCount || wantsCategories || wantsFullRecord || wantsTimelineAnchor) return false
+    if (entityTerms.isEmpty()) return false
+    if (!wantsReviewChatBriefAnswer(question)) return false
+    if (reviewChatDeepAnalysisHints.any(question::contains)) return false
+    return true
+}
 
 internal fun buildReviewChatContextPacket(
     question: String,
@@ -187,6 +219,7 @@ internal fun buildReviewChatContextPacket(
         isExternalQuestion = parsedQuery.isExternalQuestion,
         wantsCount = parsedQuery.wantsCount,
         wantsCategories = parsedQuery.wantsCategories,
+        wantsBriefAnswer = parsedQuery.wantsBriefAnswer,
         querySummarySnippets = corpusContext.querySummarySnippets,
         deterministicAnswerSnippets = corpusContext.deterministicAnswerSnippets,
         categoryDigestSnippets = corpusContext.categoryDigestSnippets,
@@ -249,6 +282,8 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .replace("我这所有记录", " ")
         .replace("我这全部记录", " ")
         .replace("我这所有", " ")
+        .replace("把它们", " ")
+        .replace("简单", " ")
         .replace("是什么时候", " ")
         .replace("什么时间", " ")
         .replace("什么时候", " ")
@@ -267,10 +302,12 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
                 .removePrefix("关于")
                 .removePrefix("有关")
                 .removePrefix("相关")
+                .removePrefix("哪些")
                 .removePrefix("这些")
                 .removePrefix("那些")
                 .removePrefix("所有")
                 .removePrefix("全部")
+                .removePrefix("它们")
                 .removeSuffix("记录")
                 .removeSuffix("笔记")
                 .removeSuffix("内容")
@@ -949,7 +986,7 @@ class ReviewChatPlanner(
         packet: ReviewChatContextPacket,
         rawAnswer: String,
     ): ReviewChatStructuredAnswer? {
-        val parsedAnswer = parseReviewChatStructuredAnswer(rawAnswer)
+        val parsedAnswer = parseReviewChatStructuredAnswer(rawAnswer, includePlainSections = true)
         val finalizedAnswer = finalizeReviewChatStructuredAnswer(
             packet = packet,
             rawAnswer = rawAnswer,
@@ -971,7 +1008,7 @@ class ReviewChatPlanner(
         return finalizeReviewChatStructuredAnswer(
             packet = packet,
             rawAnswer = rawAnswer,
-            candidate = parseReviewChatStructuredAnswer(structuredResult.content.trim()),
+            candidate = parseReviewChatStructuredAnswer(structuredResult.content.trim(), includePlainSections = true),
         )
     }
 }
@@ -980,7 +1017,7 @@ private fun doesReviewChatModeHaveDeterministicStructure(
     packet: ReviewChatContextPacket,
 ): Boolean = when (packet.questionMode) {
     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> !packet.wantsCategories
-    ReviewChatQuestionMode.RECORD_LOOKUP -> !packet.wantsCategories
+    ReviewChatQuestionMode.RECORD_LOOKUP -> !packet.wantsCategories && !packet.wantsBriefAnswer
     ReviewChatQuestionMode.FULL_RECORD -> true
     ReviewChatQuestionMode.TIMELINE_ANCHOR -> true
     ReviewChatQuestionMode.EXTERNAL,

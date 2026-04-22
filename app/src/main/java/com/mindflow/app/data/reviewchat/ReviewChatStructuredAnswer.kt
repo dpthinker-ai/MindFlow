@@ -10,53 +10,20 @@ data class ReviewChatStructuredSection(
     val items: List<String>,
 )
 
-internal fun parseReviewChatStructuredAnswer(content: String): ReviewChatStructuredAnswer? {
+internal fun parseReviewChatStructuredAnswer(
+    content: String,
+    includePlainSections: Boolean = false,
+): ReviewChatStructuredAnswer? {
     parseReviewChatStructuredJson(content)?.let { return it }
 
     val prepared = content
         .replace(Regex("(?<!\\n)(【(?:答复|结论|依据|下一步|记录|完整记录|时间线|类别)】)"), "\n$1")
         .trim()
-    if (!REVIEW_CHAT_STRUCTURED_SECTION_REGEX.containsMatchIn(prepared)) return null
-
-    val sections = mutableListOf<MutableReviewChatStructuredSection>()
-    var current: MutableReviewChatStructuredSection? = null
-
-    prepared.lines().forEach { line ->
-        val trimmed = line.trim()
-        if (trimmed.isBlank()) return@forEach
-
-        val sectionMatch = REVIEW_CHAT_STRUCTURED_SECTION_REGEX.matchEntire(trimmed)
-        if (sectionMatch != null) {
-            current = MutableReviewChatStructuredSection(title = sectionMatch.groupValues[1])
-                .also(sections::add)
-            sectionMatch.groupValues[2]
-                .trim()
-                .takeIf { it.isNotBlank() }
-                ?.let { current.appendStructuredLine(it) }
-            return@forEach
-        }
-
-        val target = current ?: return@forEach
-        val bulletContent = REVIEW_CHAT_BULLET_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
-            ?: REVIEW_CHAT_ORDERED_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
-        if (bulletContent != null) {
-            target.items += bulletContent.trim()
-        } else {
-            target.appendStructuredLine(trimmed)
-        }
+    if (REVIEW_CHAT_STRUCTURED_SECTION_REGEX.containsMatchIn(prepared)) {
+        return parseTaggedReviewChatSections(prepared)
     }
 
-    return sections.takeIf { it.isNotEmpty() }?.let { parsed ->
-        ReviewChatStructuredAnswer(
-            sections = parsed.map { section ->
-                ReviewChatStructuredSection(
-                    title = section.title,
-                    body = section.body.toList(),
-                    items = section.items.toList(),
-                )
-            },
-        )
-    }
+    return if (includePlainSections) parseReviewChatPlainSections(content) else null
 }
 
 internal fun finalizeReviewChatStructuredAnswer(
@@ -69,6 +36,7 @@ internal fun finalizeReviewChatStructuredAnswer(
             answer = it,
             mode = packet.questionMode,
             wantsCategories = packet.wantsCategories,
+            wantsBriefAnswer = packet.wantsBriefAnswer,
         )
     }
 
@@ -104,6 +72,7 @@ internal fun finalizeReviewChatStructuredAnswer(
     val orderedTitles = listOf("答复") + buildReviewChatAllowedSectionTitles(
         mode = packet.questionMode,
         wantsCategories = packet.wantsCategories,
+        wantsBriefAnswer = packet.wantsBriefAnswer,
     )
     val sections = orderedTitles
         .mapNotNull { title -> mergedSections[title] }
@@ -116,8 +85,9 @@ internal fun finalizeReviewChatStructuredAnswer(
 internal fun buildReviewChatStructuredOutputSchema(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
+    wantsBriefAnswer: Boolean = false,
 ): String {
-    val template = buildReviewChatStructuredOutputTemplateJson(mode, wantsCategories)
+    val template = buildReviewChatStructuredOutputTemplateJson(mode, wantsCategories, wantsBriefAnswer)
     return "只返回一个 JSON 对象，不要 Markdown、不要代码块。严格使用这个模板里的 title 和顺序：$template。可以留空数组，但不要新增字段。"
 }
 
@@ -127,7 +97,7 @@ internal fun buildReviewChatStructuringPrompt(
 ): String = buildString {
     appendLine("把下面这段回答整理成一个 JSON 对象。不要新增事实，只能重组原回答已经表达的信息。")
     appendLine("问题路径：${packet.questionMode.name}")
-    appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories))
+    appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer))
     appendLine("规则：")
     appendLine("1. summary 只保留一句总答复。")
     appendLine("2. sections 里的 title 必须和模板完全一致，不要改名，也不要新增 section。")
@@ -141,10 +111,11 @@ internal fun buildReviewChatStructuringPrompt(
 internal fun buildReviewChatStructuredOutputTemplateJson(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
+    wantsBriefAnswer: Boolean = false,
 ): String = buildString {
     append("{\"summary\":\"一句话回答\",\"sections\":[")
     append(
-        buildReviewChatAllowedSectionTitles(mode, wantsCategories).joinToString(",") { title ->
+        buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer).joinToString(",") { title ->
             buildReviewChatStructuredTemplateSectionJson(title)
         }
     )
@@ -231,6 +202,12 @@ internal val REVIEW_CHAT_STRUCTURED_SECTION_REGEX =
         option = RegexOption.MULTILINE,
     )
 
+internal val REVIEW_CHAT_PLAIN_SECTION_REGEX =
+    Regex(
+        pattern = "^(答复|结论|依据|下一步|记录|完整记录|时间线|类别)[：:]\\s*(.*)$",
+        option = RegexOption.MULTILINE,
+    )
+
 internal val REVIEW_CHAT_BULLET_LINE_REGEX = Regex("^[-*•]\\s*(.+)$")
 
 internal val REVIEW_CHAT_ORDERED_LINE_REGEX =
@@ -248,7 +225,7 @@ private fun buildReviewChatStructuredTemplateSectionJson(title: String): String 
         "依据", "下一步" -> "\"一条列表项\""
         "记录" -> "\"2026-04-13《标题》：摘要\""
         "时间线" -> "\"最早记录：2026-04-13《标题》：摘要\""
-        "类别" -> "\"类别：包含的信息\""
+        "类别" -> "\"类别名称：包含的信息\""
         else -> ""
     }
     return buildString {
@@ -266,6 +243,7 @@ private fun normalizeReviewChatStructuredAnswer(
     answer: ReviewChatStructuredAnswer,
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
+    wantsBriefAnswer: Boolean,
 ): ReviewChatStructuredAnswer {
     val mergedSections = linkedMapOf<String, ReviewChatStructuredSection>()
     answer.sections
@@ -277,12 +255,101 @@ private fun normalizeReviewChatStructuredAnswer(
             )
         }
 
-    val orderedTitles = listOf("答复") + buildReviewChatAllowedSectionTitles(mode, wantsCategories)
+    val orderedTitles = listOf("答复") + buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer)
     return ReviewChatStructuredAnswer(
         sections = orderedTitles
             .mapNotNull { title -> mergedSections[title] }
             .filterNot { it.body.isEmpty() && it.items.isEmpty() }
     )
+}
+
+private fun parseReviewChatPlainSections(content: String): ReviewChatStructuredAnswer? {
+    val prepared = content
+        .replace(Regex("(?<=[。！？；])\\s*((?:答复|结论|依据|下一步|记录|完整记录|时间线|类别)[：:])"), "\n$1")
+        .trim()
+    if (!REVIEW_CHAT_PLAIN_SECTION_REGEX.containsMatchIn(prepared)) return null
+
+    val sections = mutableListOf<MutableReviewChatStructuredSection>()
+    var current = MutableReviewChatStructuredSection(title = "答复")
+        .also(sections::add)
+    var sawExplicitSection = false
+
+    prepared.lines().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) return@forEach
+
+        val sectionMatch = REVIEW_CHAT_PLAIN_SECTION_REGEX.matchEntire(trimmed)
+        if (sectionMatch != null) {
+            current = MutableReviewChatStructuredSection(title = sectionMatch.groupValues[1])
+                .also(sections::add)
+            sawExplicitSection = true
+            sectionMatch.groupValues[2]
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { current.appendStructuredLine(it) }
+            return@forEach
+        }
+
+        current.appendStructuredLine(trimmed)
+    }
+
+    if (!sawExplicitSection) return null
+    val compactSections = sections
+        .map { section ->
+            canonicalizeReviewChatStructuredSection(
+                ReviewChatStructuredSection(
+                    title = section.title,
+                    body = section.body.toList(),
+                    items = section.items.toList(),
+                ),
+            )
+        }
+        .filterNot { it.body.isEmpty() && it.items.isEmpty() }
+    return compactSections.takeIf { it.isNotEmpty() }?.let(::ReviewChatStructuredAnswer)
+}
+
+private fun parseTaggedReviewChatSections(content: String): ReviewChatStructuredAnswer? {
+    val sections = mutableListOf<MutableReviewChatStructuredSection>()
+    var current: MutableReviewChatStructuredSection? = null
+
+    content.lines().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) return@forEach
+
+        val sectionMatch = REVIEW_CHAT_STRUCTURED_SECTION_REGEX.matchEntire(trimmed)
+        if (sectionMatch != null) {
+            current = MutableReviewChatStructuredSection(title = sectionMatch.groupValues[1])
+                .also(sections::add)
+            sectionMatch.groupValues[2]
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { current.appendStructuredLine(it) }
+            return@forEach
+        }
+
+        val target = current ?: return@forEach
+        val bulletContent = REVIEW_CHAT_BULLET_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
+            ?: REVIEW_CHAT_ORDERED_LINE_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
+        if (bulletContent != null) {
+            target.items += bulletContent.trim()
+        } else {
+            target.appendStructuredLine(trimmed)
+        }
+    }
+
+    return sections.takeIf { it.isNotEmpty() }?.let { parsed ->
+        ReviewChatStructuredAnswer(
+            sections = parsed.map { section ->
+                canonicalizeReviewChatStructuredSection(
+                    ReviewChatStructuredSection(
+                        title = section.title,
+                        body = section.body.toList(),
+                        items = section.items.toList(),
+                    ),
+                )
+            },
+        )
+    }
 }
 
 private fun canonicalizeReviewChatStructuredSection(
@@ -291,12 +358,30 @@ private fun canonicalizeReviewChatStructuredSection(
     ReviewChatStructuredSection(
         title = canonicalReviewChatSectionTitle(section.title),
         body = section.body.mapNotNull { it.trim().takeIf(String::isNotBlank) },
-        items = section.items.mapNotNull { it.trim().takeIf(String::isNotBlank) },
+        items = section.items.mapNotNull { item ->
+            canonicalizeReviewChatSectionItem(
+                title = canonicalReviewChatSectionTitle(section.title),
+                item = item,
+            )
+        },
     )
 
 private fun canonicalReviewChatSectionTitle(title: String): String = when (title.trim()) {
     "结论" -> "答复"
     else -> title.trim()
+}
+
+private fun canonicalizeReviewChatSectionItem(
+    title: String,
+    item: String,
+): String? {
+    val normalized = item.trim().takeIf(String::isNotBlank) ?: return null
+    if (title != "类别") return normalized
+    return normalized
+        .removePrefix("类别：")
+        .removePrefix("类别:")
+        .trim()
+        .takeIf(String::isNotBlank)
 }
 
 private fun mergeReviewChatStructuredSection(
@@ -318,13 +403,13 @@ private fun buildDeterministicReviewChatSection(
     val existingTitles = existingAnswer?.sections?.map { canonicalReviewChatSectionTitle(it.title) }?.toSet().orEmpty()
     when (packet.questionMode) {
         ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
-            if (!packet.wantsCategories && "依据" !in existingTitles) {
+            if (!packet.wantsCategories && !packet.wantsBriefAnswer && "依据" !in existingTitles) {
                 buildCollectionOverviewEvidenceSection(packet.collectionOverview)?.let(::add)
             }
         }
 
         ReviewChatQuestionMode.RECORD_LOOKUP -> {
-            if (!packet.wantsCategories && "记录" !in existingTitles) {
+            if (!packet.wantsCategories && !packet.wantsBriefAnswer && "记录" !in existingTitles) {
                 buildRecordEvidenceSection(packet.rawNoteEvidence)?.let(::add)
             }
         }
@@ -429,7 +514,11 @@ private fun parseReviewChatStructuredJson(content: String): ReviewChatStructured
             ?.let(::parseStructuredSections)
             ?.let(sections::addAll)
 
-        sections.takeIf { it.isNotEmpty() }?.let(::ReviewChatStructuredAnswer)
+        sections.takeIf { it.isNotEmpty() }?.let { parsed ->
+            ReviewChatStructuredAnswer(
+                sections = parsed.map(::canonicalizeReviewChatStructuredSection),
+            )
+        }
     }.getOrNull()
 }
 
@@ -485,6 +574,7 @@ private fun extractJsonCandidate(content: String): String? {
 private fun buildReviewChatAllowedSectionTitles(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
+    wantsBriefAnswer: Boolean,
 ): List<String> = when (mode) {
     ReviewChatQuestionMode.EXTERNAL -> listOf("下一步")
     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> if (wantsCategories) {
@@ -492,7 +582,9 @@ private fun buildReviewChatAllowedSectionTitles(
     } else {
         listOf("依据", "记录")
     }
-    ReviewChatQuestionMode.RECORD_LOOKUP -> if (wantsCategories) {
+    ReviewChatQuestionMode.RECORD_LOOKUP -> if (wantsBriefAnswer) {
+        emptyList()
+    } else if (wantsCategories) {
         listOf("类别", "记录")
     } else {
         listOf("记录")

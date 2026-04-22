@@ -14,20 +14,36 @@ internal object ReviewChatQueryParser {
         val fallbackWantsLinks = wantsReviewChatLinks(question)
         val fallbackWantsExamples = wantsReviewChatListExamples(question)
         val fallbackWantsCategories = wantsReviewChatCategories(question)
+        val fallbackWantsBriefAnswer = wantsReviewChatBriefAnswer(question)
         val fallbackIsExternalQuestion = reviewChatExternalHints.any(question::contains)
+        val fallbackEntityTerms = modelPlan?.entityTerms ?: extractReviewChatEntityTerms(question)
+        val fallbackIsTopicSummary = isReviewChatTopicSummaryQuestion(
+            question = question,
+            entityTerms = fallbackEntityTerms,
+            wantsCount = fallbackWantsCount,
+            wantsCategories = fallbackWantsCategories,
+            wantsFullRecord = fallbackWantsFullRecord,
+            wantsTimelineAnchor = fallbackWantsTimelineAnchor,
+            isExternalQuestion = fallbackIsExternalQuestion,
+        )
         val fallbackMode = when {
             fallbackIsExternalQuestion -> ReviewChatQuestionMode.EXTERNAL
             fallbackWantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
             fallbackWantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
             fallbackWantsCount -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
+            fallbackIsTopicSummary -> ReviewChatQuestionMode.RECORD_LOOKUP
             requestedDate != null || requestedMonth != null || requestedRange != null || fallbackWantsCategories ||
                 listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
                 ReviewChatQuestionMode.RECORD_LOOKUP
             else -> ReviewChatQuestionMode.ANALYSIS
         }
         val plannedOperation = modelPlan?.operation
-        val mode = plannedOperation?.toQuestionMode() ?: fallbackMode
-        val operation = plannedOperation ?: when (mode) {
+        val resolvedOperation = when {
+            fallbackIsTopicSummary && plannedOperation == ReviewChatQueryOperation.ANALYZE -> ReviewChatQueryOperation.LIST
+            else -> plannedOperation
+        }
+        val mode = resolvedOperation?.toQuestionMode() ?: fallbackMode
+        val operation = resolvedOperation ?: when (mode) {
             ReviewChatQuestionMode.EXTERNAL -> ReviewChatQueryOperation.EXTERNAL
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> ReviewChatQueryOperation.COUNT
             ReviewChatQuestionMode.RECORD_LOOKUP -> ReviewChatQueryOperation.LIST
@@ -35,13 +51,14 @@ internal object ReviewChatQueryParser {
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> ReviewChatQueryOperation.TIMELINE
             ReviewChatQuestionMode.ANALYSIS -> ReviewChatQueryOperation.ANALYZE
         }
-        val wantsFullRecord = modelPlan?.operation == ReviewChatQueryOperation.FULL_TEXT || fallbackWantsFullRecord
-        val wantsTimelineAnchor = modelPlan?.operation == ReviewChatQueryOperation.TIMELINE || fallbackWantsTimelineAnchor
-        val wantsCount = modelPlan?.operation == ReviewChatQueryOperation.COUNT || fallbackWantsCount
+        val wantsFullRecord = resolvedOperation == ReviewChatQueryOperation.FULL_TEXT || fallbackWantsFullRecord
+        val wantsTimelineAnchor = resolvedOperation == ReviewChatQueryOperation.TIMELINE || fallbackWantsTimelineAnchor
+        val wantsCount = resolvedOperation == ReviewChatQueryOperation.COUNT || fallbackWantsCount
         val wantsLinks = modelPlan?.wantsLinks ?: fallbackWantsLinks
         val wantsExamples = modelPlan?.wantsExamples ?: fallbackWantsExamples
         val wantsCategories = modelPlan?.wantsCategories ?: fallbackWantsCategories
-        val isExternalQuestion = modelPlan?.operation == ReviewChatQueryOperation.EXTERNAL || fallbackIsExternalQuestion
+        val wantsBriefAnswer = fallbackWantsBriefAnswer || fallbackIsTopicSummary
+        val isExternalQuestion = resolvedOperation == ReviewChatQueryOperation.EXTERNAL || fallbackIsExternalQuestion
         val intent = questionModeIntent(question = question, mode = mode)
 
         val timeScope = when {
@@ -58,13 +75,14 @@ internal object ReviewChatQueryParser {
             intent = intent,
             timeScope = timeScope,
             keywords = extractReviewChatKeywords(question),
-            entityTerms = modelPlan?.entityTerms ?: extractReviewChatEntityTerms(question),
+            entityTerms = fallbackEntityTerms,
             wantsTimelineAnchor = wantsTimelineAnchor,
             wantsCount = wantsCount,
             wantsFullRecord = wantsFullRecord,
             wantsLinks = wantsLinks,
             wantsExamples = wantsExamples,
             wantsCategories = wantsCategories,
+            wantsBriefAnswer = wantsBriefAnswer,
             isExternalQuestion = isExternalQuestion,
         )
     }
