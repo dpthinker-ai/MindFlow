@@ -939,7 +939,11 @@ class ReviewChatPlanner(
         val parsedQuery = resolveParsedQuery(request.question)
         val notes = loadNotes()
         val baseCorpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
-        val corpusContext = maybeAugmentCategoryDigest(parsedQuery, baseCorpusContext)
+        val corpusContext = maybeAugmentCategoryDigest(
+            sessionId = request.sessionId,
+            query = parsedQuery,
+            corpusContext = baseCorpusContext,
+        )
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
@@ -967,22 +971,35 @@ class ReviewChatPlanner(
     }
 
     private suspend fun maybeAugmentCategoryDigest(
+        sessionId: String,
         query: ReviewChatParsedQuery,
         corpusContext: ReviewChatCorpusContext,
     ): ReviewChatCorpusContext {
-        val canUseCloudCategorySummary =
+        val canSummarizeCategories =
             query.wantsCategories &&
                 !query.isExternalQuestion &&
-                corpusContext.selection.queryNotes.size >= 12 &&
-                resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
-                isCloudConfigured()
-        if (!canUseCloudCategorySummary) return corpusContext
+                corpusContext.selection.queryNotes.size >= 12
+        if (!canSummarizeCategories) return corpusContext
 
-        val summarizedCandidates = ReviewChatCategorySummarizer.summarize(
-            question = query.question,
-            notes = corpusContext.selection.queryNotes,
-            runCloud = runCloud,
-        )
+        val summarizedCandidates = when (resolveExecutionMode()) {
+            AiExecutionMode.ON_DEVICE_ONLY -> ReviewChatCategorySummarizer.summarizeOnDevice(
+                sessionIdPrefix = sessionId,
+                question = query.question,
+                notes = corpusContext.selection.queryNotes,
+                runOnDevice = runOnDevice,
+            )
+
+            AiExecutionMode.AUTOMATIC,
+            AiExecutionMode.CLOUD_ONLY -> {
+                if (!isCloudConfigured()) return corpusContext
+                ReviewChatCategorySummarizer.summarize(
+                    question = query.question,
+                    notes = corpusContext.selection.queryNotes,
+                    runCloud = runCloud,
+                )
+            }
+        }
+
         if (summarizedCandidates.isEmpty()) return corpusContext
         return corpusContext.copy(
             categoryDigestSnippets = summarizedCandidates,

@@ -6,6 +6,8 @@ import com.mindflow.app.data.topic.AiChatResult
 internal object ReviewChatCategorySummarizer {
     private const val BATCH_SIZE = 24
     private const val MAX_BATCHES = 6
+    private const val ON_DEVICE_BATCH_SIZE = 18
+    private const val ON_DEVICE_MAX_BATCHES = 4
 
     suspend fun summarize(
         question: String,
@@ -30,6 +32,56 @@ internal object ReviewChatCategorySummarizer {
 
         val mergedCandidates = when (
             val result = runCloud(buildMergePrompt(question, batchCandidates))
+        ) {
+            is AiChatResult.Success -> parseCategoryCandidates(result.content)
+            is AiChatResult.Failure -> emptyList()
+        }
+
+        return (mergedCandidates.ifEmpty { batchCandidates })
+            .distinct()
+            .take(8)
+    }
+
+    suspend fun summarizeOnDevice(
+        sessionIdPrefix: String,
+        question: String,
+        notes: List<NoteEntity>,
+        runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
+    ): List<String> {
+        if (notes.isEmpty()) return emptyList()
+
+        val batches = notes
+            .sortedBy(NoteEntity::createdAt)
+            .chunked(ON_DEVICE_BATCH_SIZE)
+            .take(ON_DEVICE_MAX_BATCHES)
+
+        val batchCandidates = batches.flatMapIndexed { index, batch ->
+            when (
+                val result = runOnDevice(
+                    ReviewChatOnDeviceRequest(
+                        sessionId = "$sessionIdPrefix:category-batch:${index + 1}",
+                        prompt = buildBatchPrompt(question, index + 1, batches.size, batch),
+                        systemInstruction = buildOnDeviceSystemInstruction(),
+                        resetConversation = true,
+                    )
+                )
+            ) {
+                is AiChatResult.Success -> parseCategoryCandidates(result.content)
+                is AiChatResult.Failure -> emptyList()
+            }
+        }.distinct()
+
+        if (batchCandidates.isEmpty()) return emptyList()
+
+        val mergedCandidates = when (
+            val result = runOnDevice(
+                ReviewChatOnDeviceRequest(
+                    sessionId = "$sessionIdPrefix:category-merge",
+                    prompt = buildMergePrompt(question, batchCandidates),
+                    systemInstruction = buildOnDeviceSystemInstruction(),
+                    resetConversation = true,
+                )
+            )
         ) {
             is AiChatResult.Success -> parseCategoryCandidates(result.content)
             is AiChatResult.Failure -> emptyList()
@@ -79,6 +131,14 @@ internal object ReviewChatCategorySummarizer {
         appendLine("候选：")
         candidates.forEach(::appendLine)
     }
+
+    private fun buildOnDeviceSystemInstruction(): String = buildString {
+        appendLine("你在归纳个人历史记录的高层类别。")
+        appendLine("只输出纯文本列表，不要 JSON，不要 Markdown 标题，不要解释。")
+        appendLine("每行固定格式：类别名称：包含的信息。")
+        appendLine("不要编号，不要项目符号，不要写“类别：类别名称”。")
+        appendLine("不要把时间范围、统计信息、历史记录、查询结果当成类别。")
+    }.trim()
 
     internal fun parseCategoryCandidates(content: String): List<String> =
         content
