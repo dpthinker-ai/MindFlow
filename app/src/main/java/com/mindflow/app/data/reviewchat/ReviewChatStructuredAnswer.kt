@@ -401,14 +401,29 @@ private fun buildDeterministicReviewChatSection(
     existingAnswer: ReviewChatStructuredAnswer?,
 ): List<ReviewChatStructuredSection> = buildList {
     val existingTitles = existingAnswer?.sections?.map { canonicalReviewChatSectionTitle(it.title) }?.toSet().orEmpty()
+    val existingCategoryCount = existingAnswer?.sections
+        ?.firstOrNull { canonicalReviewChatSectionTitle(it.title) == "类别" }
+        ?.items
+        ?.size
+        ?: 0
     when (packet.questionMode) {
         ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
+            if (packet.wantsCategories) {
+                buildCategorySection(packet.categoryDigestSnippets)
+                    ?.takeIf { existingCategoryCount < minOf(3, it.items.size) }
+                    ?.let(::add)
+            }
             if (!packet.wantsCategories && !packet.wantsBriefAnswer && "依据" !in existingTitles) {
                 buildCollectionOverviewEvidenceSection(packet.collectionOverview)?.let(::add)
             }
         }
 
         ReviewChatQuestionMode.RECORD_LOOKUP -> {
+            if (packet.wantsCategories) {
+                buildCategorySection(packet.categoryDigestSnippets)
+                    ?.takeIf { existingCategoryCount < minOf(3, it.items.size) }
+                    ?.let(::add)
+            }
             if (!packet.wantsCategories && !packet.wantsBriefAnswer && "记录" !in existingTitles) {
                 buildRecordEvidenceSection(packet.rawNoteEvidence)?.let(::add)
             }
@@ -465,6 +480,28 @@ private fun buildRecordEvidenceSection(
             },
         )
     }
+
+private fun buildCategorySection(
+    digestSnippets: List<String>,
+): ReviewChatStructuredSection? {
+    val items = digestSnippets
+        .map { it.trim() }
+        .mapNotNull { item ->
+            item.takeIf {
+                it.isNotBlank() &&
+                    !it.startsWith("批次") &&
+                    '：' in it
+            }
+        }
+        .distinct()
+    return items.takeIf { it.isNotEmpty() }?.let {
+        ReviewChatStructuredSection(
+            title = "类别",
+            body = emptyList(),
+            items = it,
+        )
+    }
+}
 
 private fun buildFullRecordSection(
     details: List<ReviewChatRawNoteDetail>,

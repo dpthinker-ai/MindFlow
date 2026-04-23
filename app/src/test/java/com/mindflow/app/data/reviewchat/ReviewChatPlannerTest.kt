@@ -1259,6 +1259,97 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_broadCategoryQuery_usesCategorySummarizerAndBackfillsMissingCategories() = runTest {
+        var cloudCalls = 0
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                List(12) { index ->
+                    sampleNote(
+                        id = index.toLong() + 1L,
+                        topic = when (index % 4) {
+                            0 -> "MindFlow 功能迭代 $index"
+                            1 -> "技术优化与调试 $index"
+                            2 -> "个人成长方法论 $index"
+                            else -> "生活与健康记录 $index"
+                        },
+                        content = "内容 $index"
+                    )
+                }
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = { prompt ->
+                cloudCalls += 1
+                when (cloudCalls) {
+                    1 -> {
+                        assertThat(prompt).contains("当前批次：1/1")
+                        AiChatResult.Success(
+                            """
+                            应用开发：MindFlow 功能迭代、产品体验
+                            技术优化：性能、调试、系统修复
+                            个人成长：原则、方法论、认知提升
+                            生活健康：作息、身体状态、健康管理
+                            """.trimIndent()
+                        )
+                    }
+
+                    2 -> {
+                        assertThat(prompt).contains("候选：")
+                        AiChatResult.Success(
+                            """
+                            应用开发：MindFlow 功能迭代、产品体验
+                            技术优化：性能、调试、系统修复
+                            个人成长：原则、方法论、认知提升
+                            生活健康：作息、身体状态、健康管理
+                            """.trimIndent()
+                        )
+                    }
+
+                    3 -> AiChatResult.Success(
+                        """
+                        {
+                          "summary": "这 12 条记录主要分成几类主题。",
+                          "sections": [
+                            {
+                              "title": "类别",
+                              "items": [
+                                "应用开发：MindFlow 功能迭代、产品体验"
+                              ]
+                            }
+                          ]
+                        }
+                        """.trimIndent()
+                    )
+
+                    else -> error("unexpected cloud call $cloudCalls")
+                }
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "帮我分析所有的记录，都有哪些分类？",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.structuredAnswer).isNotNull()
+        assertThat(result.structuredAnswer!!.sections.last().title).isEqualTo("类别")
+        assertThat(result.structuredAnswer!!.sections.last().items).containsAtLeast(
+            "应用开发：MindFlow 功能迭代、产品体验",
+            "技术优化：性能、调试、系统修复",
+            "个人成长：原则、方法论、认知提升",
+            "生活健康：作息、身体状态、健康管理",
+        )
+        assertThat(cloudCalls).isEqualTo(3)
+    }
+
+    @Test
     fun extractReviewChatEntityTerms_removesOperationNoiseAndKeepsSubject() {
         assertThat(extractReviewChatEntityTerms("人生态度记录的时间轴跨度"))
             .contains("人生态度")

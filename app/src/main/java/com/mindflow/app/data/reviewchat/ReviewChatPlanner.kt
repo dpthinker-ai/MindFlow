@@ -938,7 +938,8 @@ class ReviewChatPlanner(
     ): PreparedReviewChatContext {
         val parsedQuery = resolveParsedQuery(request.question)
         val notes = loadNotes()
-        val corpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
+        val baseCorpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
+        val corpusContext = maybeAugmentCategoryDigest(parsedQuery, baseCorpusContext)
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
@@ -962,6 +963,29 @@ class ReviewChatPlanner(
             packet = packet,
             directRawNoteDetails = corpusContext.rawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
+        )
+    }
+
+    private suspend fun maybeAugmentCategoryDigest(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): ReviewChatCorpusContext {
+        val canUseCloudCategorySummary =
+            query.wantsCategories &&
+                !query.isExternalQuestion &&
+                corpusContext.selection.queryNotes.size >= 12 &&
+                resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
+                isCloudConfigured()
+        if (!canUseCloudCategorySummary) return corpusContext
+
+        val summarizedCandidates = ReviewChatCategorySummarizer.summarize(
+            question = query.question,
+            notes = corpusContext.selection.queryNotes,
+            runCloud = runCloud,
+        )
+        if (summarizedCandidates.isEmpty()) return corpusContext
+        return corpusContext.copy(
+            categoryDigestSnippets = summarizedCandidates,
         )
     }
 
