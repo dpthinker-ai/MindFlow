@@ -20,8 +20,8 @@ import kotlinx.coroutines.flow.flow
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
-    "关于", "这个", "那个", "最近两周", "最近一周", "我们", "你们", "我的", "你的", "时候",
-    "分析", "总结", "归纳", "分类", "类别", "分为", "看看",
+    "关于", "这个", "那个", "最近两周", "最近一周", "我们", "你们", "他们", "我的", "你的", "时候",
+    "分析", "总结", "归纳", "分类", "类别", "类型", "分为", "看看",
 )
 
 internal val reviewChatHistoryHints = listOf(
@@ -77,19 +77,20 @@ internal val reviewChatOperationPhrases = (
             "总共有", "一共有", "多少", "几条", "全部", "所有", "只看",
             "列出", "举例", "示例", "样例", "打开", "命中", "那条", "那几条", "发给",
             "把它们", "简单",
-            "本周末", "上周末", "周末", "类别", "分类",
+            "本周末", "上周末", "周末", "类别", "分类", "类型", "什么类型", "哪些类型", "都是什么类型", "是什么类型",
             "分析", "总结", "归纳", "分为",
         )
 ).distinct()
     .sortedByDescending(String::length)
 
 internal val reviewChatEntityStopWords = reviewChatStopWords + setOf(
-    "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询", "类别", "分类", "周末",
-    "分析", "总结", "归纳", "分为", "所有", "全部", "哪些", "它们",
+    "记录", "笔记", "聊天", "回看", "一下", "一下子", "帮忙", "看看", "统计", "查询", "类别", "分类", "类型", "周末",
+    "分析", "总结", "归纳", "分为", "所有", "全部", "哪些", "它们", "他们",
 )
 
 private val reviewChatGenericEntityTerms = setOf(
     "我这", "可以", "都有", "这些", "那些", "这个", "那个", "所有的", "全部的",
+    "他们",
     "历史记录", "个人历史", "全部历史", "整个历史",
     "看看都",
 )
@@ -278,11 +279,16 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .replace("看看都有哪些类别", " ")
         .replace("看看都有哪些", " ")
         .replace("可以分为哪些类别", " ")
+        .replace("都是什么类型", " ")
+        .replace("是什么类型", " ")
+        .replace("哪些类型", " ")
+        .replace("什么类型", " ")
         .replace("都有哪些", " ")
         .replace("我这所有记录", " ")
         .replace("我这全部记录", " ")
         .replace("我这所有", " ")
         .replace("把它们", " ")
+        .replace("他们", " ")
         .replace("简单", " ")
         .replace("是什么时候", " ")
         .replace("什么时间", " ")
@@ -308,6 +314,7 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
                 .removePrefix("所有")
                 .removePrefix("全部")
                 .removePrefix("它们")
+                .removePrefix("他们")
                 .removeSuffix("记录")
                 .removeSuffix("笔记")
                 .removeSuffix("内容")
@@ -1166,7 +1173,7 @@ internal fun wantsReviewChatLinks(question: String): Boolean =
     reviewChatLinkHints.any(question::contains)
 
 internal fun wantsReviewChatCategories(question: String): Boolean =
-    listOf("类别", "分类", "哪几类", "哪些类别", "归类").any(question::contains)
+    listOf("类别", "分类", "类型", "哪几类", "哪些类别", "哪些类型", "什么类型", "都是什么类型", "归类").any(question::contains)
 
 private fun NoteEntity.toReferencedNote(): ReviewChatReferencedNote =
     ReviewChatReferencedNote(

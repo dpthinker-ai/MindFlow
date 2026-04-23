@@ -42,6 +42,10 @@ class ReviewChatPlannerTest {
             .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(buildReviewChatQuestionProfile("看一下本周末记录了哪些信息，都有哪些类别").wantsCategories)
             .isTrue()
+        assertThat(buildReviewChatQuestionProfile("帮我看一下所有的记录，帮我总结一下他们都是什么类型的").mode)
+            .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(buildReviewChatQuestionProfile("帮我看一下所有的记录，帮我总结一下他们都是什么类型的").wantsCategories)
+            .isTrue()
         assertThat(buildReviewChatQuestionProfile("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。").mode)
             .isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
         assertThat(buildReviewChatQuestionProfile("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。").wantsBriefAnswer)
@@ -69,6 +73,11 @@ class ReviewChatPlannerTest {
         assertThat(categoryQuery2.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(categoryQuery2.wantsCategories).isTrue()
         assertThat(categoryQuery2.entityTerms).isEmpty()
+
+        val typeQuery = ReviewChatQueryParser.parse("帮我看一下所有的记录，帮我总结一下他们都是什么类型的")
+        assertThat(typeQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(typeQuery.wantsCategories).isTrue()
+        assertThat(typeQuery.entityTerms).isEmpty()
 
         val fullTextQuery = ReviewChatQueryParser.parse("把 4 月 10 号那天的完整内容发给我")
         assertThat(fullTextQuery.operation).isEqualTo(ReviewChatQueryOperation.FULL_TEXT)
