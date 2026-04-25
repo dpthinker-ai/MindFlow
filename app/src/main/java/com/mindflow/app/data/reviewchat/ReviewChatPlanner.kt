@@ -95,6 +95,31 @@ private val reviewChatGenericEntityTerms = setOf(
     "看看都",
 )
 
+private val reviewChatSemanticEntitySuffixes = listOf(
+    "建议", "原则", "方法", "经验", "观点", "看法", "态度",
+)
+
+private val reviewChatSemanticEntityExpansions = mapOf(
+    "人生" to listOf(
+        "人生",
+        "人生态度",
+        "成长",
+        "边界",
+        "社交边界",
+        "自我保护",
+        "注意力",
+        "精力",
+        "接纳",
+        "利他",
+        "价值",
+        "失败",
+        "生存法则",
+        "持续改变",
+    ),
+)
+
+private const val reviewChatSemanticEntityMinScore = 8
+
 private val reviewChatLowIntentProbeTerms = setOf(
     "abc", "test", "testing", "hello", "hi", "ok", "1", "11", "123", "测试", "试试",
 )
@@ -259,6 +284,7 @@ internal fun buildReviewChatContextPacket(
 ): ReviewChatContextPacket {
     val parsedQuery = (parsedQueryOverride ?: ReviewChatQueryParser.parse(question)).copy(intent = intent)
     val corpusContext = corpusContextOverride ?: ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
+    val skillResult = ReviewChatHistorySkill.run(parsedQuery, corpusContext)
     val effectiveRawNoteDetails = rawNoteDetails.ifEmpty { corpusContext.rawNoteDetails }
     val knowledgeBaseSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
@@ -313,6 +339,7 @@ internal fun buildReviewChatContextPacket(
         rawNoteEvidence = corpusContext.rawNoteEvidence,
         rawNoteDetails = effectiveRawNoteDetails,
         structuredSnippets = structuredSnippets,
+        skillResult = skillResult,
     )
 }
 
@@ -427,7 +454,7 @@ internal fun buildReviewChatCorpusSelection(
         )
     }
 
-    val scored = scopedNotes.map { note ->
+    val exactScored = scopedNotes.map { note ->
         note to scoreEntityTermMatch(note, entityTerms)
     }.filter { it.second > 0 }
         .sortedWith(
@@ -435,6 +462,12 @@ internal fun buildReviewChatCorpusSelection(
                 .thenBy { it.first.createdAt }
         )
         .map { it.first }
+    val semanticScored = if (exactScored.isEmpty()) {
+        buildSemanticEntityMatchedNotes(scopedNotes, entityTerms)
+    } else {
+        emptyList()
+    }
+    val scored = exactScored.ifEmpty { semanticScored }
 
     val shouldPreferScopedDateHits =
         hasRequestedTimeScope(question) &&
@@ -761,14 +794,82 @@ internal fun scoreEntityTermMatch(
     entityTerms: List<String>,
 ): Int {
     if (entityTerms.isEmpty()) return 0
+    return scoreReviewChatTerms(
+        note = note,
+        terms = entityTerms,
+        titleWeight = 12,
+        tagWeight = 10,
+        folderWeight = 8,
+        contentWeight = 5,
+    )
+}
 
+private fun buildSemanticEntityMatchedNotes(
+    scopedNotes: List<NoteEntity>,
+    entityTerms: List<String>,
+): List<NoteEntity> {
+    val semanticTerms = buildSemanticEntitySearchTerms(entityTerms)
+    if (semanticTerms.isEmpty()) return emptyList()
+    return scopedNotes.map { note ->
+        note to scoreSemanticEntityTermMatch(note, semanticTerms)
+    }.filter { it.second >= reviewChatSemanticEntityMinScore }
+        .sortedWith(
+            compareByDescending<Pair<NoteEntity, Int>> { it.second }
+                .thenBy { it.first.createdAt },
+        )
+        .map { it.first }
+}
+
+private fun buildSemanticEntitySearchTerms(entityTerms: List<String>): List<String> {
+    val terms = linkedSetOf<String>()
+    entityTerms.forEach { rawTerm ->
+        val normalized = rawTerm.trim().lowercase()
+        if (normalized.isBlank()) return@forEach
+        reviewChatSemanticEntitySuffixes.forEach { suffix ->
+            if (normalized.endsWith(suffix) && normalized.length > suffix.length + 1) {
+                terms += normalized.removeSuffix(suffix)
+            }
+        }
+        reviewChatSemanticEntityExpansions[normalized]?.let(terms::addAll)
+        terms.toList().forEach { term ->
+            reviewChatSemanticEntityExpansions[term]?.let(terms::addAll)
+        }
+    }
+    return terms.filter { term ->
+        term.length >= 2 &&
+            term !in reviewChatEntityStopWords &&
+            !isGenericReviewChatEntityTerm(term)
+    }.distinct()
+}
+
+private fun scoreSemanticEntityTermMatch(
+    note: NoteEntity,
+    semanticTerms: List<String>,
+): Int = scoreReviewChatTerms(
+    note = note,
+    terms = semanticTerms,
+    titleWeight = 8,
+    tagWeight = 6,
+    folderWeight = 5,
+    contentWeight = 3,
+)
+
+private fun scoreReviewChatTerms(
+    note: NoteEntity,
+    terms: List<String>,
+    titleWeight: Int,
+    tagWeight: Int,
+    folderWeight: Int,
+    contentWeight: Int,
+): Int {
+    if (terms.isEmpty()) return 0
     val title = note.topic.lowercase()
     val content = note.content.lowercase()
     val folder = note.folderKey.orEmpty().lowercase()
     val tags = note.tags.map(String::lowercase)
 
     var score = 0
-    entityTerms.forEach { term ->
+    terms.forEach { term ->
         val normalized = term.lowercase()
         val negatedInContent = listOf(
             "${normalized}无关",
@@ -780,10 +881,10 @@ internal fun scoreEntityTermMatch(
         ).any(content::contains)
         if (negatedInContent) return@forEach
         when {
-            title.contains(normalized) -> score += 12
-            tags.any { it.contains(normalized) } -> score += 10
-            folder.contains(normalized) -> score += 8
-            content.contains(normalized) -> score += 5
+            title.contains(normalized) -> score += titleWeight
+            tags.any { it.contains(normalized) } -> score += tagWeight
+            folder.contains(normalized) -> score += folderWeight
+            content.contains(normalized) -> score += contentWeight
         }
     }
     return score

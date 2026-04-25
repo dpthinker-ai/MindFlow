@@ -195,6 +195,7 @@ data class ReviewChatContextPacket(
     val rawNoteEvidence: List<ReviewChatEvidenceItem>,
     val rawNoteDetails: List<ReviewChatRawNoteDetail>,
     val structuredSnippets: List<String>,
+    val skillResult: ReviewChatSkillResult? = null,
 )
 
 fun buildReviewChatProviderLine(

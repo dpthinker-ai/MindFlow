@@ -232,6 +232,86 @@ class ReviewChatStructuredAnswerTest {
     }
 
     @Test
+    fun finalizeReviewChatStructuredAnswer_stripsDisallowedSectionsEmbeddedInSummary() {
+        val packet = ReviewChatContextPacket(
+            questionMode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            intent = ReviewChatIntent.RECALL,
+            question = "我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。",
+            isExternalQuestion = false,
+            wantsCount = false,
+            wantsCategories = false,
+            wantsBriefAnswer = true,
+            querySummarySnippets = emptyList(),
+            deterministicAnswerSnippets = emptyList(),
+            categoryDigestSnippets = emptyList(),
+            sessionSummary = "",
+            collectionOverview = null,
+            conversationSnippets = emptyList(),
+            historyAnchors = emptyList(),
+            memoryDigestSnippets = emptyList(),
+            memoryThreadSnippets = emptyList(),
+            knowledgeBaseSnippets = emptyList(),
+            wikiSnippets = emptyList(),
+            rawNoteEvidence = emptyList(),
+            rawNoteDetails = emptyList(),
+            structuredSnippets = emptyList(),
+        )
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = "unused",
+            candidate = parseReviewChatStructuredAnswer(
+                """
+                {
+                  "summary": "人生建议是提升价值、守住边界并持续改变。依据：2026-04-05《人生是多线程运行》。下一步：继续系统化。",
+                  "sections": []
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复").inOrder()
+        assertThat(answer.sections.single().body.single()).isEqualTo("人生建议是提升价值、守住边界并持续改变。")
+    }
+
+    @Test
+    fun finalizeReviewChatStructuredAnswer_splitsInlineJsonCategoryItems() {
+        val packet = basePacket(
+            questionMode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            question = "帮我看一下所有的记录，帮我总结一下他们都是什么类型的",
+        ).copy(wantsCategories = true)
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = "unused",
+            candidate = parseReviewChatStructuredAnswer(
+                """
+                {
+                  "summary": "这些记录主要分为几类。",
+                  "sections": [
+                    {
+                      "title": "类别",
+                      "items": [
+                        "类别：应用开发：启动页、图标、功能开发-类别：技术优化：OpenCL、GC、OCR-类别：个人成长：注意力、精力管理"
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复", "类别").inOrder()
+        assertThat(answer.sections[1].items).containsExactly(
+            "应用开发：启动页、图标、功能开发",
+            "技术优化：OpenCL、GC、OCR",
+            "个人成长：注意力、精力管理",
+        ).inOrder()
+    }
+
+    @Test
     fun finalizeReviewChatStructuredAnswer_analysisDropsEvidenceAndNextStepUnlessAsked() {
         val packet = basePacket(
             questionMode = ReviewChatQuestionMode.ANALYSIS,

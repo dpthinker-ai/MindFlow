@@ -62,6 +62,17 @@ internal fun finalizeReviewChatStructuredAnswer(
                 )
             }
     }
+    mergedSections["答复"]?.let { section ->
+        mergedSections["答复"] = sanitizeReviewChatAnswerSection(
+            section = section,
+            allowedTitles = buildReviewChatAllowedSectionTitles(
+                mode = packet.questionMode,
+                wantsCategories = packet.wantsCategories,
+                wantsBriefAnswer = packet.wantsBriefAnswer,
+                question = packet.question,
+            ).toSet(),
+        )
+    }
 
     buildDeterministicReviewChatSection(packet, normalized).forEach { section ->
         mergedSections[section.title] = mergeReviewChatStructuredSection(
@@ -370,8 +381,8 @@ private fun canonicalizeReviewChatStructuredSection(
     ReviewChatStructuredSection(
         title = canonicalReviewChatSectionTitle(section.title),
         body = section.body.mapNotNull { it.trim().takeIf(String::isNotBlank) },
-        items = section.items.mapNotNull { item ->
-            canonicalizeReviewChatSectionItem(
+        items = section.items.flatMap { item ->
+            canonicalizeReviewChatSectionItems(
                 title = canonicalReviewChatSectionTitle(section.title),
                 item = item,
             )
@@ -383,17 +394,81 @@ private fun canonicalReviewChatSectionTitle(title: String): String = when (title
     else -> title.trim()
 }
 
-private fun canonicalizeReviewChatSectionItem(
+private fun canonicalizeReviewChatSectionItems(
     title: String,
     item: String,
-): String? {
-    val normalized = item.trim().takeIf(String::isNotBlank) ?: return null
-    if (title != "类别") return normalized
-    return normalized
+): List<String> {
+    val normalized = item.trim().takeIf(String::isNotBlank) ?: return emptyList()
+    if (title != "类别") return listOf(normalized)
+
+    val withoutPrefix = normalized
         .removePrefix("类别：")
         .removePrefix("类别:")
         .trim()
-        .takeIf(String::isNotBlank)
+    val splitItems = splitInlineReviewChatCategoryItems(withoutPrefix)
+    return (splitItems.takeIf { it.isNotEmpty() } ?: listOf(withoutPrefix))
+        .mapNotNull { category ->
+            category
+                .removePrefix("类别：")
+                .removePrefix("类别:")
+                .trim()
+                .takeIf(String::isNotBlank)
+        }
+}
+
+private fun splitInlineReviewChatCategoryItems(content: String): List<String> {
+    val exploded = explodeInlineReviewChatBulletMarkers(content).trim()
+    if (!exploded.contains('\n') && !REVIEW_CHAT_BULLET_LINE_REGEX.matches(exploded)) return emptyList()
+
+    return exploded
+        .lines()
+        .mapNotNull { line ->
+            val trimmed = line.trim()
+            REVIEW_CHAT_BULLET_LINE_REGEX.matchEntire(trimmed)
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: trimmed.takeIf { it.isNotBlank() }
+        }
+}
+
+private fun sanitizeReviewChatAnswerSection(
+    section: ReviewChatStructuredSection,
+    allowedTitles: Set<String>,
+): ReviewChatStructuredSection {
+    val disallowedTitles = REVIEW_CHAT_ITEM_SECTION_TITLES - allowedTitles
+    if (disallowedTitles.isEmpty()) return section
+    return section.copy(
+        body = section.body.mapNotNull { paragraph ->
+            stripDisallowedReviewChatSections(
+                text = paragraph,
+                disallowedTitles = disallowedTitles,
+            ).takeIf(String::isNotBlank)
+        },
+        items = section.items.mapNotNull { item ->
+            stripDisallowedReviewChatSections(
+                text = item,
+                disallowedTitles = disallowedTitles,
+            ).takeIf(String::isNotBlank)
+        },
+    )
+}
+
+private fun stripDisallowedReviewChatSections(
+    text: String,
+    disallowedTitles: Set<String>,
+): String {
+    val labels = disallowedTitles.joinToString("|") { Regex.escape(it) }
+    if (labels.isBlank()) return text.trim()
+    val explicitLabel = Regex("(?s)(?:^|(?<=\\n)|(?<=[。！？；]))\\s*(?:$labels)[：:].*$")
+    val lineLabel = Regex("(?s)(?:^|(?<=\\n))\\s*(?:$labels)\\s*(?:\\n|$).*$")
+    val bareLabel = Regex("(?s)(?:^|(?<=\\n)|(?<=[。！？；]))\\s*(?:$labels)(?=(根据|原始|如果|当前|需要|可以|没有|已|先)).*$")
+    return listOf(explicitLabel, lineLabel, bareLabel)
+        .mapNotNull { regex -> regex.find(text)?.range?.first }
+        .minOrNull()
+        ?.let { index -> text.take(index).trim() }
+        ?: text.trim()
 }
 
 private fun mergeReviewChatStructuredSection(

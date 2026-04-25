@@ -19,6 +19,7 @@ object ReviewChatPromptFactory {
         appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
 
+        appendSkillResultSection(this, packet.skillResult)
         appendPromptSection(this, "查询结果", packet.querySummarySnippets)
         appendPromptSection(this, "确定结果", packet.deterministicAnswerSnippets)
         appendPromptSection(this, "分类候选", packet.categoryDigestSnippets)
@@ -137,6 +138,11 @@ object ReviewChatPromptFactory {
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             line = "当前问题：${compactForOnDevice(packet.question, maxChars = 220)}",
+        )
+        appendSkillResultWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            result = packet.skillResult,
         )
         appendSectionWithinBudget(
             builder = prompt,
@@ -312,8 +318,25 @@ object ReviewChatPromptFactory {
                 "is_external_question" to packet.isExternalQuestion.toString(),
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
                 "raw_note_count" to packet.rawNoteEvidence.size.toString(),
+                "skill_id" to packet.skillResult?.invocation?.skillId.orEmpty(),
+                "skill_scoped_count" to packet.skillResult?.facts?.coverage?.scopedCount?.toString().orEmpty(),
+                "skill_matched_count" to packet.skillResult?.facts?.coverage?.matchedCount?.toString().orEmpty(),
+                "skill_processed_count" to packet.skillResult?.facts?.coverage?.processedCount?.toString().orEmpty(),
             ),
         )
+    }
+
+    private fun appendSkillResultSection(
+        builder: StringBuilder,
+        result: ReviewChatSkillResult?,
+    ) {
+        if (result == null) return
+        builder.appendLine("SkillResult：")
+        ReviewChatHistorySkill.toPromptLines(
+            result = result,
+            maxCategoryBatches = Int.MAX_VALUE,
+            maxRecords = 10,
+        ).forEach(builder::appendLine)
     }
 
     private fun appendPromptSection(
@@ -407,6 +430,25 @@ object ReviewChatPromptFactory {
             }
             if (overview.last7DaysCount != null && overview.last30DaysCount != null) {
                 appendLine("- 近期分布：最近 7 天 ${overview.last7DaysCount} 条，最近 30 天 ${overview.last30DaysCount} 条")
+            }
+        }.trimEnd()
+        appendWithinBudget(builder = builder, budget = budget, line = section)
+    }
+
+    private fun appendSkillResultWithinBudget(
+        builder: StringBuilder,
+        budget: Int,
+        result: ReviewChatSkillResult?,
+    ) {
+        if (result == null) return
+        val section = buildString {
+            appendLine("SkillResult：")
+            ReviewChatHistorySkill.toPromptLines(
+                result = result,
+                maxCategoryBatches = if (result.invocation.intent == "classify_history_records") 8 else 0,
+                maxRecords = 0,
+            ).forEach { line ->
+                appendLine("- ${compactForOnDevice(line, maxChars = 140)}")
             }
         }.trimEnd()
         appendWithinBudget(builder = builder, budget = budget, line = section)

@@ -120,6 +120,45 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun buildReviewChatContextPacket_briefConceptSummaryFallsBackToSemanticMatches() {
+        val packet = buildReviewChatContextPacket(
+            question = "我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(
+                    1L,
+                    "人生是多线程运行",
+                    "人生不是排队通关，而是多线程运行：提升价值的同时赚钱，在利他的同时守住边界，在接纳自己的基础上持续改变。",
+                ),
+                sampleNote(
+                    2L,
+                    "社交边界与自我保护原则",
+                    "利他要有边界，不要为了取悦别人损耗自己的精力。",
+                ),
+                sampleNote(
+                    3L,
+                    "前端输入框问题",
+                    "输入法回车和发送按钮需要拆开处理。",
+                ),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(packet.wantsBriefAnswer).isTrue()
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(2)
+        assertThat(packet.rawNoteEvidence.map { it.title }).containsAtLeast(
+            "人生是多线程运行",
+            "社交边界与自我保护原则",
+        )
+        assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("前端输入框问题")
+        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(2)
+    }
+
+    @Test
     fun reviewChatRetriever_prioritizesTitleAndTagsOverBodyOnly() {
         val query = ReviewChatQueryParser.parse("抖音有哪些记录")
         val ranked = ReviewChatRetriever.rank(
@@ -1232,6 +1271,44 @@ class ReviewChatPlannerTest {
         assertThat(packet.categoryDigestSnippets.first()).contains("产品设计")
         assertThat(packet.categoryDigestSnippets.first()).contains("精神健康")
         assertThat(packet.rawNoteEvidence).hasSize(8)
+        assertThat(packet.skillResult).isNotNull()
+        assertThat(packet.skillResult!!.invocation.skillId).isEqualTo("history-query")
+        assertThat(packet.skillResult!!.facts.coverage.scopedCount).isEqualTo(8)
+        assertThat(packet.skillResult!!.facts.coverage.matchedCount).isEqualTo(8)
+        assertThat(packet.skillResult!!.facts.coverage.processedCount).isEqualTo(8)
+        assertThat(packet.skillResult!!.facts.coverage.complete).isTrue()
+        assertThat(packet.skillResult!!.responseRules)
+            .contains("分类必须覆盖 coverage 里的全部命中记录，每个类别单独成一条。")
+    }
+
+    @Test
+    fun reviewChatPromptFactory_cloudAndOnDeviceShareHistorySkillCoverage() {
+        val packet = buildReviewChatContextPacket(
+            question = "帮我分析总结下所有的记录，看看都有哪些类别。",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "产品设计", "启动页和图标方案"),
+                sampleNote(2L, "精神健康", "减少消费和增加阅读"),
+                sampleNote(3L, "AI实验", "上下文带宽和推理体验"),
+                sampleNote(4L, "训练计划", "跑步和力量循环"),
+            ),
+            weeklyReview = WeeklyReviewState(),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        val cloudPrompt = ReviewChatPromptFactory.cloud(packet)
+        val onDevicePrompt = ReviewChatPromptFactory.onDevice(packet)
+        val expectedCoverage = "coverage｜范围内 4 条；命中 4 条；已处理 4 条；完整覆盖=true"
+
+        assertThat(cloudPrompt).contains("SkillResult：")
+        assertThat(cloudPrompt).contains(expectedCoverage)
+        assertThat(cloudPrompt).contains("rule｜只回答用户当前问题，不要主动添加“依据”或“下一步”。")
+        assertThat(onDevicePrompt.userMessage).contains("SkillResult：")
+        assertThat(onDevicePrompt.userMessage).contains(expectedCoverage)
+        assertThat(onDevicePrompt.extraContext["skill_id"]).isEqualTo("history-query")
+        assertThat(onDevicePrompt.extraContext["skill_matched_count"]).isEqualTo("4")
     }
 
     @Test
