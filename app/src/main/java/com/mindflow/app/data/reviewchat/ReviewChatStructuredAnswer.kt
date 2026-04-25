@@ -37,6 +37,7 @@ internal fun finalizeReviewChatStructuredAnswer(
             mode = packet.questionMode,
             wantsCategories = packet.wantsCategories,
             wantsBriefAnswer = packet.wantsBriefAnswer,
+            question = packet.question,
         )
     }
 
@@ -73,6 +74,7 @@ internal fun finalizeReviewChatStructuredAnswer(
         mode = packet.questionMode,
         wantsCategories = packet.wantsCategories,
         wantsBriefAnswer = packet.wantsBriefAnswer,
+        question = packet.question,
     )
     val sections = orderedTitles
         .mapNotNull { title -> mergedSections[title] }
@@ -86,8 +88,9 @@ internal fun buildReviewChatStructuredOutputSchema(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
     wantsBriefAnswer: Boolean = false,
+    question: String = "",
 ): String {
-    val template = buildReviewChatStructuredOutputTemplateJson(mode, wantsCategories, wantsBriefAnswer)
+    val template = buildReviewChatStructuredOutputTemplateJson(mode, wantsCategories, wantsBriefAnswer, question)
     return "只返回一个 JSON 对象，不要 Markdown、不要代码块。严格使用这个模板里的 title 和顺序：$template。可以留空数组，但不要新增字段。"
 }
 
@@ -97,7 +100,14 @@ internal fun buildReviewChatStructuringPrompt(
 ): String = buildString {
     appendLine("把下面这段回答整理成一个 JSON 对象。不要新增事实，只能重组原回答已经表达的信息。")
     appendLine("问题路径：${packet.questionMode.name}")
-    appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer))
+    appendLine(
+        buildReviewChatStructuredOutputSchema(
+            mode = packet.questionMode,
+            wantsCategories = packet.wantsCategories,
+            wantsBriefAnswer = packet.wantsBriefAnswer,
+            question = packet.question,
+        )
+    )
     appendLine("规则：")
     appendLine("1. summary 只保留一句总答复。")
     appendLine("2. sections 里的 title 必须和模板完全一致，不要改名，也不要新增 section。")
@@ -112,10 +122,11 @@ internal fun buildReviewChatStructuredOutputTemplateJson(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
     wantsBriefAnswer: Boolean = false,
+    question: String = "",
 ): String = buildString {
     append("{\"summary\":\"一句话回答\",\"sections\":[")
     append(
-        buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer).joinToString(",") { title ->
+        buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer, question).joinToString(",") { title ->
             buildReviewChatStructuredTemplateSectionJson(title)
         }
     )
@@ -244,6 +255,7 @@ private fun normalizeReviewChatStructuredAnswer(
     mode: ReviewChatQuestionMode,
     wantsCategories: Boolean,
     wantsBriefAnswer: Boolean,
+    question: String,
 ): ReviewChatStructuredAnswer {
     val mergedSections = linkedMapOf<String, ReviewChatStructuredSection>()
     answer.sections
@@ -255,7 +267,7 @@ private fun normalizeReviewChatStructuredAnswer(
             )
         }
 
-    val orderedTitles = listOf("答复") + buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer)
+    val orderedTitles = listOf("答复") + buildReviewChatAllowedSectionTitles(mode, wantsCategories, wantsBriefAnswer, question)
     return ReviewChatStructuredAnswer(
         sections = orderedTitles
             .mapNotNull { title -> mergedSections[title] }
@@ -401,6 +413,12 @@ private fun buildDeterministicReviewChatSection(
     existingAnswer: ReviewChatStructuredAnswer?,
 ): List<ReviewChatStructuredSection> = buildList {
     val existingTitles = existingAnswer?.sections?.map { canonicalReviewChatSectionTitle(it.title) }?.toSet().orEmpty()
+    val allowedTitles = buildReviewChatAllowedSectionTitles(
+        mode = packet.questionMode,
+        wantsCategories = packet.wantsCategories,
+        wantsBriefAnswer = packet.wantsBriefAnswer,
+        question = packet.question,
+    ).toSet()
     val existingCategoryCount = existingAnswer?.sections
         ?.firstOrNull { canonicalReviewChatSectionTitle(it.title) == "类别" }
         ?.items
@@ -413,7 +431,7 @@ private fun buildDeterministicReviewChatSection(
                     ?.takeIf { existingCategoryCount < minOf(3, it.items.size) }
                     ?.let(::add)
             }
-            if (!packet.wantsCategories && !packet.wantsBriefAnswer && "依据" !in existingTitles) {
+            if ("依据" in allowedTitles && "依据" !in existingTitles) {
                 buildCollectionOverviewEvidenceSection(packet.collectionOverview)?.let(::add)
             }
         }
@@ -424,7 +442,7 @@ private fun buildDeterministicReviewChatSection(
                     ?.takeIf { existingCategoryCount < minOf(3, it.items.size) }
                     ?.let(::add)
             }
-            if (!packet.wantsCategories && !packet.wantsBriefAnswer && "记录" !in existingTitles) {
+            if ("记录" in allowedTitles && "记录" !in existingTitles) {
                 buildRecordEvidenceSection(packet.rawNoteEvidence)?.let(::add)
             }
         }
@@ -606,29 +624,6 @@ private fun extractJsonCandidate(content: String): String? {
         return unfenced.substring(start, end + 1)
     }
     return null
-}
-
-private fun buildReviewChatAllowedSectionTitles(
-    mode: ReviewChatQuestionMode,
-    wantsCategories: Boolean,
-    wantsBriefAnswer: Boolean,
-): List<String> = when (mode) {
-    ReviewChatQuestionMode.EXTERNAL -> listOf("下一步")
-    ReviewChatQuestionMode.COLLECTION_OVERVIEW -> if (wantsCategories) {
-        listOf("类别")
-    } else {
-        listOf("依据", "记录")
-    }
-    ReviewChatQuestionMode.RECORD_LOOKUP -> if (wantsBriefAnswer) {
-        emptyList()
-    } else if (wantsCategories) {
-        listOf("类别", "记录")
-    } else {
-        listOf("记录")
-    }
-    ReviewChatQuestionMode.FULL_RECORD -> listOf("完整记录")
-    ReviewChatQuestionMode.TIMELINE_ANCHOR -> listOf("时间线")
-    ReviewChatQuestionMode.ANALYSIS -> listOf("依据", "下一步")
 }
 
 private sealed interface ReviewChatJsonValue {

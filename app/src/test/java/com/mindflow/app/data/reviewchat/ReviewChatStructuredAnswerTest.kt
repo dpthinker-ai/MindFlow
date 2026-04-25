@@ -13,8 +13,16 @@ class ReviewChatStructuredAnswerTest {
 
         assertThat(schema).contains("严格使用这个模板里的 title 和顺序")
         assertThat(schema).contains("\"title\":\"类别\"")
-        assertThat(schema).contains("\"title\":\"记录\"")
+        assertThat(schema).doesNotContain("\"title\":\"记录\"")
         assertThat(schema).doesNotContain("\"title\":\"类别|记录\"")
+
+        val schemaWithRecords = buildReviewChatStructuredOutputSchema(
+            mode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            wantsCategories = true,
+            question = "帮我分类，并列出命中的记录",
+        )
+        assertThat(schemaWithRecords).contains("\"title\":\"类别\"")
+        assertThat(schemaWithRecords).contains("\"title\":\"记录\"")
     }
 
     @Test
@@ -222,4 +230,103 @@ class ReviewChatStructuredAnswerTest {
         assertThat(answer!!.sections.map { it.title }).containsExactly("答复").inOrder()
         assertThat(answer.sections.single().body.single()).contains("人生建议的核心")
     }
+
+    @Test
+    fun finalizeReviewChatStructuredAnswer_analysisDropsEvidenceAndNextStepUnlessAsked() {
+        val packet = basePacket(
+            questionMode = ReviewChatQuestionMode.ANALYSIS,
+            question = "我记了哪些人生建议？帮我总结成几句话。",
+        )
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = """
+                人生建议主要是提升价值、守住边界和持续改变。
+
+                依据：
+                - 来自人生建议记录。
+
+                下一步：
+                - 继续形成行动计划。
+            """.trimIndent(),
+            candidate = parseReviewChatStructuredAnswer(
+                """
+                人生建议主要是提升价值、守住边界和持续改变。
+
+                依据：
+                - 来自人生建议记录。
+
+                下一步：
+                - 继续形成行动计划。
+                """.trimIndent(),
+                includePlainSections = true,
+            ),
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复").inOrder()
+    }
+
+    @Test
+    fun finalizeReviewChatStructuredAnswer_keepsEvidenceAndNextStepWhenQuestionAsksForThem() {
+        val packet = basePacket(
+            questionMode = ReviewChatQuestionMode.ANALYSIS,
+            question = "为什么会得出这个判断？依据是什么，下一步建议怎么做？",
+        )
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = """
+                这个判断成立。
+
+                依据：
+                - 多条记录都提到同一趋势。
+
+                下一步：
+                - 先验证一个最小行动。
+            """.trimIndent(),
+            candidate = parseReviewChatStructuredAnswer(
+                """
+                这个判断成立。
+
+                依据：
+                - 多条记录都提到同一趋势。
+
+                下一步：
+                - 先验证一个最小行动。
+                """.trimIndent(),
+                includePlainSections = true,
+            ),
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复", "依据", "下一步").inOrder()
+    }
+
+    private fun basePacket(
+        questionMode: ReviewChatQuestionMode,
+        question: String,
+    ): ReviewChatContextPacket = ReviewChatContextPacket(
+        questionMode = questionMode,
+        intent = ReviewChatIntent.RECALL,
+        question = question,
+        isExternalQuestion = false,
+        wantsCount = false,
+        wantsCategories = false,
+        wantsBriefAnswer = false,
+        querySummarySnippets = emptyList(),
+        deterministicAnswerSnippets = emptyList(),
+        categoryDigestSnippets = emptyList(),
+        sessionSummary = "",
+        collectionOverview = null,
+        conversationSnippets = emptyList(),
+        historyAnchors = emptyList(),
+        memoryDigestSnippets = emptyList(),
+        memoryThreadSnippets = emptyList(),
+        knowledgeBaseSnippets = emptyList(),
+        wikiSnippets = emptyList(),
+        rawNoteEvidence = emptyList(),
+        rawNoteDetails = emptyList(),
+        structuredSnippets = emptyList(),
+    )
 }

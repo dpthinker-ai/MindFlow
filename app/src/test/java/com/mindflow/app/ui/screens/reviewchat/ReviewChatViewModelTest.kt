@@ -151,6 +151,61 @@ class ReviewChatViewModelTest {
     }
 
     @Test
+    fun emptySeed_restoresLatestWorkingSessionEditable() = runTest(dispatcher) {
+        val repository = FakeSavedConversationRepository().apply {
+            seedSession(
+                SavedReviewChatSession(
+                    sessionId = 9L,
+                    title = "未完成聊天",
+                    createdAt = 1_000L,
+                    updatedAt = 2_000L,
+                    messages = listOf(
+                        ReviewChatMessage(
+                            role = ReviewChatMessageRole.USER,
+                            content = "继续刚才的问题",
+                            createdAt = 1_000L,
+                        ),
+                    ),
+                    draft = "还没发出去的一句",
+                    isArchived = false,
+                ),
+            )
+        }
+
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(),
+            answerTurnStream = { error("should not run") },
+            savedConversationRepository = repository,
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.isReadOnly).isFalse()
+        assertThat(state.savedSessionId).isEqualTo(9L)
+        assertThat(state.messages.single().content).isEqualTo("继续刚才的问题")
+        assertThat(state.draft).isEqualTo("还没发出去的一句")
+    }
+
+    @Test
+    fun draftChange_cachesWorkingSession() = runTest(dispatcher) {
+        val repository = FakeSavedConversationRepository()
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(),
+            answerTurnStream = { error("should not run") },
+            savedConversationRepository = repository,
+        )
+
+        viewModel.onDraftChange("先写一半")
+        advanceUntilIdle()
+
+        val working = repository.workingSessions.single()
+        assertThat(working.draft).isEqualTo("先写一半")
+        assertThat(working.isArchived).isFalse()
+        assertThat(viewModel.uiState.value.savedSessionId).isEqualTo(working.sessionId)
+    }
+
+    @Test
     fun answerWithReferencedRecord_preservesNoteIdForOpenRecordAction() = runTest(dispatcher) {
         val viewModel = ReviewChatViewModel(
             seed = ReviewChatSeed(initialQuestion = "把 4 月 10 号那条完整记录给我"),
@@ -271,6 +326,46 @@ class ReviewChatViewModelTest {
     }
 
     @Test
+    fun sendDraft_statusEventShowsGenerationStatusUntilFinalAnswer() = runTest(dispatcher) {
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(),
+            answerTurnStream = {
+                flow {
+                    emit(
+                        ReviewChatTurnEvent.Status(
+                            message = "正在加载端侧模型并准备推理…",
+                            provider = ReviewChatProvider.ON_DEVICE,
+                            providerLine = "本次由端侧完成",
+                        )
+                    )
+                    emit(
+                        ReviewChatTurnEvent.Complete(
+                            ReviewChatTurnResult(
+                                answer = "端侧回答",
+                                provider = ReviewChatProvider.ON_DEVICE,
+                                fallbackOccurred = false,
+                                providerLine = "本次由端侧完成",
+                                sessionSummary = "端侧回答",
+                                titleSuggestion = "端侧",
+                            )
+                        )
+                    )
+                }
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        viewModel.onDraftChange("端侧问题")
+        viewModel.sendDraft()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.generationStatus).isEmpty()
+        assertThat(state.messages.last().content).isEqualTo("端侧回答")
+        assertThat(state.providerLine).isEqualTo("本次由端侧完成")
+    }
+
+    @Test
     fun completeTurn_preservesStructuredAnswerOnAssistantMessage() = runTest(dispatcher) {
         val structured = ReviewChatStructuredAnswer(
             sections = listOf(
@@ -315,44 +410,88 @@ class ReviewChatViewModelTest {
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {
         val savedSessions = mutableListOf<SavedReviewChatSession>()
         private val latestSummary = MutableStateFlow<SavedReviewChatSessionSummary?>(null)
+        private val savedSummaries = MutableStateFlow<List<SavedReviewChatSessionSummary>>(emptyList())
+
+        val workingSessions: List<SavedReviewChatSession>
+            get() = savedSessions.filter { !it.isArchived }
 
         override suspend fun saveSession(
+            sessionId: Long?,
             title: String,
             messages: List<ReviewChatMessage>,
         ): Long {
-            val sessionId = (savedSessions.size + 1).toLong()
+            val resolvedSessionId = sessionId ?: (savedSessions.size + 1).toLong()
             val session = SavedReviewChatSession(
-                sessionId = sessionId,
+                sessionId = resolvedSessionId,
                 title = title,
                 createdAt = messages.firstOrNull()?.createdAt ?: 0L,
                 updatedAt = messages.lastOrNull()?.createdAt ?: 0L,
                 messages = messages,
+                isArchived = true,
             )
+            savedSessions.removeAll { it.sessionId == resolvedSessionId }
             savedSessions += session
-            latestSummary.value = SavedReviewChatSessionSummary(
-                sessionId = sessionId,
-                title = title,
-                updatedAt = session.updatedAt,
-                messageCount = messages.size,
-                latestExcerpt = messages.lastOrNull()?.content.orEmpty(),
-            )
-            return sessionId
+            refreshSavedSummaries()
+            return resolvedSessionId
         }
+
+        override suspend fun cacheWorkingSession(
+            sessionId: Long?,
+            title: String,
+            messages: List<ReviewChatMessage>,
+            draft: String,
+        ): Long {
+            val resolvedSessionId = sessionId ?: (savedSessions.size + 1).toLong()
+            val session = SavedReviewChatSession(
+                sessionId = resolvedSessionId,
+                title = title,
+                createdAt = messages.firstOrNull()?.createdAt ?: 0L,
+                updatedAt = System.currentTimeMillis(),
+                messages = messages,
+                draft = draft,
+                isArchived = false,
+            )
+            savedSessions.removeAll { it.sessionId == resolvedSessionId }
+            savedSessions += session
+            return resolvedSessionId
+        }
+
+        override suspend fun getLatestWorkingSession(): SavedReviewChatSession? =
+            savedSessions.filter { !it.isArchived }.maxByOrNull { it.updatedAt }
 
         override suspend fun getSession(sessionId: Long): SavedReviewChatSession? =
             savedSessions.firstOrNull { it.sessionId == sessionId }
 
         override fun observeLatestSavedSessionSummary(): Flow<SavedReviewChatSessionSummary?> = latestSummary
 
+        override fun observeSavedSessionSummaries(): Flow<List<SavedReviewChatSessionSummary>> = savedSummaries
+
+        override suspend fun deleteSessions(sessionIds: List<Long>) {
+            savedSessions.removeAll { it.sessionId in sessionIds }
+            refreshSavedSummaries()
+        }
+
         fun seedSession(session: SavedReviewChatSession) {
             savedSessions += session
-            latestSummary.value = SavedReviewChatSessionSummary(
-                sessionId = session.sessionId,
-                title = session.title,
-                updatedAt = session.updatedAt,
-                messageCount = session.messages.size,
-                latestExcerpt = session.messages.lastOrNull()?.content.orEmpty(),
-            )
+            refreshSavedSummaries()
+        }
+
+        private fun refreshSavedSummaries() {
+            val summaries = savedSessions
+                .filter { it.isArchived }
+                .sortedWith(compareByDescending<SavedReviewChatSession> { it.updatedAt }.thenByDescending { it.sessionId })
+                .map { session ->
+                    SavedReviewChatSessionSummary(
+                        sessionId = session.sessionId,
+                        title = session.title,
+                        updatedAt = session.updatedAt,
+                        messageCount = session.messages.size,
+                        latestExcerpt = session.messages.lastOrNull()?.content.orEmpty(),
+                        isArchived = true,
+                    )
+                }
+            savedSummaries.value = summaries
+            latestSummary.value = summaries.firstOrNull()
         }
     }
 }

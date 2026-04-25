@@ -99,9 +99,14 @@ fun FlowRoute(
     val latestSavedConversationSummary by reviewChatSavedConversationRepository
         .observeLatestSavedSessionSummary()
         .collectAsStateWithLifecycle(initialValue = null)
+    val savedConversationSummaries by reviewChatSavedConversationRepository
+        .observeSavedSessionSummaries()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val routeScope = rememberCoroutineScope()
     FlowScreen(
         uiState = uiState,
         latestSavedConversationSummary = latestSavedConversationSummary,
+        savedConversationSummaries = savedConversationSummaries,
         focus = initialFocus,
         onRefreshMainline = viewModel::refreshMainline,
         onRefreshLocalKnowledgeBrain = viewModel::refreshLocalKnowledgeBrain,
@@ -111,6 +116,11 @@ fun FlowRoute(
         onCreateCapture = onCreateCapture,
         onOpenReviewChat = onOpenReviewChat,
         onOpenLatestSavedReviewChat = onOpenLatestSavedReviewChat,
+        onDeleteSavedReviewChats = { sessionIds ->
+            routeScope.launch {
+                reviewChatSavedConversationRepository.deleteSessions(sessionIds)
+            }
+        },
     )
 }
 
@@ -132,6 +142,7 @@ private fun FlowFocus?.toPage(): FlowPage = when (this) {
 private fun FlowScreen(
     uiState: FlowUiState,
     latestSavedConversationSummary: SavedReviewChatSessionSummary?,
+    savedConversationSummaries: List<SavedReviewChatSessionSummary>,
     focus: FlowFocus?,
     onRefreshMainline: () -> Unit,
     onRefreshLocalKnowledgeBrain: () -> Unit,
@@ -141,6 +152,7 @@ private fun FlowScreen(
     onCreateCapture: (CaptureSeed) -> Unit,
     onOpenReviewChat: (String) -> Unit,
     onOpenLatestSavedReviewChat: (Long) -> Unit,
+    onDeleteSavedReviewChats: (List<Long>) -> Unit,
 ) {
     val maintainerSnapshot = uiState.localMaintainerSnapshot
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
@@ -229,10 +241,10 @@ private fun FlowScreen(
                         item {
                             ReviewChatEntryCard(
                                 latestSavedSummary = latestSavedConversationSummary,
+                                savedSummaries = savedConversationSummaries,
                                 onOpenChat = { onOpenReviewChat("") },
-                                onOpenLatestSaved = {
-                                    latestSavedConversationSummary?.sessionId?.let(onOpenLatestSavedReviewChat)
-                                },
+                                onOpenSaved = onOpenLatestSavedReviewChat,
+                                onDeleteSaved = onDeleteSavedReviewChats,
                             )
                         }
                         item {

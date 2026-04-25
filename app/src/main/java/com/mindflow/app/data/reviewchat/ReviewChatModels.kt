@@ -74,6 +74,7 @@ enum class ReviewChatMessageRole {
 
 enum class ReviewChatProvider {
     LOCAL_MEMORY,
+    SYSTEM,
     CLOUD,
     ON_DEVICE,
 }
@@ -107,6 +108,12 @@ data class ReviewChatTurnResult(
 )
 
 sealed interface ReviewChatTurnEvent {
+    data class Status(
+        val message: String,
+        val provider: ReviewChatProvider? = null,
+        val providerLine: String = "",
+    ) : ReviewChatTurnEvent
+
     data class Partial(
         val content: String,
         val provider: ReviewChatProvider,
@@ -194,6 +201,7 @@ fun buildReviewChatProviderLine(
     provider: ReviewChatProvider,
     fallbackOccurred: Boolean,
 ): String = when {
+    provider == ReviewChatProvider.SYSTEM -> "系统提示"
     provider == ReviewChatProvider.CLOUD -> "本次由云侧完成"
     fallbackOccurred -> "云侧不可用，已回退端侧"
     else -> "本次由端侧完成"

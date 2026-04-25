@@ -95,6 +95,10 @@ private val reviewChatGenericEntityTerms = setOf(
     "看看都",
 )
 
+private val reviewChatLowIntentProbeTerms = setOf(
+    "abc", "test", "testing", "hello", "hi", "ok", "1", "11", "123", "测试", "试试",
+)
+
 internal val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
 internal fun extractReviewChatKeywords(question: String): List<String> =
@@ -147,6 +151,69 @@ internal fun buildReviewChatQuestionProfile(question: String): ReviewChatQuestio
         wantsBriefAnswer = parsedQuery.wantsBriefAnswer,
         isExternalQuestion = parsedQuery.isExternalQuestion,
     )
+}
+
+internal fun shouldAskReviewChatClarifyingQuestion(
+    question: String,
+    notes: List<NoteEntity>,
+): Boolean {
+    val trimmed = question.trim()
+    if (trimmed.isBlank()) return false
+
+    val compact = trimmed.lowercase().replace(Regex("\\s+"), "")
+    if (compact in reviewChatLowIntentProbeTerms) return true
+
+    val parsedQuery = ReviewChatQueryParser.parse(trimmed)
+    val hasExplicitOperation =
+        parsedQuery.isExternalQuestion ||
+            parsedQuery.wantsCount ||
+            parsedQuery.wantsCategories ||
+            parsedQuery.wantsFullRecord ||
+            parsedQuery.wantsTimelineAnchor ||
+            parsedQuery.wantsLinks ||
+            parsedQuery.wantsExamples ||
+            parsedQuery.timeScope != ReviewChatTimeScope.AllTime ||
+            reviewChatOperationPhrases.any(trimmed::contains) ||
+            reviewChatDeepAnalysisHints.any(trimmed::contains)
+    if (hasExplicitOperation) return false
+
+    val asciiOnly = trimmed.all { char ->
+        char.isLetterOrDigit() || char.isWhitespace() || char in setOf('-', '_', '.', '/', '#')
+    }
+    if (!asciiOnly || compact.length > 12) return false
+
+    val hasDirectHistoryMatch = parsedQuery.entityTerms.any { term ->
+        notes.any { note -> hasStrongReviewChatEntityMatch(note, term) }
+    }
+    return !hasDirectHistoryMatch
+}
+
+private fun hasStrongReviewChatEntityMatch(
+    note: NoteEntity,
+    term: String,
+): Boolean {
+    val normalized = term.trim().lowercase()
+    if (normalized.isBlank()) return false
+    val shortAsciiTerm = normalized.length <= 3 && normalized.all { it.isLetterOrDigit() }
+    if (!shortAsciiTerm) return scoreEntityTermMatch(note, listOf(normalized)) > 0
+
+    val title = note.topic.lowercase()
+    val folder = note.folderKey.orEmpty().lowercase()
+    val tags = note.tags.map(String::lowercase)
+    return title.contains(normalized) ||
+        folder.contains(normalized) ||
+        tags.any { it.contains(normalized) }
+}
+
+private fun isPotentialReviewChatClarificationProbe(question: String): Boolean {
+    val trimmed = question.trim()
+    if (trimmed.isBlank()) return false
+    val compact = trimmed.lowercase().replace(Regex("\\s+"), "")
+    if (compact in reviewChatLowIntentProbeTerms) return true
+    val asciiOnly = trimmed.all { char ->
+        char.isLetterOrDigit() || char.isWhitespace() || char in setOf('-', '_', '.', '/', '#')
+    }
+    return asciiOnly && compact.length <= 12
 }
 
 internal data class ReviewChatCorpusSelection(
@@ -736,6 +803,7 @@ class ReviewChatPlanner(
     private val streamOnDevice: (suspend (ReviewChatOnDeviceRequest) -> Flow<String>)? = null,
 ) {
     suspend fun answer(request: ReviewChatTurnRequest): ReviewChatTurnResult {
+        buildLowIntentClarificationResult(request)?.let { return it }
         val prepared = prepareReviewChatContext(request)
 
         val cloudPrompt = ReviewChatPromptFactory.cloud(prepared.packet)
@@ -768,6 +836,7 @@ class ReviewChatPlanner(
                     }
                 }
                 ReviewChatProvider.LOCAL_MEMORY -> error("Review chat no longer routes through LOCAL_MEMORY")
+                ReviewChatProvider.SYSTEM -> error("Review chat SYSTEM provider is deterministic")
             }
             if (result is AiChatResult.Success) {
                 val fallbackOccurred = index > 0
@@ -793,8 +862,14 @@ class ReviewChatPlanner(
     }
 
     fun answerStream(request: ReviewChatTurnRequest): Flow<ReviewChatTurnEvent> = flow {
+        buildLowIntentClarificationResult(request)?.let { result ->
+            emit(ReviewChatTurnEvent.Complete(result))
+            return@flow
+        }
+        emit(ReviewChatTurnEvent.Status(message = "正在读取历史记录…"))
         val prepared = prepareReviewChatContext(request)
 
+        emit(ReviewChatTurnEvent.Status(message = "正在组织问题上下文…"))
         val cloudPrompt = ReviewChatPromptFactory.cloud(prepared.packet)
         val onDevicePrompt = ReviewChatPromptFactory.onDevice(prepared.packet)
         val attempts = when (resolveExecutionMode()) {
@@ -807,6 +882,14 @@ class ReviewChatPlanner(
         attempts.forEachIndexed { index, provider ->
             when (provider) {
                 ReviewChatProvider.CLOUD -> {
+                    val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
+                    emit(
+                        ReviewChatTurnEvent.Status(
+                            message = "正在请求云侧模型…",
+                            provider = provider,
+                            providerLine = providerLine,
+                        )
+                    )
                     val result = if (isCloudConfigured()) {
                         runCloud(cloudPrompt)
                     } else {
@@ -822,7 +905,7 @@ class ReviewChatPlanner(
                                     structuredAnswer = structuredAnswer,
                                     provider = provider,
                                     fallbackOccurred = index > 0,
-                                    providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0),
+                                    providerLine = providerLine,
                                     sessionSummary = "${request.question.take(40)}｜${normalizedAnswer.take(80)}",
                                     titleSuggestion = request.question.take(18),
                                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
@@ -838,15 +921,36 @@ class ReviewChatPlanner(
                 }
 
                 ReviewChatProvider.ON_DEVICE -> {
+                    val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
+                    emit(
+                        ReviewChatTurnEvent.Status(
+                            message = "正在检查端侧模型…",
+                            provider = provider,
+                            providerLine = providerLine,
+                        )
+                    )
                     if (!isOnDeviceReady()) {
                         lastFailure = AiChatResult.Failure(AiFailureReason.CONFIG, "端侧未就绪")
                         return@forEachIndexed
                     }
 
-                    val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
+                    emit(
+                        ReviewChatTurnEvent.Status(
+                            message = "正在加载端侧模型并准备推理…",
+                            provider = provider,
+                            providerLine = providerLine,
+                        )
+                    )
                     if (streamOnDevice != null) {
                         val buffer = StringBuilder()
                         runCatching {
+                            emit(
+                                ReviewChatTurnEvent.Status(
+                                    message = "正在端侧推理，首段内容生成后会实时显示…",
+                                    provider = provider,
+                                    providerLine = providerLine,
+                                )
+                            )
                             streamOnDevice.invoke(
                                 ReviewChatOnDeviceRequest(
                                     sessionId = request.sessionId,
@@ -898,6 +1002,13 @@ class ReviewChatPlanner(
                             )
                         }
                     } else {
+                        emit(
+                            ReviewChatTurnEvent.Status(
+                                message = "正在端侧推理…",
+                                provider = provider,
+                                providerLine = providerLine,
+                            )
+                        )
                         val result = runOnDevice(
                             ReviewChatOnDeviceRequest(
                                 sessionId = request.sessionId,
@@ -934,10 +1045,35 @@ class ReviewChatPlanner(
                 }
 
                 ReviewChatProvider.LOCAL_MEMORY -> error("Review chat no longer routes through LOCAL_MEMORY")
+                ReviewChatProvider.SYSTEM -> error("Review chat SYSTEM provider is deterministic")
             }
         }
 
         error(lastFailure?.message ?: "No provider returned a usable review chat answer")
+    }
+
+    private suspend fun buildLowIntentClarificationResult(
+        request: ReviewChatTurnRequest,
+    ): ReviewChatTurnResult? {
+        if (!isPotentialReviewChatClarificationProbe(request.question)) return null
+        val notes = loadNotes()
+        if (!shouldAskReviewChatClarifyingQuestion(request.question, notes)) return null
+        val answer = """
+            我还没看出你想查什么。
+
+            你可以直接这样问：
+            - 我今天记录了什么？
+            - 帮我总结所有记录的类别
+            - 查一下 OpenCL 相关记录
+        """.trimIndent()
+        return ReviewChatTurnResult(
+            answer = answer,
+            provider = ReviewChatProvider.SYSTEM,
+            fallbackOccurred = false,
+            providerLine = buildReviewChatProviderLine(ReviewChatProvider.SYSTEM, fallbackOccurred = false),
+            sessionSummary = "需要补充问题意图",
+            titleSuggestion = "问题不明确",
+        )
     }
 
     private suspend fun prepareReviewChatContext(

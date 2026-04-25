@@ -1,6 +1,7 @@
 package com.mindflow.app.ui.screens.reviewchat
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.BorderStroke
@@ -8,9 +9,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +80,7 @@ import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.launch
 
 @Composable
 fun ReviewChatRoute(
@@ -93,9 +99,21 @@ fun ReviewChatRoute(
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val routeScope = rememberCoroutineScope()
+    var isLeaving by remember { mutableStateOf(false) }
+    val flushAndBack = {
+        if (!isLeaving) {
+            isLeaving = true
+            routeScope.launch {
+                viewModel.flushWorkingSession()
+                onBack()
+            }
+        }
+    }
+    BackHandler(onBack = flushAndBack)
     ReviewChatScreen(
         uiState = uiState,
-        onBack = onBack,
+        onBack = flushAndBack,
         onDraftChange = viewModel::onDraftChange,
         onSend = viewModel::sendDraft,
         onRetry = viewModel::retry,
@@ -116,14 +134,20 @@ private fun ReviewChatScreen(
 ) {
     val listState = rememberLazyListState()
     var copySheet by remember { mutableStateOf<ReviewChatCopySheetState?>(null) }
+    val bottomAnchorIndex = uiState.messages.size +
+        (if (uiState.isSending) 1 else 0) +
+        (if (!uiState.errorMessage.isNullOrBlank()) 1 else 0)
 
-    LaunchedEffect(uiState.messages.size, uiState.isSending) {
-        val targetIndex = when {
-            uiState.isSending -> uiState.messages.size
-            uiState.messages.isNotEmpty() -> uiState.messages.lastIndex
-            else -> null
+    LaunchedEffect(uiState.messages.size, uiState.isSending, uiState.errorMessage) {
+        if (bottomAnchorIndex > 0) {
+            listState.animateScrollToItem(bottomAnchorIndex)
         }
-        targetIndex?.let { listState.animateScrollToItem(it) }
+    }
+
+    LaunchedEffect(uiState.draft.length, uiState.streamingAnswer, bottomAnchorIndex) {
+        if (bottomAnchorIndex > 0) {
+            listState.scrollToItem(bottomAnchorIndex)
+        }
     }
 
     ScreenBackground {
@@ -131,7 +155,8 @@ private fun ReviewChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(),
         ) {
             Row(
                 modifier = Modifier
@@ -224,11 +249,18 @@ private fun ReviewChatScreen(
                             )
                         } else {
                             PanelCard {
-                                Text(
-                                    text = "正在整理这次回答…",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextMain,
-                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        text = uiState.generationStatus.ifBlank { "正在整理这次回答…" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextMain,
+                                    )
+                                    if (uiState.providerLine.isNotBlank()) {
+                                        InsightChip(text = uiState.providerLine)
+                                    }
+                                }
                             }
                         }
                     }
@@ -250,15 +282,16 @@ private fun ReviewChatScreen(
                         }
                     }
                 }
+                item("bottom-anchor") {
+                    Spacer(modifier = Modifier.height(1.dp))
+                }
             }
 
             if (!uiState.isReadOnly) {
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.96f),
                     border = BorderStroke(1.dp, BorderSoft),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .imePadding(),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
                         modifier = Modifier
@@ -266,21 +299,29 @@ private fun ReviewChatScreen(
                             .padding(horizontal = ScreenHorizontalPadding, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        ComposerTextField(
-                            value = uiState.draft,
-                            onValueChange = onDraftChange,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            maxLines = 5,
-                            imeAction = ImeAction.Default,
-                            placeholder = "继续追问，或者换个角度聊。",
-                        )
-                        ActionButton(
-                            text = if (uiState.isSending) "生成中" else "发送",
-                            onClick = onSend,
-                            enabled = uiState.canSend,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Bottom,
+                        ) {
+                            ComposerTextField(
+                                value = uiState.draft,
+                                onValueChange = onDraftChange,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 56.dp, max = 148.dp),
+                                minLines = 1,
+                                maxLines = 4,
+                                imeAction = ImeAction.Default,
+                                placeholder = "继续追问，或换个角度聊。",
+                            )
+                            ActionButton(
+                                text = if (uiState.isSending) "生成中" else "发送",
+                                onClick = onSend,
+                                enabled = uiState.canSend,
+                                modifier = Modifier.widthIn(min = 76.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -390,6 +431,7 @@ private fun ReviewChatMessageBubble(
                 }
                 val providerLabel = when {
                     providerLine.isNotBlank() -> providerLine
+                    message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
                     message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
                     message.provider == ReviewChatProvider.ON_DEVICE -> "端侧回答"
                     else -> ""

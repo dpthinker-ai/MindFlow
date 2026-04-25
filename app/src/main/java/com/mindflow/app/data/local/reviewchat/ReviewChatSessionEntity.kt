@@ -12,4 +12,6 @@ data class ReviewChatSessionEntity(
     val updatedAt: Long,
     val messageCount: Int,
     val latestExcerpt: String,
+    val isArchived: Boolean = true,
+    val draftContent: String = "",
 )

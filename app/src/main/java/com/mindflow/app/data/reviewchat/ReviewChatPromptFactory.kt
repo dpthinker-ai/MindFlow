@@ -8,6 +8,7 @@ object ReviewChatPromptFactory {
     fun onDevice(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt = buildOnDevicePrompt(packet)
 
     private fun buildPrompt(packet: ReviewChatContextPacket): String = buildString {
+        val responsePolicy = ReviewChatResponsePolicy.resolve(packet)
         appendLine(
             when (packet.questionMode) {
                 ReviewChatQuestionMode.EXTERNAL -> "你正在回答一个通用问题，不要假装拥有实时外部信息。"
@@ -37,13 +38,26 @@ object ReviewChatPromptFactory {
         }
 
         appendLine("回答要求：")
-        appendLine("0. ${buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer)}")
+        appendLine(
+            "0. ${
+                buildReviewChatStructuredOutputSchema(
+                    mode = packet.questionMode,
+                    wantsCategories = packet.wantsCategories,
+                    wantsBriefAnswer = packet.wantsBriefAnswer,
+                    question = packet.question,
+                )
+            }"
+        )
         appendLine("1. 先直接回答当前问题，不要重复上一轮。")
         when (packet.questionMode) {
             ReviewChatQuestionMode.EXTERNAL -> {
                 appendLine("2. 这是外部或通用问题，不要引用个人历史记录，也不要附历史记录链接。")
                 appendLine("3. 如果问题需要实时天气、新闻、股价等信息，要直接说明你无法获取实时数据；如果能回答，就给简短通用建议。")
-                appendLine("4. 把一句总答复写进 summary；如果要补充建议，只写进 `下一步` section 的 items，每个数组元素只放一条建议。")
+                if (responsePolicy.allows(REVIEW_CHAT_SECTION_NEXT_STEP)) {
+                    appendLine("4. 把一句总答复写进 summary；用户明确要建议或行动时，才把建议写进 `下一步` section 的 items，每个数组元素只放一条建议。")
+                } else {
+                    appendLine("4. 把一句总答复写进 summary；不要创建 `依据`、`下一步` 或历史记录相关 section。")
+                }
                 appendLine("5. 默认使用 Markdown；不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
@@ -56,8 +70,14 @@ object ReviewChatPromptFactory {
                     appendLine("7. 类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。")
                     appendLine("8. 不要创建 `依据` 或 `下一步` 这样的额外 section，也不要输出 Markdown 表格。")
                 } else {
-                    appendLine("5. 把直接答案写进 summary；如需解释原因，只写进 `依据` section 的 items，每个数组元素只放一条依据。")
-                    appendLine("6. 只有在用户明确要求举例或列记录时，才填写 `记录` section；每个 items 元素都写成 `日期《标题》：摘要`。不要输出 Markdown 表格，也不要照抄证据字段标签。")
+                    appendLine("5. 把直接答案写进 summary；不要默认创建 `依据` 或 `下一步` section。")
+                    if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
+                        appendLine("6. 用户明确要求依据或统计口径时，才把原因写进 `依据` section 的 items，每个数组元素只放一条依据。")
+                    } else if (responsePolicy.allows(REVIEW_CHAT_SECTION_RECORD)) {
+                        appendLine("6. 用户明确要求举例或列记录时，才填写 `记录` section；每个 items 元素都写成 `日期《标题》：摘要`。不要输出 Markdown 表格，也不要照抄证据字段标签。")
+                    } else {
+                        appendLine("6. 不要填写额外 section，不要输出 Markdown 表格，也不要照抄证据字段标签。")
+                    }
                 }
             }
             ReviewChatQuestionMode.RECORD_LOOKUP -> {
@@ -90,8 +110,13 @@ object ReviewChatPromptFactory {
             }
             ReviewChatQuestionMode.ANALYSIS -> {
                 appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                appendLine("3. 把总答复写进 summary；把依据写进 `依据` section 的 items；把建议写进 `下一步` section 的 items。")
-                appendLine("4. `依据` 和 `下一步` 里的每个 items 元素都只放一条内容，不要写成表格，也不要使用 Markdown 标题。")
+                appendLine("3. 把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section。")
+                if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
+                    appendLine("4. 用户明确追问依据、原因或证据时，才把支撑材料写进 `依据` section 的 items，每个 items 元素只放一条内容。")
+                }
+                if (responsePolicy.allows(REVIEW_CHAT_SECTION_NEXT_STEP)) {
+                    appendLine("5. 用户明确要建议、计划或行动项时，才把建议写进 `下一步` section 的 items，每个 items 元素只放一条内容。")
+                }
                 appendLine("5. 如果材料跨不同时间，要点出变化，不要只盯最近两天。")
                 appendLine("6. 不要输出 Markdown 表格，改用项目列表或分段。")
             }
@@ -102,6 +127,7 @@ object ReviewChatPromptFactory {
     }
 
     private fun buildOnDevicePrompt(packet: ReviewChatContextPacket): ReviewChatOnDevicePrompt {
+        val responsePolicy = ReviewChatResponsePolicy.resolve(packet)
         val prompt = StringBuilder()
         val recentUserSnippets = packet.conversationSnippets
             .filter { it.startsWith("用户｜") }
@@ -207,13 +233,24 @@ object ReviewChatPromptFactory {
                 )
                 appendLine("问题路径：${packet.questionMode.name}")
                 appendLine("问题类型：${packet.intent.name}")
-                appendLine(buildReviewChatStructuredOutputSchema(packet.questionMode, packet.wantsCategories, packet.wantsBriefAnswer))
+                appendLine(
+                    buildReviewChatStructuredOutputSchema(
+                        mode = packet.questionMode,
+                        wantsCategories = packet.wantsCategories,
+                        wantsBriefAnswer = packet.wantsBriefAnswer,
+                        question = packet.question,
+                    )
+                )
                 appendLine("回答要求：先直接回答当前问题，不要重复上一轮。")
                 when (packet.questionMode) {
                     ReviewChatQuestionMode.EXTERNAL -> {
                         appendLine("补充要求：不要引用个人历史记录，也不要给历史记录链接。")
                         appendLine("如果问题需要实时天气、新闻、股价等信息，就明确说明你无法获取实时数据；如果可以，给简短通用建议。")
-                        appendLine("把总答复写进 summary；如要补充建议，只写进 `下一步` section 的 items。不要使用基于历史材料的拒答口径，也不要输出表格或 Markdown 标题。")
+                        if (responsePolicy.allows(REVIEW_CHAT_SECTION_NEXT_STEP)) {
+                            appendLine("把总答复写进 summary；用户明确要建议或行动时，才把建议写进 `下一步` section 的 items。不要使用基于历史材料的拒答口径，也不要输出表格或 Markdown 标题。")
+                        } else {
+                            appendLine("把总答复写进 summary；不要创建 `依据`、`下一步` 或历史记录相关 section。不要使用基于历史材料的拒答口径，也不要输出表格或 Markdown 标题。")
+                        }
                     }
                     ReviewChatQuestionMode.COLLECTION_OVERVIEW -> {
                         appendLine("补充要求：这是全局统计或整体概览问题，优先根据集合概览直接回答。")
@@ -222,7 +259,14 @@ object ReviewChatPromptFactory {
                         if (packet.wantsCategories) {
                             appendLine("把总览写进 summary；把类别写进 `类别` section 的 items，每个数组元素只放一条 `类别名称：说明`。不要把多个类别塞进同一个 items 字符串。类别只能来自命中原始记录的内容主题，不要把“时间范围”“统计信息”“历史记录”“查询结果”“集合概览”当成类别。不要创建额外 section，也不要输出表格。")
                         } else {
-                            appendLine("把直接答案写进 summary；如需解释，只写进 `依据` section 的 items。只有明确要求举例时才填写 `记录` section。不要输出表格，也不要照抄证据字段标签。")
+                            appendLine("把直接答案写进 summary；不要默认创建 `依据` 或 `下一步` section。")
+                            if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
+                                appendLine("用户明确要求依据或统计口径时，才把原因写进 `依据` section 的 items。不要输出表格，也不要照抄证据字段标签。")
+                            } else if (responsePolicy.allows(REVIEW_CHAT_SECTION_RECORD)) {
+                                appendLine("只有明确要求举例时才填写 `记录` section。不要输出表格，也不要照抄证据字段标签。")
+                            } else {
+                                appendLine("不要填写额外 section，不要输出表格，也不要照抄证据字段标签。")
+                            }
                         }
                     }
                     ReviewChatQuestionMode.RECORD_LOOKUP -> {
@@ -247,7 +291,14 @@ object ReviewChatPromptFactory {
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
                         appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
-                        appendLine("把总答复写进 summary；把依据写进 `依据` section 的 items；把建议写进 `下一步` section 的 items。不要使用 Markdown 标题，也不要输出表格。")
+                        appendLine("把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section。")
+                        if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
+                            appendLine("用户明确追问依据、原因或证据时，才把支撑材料写进 `依据` section 的 items。")
+                        }
+                        if (responsePolicy.allows(REVIEW_CHAT_SECTION_NEXT_STEP)) {
+                            appendLine("用户明确要建议、计划或行动项时，才把建议写进 `下一步` section 的 items。")
+                        }
+                        appendLine("不要使用 Markdown 标题，也不要输出表格。")
                     }
                 }
                 if (packet.questionMode != ReviewChatQuestionMode.EXTERNAL) {

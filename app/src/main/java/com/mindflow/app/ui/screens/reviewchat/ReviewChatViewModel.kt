@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class ReviewChatUiState(
     val title: String = "和历史聊聊",
@@ -28,6 +30,7 @@ data class ReviewChatUiState(
     val providerLine: String = "",
     val streamingAnswer: String = "",
     val streamingProvider: ReviewChatProvider? = null,
+    val generationStatus: String = "",
     val errorMessage: String? = null,
     val savedSessionId: Long? = null,
 ) {
@@ -48,6 +51,7 @@ class ReviewChatViewModel(
 
     private var pendingQuestion: String? = null
     private var pendingPriorMessages: List<ReviewChatMessage> = emptyList()
+    private val cacheMutex = Mutex()
 
     init {
         when {
@@ -56,11 +60,13 @@ class ReviewChatViewModel(
                 question = seed.initialQuestion.trim(),
                 appendUserMessage = true,
             )
+            else -> loadWorkingSession()
         }
     }
 
     fun onDraftChange(value: String) {
         _uiState.update { it.copy(draft = value) }
+        cacheWorkingSession()
     }
 
     fun sendDraft() {
@@ -80,6 +86,7 @@ class ReviewChatViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null) }
             val sessionId = savedConversationRepository.saveSession(
+                sessionId = state.savedSessionId,
                 title = state.title.ifBlank { state.messages.firstOrNull()?.content?.take(18).orEmpty() },
                 messages = state.messages,
             )
@@ -88,6 +95,25 @@ class ReviewChatViewModel(
                     isSaving = false,
                     isReadOnly = true,
                     savedSessionId = sessionId,
+                )
+            }
+        }
+    }
+
+    suspend fun flushWorkingSession() {
+        persistWorkingSession()
+    }
+
+    private fun loadWorkingSession() {
+        viewModelScope.launch {
+            val session = savedConversationRepository.getLatestWorkingSession() ?: return@launch
+            _uiState.update {
+                it.copy(
+                    title = session.title,
+                    messages = session.messages,
+                    draft = session.draft,
+                    isReadOnly = false,
+                    savedSessionId = session.sessionId,
                 )
             }
         }
@@ -139,15 +165,18 @@ class ReviewChatViewModel(
                     isSending = true,
                     streamingAnswer = "",
                     streamingProvider = null,
+                    generationStatus = "正在准备问题…",
                     errorMessage = null,
                 )
             }
+            cacheWorkingSession()
         } else {
             _uiState.update {
                 it.copy(
                     isSending = true,
                     streamingAnswer = "",
                     streamingProvider = null,
+                    generationStatus = "正在准备问题…",
                     errorMessage = null,
                 )
             }
@@ -163,12 +192,24 @@ class ReviewChatViewModel(
                     )
                 ).collect { event ->
                     when (event) {
+                        is ReviewChatTurnEvent.Status -> {
+                            _uiState.update { state ->
+                                state.copy(
+                                    generationStatus = event.message,
+                                    streamingProvider = event.provider,
+                                    providerLine = event.providerLine,
+                                    errorMessage = null,
+                                )
+                            }
+                        }
+
                         is ReviewChatTurnEvent.Partial -> {
                             _uiState.update { state ->
                                 state.copy(
                                     streamingAnswer = event.content,
                                     streamingProvider = event.provider,
                                     providerLine = event.providerLine,
+                                    generationStatus = "",
                                     errorMessage = null,
                                 )
                             }
@@ -194,9 +235,11 @@ class ReviewChatViewModel(
                                     providerLine = result.providerLine,
                                     streamingAnswer = "",
                                     streamingProvider = null,
+                                    generationStatus = "",
                                     errorMessage = null,
                                 )
                             }
+                            cacheWorkingSession()
                         }
                     }
                 }
@@ -206,11 +249,48 @@ class ReviewChatViewModel(
                         isSending = false,
                         streamingAnswer = "",
                         streamingProvider = null,
+                        generationStatus = "",
                         errorMessage = error.message ?: "生成回答失败，请重试。",
                     )
                 }
+                cacheWorkingSession()
             }
         }
+    }
+
+    private fun cacheWorkingSession() {
+        if (_uiState.value.isReadOnly) return
+        viewModelScope.launch {
+            persistWorkingSession()
+        }
+    }
+
+    private suspend fun persistWorkingSession() {
+        cacheMutex.withLock {
+            val state = _uiState.value
+            if (state.isReadOnly || (state.messages.isEmpty() && state.draft.isBlank())) return@withLock
+            val sessionId = savedConversationRepository.cacheWorkingSession(
+                sessionId = state.savedSessionId,
+                title = workingSessionTitle(state),
+                messages = state.messages,
+                draft = state.draft,
+            )
+            _uiState.update { current ->
+                if (!current.isReadOnly && current.savedSessionId == state.savedSessionId) {
+                    current.copy(savedSessionId = sessionId)
+                } else {
+                    current
+                }
+            }
+        }
+    }
+
+    private fun workingSessionTitle(state: ReviewChatUiState): String {
+        if (state.title.isNotBlank() && state.title != "和历史聊聊") return state.title
+        return state.messages.firstOrNull { it.role == ReviewChatMessageRole.USER }
+            ?.content
+            ?.take(18)
+            ?: state.draft.take(18).ifBlank { "和历史聊聊" }
     }
 
     companion object {

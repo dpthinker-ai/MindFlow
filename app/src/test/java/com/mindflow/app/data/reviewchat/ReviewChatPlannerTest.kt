@@ -412,6 +412,101 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_lowIntentProbeAsksForClarificationWithoutCallingModels() = runTest {
+        var cloudCalled = false
+        var onDeviceCalled = false
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "产品方向", "最近一直在讨论推荐链路和增长")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.AUTOMATIC },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { true },
+            runCloud = {
+                cloudCalled = true
+                AiChatResult.Success("不应该调用云侧")
+            },
+            runOnDevice = {
+                onDeviceCalled = true
+                AiChatResult.Success("不应该调用端侧")
+            },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "test",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalled).isFalse()
+        assertThat(onDeviceCalled).isFalse()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.SYSTEM)
+        assertThat(result.answer).contains("我还没看出你想查什么")
+    }
+
+    @Test
+    fun answer_shortAsciiWithDirectHistoryMatchStillRoutesToModel() = runTest {
+        var cloudCalled = false
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "OpenCL 接入", "GPU 推理和 OpenCL 库能力")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = {
+                cloudCalled = true
+                AiChatResult.Success("你有一条 OpenCL 相关记录。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "OpenCL",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalled).isTrue()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(result.answer).contains("OpenCL")
+    }
+
+    @Test
+    fun answer_shortAsciiBodyOnlyMatchStillAsksForClarification() = runTest {
+        var cloudCalled = false
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "产品方向", "正文里偶然出现 adc 字样")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = {
+                cloudCalled = true
+                AiChatResult.Success("不应该调用云侧")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "adc",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(cloudCalled).isFalse()
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.SYSTEM)
+        assertThat(result.answer).contains("我还没看出你想查什么")
+    }
+
+    @Test
     fun answer_genericHistoryQuestion_isNotBlockedByOutOfScopeGuard() = runTest {
         var cloudCalled = false
         val planner = ReviewChatPlanner(
@@ -825,7 +920,7 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("原始记录：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
-        assertThat(prompt.systemInstruction).contains("把总答复写进 summary；把依据写进 `依据` section 的 items；把建议写进 `下一步` section 的 items")
+        assertThat(prompt.systemInstruction).contains("把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section")
     }
 
     @Test
