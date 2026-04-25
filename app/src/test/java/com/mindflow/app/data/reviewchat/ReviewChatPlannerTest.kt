@@ -902,6 +902,47 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_linkQuestionNormalizesModelUrlConfusionToAppRecordReferences() = runTest {
+        val april10Timestamp = LocalDate.now(ZoneId.systemDefault())
+            .withMonth(4)
+            .withDayOfMonth(10)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(42L, "4 月 10 号讨论", "完整原文").copy(
+                        createdAt = april10Timestamp,
+                        updatedAt = april10Timestamp + 1_000L,
+                    ),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            runCloud = { AiChatResult.Success("2026-04-10 共1 条记录，但材料中未提供原始链接。") },
+            runOnDevice = { AiChatResult.Success("端侧不应该被调用") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "把 4 月 10 号那条记录的原始链接发给我",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.answer).contains("已找到 1 条可打开的原始记录")
+        assertThat(result.answer).contains("${LocalDate.now(ZoneId.systemDefault()).year}-04-10｜4 月 10 号讨论")
+        assertThat(result.answer).doesNotContain("未提供原始链接")
+        assertThat(result.referencedNotes).hasSize(1)
+        assertThat(result.referencedNotes.single().noteId).isEqualTo(42L)
+    }
+
+    @Test
     fun onDevicePrompt_isCondensedAndKeepsCurrentQuestion() {
         val packet = buildReviewChatContextPacket(
             question = "把我过去几个月关于产品方向的分歧串起来",

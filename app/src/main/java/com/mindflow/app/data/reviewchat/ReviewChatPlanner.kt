@@ -941,7 +941,7 @@ class ReviewChatPlanner(
             }
             if (result is AiChatResult.Success) {
                 val fallbackOccurred = index > 0
-                val normalizedAnswer = result.content.trim()
+                val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, result.content)
                 val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                 return ReviewChatTurnResult(
                     answer = normalizedAnswer,
@@ -997,7 +997,7 @@ class ReviewChatPlanner(
                         AiChatResult.Failure(AiFailureReason.CONFIG, "云侧未配置")
                     }
                     if (result is AiChatResult.Success) {
-                        val normalizedAnswer = result.content.trim()
+                        val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, result.content)
                         val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                         emit(
                             ReviewChatTurnEvent.Complete(
@@ -1074,16 +1074,17 @@ class ReviewChatPlanner(
                         }.onSuccess {
                             val content = buffer.toString().trim()
                             if (isUsableReviewChatAnswer(content)) {
-                                val structuredAnswer = coerceStructuredAnswer(prepared.packet, content)
+                                val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, content)
+                                val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                                 emit(
                                     ReviewChatTurnEvent.Complete(
                                         ReviewChatTurnResult(
-                                            answer = content,
+                                            answer = normalizedAnswer,
                                             structuredAnswer = structuredAnswer,
                                             provider = provider,
                                             fallbackOccurred = index > 0,
                                             providerLine = providerLine,
-                                            sessionSummary = "${request.question.take(40)}｜${content.take(80)}",
+                                            sessionSummary = "${request.question.take(40)}｜${normalizedAnswer.take(80)}",
                                             titleSuggestion = request.question.take(18),
                                             referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                             referencedNotes = prepared.referencedNotes,
@@ -1120,7 +1121,7 @@ class ReviewChatPlanner(
                             )
                         )
                         if (result is AiChatResult.Success) {
-                            val normalizedAnswer = result.content.trim()
+                            val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, result.content)
                             val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
                             emit(
                                 ReviewChatTurnEvent.Complete(
@@ -1151,6 +1152,20 @@ class ReviewChatPlanner(
         }
 
         error(lastFailure?.message ?: "No provider returned a usable review chat answer")
+    }
+
+    private fun normalizeReviewChatModelAnswer(
+        prepared: PreparedReviewChatContext,
+        answer: String,
+    ): String {
+        val trimmed = answer.trim()
+        if (!wantsReviewChatLinks(prepared.packet.question) || prepared.referencedNotes.isEmpty()) {
+            return trimmed
+        }
+        val references = prepared.referencedNotes.joinToString("\n") { note ->
+            "- ${note.dateLabel}｜${note.title}"
+        }
+        return "已找到 ${prepared.referencedNotes.size} 条可打开的原始记录，已附在下方。\n$references"
     }
 
     private suspend fun buildLowIntentClarificationResult(
