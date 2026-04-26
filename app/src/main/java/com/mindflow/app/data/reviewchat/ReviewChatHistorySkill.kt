@@ -5,6 +5,7 @@ import com.mindflow.app.data.skills.SkillJsonValue
 import com.mindflow.app.data.skills.SkillMiniJsonParser
 import com.mindflow.app.data.skills.SkillModelPass
 import com.mindflow.app.data.skills.SkillResult
+import com.mindflow.app.data.skills.SkillWebViewSpec
 
 internal object ReviewChatHistorySkill {
     private const val SKILL_ID = "history-query"
@@ -103,6 +104,7 @@ internal object ReviewChatHistorySkill {
             } else {
                 emptyList()
             },
+            skillWebView = runtimeResult.webview?.toReviewChatSkillWebView(),
         )
     }
 
@@ -393,7 +395,15 @@ internal object ReviewChatHistorySkill {
 internal data class ReviewChatHistorySkillRuntimeResult(
     val skillResult: ReviewChatSkillResult,
     val rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
+    val skillWebView: ReviewChatSkillWebView? = null,
 )
+
+private fun SkillWebViewSpec.toReviewChatSkillWebView(): ReviewChatSkillWebView =
+    ReviewChatSkillWebView(
+        url = url,
+        iframe = iframe,
+        aspectRatio = aspectRatio,
+    )
 
 private data class ReviewChatRuntimeRecord(
     val id: Long,

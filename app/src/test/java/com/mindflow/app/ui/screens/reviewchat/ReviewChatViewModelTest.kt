@@ -6,6 +6,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatMessageRole
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
+import com.mindflow.app.data.reviewchat.ReviewChatSkillWebView
 import com.mindflow.app.data.reviewchat.ReviewChatStructuredAnswer
 import com.mindflow.app.data.reviewchat.ReviewChatStructuredSection
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
@@ -405,6 +406,39 @@ class ReviewChatViewModelTest {
 
         val assistant = viewModel.uiState.value.messages.last()
         assertThat(assistant.structuredAnswer).isEqualTo(structured)
+    }
+
+    @Test
+    fun completeTurn_preservesSkillWebViewOnAssistantMessage() = runTest(dispatcher) {
+        val skillWebView = ReviewChatSkillWebView(
+            url = "file:///android_asset/skills/history-query/assets/result-card.html?matched=3",
+            iframe = false,
+            aspectRatio = 1.333f,
+        )
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "今天记录了什么"),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = "今天命中 3 条记录。",
+                            provider = ReviewChatProvider.CLOUD,
+                            fallbackOccurred = false,
+                            providerLine = "本次由云侧完成",
+                            sessionSummary = "今天记录",
+                            titleSuggestion = "今天记录",
+                            skillWebView = skillWebView,
+                        )
+                    )
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.messages.last()
+        assertThat(assistant.skillWebView).isEqualTo(skillWebView)
     }
 
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {

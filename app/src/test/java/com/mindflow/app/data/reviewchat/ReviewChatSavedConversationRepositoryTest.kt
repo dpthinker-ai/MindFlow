@@ -28,6 +28,11 @@ class ReviewChatSavedConversationRepositoryTest {
                     content = "你在增长和定位之间反复摇摆",
                     provider = ReviewChatProvider.CLOUD,
                     createdAt = 1_100L,
+                    skillWebView = ReviewChatSkillWebView(
+                        url = "file:///android_asset/skills/history-query/assets/result-card.html?matched=2",
+                        iframe = false,
+                        aspectRatio = 1.5f,
+                    ),
                 ),
             ),
         )
@@ -37,6 +42,8 @@ class ReviewChatSavedConversationRepositoryTest {
 
         assertThat(saved?.messages).hasSize(2)
         assertThat(saved?.messages?.last()?.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(saved?.messages?.last()?.skillWebView?.url).contains("result-card.html?matched=2")
+        assertThat(saved?.messages?.last()?.skillWebView?.aspectRatio).isEqualTo(1.5f)
         assertThat(latest?.sessionId).isEqualTo(sessionId)
         assertThat(latest?.title).isEqualTo("产品方向的矛盾")
     }

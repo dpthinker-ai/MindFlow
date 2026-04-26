@@ -15,6 +15,7 @@ import com.mindflow.app.data.review.WeeklyReviewState
 import com.mindflow.app.data.skills.SkillInvocation
 import com.mindflow.app.data.skills.SkillResult
 import com.mindflow.app.data.skills.SkillRuntime
+import com.mindflow.app.data.skills.SkillWebViewSpec
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiFailureReason
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
@@ -448,6 +449,11 @@ class ReviewChatPlannerTest {
                     invocations += invocation
                     return SkillResult(
                         result = "命中 1 条记录，已处理 1 条。",
+                        webview = SkillWebViewSpec(
+                            url = "file:///android_asset/skills/history-query/assets/result-card.html?matched=1",
+                            iframe = false,
+                            aspectRatio = 1.333f,
+                        ),
                         dataJson = """
                             {
                               "coverage": {
@@ -491,6 +497,7 @@ class ReviewChatPlannerTest {
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
         assertThat(invocations).hasSize(1)
         assertThat(invocations.single().data).contains("\"includeContent\":true")
+        assertThat(result.skillWebView?.url).contains("result-card.html?matched=1")
         assertThat(capturedPrompts.single()).contains("skill runtime 返回的完整原文")
         assertThat(capturedPrompts.single()).doesNotContain("旧路径里的完整原文")
     }

@@ -957,6 +957,7 @@ class ReviewChatPlanner(
                     titleSuggestion = request.question.take(18),
                     referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                     referencedNotes = prepared.referencedNotes,
+                    skillWebView = prepared.skillWebView,
                 )
             }
             if (result is AiChatResult.Failure) {
@@ -1015,6 +1016,7 @@ class ReviewChatPlanner(
                                     titleSuggestion = request.question.take(18),
                                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
                                     referencedNotes = prepared.referencedNotes,
+                                    skillWebView = prepared.skillWebView,
                                 )
                             )
                         )
@@ -1092,6 +1094,7 @@ class ReviewChatPlanner(
                                             titleSuggestion = request.question.take(18),
                                             referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                             referencedNotes = prepared.referencedNotes,
+                                            skillWebView = prepared.skillWebView,
                                         )
                                     )
                                 )
@@ -1139,6 +1142,7 @@ class ReviewChatPlanner(
                                         titleSuggestion = request.question.take(18),
                                         referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                         referencedNotes = prepared.referencedNotes,
+                                        skillWebView = prepared.skillWebView,
                                     )
                                 )
                             )
@@ -1258,6 +1262,7 @@ class ReviewChatPlanner(
             packet = packet,
             directRawNoteDetails = effectiveRawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
+            skillWebView = runtimeBackedSkillResult?.skillWebView,
         )
     }
 
@@ -1385,6 +1390,7 @@ private data class PreparedReviewChatContext(
     val packet: ReviewChatContextPacket,
     val directRawNoteDetails: List<ReviewChatRawNoteDetail>,
     val referencedNotes: List<ReviewChatReferencedNote>,
+    val skillWebView: ReviewChatSkillWebView? = null,
 )
 
 private fun isUsableReviewChatAnswer(content: String): Boolean {

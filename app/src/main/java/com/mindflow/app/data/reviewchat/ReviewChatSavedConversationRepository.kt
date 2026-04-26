@@ -143,6 +143,13 @@ class RoomReviewChatSavedConversationRepository(
                 },
                 provider = entity.provider?.let(ReviewChatProvider::valueOf),
                 createdAt = entity.createdAt,
+                skillWebView = entity.skillWebViewUrl?.let { url ->
+                    ReviewChatSkillWebView(
+                        url = url,
+                        iframe = entity.skillWebViewIframe,
+                        aspectRatio = entity.skillWebViewAspectRatio ?: 1.333f,
+                    )
+                },
             )
         }
         return SavedReviewChatSession(
@@ -195,6 +202,9 @@ class RoomReviewChatSavedConversationRepository(
                     content = message.content,
                     provider = message.provider?.name,
                     createdAt = message.createdAt,
+                    skillWebViewUrl = message.skillWebView?.url,
+                    skillWebViewIframe = message.skillWebView?.iframe ?: false,
+                    skillWebViewAspectRatio = message.skillWebView?.aspectRatio,
                 )
             },
         )

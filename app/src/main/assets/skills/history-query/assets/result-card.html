@@ -1,39 +1,179 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>History Query Result Card</title>
     <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #667085;
+        --line: #e6e1d6;
+        --paper: #fffdf7;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
-        font-family: sans-serif;
-        background: #f7f7f8;
-        color: #111827;
+        padding: 10px;
+        font-family: "Noto Serif SC", "Songti SC", serif;
+        background: transparent;
+        color: var(--ink);
       }
+
       .card {
-        box-sizing: border-box;
+        min-height: calc(100vh - 20px);
         padding: 16px;
-        border-radius: 16px;
-        background: white;
-        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 36%),
+          linear-gradient(135deg, #fffdf7 0%, #f8f2e5 100%);
+        border: 1px solid var(--line);
+        box-shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
       }
-      h1 {
+
+      .eyebrow {
         margin: 0 0 8px;
-        font-size: 16px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
       }
-      p {
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: 18px;
+        line-height: 1.28;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .metric {
+        padding: 10px 8px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(230, 225, 214, 0.9);
+      }
+
+      .value {
+        display: block;
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .label {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .range,
+      .status {
+        margin: 8px 0 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .records {
+        margin: 12px 0 0;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(230, 225, 214, 0.78);
+      }
+
+      .records-title {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      ul {
         margin: 0;
-        font-size: 14px;
-        line-height: 1.5;
+        padding-left: 18px;
+      }
+
+      li {
+        margin: 4px 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--muted);
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h1>History Query</h1>
-      <p>This is a placeholder card for the first skill runtime skeleton.</p>
-    </div>
+    <article class="card">
+      <p class="eyebrow">Skill Card</p>
+      <h1>历史检索覆盖情况</h1>
+      <section class="metrics">
+        <div class="metric">
+          <span class="value" id="total">0</span>
+          <span class="label">范围内</span>
+        </div>
+        <div class="metric">
+          <span class="value" id="matched">0</span>
+          <span class="label">命中</span>
+        </div>
+        <div class="metric">
+          <span class="value" id="processed">0</span>
+          <span class="label">已处理</span>
+        </div>
+      </section>
+      <p class="range" id="range"></p>
+      <p class="status" id="status"></p>
+      <section class="records" id="recordsBox" hidden>
+        <p class="records-title">示例记录</p>
+        <ul id="records"></ul>
+      </section>
+    </article>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const text = (key, fallback = "0") => params.get(key) || fallback;
+      document.getElementById("total").textContent = text("total");
+      document.getElementById("matched").textContent = text("matched");
+      document.getElementById("processed").textContent = text("processed");
+
+      const start = params.get("start");
+      const end = params.get("end");
+      document.getElementById("range").textContent = start && end
+        ? `时间范围：${start} 至 ${end}`
+        : "时间范围：全部历史";
+
+      const complete = params.get("complete") === "true";
+      document.getElementById("status").textContent = complete
+        ? "本次检索已完整覆盖命中记录。"
+        : "本次只展示了部分记录，后续可继续分页。";
+
+      const records = (params.get("records") || "")
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (records.length > 0) {
+        document.getElementById("recordsBox").hidden = false;
+        document.getElementById("records").innerHTML = records
+          .map((item) => `<li>${item.replace(/[&<>"']/g, (char) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+          })[char])}</li>`)
+          .join("");
+      }
+    </script>
   </body>
 </html>
-

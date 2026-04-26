@@ -87,6 +87,7 @@ data class ReviewChatMessage(
     val createdAt: Long,
     val referencedNoteId: Long? = null,
     val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
+    val skillWebView: ReviewChatSkillWebView? = null,
 )
 
 data class ReviewChatTurnRequest(
@@ -105,6 +106,7 @@ data class ReviewChatTurnResult(
     val titleSuggestion: String,
     val referencedNoteId: Long? = null,
     val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
+    val skillWebView: ReviewChatSkillWebView? = null,
 )
 
 sealed interface ReviewChatTurnEvent {
@@ -144,6 +146,12 @@ data class ReviewChatRawNoteDetail(
     val title: String,
     val dateLabel: String,
     val fullContent: String,
+)
+
+data class ReviewChatSkillWebView(
+    val url: String,
+    val iframe: Boolean = false,
+    val aspectRatio: Float = 1.333f,
 )
 
 data class ReviewChatCollectionOverview(

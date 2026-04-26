@@ -1,5 +1,9 @@
 package com.mindflow.app.ui.screens.reviewchat
 
+import android.annotation.SuppressLint
+import android.graphics.Color
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -7,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
@@ -51,6 +56,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,6 +66,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatReferencedNote
 import com.mindflow.app.data.reviewchat.ReviewChatStructuredAnswer
+import com.mindflow.app.data.reviewchat.ReviewChatSkillWebView
 import com.mindflow.app.data.reviewchat.normalizeReviewChatAnswerForDisplay
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.renderReviewChatStructuredAnswerAsMarkdown
@@ -429,6 +436,9 @@ private fun ReviewChatMessageBubble(
                         markdown = normalizedContent,
                     )
                 }
+                message.skillWebView?.let { skillWebView ->
+                    ReviewChatSkillWebViewCard(skillWebView)
+                }
                 val providerLabel = when {
                     providerLine.isNotBlank() -> providerLine
                     message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
@@ -465,6 +475,44 @@ private fun ReviewChatMessageBubble(
                 }
             }
         }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun ReviewChatSkillWebViewCard(
+    skillWebView: ReviewChatSkillWebView,
+) {
+    val safeAspectRatio = skillWebView.aspectRatio.takeIf { it in 0.5f..2.5f } ?: 1.333f
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, BorderSoft),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 172.dp, max = 280.dp)
+                .aspectRatio(safeAspectRatio),
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.allowFileAccess = true
+                    settings.builtInZoomControls = false
+                    settings.displayZoomControls = false
+                    setBackgroundColor(Color.TRANSPARENT)
+                    webViewClient = WebViewClient()
+                    loadUrl(skillWebView.url)
+                }
+            },
+            update = { view ->
+                if (view.url != skillWebView.url) {
+                    view.loadUrl(skillWebView.url)
+                }
+            },
+        )
     }
 }
 

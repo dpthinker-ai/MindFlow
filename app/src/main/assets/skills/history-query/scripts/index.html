@@ -43,6 +43,22 @@
         return `- ${date}《${title}》：${summary}`;
       }
 
+      function buildResultCardUrl(coverage, records) {
+        const params = new URLSearchParams();
+        const dateRange = coverage && coverage.dateRange ? coverage.dateRange : {};
+        params.set("total", String(coverage?.totalCount || 0));
+        params.set("matched", String(coverage?.matchedCount || 0));
+        params.set("processed", String(coverage?.processedCount || 0));
+        params.set("complete", String(Boolean(coverage?.complete)));
+        if (dateRange.start) params.set("start", String(dateRange.start));
+        if (dateRange.end) params.set("end", String(dateRange.end));
+        const titles = records
+          .slice(0, 3)
+          .map((record) => `${record.date || "未知日期"}｜${record.title || "未命名记录"}`);
+        if (titles.length > 0) params.set("records", titles.join("\n"));
+        return `assets/result-card.html?${params.toString()}`;
+      }
+
       async function runHistoryQuery(input) {
         const payload = normalizeQueryPayload(input || {});
         const intent = String(input?.intent || "lookup");
@@ -72,7 +88,7 @@
         return {
           result: lines.join("\n"),
           webview: {
-            url: "assets/result-card.html",
+            url: buildResultCardUrl(queryResult.coverage || coverage, records),
             iframe: false,
             aspectRatio: 1.333
           },

@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [ReviewChatSessionEntity::class, ReviewChatMessageEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class ReviewChatDatabase : RoomDatabase() {
@@ -18,6 +18,14 @@ abstract class ReviewChatDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE review_chat_sessions ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE review_chat_sessions ADD COLUMN draftContent TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE review_chat_messages ADD COLUMN skillWebViewUrl TEXT")
+                db.execSQL("ALTER TABLE review_chat_messages ADD COLUMN skillWebViewIframe INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE review_chat_messages ADD COLUMN skillWebViewAspectRatio REAL")
             }
         }
     }
