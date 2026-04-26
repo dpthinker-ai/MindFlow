@@ -198,6 +198,7 @@ data class ReviewChatContextPacket(
     val historyAnchors: List<ReviewChatTimelineAnchor>,
     val memoryDigestSnippets: List<String>,
     val memoryThreadSnippets: List<String>,
+    val availableSkillSnippets: List<String> = emptyList(),
     val knowledgeBaseSnippets: List<String>,
     val wikiSnippets: List<String>,
     val rawNoteEvidence: List<ReviewChatEvidenceItem>,

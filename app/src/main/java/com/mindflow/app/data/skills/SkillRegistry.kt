@@ -8,6 +8,31 @@ interface SkillRegistry {
     fun listSkills(): List<SkillPackage>
 }
 
+data class SkillPromptSummary(
+    val id: String,
+    val name: String,
+    val description: String,
+    val outputs: Set<SkillOutputType>,
+)
+
+fun SkillPackage.toPromptSummary(): SkillPromptSummary =
+    SkillPromptSummary(
+        id = manifest.id,
+        name = manifest.name,
+        description = instructions.description.ifBlank { manifest.description },
+        outputs = manifest.output,
+    )
+
+fun SkillPromptSummary.toPromptLine(): String {
+    val outputLabel = outputs.joinToString("/") { it.name.lowercase() }.ifBlank { "text" }
+    return "- $id：$description（输出：$outputLabel）"
+}
+
+fun SkillRegistry.listPromptLines(): List<String> =
+    listSkills()
+        .sortedBy { it.manifest.id }
+        .map { it.toPromptSummary().toPromptLine() }
+
 class AssetSkillRegistry(
     private val context: Context,
 ) : SkillRegistry {
@@ -42,4 +67,3 @@ class AssetSkillRegistry(
         const val ASSET_SKILLS_ROOT = "skills"
     }
 }
-

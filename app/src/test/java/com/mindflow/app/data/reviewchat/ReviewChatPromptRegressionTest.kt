@@ -66,6 +66,7 @@ class ReviewChatPromptRegressionTest {
         val packet = packet(
             question = "今天天气怎么样",
             notes = listOf(note(1L, "产品方向", "今天讨论了推荐链路")),
+            availableSkillSnippets = listOf("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）"),
         )
 
         val cloud = ReviewChatPromptFactory.cloud(packet)
@@ -75,11 +76,31 @@ class ReviewChatPromptRegressionTest {
         assertThat(cloud).contains("你正在回答一个通用问题")
         assertThat(cloud).contains("不要引用个人历史记录")
         assertThat(cloud).doesNotContain("SkillResult：")
+        assertThat(cloud).doesNotContain("可用技能：")
         assertThat(cloud).doesNotContain("原始记录：")
         assertThat(cloud).doesNotContain("产品方向")
         assertThat(onDevice.systemInstruction).contains("不要引用个人历史记录")
         assertThat(onDevice.userMessage).doesNotContain("SkillResult：")
+        assertThat(onDevice.userMessage).doesNotContain("可用技能：")
         assertThat(onDevice.userMessage).doesNotContain("产品方向")
+    }
+
+    @Test
+    fun historyPromptCarriesAvailableSkillSummariesBeforeSkillResult() {
+        val packet = packet(
+            question = "今天记录了什么？",
+            notes = listOf(note(1L, "产品方向", "今天讨论了推荐链路")),
+            availableSkillSnippets = listOf("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）"),
+        )
+
+        val cloud = ReviewChatPromptFactory.cloud(packet)
+        val onDevice = ReviewChatPromptFactory.onDevice(packet)
+
+        assertThat(cloud).contains("可用技能：")
+        assertThat(cloud).contains("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
+        assertThat(cloud.indexOf("可用技能：")).isLessThan(cloud.indexOf("SkillResult："))
+        assertThat(onDevice.userMessage).contains("可用技能：")
+        assertThat(onDevice.extraContext["available_skill_count"]).isEqualTo("1")
     }
 
     @Test
@@ -115,6 +136,7 @@ class ReviewChatPromptRegressionTest {
     private fun packet(
         question: String,
         notes: List<NoteEntity>,
+        availableSkillSnippets: List<String> = emptyList(),
     ): ReviewChatContextPacket = buildReviewChatContextPacket(
         question = question,
         intent = ReviewChatIntent.RECALL,
@@ -123,6 +145,7 @@ class ReviewChatPromptRegressionTest {
         maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
         wikiSnapshot = DirectionWikiSnapshot(),
         sessionSummary = "",
+        availableSkillSnippets = availableSkillSnippets,
     )
 
     private fun note(

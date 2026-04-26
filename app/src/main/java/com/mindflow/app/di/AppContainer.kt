@@ -52,6 +52,7 @@ import com.mindflow.app.data.skills.DefaultSkillRuntime
 import com.mindflow.app.data.skills.SkillRegistry
 import com.mindflow.app.data.skills.SkillRuntime
 import com.mindflow.app.data.skills.WebViewJsSkillExecutor
+import com.mindflow.app.data.skills.listPromptLines
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
@@ -369,6 +370,9 @@ class AppContainer(context: Context) {
                 settings = aiSettingsRepository.getCurrent(),
                 prompt = prompt,
             )
+        },
+        listAvailableSkillSnippets = {
+            skillRegistry.listPromptLines()
         },
         skillRuntime = skillRuntime,
         runCloud = { prompt ->

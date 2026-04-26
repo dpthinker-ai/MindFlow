@@ -19,6 +19,7 @@ object ReviewChatPromptFactory {
         appendLine("问题路径：${packet.questionMode.name}")
         appendLine("问题类型：${packet.intent.name}")
 
+        appendPromptSection(this, "可用技能", packet.availableSkillSnippets)
         appendSkillResultSection(this, packet.skillResult)
         appendPromptSection(this, "查询结果", packet.querySummarySnippets)
         appendPromptSection(this, "确定结果", packet.deterministicAnswerSnippets)
@@ -143,6 +144,14 @@ object ReviewChatPromptFactory {
             builder = prompt,
             budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
             result = packet.skillResult,
+        )
+        appendSectionWithinBudget(
+            builder = prompt,
+            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
+            title = "可用技能",
+            lines = packet.availableSkillSnippets,
+            maxItems = 4,
+            itemMaxChars = 120,
         )
         appendSectionWithinBudget(
             builder = prompt,
@@ -318,6 +327,7 @@ object ReviewChatPromptFactory {
                 "is_external_question" to packet.isExternalQuestion.toString(),
                 "has_raw_note_details" to packet.rawNoteDetails.isNotEmpty().toString(),
                 "raw_note_count" to packet.rawNoteEvidence.size.toString(),
+                "available_skill_count" to packet.availableSkillSnippets.size.toString(),
                 "skill_id" to packet.skillResult?.invocation?.skillId.orEmpty(),
                 "skill_scoped_count" to packet.skillResult?.facts?.coverage?.scopedCount?.toString().orEmpty(),
                 "skill_matched_count" to packet.skillResult?.facts?.coverage?.matchedCount?.toString().orEmpty(),

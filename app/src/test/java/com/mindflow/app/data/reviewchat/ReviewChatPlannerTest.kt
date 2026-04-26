@@ -444,6 +444,9 @@ class ReviewChatPlannerTest {
             resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
             isCloudConfigured = { true },
             isOnDeviceReady = { false },
+            listAvailableSkillSnippets = {
+                listOf("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
+            },
             skillRuntime = object : SkillRuntime {
                 override suspend fun execute(invocation: SkillInvocation): SkillResult {
                     invocations += invocation
@@ -723,6 +726,9 @@ class ReviewChatPlannerTest {
             resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
             isCloudConfigured = { true },
             isOnDeviceReady = { false },
+            listAvailableSkillSnippets = {
+                listOf("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
+            },
             skillRuntime = object : SkillRuntime {
                 override suspend fun execute(invocation: SkillInvocation): SkillResult {
                     invocations += invocation
@@ -771,6 +777,8 @@ class ReviewChatPlannerTest {
         assertThat(invocations).hasSize(1)
         assertThat(invocations.single().skillId).isEqualTo("history-query")
         assertThat(invocations.single().data).contains("\"intent\":\"count\"")
+        assertThat(capturedPrompts.single()).contains("可用技能：")
+        assertThat(capturedPrompts.single()).contains("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
         assertThat(capturedPrompts.single()).contains("coverage｜范围内 2 条；命中 2 条；已处理 2 条；完整覆盖=true")
     }
 
