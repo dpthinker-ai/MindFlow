@@ -280,6 +280,7 @@ internal fun buildReviewChatContextPacket(
     sessionSummary: String,
     priorMessages: List<ReviewChatMessage> = emptyList(),
     rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
+    rawNoteEvidenceOverride: List<ReviewChatEvidenceItem>? = null,
     parsedQueryOverride: ReviewChatParsedQuery? = null,
     corpusContextOverride: ReviewChatCorpusContext? = null,
     skillResultOverride: ReviewChatSkillResult? = null,
@@ -338,7 +339,7 @@ internal fun buildReviewChatContextPacket(
         memoryThreadSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
-        rawNoteEvidence = corpusContext.rawNoteEvidence,
+        rawNoteEvidence = rawNoteEvidenceOverride ?: corpusContext.rawNoteEvidence,
         rawNoteDetails = effectiveRawNoteDetails,
         structuredSnippets = structuredSnippets,
         skillResult = skillResult,
@@ -1210,6 +1211,28 @@ class ReviewChatPlanner(
             query = parsedQuery,
             corpusContext = corpusContext,
         )
+        val runtimeRawNoteDetails = runtimeBackedSkillResult
+            ?.rawNoteDetails
+            .orEmpty()
+        val effectiveRawNoteDetails = runtimeRawNoteDetails.ifEmpty {
+            corpusContext.rawNoteDetails
+        }
+        val runtimeRawNoteEvidence = runtimeBackedSkillResult
+            ?.skillResult
+            ?.facts
+            ?.recordPreview
+            .orEmpty()
+            .map { record ->
+                ReviewChatEvidenceItem(
+                    noteId = record.id,
+                    dateLabel = record.dateLabel,
+                    title = record.title,
+                    summary = record.summary,
+                )
+            }
+        val effectiveRawNoteEvidence = runtimeRawNoteEvidence.ifEmpty {
+            corpusContext.rawNoteEvidence
+        }
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
@@ -1224,15 +1247,16 @@ class ReviewChatPlanner(
                 .takeLast(2)
                 .joinToString("\n") { it.content.take(120) },
             priorMessages = request.priorMessages,
-            rawNoteDetails = corpusContext.rawNoteDetails,
+            rawNoteDetails = effectiveRawNoteDetails,
+            rawNoteEvidenceOverride = effectiveRawNoteEvidence,
             parsedQueryOverride = parsedQuery,
             corpusContextOverride = corpusContext,
-            skillResultOverride = runtimeBackedSkillResult,
+            skillResultOverride = runtimeBackedSkillResult?.skillResult,
         )
         return PreparedReviewChatContext(
             intent = parsedQuery.intent,
             packet = packet,
-            directRawNoteDetails = corpusContext.rawNoteDetails,
+            directRawNoteDetails = effectiveRawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
         )
     }
@@ -1276,8 +1300,9 @@ class ReviewChatPlanner(
     private suspend fun buildRuntimeBackedSkillResult(
         query: ReviewChatParsedQuery,
         corpusContext: ReviewChatCorpusContext,
-    ): ReviewChatSkillResult? {
+    ): ReviewChatHistorySkillRuntimeResult? {
         val legacy = ReviewChatHistorySkill.run(query, corpusContext)
+            ?.let(::ReviewChatHistorySkillRuntimeResult)
         val runtime = skillRuntime
         if (runtime == null || !ReviewChatHistorySkill.shouldUseRuntime(query)) {
             return legacy

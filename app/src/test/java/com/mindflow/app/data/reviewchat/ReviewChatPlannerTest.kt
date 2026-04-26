@@ -418,6 +418,84 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_fullRecordQuestion_executesHistorySkillRuntimeWithContent() = runTest {
+        val april10Timestamp = LocalDate.now(ZoneId.systemDefault())
+            .withMonth(4)
+            .withDayOfMonth(10)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        val invocations = mutableListOf<SkillInvocation>()
+        val capturedPrompts = mutableListOf<String>()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(
+                        id = 42L,
+                        topic = "4 月 10 号讨论",
+                        content = "旧路径里的完整原文",
+                    ).copy(createdAt = april10Timestamp, updatedAt = april10Timestamp + 123_000L)
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult {
+                    invocations += invocation
+                    return SkillResult(
+                        result = "命中 1 条记录，已处理 1 条。",
+                        dataJson = """
+                            {
+                              "coverage": {
+                                "totalCount": 1,
+                                "matchedCount": 1,
+                                "processedCount": 1,
+                                "complete": true,
+                                "dateRange": {
+                                  "start": "2026-04-10",
+                                  "end": "2026-04-10"
+                                }
+                              },
+                              "records": [
+                                {
+                                  "id": "42",
+                                  "date": "2026-04-10",
+                                  "title": "4 月 10 号讨论",
+                                  "summary": "skill runtime 摘要",
+                                  "content": "skill runtime 返回的完整原文"
+                                }
+                              ]
+                            }
+                        """.trimIndent(),
+                    )
+                }
+            },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("基于 runtime 原始记录整理后的回答。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "把 4 月 10 号那条完整记录发给我",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(invocations).hasSize(1)
+        assertThat(invocations.single().data).contains("\"includeContent\":true")
+        assertThat(capturedPrompts.single()).contains("skill runtime 返回的完整原文")
+        assertThat(capturedPrompts.single()).doesNotContain("旧路径里的完整原文")
+    }
+
+    @Test
     fun answer_outOfScopeQuestion_stillRoutesToModel() = runTest {
         var cloudCalled = false
         val capturedPrompts = mutableListOf<String>()

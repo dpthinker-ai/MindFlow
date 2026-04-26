@@ -41,6 +41,7 @@ internal object ReviewChatHistorySkill {
         query.mode in setOf(
             ReviewChatQuestionMode.COLLECTION_OVERVIEW,
             ReviewChatQuestionMode.RECORD_LOOKUP,
+            ReviewChatQuestionMode.FULL_RECORD,
             ReviewChatQuestionMode.TIMELINE_ANCHOR,
         )
 
@@ -61,21 +62,28 @@ internal object ReviewChatHistorySkill {
         query: ReviewChatParsedQuery,
         corpusContext: ReviewChatCorpusContext,
         runtimeResult: SkillResult,
-    ): ReviewChatSkillResult? {
+    ): ReviewChatHistorySkillRuntimeResult? {
         if (!runtimeResult.isSuccess) return null
         val dataRoot = runtimeResult.dataJson
             ?.let { raw -> runCatching { SkillMiniJsonParser(raw).parseObject() }.getOrNull() }
             ?: return null
 
         val coverage = parseCoverage(dataRoot.objectValue("coverage"), query, corpusContext)
-        val records = parseRecordPreview(dataRoot.arrayValue("records"))
-        return ReviewChatSkillResult(
+        val records = parseRuntimeRecords(dataRoot.arrayValue("records"))
+        val skillResult = ReviewChatSkillResult(
             invocation = buildInvocation(query),
             facts = ReviewChatSkillFacts(
                 coverage = coverage,
                 deterministicResults = corpusContext.deterministicAnswerSnippets,
                 categoryBatches = corpusContext.categoryDigestSnippets,
-                recordPreview = records.ifEmpty {
+                recordPreview = records.map { record ->
+                    ReviewChatSkillRecord(
+                        id = record.id,
+                        dateLabel = record.dateLabel,
+                        title = record.title,
+                        summary = record.summary,
+                    )
+                }.ifEmpty {
                     corpusContext.rawNoteEvidence.map { evidence ->
                         ReviewChatSkillRecord(
                             id = evidence.noteId,
@@ -87,6 +95,14 @@ internal object ReviewChatHistorySkill {
                 },
             ),
             responseRules = buildResponseRules(query),
+        )
+        return ReviewChatHistorySkillRuntimeResult(
+            skillResult = skillResult,
+            rawNoteDetails = if (query.mode == ReviewChatQuestionMode.FULL_RECORD) {
+                records.mapNotNull(ReviewChatRuntimeRecord::toRawNoteDetail)
+            } else {
+                emptyList()
+            },
         )
     }
 
@@ -191,6 +207,7 @@ internal object ReviewChatHistorySkill {
     ): String {
         val pageSize = when (query.mode) {
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> 1
+            ReviewChatQuestionMode.FULL_RECORD -> 20
             ReviewChatQuestionMode.RECORD_LOOKUP -> when {
                 query.wantsCategories -> 24
                 query.wantsExamples -> 12
@@ -211,7 +228,7 @@ internal object ReviewChatHistorySkill {
                 "entityTerms" to corpusContext.selection.entityTerms,
                 "pageSize" to pageSize,
                 "cursor" to null,
-                "includeContent" to false,
+                "includeContent" to (query.mode == ReviewChatQuestionMode.FULL_RECORD),
                 "sort" to sort,
             ),
         )
@@ -267,19 +284,20 @@ internal object ReviewChatHistorySkill {
         )
     }
 
-    private fun parseRecordPreview(
+    private fun parseRuntimeRecords(
         rawRecords: List<SkillJsonValue>,
-    ): List<ReviewChatSkillRecord> = rawRecords.mapNotNull { item ->
+    ): List<ReviewChatRuntimeRecord> = rawRecords.mapNotNull { item ->
         val record = item.objectValues()
         val id = record.stringValue("id")?.toLongOrNull() ?: return@mapNotNull null
         val date = record.stringValue("date") ?: return@mapNotNull null
         val title = record.stringValue("title") ?: return@mapNotNull null
         val summary = record.stringValue("summary").orEmpty()
-        ReviewChatSkillRecord(
+        ReviewChatRuntimeRecord(
             id = id,
             dateLabel = date,
             title = title,
             summary = summary,
+            content = record.stringValue("content"),
         )
     }
 
@@ -369,6 +387,29 @@ internal object ReviewChatHistorySkill {
             }
         }
         append('"')
+    }
+}
+
+internal data class ReviewChatHistorySkillRuntimeResult(
+    val skillResult: ReviewChatSkillResult,
+    val rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
+)
+
+private data class ReviewChatRuntimeRecord(
+    val id: Long,
+    val dateLabel: String,
+    val title: String,
+    val summary: String,
+    val content: String?,
+) {
+    fun toRawNoteDetail(): ReviewChatRawNoteDetail? {
+        val fullContent = content?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return ReviewChatRawNoteDetail(
+            noteId = id,
+            title = title,
+            dateLabel = dateLabel,
+            fullContent = fullContent,
+        )
     }
 }
 
