@@ -91,6 +91,35 @@ class DefaultNativeToolBridgeTest {
         assertThat(records[1].objectValues().stringValue("id")).isEqualTo("2")
     }
 
+    @Test
+    fun historyCount_totalCountReflectsScopedNotes() = runTest {
+        val bridge = DefaultNativeToolBridge(
+            loadAllNotes = {
+                listOf(
+                    note(id = 1L, topic = "三月主题A", content = "alpha", date = LocalDate.of(2026, 3, 1)),
+                    note(id = 2L, topic = "三月主题B", content = "beta", date = LocalDate.of(2026, 3, 20)),
+                    note(id = 3L, topic = "四月主题", content = "gamma", date = LocalDate.of(2026, 4, 3)),
+                )
+            },
+            zoneId = ZoneId.systemDefault(),
+        )
+
+        val raw = bridge.invoke(
+            apiName = "history.count",
+            payloadJson = """
+                {
+                  "timeScope": {"type": "month", "month": "2026-03"},
+                  "entityTerms": []
+                }
+            """.trimIndent(),
+        )
+
+        val result = SkillMiniJsonParser(raw).parseObject()
+        val coverage = result.objectValue("coverage")
+        assertThat(coverage.numberValue("totalCount")?.toInt()).isEqualTo(2)
+        assertThat(coverage.numberValue("matchedCount")?.toInt()).isEqualTo(2)
+    }
+
     private fun note(
         id: Long,
         topic: String,

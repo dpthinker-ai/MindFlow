@@ -4,6 +4,7 @@ import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
 import com.mindflow.app.data.review.WeeklyReviewState
+import com.mindflow.app.data.skills.SkillRuntime
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiFailureReason
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
@@ -281,10 +282,11 @@ internal fun buildReviewChatContextPacket(
     rawNoteDetails: List<ReviewChatRawNoteDetail> = emptyList(),
     parsedQueryOverride: ReviewChatParsedQuery? = null,
     corpusContextOverride: ReviewChatCorpusContext? = null,
+    skillResultOverride: ReviewChatSkillResult? = null,
 ): ReviewChatContextPacket {
     val parsedQuery = (parsedQueryOverride ?: ReviewChatQueryParser.parse(question)).copy(intent = intent)
     val corpusContext = corpusContextOverride ?: ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
-    val skillResult = ReviewChatHistorySkill.run(parsedQuery, corpusContext)
+    val skillResult = skillResultOverride ?: ReviewChatHistorySkill.run(parsedQuery, corpusContext)
     val effectiveRawNoteDetails = rawNoteDetails.ifEmpty { corpusContext.rawNoteDetails }
     val knowledgeBaseSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
         buildKnowledgeBaseSnippets(
@@ -899,6 +901,7 @@ class ReviewChatPlanner(
     private val isCloudConfigured: suspend () -> Boolean,
     private val isOnDeviceReady: suspend () -> Boolean,
     private val planQueryWithCloud: (suspend (String) -> AiChatResult)? = null,
+    private val skillRuntime: SkillRuntime? = null,
     private val runCloud: suspend (String) -> AiChatResult,
     private val runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
     private val streamOnDevice: (suspend (ReviewChatOnDeviceRequest) -> Flow<String>)? = null,
@@ -1203,6 +1206,10 @@ class ReviewChatPlanner(
             query = parsedQuery,
             corpusContext = baseCorpusContext,
         )
+        val runtimeBackedSkillResult = buildRuntimeBackedSkillResult(
+            query = parsedQuery,
+            corpusContext = corpusContext,
+        )
         val weeklyReview = loadWeeklyReview()
         val maintenanceSnapshot = loadMaintenanceSnapshot()
         val wikiSnapshot = loadWikiSnapshot()
@@ -1220,6 +1227,7 @@ class ReviewChatPlanner(
             rawNoteDetails = corpusContext.rawNoteDetails,
             parsedQueryOverride = parsedQuery,
             corpusContextOverride = corpusContext,
+            skillResultOverride = runtimeBackedSkillResult,
         )
         return PreparedReviewChatContext(
             intent = parsedQuery.intent,
@@ -1263,6 +1271,29 @@ class ReviewChatPlanner(
         return corpusContext.copy(
             categoryDigestSnippets = summarizedCandidates,
         )
+    }
+
+    private suspend fun buildRuntimeBackedSkillResult(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): ReviewChatSkillResult? {
+        val legacy = ReviewChatHistorySkill.run(query, corpusContext)
+        val runtime = skillRuntime
+        if (runtime == null || !ReviewChatHistorySkill.shouldUseRuntime(query)) {
+            return legacy
+        }
+
+        val invocation = ReviewChatHistorySkill.buildRuntimeInvocation(query, corpusContext)
+            ?: return legacy
+        val runtimeResult = runCatching {
+            runtime.execute(invocation)
+        }.getOrNull() ?: return legacy
+
+        return ReviewChatHistorySkill.fromRuntime(
+            query = query,
+            corpusContext = corpusContext,
+            runtimeResult = runtimeResult,
+        ) ?: legacy
     }
 
     private suspend fun resolveParsedQuery(question: String): ReviewChatParsedQuery {

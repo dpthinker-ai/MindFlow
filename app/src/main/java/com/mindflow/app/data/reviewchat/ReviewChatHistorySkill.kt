@@ -1,40 +1,91 @@
 package com.mindflow.app.data.reviewchat
 
+import com.mindflow.app.data.skills.SkillInvocation
+import com.mindflow.app.data.skills.SkillJsonValue
+import com.mindflow.app.data.skills.SkillMiniJsonParser
+import com.mindflow.app.data.skills.SkillModelPass
+import com.mindflow.app.data.skills.SkillResult
+
 internal object ReviewChatHistorySkill {
     private const val SKILL_ID = "history-query"
-    private const val SCRIPT_NAME = "skills/history-query/SKILL.md"
+    private const val SKILL_ENTRY = "scripts/index.html"
+    private const val SCRIPT_NAME = "skills/history-query/scripts/index.html"
 
     fun run(
         query: ReviewChatParsedQuery,
         corpusContext: ReviewChatCorpusContext,
     ): ReviewChatSkillResult? {
         if (query.isExternalQuestion) return null
-
-        val invocation = ReviewChatSkillInvocation(
-            skillId = SKILL_ID,
-            scriptName = SCRIPT_NAME,
-            intent = query.toSkillIntent(),
-            query = query.question,
-            timeScopeLabel = query.timeScope.toSkillScopeLabel(),
-            needsCard = false,
-            modelPass = query.toModelPass(),
-        )
-        val facts = ReviewChatSkillFacts(
-            coverage = buildCoverage(query, corpusContext),
-            deterministicResults = corpusContext.deterministicAnswerSnippets,
-            categoryBatches = corpusContext.categoryDigestSnippets,
-            recordPreview = corpusContext.rawNoteEvidence.map { evidence ->
-                ReviewChatSkillRecord(
-                    id = evidence.noteId,
-                    dateLabel = evidence.dateLabel,
-                    title = evidence.title,
-                    summary = evidence.summary,
-                )
-            },
-        )
         return ReviewChatSkillResult(
-            invocation = invocation,
-            facts = facts,
+            invocation = buildInvocation(query),
+            facts = ReviewChatSkillFacts(
+                coverage = buildCoverage(query, corpusContext),
+                deterministicResults = corpusContext.deterministicAnswerSnippets,
+                categoryBatches = corpusContext.categoryDigestSnippets,
+                recordPreview = corpusContext.rawNoteEvidence.map { evidence ->
+                    ReviewChatSkillRecord(
+                        id = evidence.noteId,
+                        dateLabel = evidence.dateLabel,
+                        title = evidence.title,
+                        summary = evidence.summary,
+                    )
+                },
+            ),
+            responseRules = buildResponseRules(query),
+        )
+    }
+
+    fun shouldUseRuntime(
+        query: ReviewChatParsedQuery,
+    ): Boolean = !query.isExternalQuestion &&
+        query.mode in setOf(
+            ReviewChatQuestionMode.COLLECTION_OVERVIEW,
+            ReviewChatQuestionMode.RECORD_LOOKUP,
+            ReviewChatQuestionMode.TIMELINE_ANCHOR,
+        )
+
+    fun buildRuntimeInvocation(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): SkillInvocation? {
+        if (!shouldUseRuntime(query)) return null
+        return SkillInvocation(
+            skillId = SKILL_ID,
+            scriptName = SKILL_ENTRY,
+            data = buildRuntimeInvocationPayload(query, corpusContext),
+            modelPass = query.toRuntimeModelPass(),
+        )
+    }
+
+    fun fromRuntime(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+        runtimeResult: SkillResult,
+    ): ReviewChatSkillResult? {
+        if (!runtimeResult.isSuccess) return null
+        val dataRoot = runtimeResult.dataJson
+            ?.let { raw -> runCatching { SkillMiniJsonParser(raw).parseObject() }.getOrNull() }
+            ?: return null
+
+        val coverage = parseCoverage(dataRoot.objectValue("coverage"), query, corpusContext)
+        val records = parseRecordPreview(dataRoot.arrayValue("records"))
+        return ReviewChatSkillResult(
+            invocation = buildInvocation(query),
+            facts = ReviewChatSkillFacts(
+                coverage = coverage,
+                deterministicResults = corpusContext.deterministicAnswerSnippets,
+                categoryBatches = corpusContext.categoryDigestSnippets,
+                recordPreview = records.ifEmpty {
+                    corpusContext.rawNoteEvidence.map { evidence ->
+                        ReviewChatSkillRecord(
+                            id = evidence.noteId,
+                            dateLabel = evidence.dateLabel,
+                            title = evidence.title,
+                            summary = evidence.summary,
+                        )
+                    }
+                },
+            ),
             responseRules = buildResponseRules(query),
         )
     }
@@ -81,6 +132,18 @@ internal object ReviewChatHistorySkill {
         result.error?.let { add("error｜$it") }
     }
 
+    private fun buildInvocation(
+        query: ReviewChatParsedQuery,
+    ): ReviewChatSkillInvocation = ReviewChatSkillInvocation(
+        skillId = SKILL_ID,
+        scriptName = SCRIPT_NAME,
+        intent = query.toSkillIntent(),
+        query = query.question,
+        timeScopeLabel = query.timeScope.toSkillScopeLabel(),
+        needsCard = false,
+        modelPass = query.toModelPass(),
+    )
+
     private fun buildCoverage(
         query: ReviewChatParsedQuery,
         corpusContext: ReviewChatCorpusContext,
@@ -122,6 +185,104 @@ internal object ReviewChatHistorySkill {
         }
     }
 
+    private fun buildRuntimeInvocationPayload(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): String {
+        val pageSize = when (query.mode) {
+            ReviewChatQuestionMode.TIMELINE_ANCHOR -> 1
+            ReviewChatQuestionMode.RECORD_LOOKUP -> when {
+                query.wantsCategories -> 24
+                query.wantsExamples -> 12
+                else -> 8
+            }
+
+            ReviewChatQuestionMode.COLLECTION_OVERVIEW -> 6
+            else -> 6
+        }
+        val sort = when (query.mode) {
+            ReviewChatQuestionMode.TIMELINE_ANCHOR -> "created_at_asc"
+            else -> "created_at_asc"
+        }
+        return renderJsonObject(
+            linkedMapOf(
+                "intent" to runtimeIntent(query),
+                "timeScope" to renderTimeScopePayload(query.timeScope),
+                "entityTerms" to corpusContext.selection.entityTerms,
+                "pageSize" to pageSize,
+                "cursor" to null,
+                "includeContent" to false,
+                "sort" to sort,
+            ),
+        )
+    }
+
+    private fun renderTimeScopePayload(
+        scope: ReviewChatTimeScope,
+    ): Map<String, Any?> = when (scope) {
+        ReviewChatTimeScope.AllTime -> linkedMapOf("type" to "all_time")
+        is ReviewChatTimeScope.Day -> linkedMapOf(
+            "type" to "day",
+            "date" to scope.date.format(reviewChatDateFormatter),
+        )
+
+        is ReviewChatTimeScope.Month -> linkedMapOf(
+            "type" to "month",
+            "month" to scope.month.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM")),
+        )
+
+        is ReviewChatTimeScope.Range -> linkedMapOf(
+            "type" to "range",
+            "start" to scope.start.format(reviewChatDateFormatter),
+            "end" to scope.endInclusive.format(reviewChatDateFormatter),
+        )
+    }
+
+    private fun runtimeIntent(
+        query: ReviewChatParsedQuery,
+    ): String = when (query.operation) {
+        ReviewChatQueryOperation.COUNT -> "count"
+        ReviewChatQueryOperation.TIMELINE -> "timeline"
+        else -> "lookup"
+    }
+
+    private fun parseCoverage(
+        raw: Map<String, SkillJsonValue>,
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): ReviewChatSkillCoverage {
+        val fallback = buildCoverage(query, corpusContext)
+        if (raw.isEmpty()) return fallback
+        val startDate = raw.objectValue("dateRange").stringValue("start")
+        val endDate = raw.objectValue("dateRange").stringValue("end")
+        return ReviewChatSkillCoverage(
+            timeScopeLabel = query.timeScope.toSkillScopeLabel(),
+            scopedCount = raw.numberValue("totalCount")?.toInt() ?: fallback.scopedCount,
+            matchedCount = raw.numberValue("matchedCount")?.toInt() ?: fallback.matchedCount,
+            processedCount = raw.numberValue("processedCount")?.toInt() ?: fallback.processedCount,
+            complete = raw.booleanValue("complete") ?: fallback.complete,
+            startDateLabel = startDate ?: fallback.startDateLabel,
+            endDateLabel = endDate ?: fallback.endDateLabel,
+            nextCursor = raw.stringValue("nextCursor"),
+        )
+    }
+
+    private fun parseRecordPreview(
+        rawRecords: List<SkillJsonValue>,
+    ): List<ReviewChatSkillRecord> = rawRecords.mapNotNull { item ->
+        val record = item.objectValues()
+        val id = record.stringValue("id")?.toLongOrNull() ?: return@mapNotNull null
+        val date = record.stringValue("date") ?: return@mapNotNull null
+        val title = record.stringValue("title") ?: return@mapNotNull null
+        val summary = record.stringValue("summary").orEmpty()
+        ReviewChatSkillRecord(
+            id = id,
+            dateLabel = date,
+            title = title,
+            summary = summary,
+        )
+    }
+
     private fun ReviewChatParsedQuery.toSkillIntent(): String = when {
         wantsCategories -> "classify_history_records"
         wantsCount -> "count_history_records"
@@ -135,7 +296,16 @@ internal object ReviewChatHistorySkill {
         wantsCategories || operation == ReviewChatQueryOperation.ANALYZE -> ReviewChatSkillModelPass.ANALYZE_RECORDS
         wantsCount || operation == ReviewChatQueryOperation.LIST || wantsTimelineAnchor ->
             ReviewChatSkillModelPass.SUMMARIZE_COMPACT_RESULT
+
         else -> ReviewChatSkillModelPass.NONE
+    }
+
+    private fun ReviewChatParsedQuery.toRuntimeModelPass(): SkillModelPass = when {
+        wantsCategories || operation == ReviewChatQueryOperation.ANALYZE -> SkillModelPass.ANALYZE_RECORDS
+        wantsCount || operation == ReviewChatQueryOperation.LIST || wantsTimelineAnchor ->
+            SkillModelPass.SUMMARIZE_COMPACT_RESULT
+
+        else -> SkillModelPass.NONE
     }
 
     private fun ReviewChatTimeScope.toSkillScopeLabel(): String = when (this) {
@@ -144,4 +314,78 @@ internal object ReviewChatHistorySkill {
         is ReviewChatTimeScope.Month -> "${month.monthValue}月"
         is ReviewChatTimeScope.Range -> label
     }
+
+    private fun renderJsonObject(
+        fields: Map<String, Any?>,
+    ): String = fields.entries.joinToString(
+        prefix = "{",
+        postfix = "}",
+    ) { (key, value) ->
+        "${renderJsonString(key)}:${renderJsonValue(value)}"
+    }
+
+    private fun renderJsonArray(
+        values: List<*>,
+    ): String = values.joinToString(
+        prefix = "[",
+        postfix = "]",
+    ) { value -> renderJsonValue(value) }
+
+    private fun renderJsonValue(
+        value: Any?,
+    ): String = when (value) {
+        null -> "null"
+        is String -> renderJsonString(value)
+        is Number -> value.toString()
+        is Boolean -> value.toString()
+        is List<*> -> renderJsonArray(value)
+        is Map<*, *> -> renderJsonObject(
+            value.entries.associate { (key, nestedValue) ->
+                key.toString() to nestedValue
+            },
+        )
+
+        else -> renderJsonString(value.toString())
+    }
+
+    private fun renderJsonString(
+        value: String,
+    ): String = buildString {
+        append('"')
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (character.code < 0x20) {
+                    append("\\u%04x".format(character.code))
+                } else {
+                    append(character)
+                }
+            }
+        }
+        append('"')
+    }
 }
+
+private fun Map<String, SkillJsonValue>.stringValue(key: String): String? =
+    (this[key] as? SkillJsonValue.JsonString)?.value?.takeIf { it.isNotBlank() }
+
+private fun Map<String, SkillJsonValue>.booleanValue(key: String): Boolean? =
+    (this[key] as? SkillJsonValue.JsonBoolean)?.value
+
+private fun Map<String, SkillJsonValue>.numberValue(key: String): Double? =
+    (this[key] as? SkillJsonValue.JsonNumber)?.value
+
+private fun Map<String, SkillJsonValue>.objectValue(key: String): Map<String, SkillJsonValue> =
+    (this[key] as? SkillJsonValue.JsonObject)?.values ?: emptyMap()
+
+private fun SkillJsonValue.objectValues(): Map<String, SkillJsonValue> =
+    (this as? SkillJsonValue.JsonObject)?.values ?: emptyMap()
+
+private fun Map<String, SkillJsonValue>.arrayValue(key: String): List<SkillJsonValue> =
+    (this[key] as? SkillJsonValue.JsonArray)?.items ?: emptyList()

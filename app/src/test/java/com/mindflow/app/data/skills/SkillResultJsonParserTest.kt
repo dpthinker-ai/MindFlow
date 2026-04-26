@@ -34,6 +34,12 @@ class SkillResultJsonParserTest {
                   },
                   "metadata": {
                     "matchedCount": "3"
+                  },
+                  "data": {
+                    "coverage": {
+                      "matchedCount": 3
+                    },
+                    "records": []
                   }
                 }
             """.trimIndent(),
@@ -45,5 +51,6 @@ class SkillResultJsonParserTest {
             .isEqualTo("file:///android_asset/skills/history-query/assets/result-card.html")
         assertThat(result.webview!!.aspectRatio).isEqualTo(1.5f)
         assertThat(result.metadata["matchedCount"]).isEqualTo("3")
+        assertThat(result.dataJson).contains("\"matchedCount\":3.0")
     }
 }

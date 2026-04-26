@@ -46,13 +46,19 @@
       async function runHistoryQuery(input) {
         const payload = normalizeQueryPayload(input || {});
         const intent = String(input?.intent || "lookup");
+        const countResult = callNative("history.count", payload);
+        const coverage = countResult.coverage || null;
         if (intent === "count") {
-          const countResult = callNative("history.count", payload);
           return {
-            result: formatCoverage(countResult.coverage),
+            result: formatCoverage(coverage),
             metadata: {
-              matchedCount: String(countResult.coverage?.matchedCount || 0),
-              complete: String(Boolean(countResult.coverage?.complete))
+              matchedCount: String(coverage?.matchedCount || 0),
+              processedCount: String(coverage?.processedCount || 0),
+              complete: String(Boolean(coverage?.complete))
+            },
+            data: {
+              coverage,
+              records: []
             }
           };
         }
@@ -71,9 +77,13 @@
             aspectRatio: 1.333
           },
           metadata: {
-            matchedCount: String(queryResult.coverage?.matchedCount || 0),
-            processedCount: String(queryResult.coverage?.processedCount || 0),
-            complete: String(Boolean(queryResult.coverage?.complete))
+            matchedCount: String(coverage?.matchedCount || 0),
+            processedCount: String(coverage?.processedCount || 0),
+            complete: String(Boolean(coverage?.complete))
+          },
+          data: {
+            coverage,
+            records
           }
         };
       }

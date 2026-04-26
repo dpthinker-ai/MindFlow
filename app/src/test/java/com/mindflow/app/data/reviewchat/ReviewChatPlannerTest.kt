@@ -12,6 +12,9 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.review.WeeklyReviewState
+import com.mindflow.app.data.skills.SkillInvocation
+import com.mindflow.app.data.skills.SkillResult
+import com.mindflow.app.data.skills.SkillRuntime
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiFailureReason
 import com.mindflow.app.data.wiki.DirectionWikiDirectionSummary
@@ -616,6 +619,106 @@ class ReviewChatPlannerTest {
         assertThat(capturedPrompts.first()).contains("命中｜共 4 条记录")
         assertThat(capturedPrompts.first()).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
         assertThat(capturedPrompts.first()).doesNotContain("主题｜")
+    }
+
+    @Test
+    fun answer_countQuestion_executesHistorySkillRuntime() = runTest {
+        val invocations = mutableListOf<SkillInvocation>()
+        val capturedPrompts = mutableListOf<String>()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "人生建议", "人生是多线程运行"),
+                    sampleNote(2L, "技术实现", "MindFlow 接入 OpenCL"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult {
+                    invocations += invocation
+                    return SkillResult(
+                        result = "命中 2 条记录，已处理 2 条。",
+                        dataJson = """
+                            {
+                              "coverage": {
+                                "totalCount": 2,
+                                "matchedCount": 2,
+                                "processedCount": 2,
+                                "complete": true,
+                                "dateRange": {
+                                  "start": "1970-01-01",
+                                  "end": "1970-01-01"
+                                }
+                              },
+                              "records": [
+                                {
+                                  "id": "1",
+                                  "date": "1970-01-01",
+                                  "title": "人生建议",
+                                  "summary": "人生是多线程运行"
+                                }
+                              ]
+                            }
+                        """.trimIndent(),
+                    )
+                }
+            },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("共 2 条记录。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我总共有多少条记录",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(invocations).hasSize(1)
+        assertThat(invocations.single().skillId).isEqualTo("history-query")
+        assertThat(invocations.single().data).contains("\"intent\":\"count\"")
+        assertThat(capturedPrompts.single()).contains("coverage｜范围内 2 条；命中 2 条；已处理 2 条；完整覆盖=true")
+    }
+
+    @Test
+    fun answer_analysisQuestion_doesNotExecuteHistorySkillRuntime() = runTest {
+        val invocations = mutableListOf<SkillInvocation>()
+        val planner = ReviewChatPlanner(
+            loadNotes = { listOf(sampleNote(1L, "产品方向", "最近一直在讨论推荐链路和增长")) },
+            loadWeeklyReview = { WeeklyReviewState(lines = listOf("最近主要在推进推荐链路验证")) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult {
+                    invocations += invocation
+                    return SkillResult.failure("分析问题不应该走 history skill runtime")
+                }
+            },
+            runCloud = { AiChatResult.Success("最近主要在推进推荐链路验证。") },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "把最近两周的矛盾串一下",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(invocations).isEmpty()
     }
 
     @Test

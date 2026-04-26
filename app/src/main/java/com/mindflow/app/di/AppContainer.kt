@@ -369,6 +369,7 @@ class AppContainer(context: Context) {
                 prompt = prompt,
             )
         },
+        skillRuntime = skillRuntime,
         runCloud = { prompt ->
             aiServiceClient.generateReviewChatReply(
                 settings = aiSettingsRepository.getCurrent(),

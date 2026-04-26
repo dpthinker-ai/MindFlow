@@ -70,6 +70,7 @@ data class SkillResult(
     val image: SkillImageSpec? = null,
     val webview: SkillWebViewSpec? = null,
     val metadata: Map<String, String> = emptyMap(),
+    val dataJson: String? = null,
 ) {
     val isSuccess: Boolean
         get() = error.isNullOrBlank()
@@ -78,4 +79,3 @@ data class SkillResult(
         fun failure(message: String): SkillResult = SkillResult(error = message)
     }
 }
-

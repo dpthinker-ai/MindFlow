@@ -42,11 +42,12 @@ class DefaultNativeToolBridge(
     private suspend fun renderHistoryCount(payloadJson: String): String {
         val request = parseHistoryRequest(payloadJson)
         val allNotes = loadActiveNotes()
-        val matchedNotes = selectMatchedNotes(allNotes, request)
+        val scopedNotes = selectScopedNotes(allNotes, request.timeScope)
+        val matchedNotes = selectMatchedNotes(scopedNotes, request.entityTerms)
         return renderJsonObject(
             linkedMapOf(
                 "coverage" to buildCoveragePayload(
-                    totalNotes = allNotes,
+                    scopedNotes = scopedNotes,
                     matchedNotes = matchedNotes,
                     processedCount = matchedNotes.size,
                     nextCursor = null,
@@ -58,14 +59,15 @@ class DefaultNativeToolBridge(
     private suspend fun renderHistoryQuery(payloadJson: String): String {
         val request = parseHistoryRequest(payloadJson)
         val allNotes = loadActiveNotes()
-        val matchedNotes = selectMatchedNotes(allNotes, request)
+        val scopedNotes = selectScopedNotes(allNotes, request.timeScope)
+        val matchedNotes = selectMatchedNotes(scopedNotes, request.entityTerms, request.sort)
         val offset = request.cursor ?: 0
         val page = matchedNotes.drop(offset).take(request.pageSize)
         val nextCursor = (offset + page.size).takeIf { it < matchedNotes.size }?.toString()
         return renderJsonObject(
             linkedMapOf(
                 "coverage" to buildCoveragePayload(
-                    totalNotes = allNotes,
+                    scopedNotes = scopedNotes,
                     matchedNotes = matchedNotes,
                     processedCount = minOf(offset + page.size, matchedNotes.size),
                     nextCursor = nextCursor,
@@ -86,14 +88,22 @@ class DefaultNativeToolBridge(
     private suspend fun loadActiveNotes(): List<NoteEntity> =
         loadAllNotes().filterNot(NoteEntity::isArchived)
 
-    private fun selectMatchedNotes(
+    private fun selectScopedNotes(
         notes: List<NoteEntity>,
-        request: HistorySkillQueryRequest,
+        timeScope: HistorySkillTimeScope,
     ): List<NoteEntity> = notes
         .asSequence()
-        .filter { request.timeScope.matches(it.createdLocalDate(zoneId)) }
-        .filter { note -> request.entityTerms.all { note.matchesEntityTerm(it) } }
-        .sortedWith(request.sort.comparator())
+        .filter { timeScope.matches(it.createdLocalDate(zoneId)) }
+        .toList()
+
+    private fun selectMatchedNotes(
+        notes: List<NoteEntity>,
+        entityTerms: List<String>,
+        sort: HistorySkillSort = HistorySkillSort.CREATED_AT_ASC,
+    ): List<NoteEntity> = notes
+        .asSequence()
+        .filter { note -> entityTerms.all { note.matchesEntityTerm(it) } }
+        .sortedWith(sort.comparator())
         .toList()
 
     private fun parseHistoryRequest(payloadJson: String): HistorySkillQueryRequest {
@@ -133,7 +143,7 @@ class DefaultNativeToolBridge(
     }
 
     private fun buildCoveragePayload(
-        totalNotes: List<NoteEntity>,
+        scopedNotes: List<NoteEntity>,
         matchedNotes: List<NoteEntity>,
         processedCount: Int,
         nextCursor: String?,
@@ -148,7 +158,7 @@ class DefaultNativeToolBridge(
             null
         }
         return linkedMapOf(
-            "totalCount" to totalNotes.size,
+            "totalCount" to scopedNotes.size,
             "matchedCount" to matchedNotes.size,
             "processedCount" to processedCount,
             "complete" to (nextCursor == null),

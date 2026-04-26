@@ -16,6 +16,7 @@ internal object SkillResultJsonParser {
             image = root.objectValue("image").takeIf { it.isNotEmpty() }?.toImageSpec(),
             webview = root.objectValue("webview").takeIf { it.isNotEmpty() }?.toWebViewSpec(skill),
             metadata = root.objectValue("metadata").toMetadataMap(),
+            dataJson = (root["data"] as? SkillJsonValue.JsonObject)?.let(::renderSkillJsonObject),
         )
     }
 
@@ -61,6 +62,54 @@ internal object SkillResultJsonParser {
         val start = content.indexOf('{')
         val end = content.lastIndexOf('}')
         return if (start >= 0 && end > start) content.substring(start, end + 1) else null
+    }
+
+    private fun renderSkillJsonObject(
+        value: SkillJsonValue.JsonObject,
+    ): String = renderSkillJsonValue(value)
+
+    private fun renderSkillJsonValue(
+        value: SkillJsonValue,
+    ): String = when (value) {
+        is SkillJsonValue.JsonObject -> value.values.entries.joinToString(
+            prefix = "{",
+            postfix = "}",
+        ) { (key, nestedValue) ->
+            "${renderSkillJsonString(key)}:${renderSkillJsonValue(nestedValue)}"
+        }
+
+        is SkillJsonValue.JsonArray -> value.items.joinToString(
+            prefix = "[",
+            postfix = "]",
+        ) { item -> renderSkillJsonValue(item) }
+
+        is SkillJsonValue.JsonString -> renderSkillJsonString(value.value)
+        is SkillJsonValue.JsonNumber -> value.value.toString()
+        is SkillJsonValue.JsonBoolean -> value.value.toString()
+        SkillJsonValue.JsonNull -> "null"
+    }
+
+    private fun renderSkillJsonString(
+        value: String,
+    ): String = buildString {
+        append('"')
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (character.code < 0x20) {
+                    append("\\u%04x".format(character.code))
+                } else {
+                    append(character)
+                }
+            }
+        }
+        append('"')
     }
 }
 
