@@ -1,0 +1,22 @@
+{
+  "id": "history-query",
+  "name": "History Query",
+  "description": "Query and summarize MindFlow historical notes.",
+  "version": "1.0.0",
+  "entry": "scripts/index.html",
+  "executor": "js",
+  "output": ["text", "webview"],
+  "permissions": ["history"],
+  "nativeApis": [
+    "history.query",
+    "history.count",
+    "history.timeline",
+    "history.categories",
+    "history.getRecords",
+    "note.open"
+  ],
+  "remote": {
+    "signatureRequired": true
+  }
+}
+

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>History Query Skill</title>
+  </head>
+  <body>
+    <script>
+      async function runHistoryQuery(input) {
+        return {
+          result: `history-query placeholder: ${input.intent || "unknown"}`,
+          webview: {
+            url: "assets/result-card.html",
+            iframe: false,
+            aspectRatio: 1.333
+          }
+        };
+      }
+
+      window["ai_edge_gallery_get_result"] = async (data) => {
+        try {
+          const input = JSON.parse(data || "{}");
+          return JSON.stringify(await runHistoryQuery(input));
+        } catch (error) {
+          return JSON.stringify({ error: String(error?.message || error) });
+        }
+      };
+    </script>
+  </body>
+</html>
+
