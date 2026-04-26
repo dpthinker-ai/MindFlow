@@ -47,11 +47,11 @@ import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.skills.AssetSkillRegistry
+import com.mindflow.app.data.skills.DefaultNativeToolBridge
 import com.mindflow.app.data.skills.DefaultSkillRuntime
 import com.mindflow.app.data.skills.SkillRegistry
 import com.mindflow.app.data.skills.SkillRuntime
-import com.mindflow.app.data.skills.UnsupportedJsSkillExecutor
-import com.mindflow.app.data.skills.UnsupportedNativeToolBridge
+import com.mindflow.app.data.skills.WebViewJsSkillExecutor
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
@@ -151,12 +151,21 @@ class AppContainer(context: Context) {
         context = context.applicationContext,
     )
 
-    val nativeToolBridge = UnsupportedNativeToolBridge()
+    val nativeToolBridge by lazy {
+        DefaultNativeToolBridge(
+            loadAllNotes = { noteRepository.observeAllNotes().first() },
+        )
+    }
 
-    val skillRuntime: SkillRuntime = DefaultSkillRuntime(
-        registry = skillRegistry,
-        jsSkillExecutor = UnsupportedJsSkillExecutor(),
-    )
+    val skillRuntime: SkillRuntime by lazy {
+        DefaultSkillRuntime(
+            registry = skillRegistry,
+            jsSkillExecutor = WebViewJsSkillExecutor(
+                context = context.applicationContext,
+                nativeToolBridge = nativeToolBridge,
+            ),
+        )
+    }
 
     val aiTaskRouter = AiTaskRouter(
         resolveMode = { onDeviceModelSettingsRepository.getCurrent().executionMode },

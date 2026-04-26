@@ -9,14 +9,9 @@
   "permissions": ["history"],
   "nativeApis": [
     "history.query",
-    "history.count",
-    "history.timeline",
-    "history.categories",
-    "history.getRecords",
-    "note.open"
+    "history.count"
   ],
   "remote": {
     "signatureRequired": true
   }
 }
-

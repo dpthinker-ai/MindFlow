@@ -7,13 +7,73 @@
   </head>
   <body>
     <script>
-      async function runHistoryQuery(input) {
+      function callNative(apiName, payload) {
+        if (!window.MindFlowNativeBridge || typeof window.MindFlowNativeBridge.invoke !== "function") {
+          throw new Error("MindFlowNativeBridge is unavailable");
+        }
+        const raw = window.MindFlowNativeBridge.invoke(apiName, JSON.stringify(payload || {}));
+        return JSON.parse(raw || "{}");
+      }
+
+      function normalizeQueryPayload(input) {
         return {
-          result: `history-query placeholder: ${input.intent || "unknown"}`,
+          timeScope: input.timeScope || { type: "all_time" },
+          entityTerms: Array.isArray(input.entityTerms) ? input.entityTerms : [],
+          pageSize: typeof input.pageSize === "number" ? input.pageSize : 20,
+          cursor: typeof input.cursor === "string" ? input.cursor : null,
+          includeContent: Boolean(input.includeContent),
+          sort: input.sort || "created_at_asc"
+        };
+      }
+
+      function formatCoverage(coverage) {
+        if (!coverage) return "没有可用的历史记录统计。";
+        const matched = Number(coverage.matchedCount || 0);
+        const processed = Number(coverage.processedCount || 0);
+        const start = coverage.dateRange && coverage.dateRange.start;
+        const end = coverage.dateRange && coverage.dateRange.end;
+        const range = start && end ? `，时间范围 ${start} 到 ${end}` : "";
+        return `命中 ${matched} 条记录，已处理 ${processed} 条${range}。`;
+      }
+
+      function formatRecordLine(record) {
+        const date = record.date || "未知日期";
+        const title = record.title || "未命名记录";
+        const summary = record.summary || "";
+        return `- ${date}《${title}》：${summary}`;
+      }
+
+      async function runHistoryQuery(input) {
+        const payload = normalizeQueryPayload(input || {});
+        const intent = String(input?.intent || "lookup");
+        if (intent === "count") {
+          const countResult = callNative("history.count", payload);
+          return {
+            result: formatCoverage(countResult.coverage),
+            metadata: {
+              matchedCount: String(countResult.coverage?.matchedCount || 0),
+              complete: String(Boolean(countResult.coverage?.complete))
+            }
+          };
+        }
+
+        const queryResult = callNative("history.query", payload);
+        const records = Array.isArray(queryResult.records) ? queryResult.records : [];
+        const lines = [
+          formatCoverage(queryResult.coverage),
+          ...records.slice(0, 5).map(formatRecordLine)
+        ];
+        return {
+          result: lines.join("\n"),
           webview: {
             url: "assets/result-card.html",
             iframe: false,
             aspectRatio: 1.333
+          },
+          metadata: {
+            matchedCount: String(queryResult.coverage?.matchedCount || 0),
+            processedCount: String(queryResult.coverage?.processedCount || 0),
+            complete: String(Boolean(queryResult.coverage?.complete))
           }
         };
       }
@@ -29,4 +89,3 @@
     </script>
   </body>
 </html>
-
