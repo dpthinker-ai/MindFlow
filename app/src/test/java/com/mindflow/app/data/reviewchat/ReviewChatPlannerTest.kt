@@ -124,6 +124,41 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun reviewChatQueryParser_localHardSignalsWinOverCloudAnalyzePlan() {
+        val analyzePlan = ReviewChatModelQueryPlan(
+            operation = ReviewChatQueryOperation.ANALYZE,
+            entityTerms = emptyList(),
+            wantsCategories = false,
+        )
+
+        val categoryQuery = ReviewChatQueryParser.parse(
+            question = "帮我分析所有的记录，都有哪些分类？",
+            modelPlan = analyzePlan,
+        )
+        assertThat(categoryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(categoryQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(categoryQuery.wantsCategories).isTrue()
+        assertThat(ReviewChatHistorySkill.shouldUseRuntime(categoryQuery)).isTrue()
+
+        val countQuery = ReviewChatQueryParser.parse(
+            question = "我总共有多少条记录？给我看一下覆盖情况",
+            modelPlan = analyzePlan,
+        )
+        assertThat(countQuery.operation).isEqualTo(ReviewChatQueryOperation.COUNT)
+        assertThat(countQuery.mode).isEqualTo(ReviewChatQuestionMode.COLLECTION_OVERVIEW)
+        assertThat(countQuery.wantsCount).isTrue()
+        assertThat(ReviewChatHistorySkill.shouldUseRuntime(countQuery)).isTrue()
+
+        val scopedQuery = ReviewChatQueryParser.parse(
+            question = "看一下今天记录了什么",
+            modelPlan = analyzePlan,
+        )
+        assertThat(scopedQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(scopedQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(ReviewChatHistorySkill.shouldUseRuntime(scopedQuery)).isTrue()
+    }
+
+    @Test
     fun buildReviewChatContextPacket_briefConceptSummaryFallsBackToSemanticMatches() {
         val packet = buildReviewChatContextPacket(
             question = "我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。",
@@ -797,11 +832,21 @@ class ReviewChatPlannerTest {
             resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
             isCloudConfigured = { true },
             isOnDeviceReady = { false },
+            planQueryWithCloud = {
+                AiChatResult.Success(
+                    """{"operation":"analyze","entity_terms":[],"wants_categories":false,"wants_examples":false,"wants_links":false}"""
+                )
+            },
             skillRuntime = object : SkillRuntime {
                 override suspend fun execute(invocation: SkillInvocation): SkillResult {
                     invocations += invocation
                     return SkillResult(
                         result = "命中 2 条记录，已处理 2 条。",
+                        webview = SkillWebViewSpec(
+                            url = "file:///android_asset/skills/history-query/assets/insight-card.html?payload=test",
+                            iframe = false,
+                            aspectRatio = 0.78f,
+                        ),
                         dataJson = """
                             {
                               "coverage": {
@@ -820,7 +865,7 @@ class ReviewChatPlannerTest {
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
 
-        planner.answer(
+        val result = planner.answer(
             ReviewChatTurnRequest(
                 question = "帮我分析所有的记录，都有哪些分类？",
                 priorMessages = emptyList(),
@@ -830,6 +875,7 @@ class ReviewChatPlannerTest {
         assertThat(invocations).hasSize(1)
         assertThat(invocations.single().data).contains("\"intent\":\"categories\"")
         assertThat(invocations.single().data).contains("\"query\":\"帮我分析所有的记录，都有哪些分类？\"")
+        assertThat(result.skillWebView?.url).contains("insight-card.html")
     }
 
     @Test

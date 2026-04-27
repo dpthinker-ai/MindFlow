@@ -39,7 +39,14 @@ internal object ReviewChatQueryParser {
         }
         val plannedOperation = modelPlan?.operation
         val resolvedOperation = when {
+            fallbackIsExternalQuestion -> ReviewChatQueryOperation.EXTERNAL
+            fallbackWantsFullRecord -> ReviewChatQueryOperation.FULL_TEXT
+            fallbackWantsTimelineAnchor -> ReviewChatQueryOperation.TIMELINE
+            fallbackWantsCount -> ReviewChatQueryOperation.COUNT
+            fallbackWantsCategories -> ReviewChatQueryOperation.LIST
             fallbackIsTopicSummary && plannedOperation == ReviewChatQueryOperation.ANALYZE -> ReviewChatQueryOperation.LIST
+            plannedOperation == ReviewChatQueryOperation.ANALYZE &&
+                (requestedDate != null || requestedMonth != null || requestedRange != null) -> ReviewChatQueryOperation.LIST
             else -> plannedOperation
         }
         val mode = resolvedOperation?.toQuestionMode() ?: fallbackMode
@@ -54,9 +61,9 @@ internal object ReviewChatQueryParser {
         val wantsFullRecord = resolvedOperation == ReviewChatQueryOperation.FULL_TEXT || fallbackWantsFullRecord
         val wantsTimelineAnchor = resolvedOperation == ReviewChatQueryOperation.TIMELINE || fallbackWantsTimelineAnchor
         val wantsCount = resolvedOperation == ReviewChatQueryOperation.COUNT || fallbackWantsCount
-        val wantsLinks = modelPlan?.wantsLinks ?: fallbackWantsLinks
-        val wantsExamples = modelPlan?.wantsExamples ?: fallbackWantsExamples
-        val wantsCategories = modelPlan?.wantsCategories ?: fallbackWantsCategories
+        val wantsLinks = fallbackWantsLinks || (modelPlan?.wantsLinks ?: false)
+        val wantsExamples = fallbackWantsExamples || (modelPlan?.wantsExamples ?: false)
+        val wantsCategories = fallbackWantsCategories || (modelPlan?.wantsCategories ?: false)
         val wantsBriefAnswer = fallbackWantsBriefAnswer || fallbackIsTopicSummary
         val isExternalQuestion = resolvedOperation == ReviewChatQueryOperation.EXTERNAL || fallbackIsExternalQuestion
         val intent = questionModeIntent(question = question, mode = mode)

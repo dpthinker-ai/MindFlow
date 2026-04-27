@@ -39,12 +39,18 @@ internal object ReviewChatHistorySkill {
     fun shouldUseRuntime(
         query: ReviewChatParsedQuery,
     ): Boolean = !query.isExternalQuestion &&
-        query.mode in setOf(
-            ReviewChatQuestionMode.COLLECTION_OVERVIEW,
-            ReviewChatQuestionMode.RECORD_LOOKUP,
-            ReviewChatQuestionMode.FULL_RECORD,
-            ReviewChatQuestionMode.TIMELINE_ANCHOR,
-        )
+        (
+            query.wantsCount ||
+                query.wantsCategories ||
+                query.wantsFullRecord ||
+                query.wantsTimelineAnchor ||
+                query.mode in setOf(
+                    ReviewChatQuestionMode.COLLECTION_OVERVIEW,
+                    ReviewChatQuestionMode.RECORD_LOOKUP,
+                    ReviewChatQuestionMode.FULL_RECORD,
+                    ReviewChatQuestionMode.TIMELINE_ANCHOR,
+                )
+            )
 
     fun buildRuntimeInvocation(
         query: ReviewChatParsedQuery,
