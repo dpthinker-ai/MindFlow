@@ -40,6 +40,19 @@ sealed interface AiChatResult {
 }
 
 class AiServiceClient {
+    private companion object {
+        const val DEFAULT_CONNECT_TIMEOUT_MS = 12_000
+        const val DEFAULT_READ_TIMEOUT_MS = 12_000
+        const val REVIEW_CHAT_CONNECT_TIMEOUT_MS = 15_000
+        const val REVIEW_CHAT_READ_TIMEOUT_MS = 90_000
+        const val QUERY_PLANNER_READ_TIMEOUT_MS = 20_000
+    }
+
+    private data class AiRequestTimeouts(
+        val connectMs: Int = DEFAULT_CONNECT_TIMEOUT_MS,
+        val readMs: Int = DEFAULT_READ_TIMEOUT_MS,
+    )
+
     suspend fun extractTopic(
         settings: AiSettings,
         content: String,
@@ -311,6 +324,10 @@ class AiServiceClient {
             maxTokens = 720,
             temperature = 0.55,
             thinkingEnabled = false,
+            timeouts = AiRequestTimeouts(
+                connectMs = REVIEW_CHAT_CONNECT_TIMEOUT_MS,
+                readMs = REVIEW_CHAT_READ_TIMEOUT_MS,
+            ),
         )
     }
 
@@ -325,6 +342,7 @@ class AiServiceClient {
             maxTokens = 220,
             temperature = 0.1,
             thinkingEnabled = false,
+            timeouts = AiRequestTimeouts(readMs = QUERY_PLANNER_READ_TIMEOUT_MS),
         )
     }
 
@@ -391,6 +409,7 @@ class AiServiceClient {
         maxTokens: Int,
         temperature: Double,
         thinkingEnabled: Boolean,
+        timeouts: AiRequestTimeouts = AiRequestTimeouts(),
     ): AiChatResult {
         if (!settings.isConfigured) {
             return AiChatResult.Failure(
@@ -413,6 +432,7 @@ class AiServiceClient {
                     maxTokens = maxTokens,
                     temperature = temperature,
                     thinkingEnabled = thinkingEnabled,
+                    timeouts = timeouts,
                 )
             ) {
                 is AiChatResult.Success -> return result
@@ -440,6 +460,7 @@ class AiServiceClient {
         maxTokens: Int,
         temperature: Double,
         thinkingEnabled: Boolean,
+        timeouts: AiRequestTimeouts,
     ): AiChatResult {
         val connection = runCatching {
             URL("${settings.baseUrl.trimEnd('/')}/chat/completions").openConnection() as HttpURLConnection
@@ -455,8 +476,8 @@ class AiServiceClient {
             connection.setRequestProperty("Authorization", authHeader)
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json")
-            connection.connectTimeout = 12_000
-            connection.readTimeout = 12_000
+            connection.connectTimeout = timeouts.connectMs
+            connection.readTimeout = timeouts.readMs
             connection.doOutput = true
 
             val payload = JSONObject()
@@ -525,7 +546,7 @@ class AiServiceClient {
         } catch (_: SocketTimeoutException) {
             return AiChatResult.Failure(
                 reason = AiFailureReason.NETWORK,
-                message = "连接超时，请检查网络或稍后再试",
+                message = "模型服务 ${timeouts.readMs / 1000} 秒内没有返回，请检查网络或稍后再试",
             )
         } catch (_: Exception) {
             return AiChatResult.Failure(
