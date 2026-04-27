@@ -58,7 +58,14 @@ class DefaultNativeToolBridgeTest {
         val bridge = DefaultNativeToolBridge(
             loadAllNotes = {
                 listOf(
-                    note(id = 1L, topic = "A", content = "alpha", date = LocalDate.of(2026, 4, 1)),
+                    note(
+                        id = 1L,
+                        topic = "A",
+                        content = "alpha",
+                        date = LocalDate.of(2026, 4, 1),
+                        folderKey = "work",
+                        tags = listOf("AI", "项目"),
+                    ),
                     note(id = 2L, topic = "B", content = "beta", date = LocalDate.of(2026, 4, 2)),
                     note(id = 3L, topic = "C", content = "gamma", date = LocalDate.of(2026, 4, 3)),
                 )
@@ -88,6 +95,9 @@ class DefaultNativeToolBridgeTest {
         assertThat(coverage.stringValue("nextCursor")).isEqualTo("2")
         assertThat(records).hasSize(2)
         assertThat(records[0].objectValues().stringValue("id")).isEqualTo("1")
+        assertThat(records[0].objectValues().stringValue("folder")).isEqualTo("work")
+        assertThat(records[0].objectValues().arrayValue("tags").mapNotNull { (it as? SkillJsonValue.JsonString)?.value })
+            .containsExactly("AI", "项目")
         assertThat(records[1].objectValues().stringValue("id")).isEqualTo("2")
     }
 
@@ -125,6 +135,8 @@ class DefaultNativeToolBridgeTest {
         topic: String,
         content: String,
         date: LocalDate,
+        folderKey: String? = null,
+        tags: List<String> = emptyList(),
     ): NoteEntity {
         val timestamp = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return NoteEntity(
@@ -132,9 +144,9 @@ class DefaultNativeToolBridgeTest {
             content = content,
             topic = topic,
             topicSource = TopicSource.RULE,
-            folderKey = null,
+            folderKey = folderKey,
             folderSource = FolderSource.RULE,
-            tags = emptyList(),
+            tags = tags,
             tagSource = TagSource.RULE,
             status = NoteStatus.IDEA,
             horizon = NoteHorizon.MEDIUM,

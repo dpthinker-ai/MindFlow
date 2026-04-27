@@ -782,6 +782,57 @@ class ReviewChatPlannerTest {
     }
 
     @Test
+    fun answer_categoryLookupPassesCategoryIntentAndQuestionToHistorySkillRuntime() = runTest {
+        val invocations = mutableListOf<SkillInvocation>()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "MindFlow 卡片", "聊天界面增加 Skill 可视化卡片"),
+                    sampleNote(2L, "人生建议", "人生是多线程运行"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult {
+                    invocations += invocation
+                    return SkillResult(
+                        result = "命中 2 条记录，已处理 2 条。",
+                        dataJson = """
+                            {
+                              "coverage": {
+                                "totalCount": 2,
+                                "matchedCount": 2,
+                                "processedCount": 2,
+                                "complete": true
+                              },
+                              "records": []
+                            }
+                        """.trimIndent(),
+                    )
+                }
+            },
+            runCloud = { AiChatResult.Success("分类结果") },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        planner.answer(
+            ReviewChatTurnRequest(
+                question = "帮我分析所有的记录，都有哪些分类？",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(invocations).hasSize(1)
+        assertThat(invocations.single().data).contains("\"intent\":\"categories\"")
+        assertThat(invocations.single().data).contains("\"query\":\"帮我分析所有的记录，都有哪些分类？\"")
+    }
+
+    @Test
     fun answer_analysisQuestion_doesNotExecuteHistorySkillRuntime() = runTest {
         val invocations = mutableListOf<SkillInvocation>()
         val planner = ReviewChatPlanner(

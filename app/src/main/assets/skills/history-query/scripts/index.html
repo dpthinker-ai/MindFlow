@@ -43,6 +43,62 @@
         return `- ${date}《${title}》：${summary}`;
       }
 
+      function encodePayload(payload) {
+        const json = JSON.stringify(payload || {});
+        const bytes = window.TextEncoder
+          ? new TextEncoder().encode(json)
+          : Uint8Array.from(unescape(encodeURIComponent(json)), (char) => char.charCodeAt(0));
+        let binary = "";
+        bytes.forEach((byte) => {
+          binary += String.fromCharCode(byte);
+        });
+        return btoa(binary)
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/g, "");
+      }
+
+      function compactText(value, maxLength) {
+        const text = String(value || "").replace(/\s+/g, " ").trim();
+        return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+      }
+
+      function formatScopeLabel(timeScope, coverage) {
+        const scope = timeScope || {};
+        if (scope.type === "day" && scope.date) return scope.date;
+        if (scope.type === "month" && scope.month) return scope.month;
+        if (scope.type === "range" && scope.start && scope.end) return `${scope.start} 至 ${scope.end}`;
+        const range = coverage && coverage.dateRange ? coverage.dateRange : {};
+        if (range.start && range.end) return `${range.start} 至 ${range.end}`;
+        return "全部历史";
+      }
+
+      function normalizeRecordForCard(record) {
+        return {
+          id: record.id || "",
+          date: record.date || "未知日期",
+          title: compactText(record.title || "未命名记录", 34),
+          summary: compactText(record.summary || "", 86),
+          folder: record.folder || "",
+          tags: Array.isArray(record.tags) ? record.tags.slice(0, 4) : []
+        };
+      }
+
+      function buildInsightCardUrl(input, coverage, records) {
+        const payload = {
+          version: 1,
+          cardType: String(input?.intent || "lookup"),
+          query: compactText(input?.query || "", 80),
+          generatedAt: new Date().toISOString(),
+          scopeLabel: formatScopeLabel(input?.timeScope, coverage),
+          coverage: coverage || null,
+          records: records.slice(0, 12).map(normalizeRecordForCard)
+        };
+        const params = new URLSearchParams();
+        params.set("payload", encodePayload(payload));
+        return `assets/insight-card.html?${params.toString()}`;
+      }
+
       function buildResultCardUrl(coverage, records) {
         const params = new URLSearchParams();
         const dateRange = coverage && coverage.dateRange ? coverage.dateRange : {};
@@ -69,9 +125,9 @@
           return {
             result: formatCoverage(coverage),
             webview: {
-              url: buildResultCardUrl(coverage, []),
+              url: buildInsightCardUrl(input, coverage, []),
               iframe: false,
-              aspectRatio: 0.86
+              aspectRatio: 0.78
             },
             metadata: {
               matchedCount: String(coverage?.matchedCount || 0),
@@ -94,9 +150,9 @@
         return {
           result: lines.join("\n"),
           webview: {
-            url: buildResultCardUrl(queryResult.coverage || coverage, records),
+            url: buildInsightCardUrl(input, queryResult.coverage || coverage, records),
             iframe: false,
-            aspectRatio: 0.86
+            aspectRatio: 0.78
           },
           metadata: {
             matchedCount: String(coverage?.matchedCount || 0),

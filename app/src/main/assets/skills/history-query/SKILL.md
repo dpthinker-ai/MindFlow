@@ -26,4 +26,6 @@ Call the JS runtime entry with:
 
 Do not invent counts. Use native tool results for counts, date ranges, and record coverage.
 Only include source links if the user explicitly asks for links or original records.
-
+When returning a card, use the WebView output as a visual companion. The card should show coverage,
+themes, timeline hints, and representative records, but the natural-language answer remains the source
+of analysis and conclusions.

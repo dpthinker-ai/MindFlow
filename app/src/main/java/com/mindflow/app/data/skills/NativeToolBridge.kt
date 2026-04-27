@@ -78,6 +78,8 @@ class DefaultNativeToolBridge(
                         "date" to note.createdLocalDate(zoneId).toString(),
                         "title" to note.displayTitle(),
                         "summary" to note.summaryLine(),
+                        "folder" to note.folderKey,
+                        "tags" to note.tags,
                         "content" to request.includeContent.thenValue(note.content),
                     ).filterValues { it != null }
                 },

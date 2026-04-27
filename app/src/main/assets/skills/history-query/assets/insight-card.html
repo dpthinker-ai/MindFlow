@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindFlow History Insight Card</title>
+    <link rel="stylesheet" href="file:///android_asset/skills/shared/card-kit/card-theme.css" />
+  </head>
+  <body>
+    <article class="mf-card mf-fade-in" aria-label="MindFlow 历史洞察卡片">
+      <div class="mf-card__content">
+        <section class="mf-hero">
+          <div>
+            <p class="mf-eyebrow" id="eyebrow">MindFlow Skill</p>
+            <h1 class="mf-title" id="title">历史洞察卡片</h1>
+            <p class="mf-subtitle" id="subtitle">正在整理你的历史记录。</p>
+          </div>
+          <div class="mf-orb" aria-label="命中记录数">
+            <div class="mf-orb__inner">
+              <strong id="heroCount">0</strong>
+              <span id="heroLabel">命中</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="mf-metrics" aria-label="记录覆盖指标">
+          <div class="mf-metric">
+            <strong id="scopedCount">0</strong>
+            <span>范围内</span>
+          </div>
+          <div class="mf-metric">
+            <strong id="matchedCount">0</strong>
+            <span>命中</span>
+          </div>
+          <div class="mf-metric">
+            <strong id="processedCount">0</strong>
+            <span>已展示</span>
+          </div>
+        </section>
+
+        <section class="mf-panel" aria-label="主题线索">
+          <div class="mf-section-head">
+            <strong id="themeTitle">主题线索</strong>
+            <span id="coverageLabel">Sample</span>
+          </div>
+          <div class="mf-theme-list" id="themes"></div>
+        </section>
+
+        <section class="mf-panel mf-panel--secondary" aria-label="时间分布">
+          <div class="mf-section-head">
+            <strong>时间分布</strong>
+            <span id="scopeLabel">全部历史</span>
+          </div>
+          <div class="mf-timeline" id="timeline"></div>
+        </section>
+
+        <section class="mf-panel" aria-label="代表记录">
+          <div class="mf-section-head">
+            <strong id="recordTitle">代表记录</strong>
+            <span id="recordCount">0 items</span>
+          </div>
+          <div class="mf-records" id="records"></div>
+        </section>
+
+        <footer class="mf-footer">
+          <span class="mf-brand">History Query Skill</span>
+          <span id="freshness">刚刚生成</span>
+        </footer>
+      </div>
+    </article>
+
+    <script src="file:///android_asset/skills/shared/card-kit/card-runtime.js"></script>
+    <script>
+      const {
+        colorFor,
+        countBy,
+        escapeHtml,
+        formatDateLabel,
+        formatGeneratedAt,
+        formatNumber,
+        normalizeRecords,
+        number,
+        readPayloadFromUrl,
+        setText
+      } = window.MindFlowCard;
+
+      const payload = readPayloadFromUrl({});
+      const coverage = payload.coverage || {};
+      const records = normalizeRecords(payload.records);
+      const cardType = String(payload.cardType || "lookup");
+      const matched = number(coverage.matchedCount);
+      const scoped = number(coverage.totalCount);
+      const processed = number(coverage.processedCount);
+      const complete = Boolean(coverage.complete);
+      const scopeLabel = String(payload.scopeLabel || "全部历史");
+
+      const titleByType = {
+        count: "记录覆盖情况",
+        categories: "历史分类地图",
+        timeline: "时间线索",
+        lookup: "命中记录卡片",
+        analysis: "历史洞察卡片"
+      };
+
+      const themeTitleByType = {
+        count: "覆盖范围",
+        categories: "主题线索",
+        timeline: "时间线索",
+        lookup: "命中线索",
+        analysis: "洞察线索"
+      };
+
+      function folderLabel(raw) {
+        const map = {
+          work: "工作",
+          life: "生活",
+          health: "健康",
+          project: "项目",
+          fitness: "健身",
+          idea: "想法",
+          study: "学习"
+        };
+        const key = String(raw || "").trim();
+        return map[key] || key.replace(/[-_]+/g, " ");
+      }
+
+      function inferTheme(record) {
+        const source = `${record.title}\n${record.summary}`.toLowerCase();
+        const rules = [
+          ["应用开发", ["mindflow", "fitever", "应用", "界面", "输入框", "发布", "卡片", "启动页"]],
+          ["AI 与模型", ["ai", "llm", "rag", "gemma", "litert", "模型", "端侧", "云侧", "gpu"]],
+          ["技术优化", ["opencl", "npu", "gc", "内存", "架构", "代码", "闪退", "性能"]],
+          ["个人成长", ["人生", "建议", "认知", "成长", "注意力", "效率", "内耗"]],
+          ["健康生活", ["健康", "运动", "深蹲", "久坐", "免疫", "健身"]],
+          ["规划总结", ["okr", "规划", "总结", "时间表", "复盘"]]
+        ];
+        const match = rules.find(([, terms]) => terms.some((term) => source.includes(term)));
+        return match ? match[0] : "记录线索";
+      }
+
+      function buildThemes() {
+        const labels = [];
+        records.forEach((record) => {
+          record.tags.slice(0, 2).forEach((tag) => labels.push(tag));
+          if (record.folder) labels.push(folderLabel(record.folder));
+          if (labels.length < 8) labels.push(inferTheme(record));
+        });
+        if (labels.length === 0) {
+          labels.push(complete ? "完整覆盖" : "统计结果", scopeLabel);
+        }
+        return countBy(labels, (label) => label)
+          .slice(0, 6);
+      }
+
+      function buildTimeline() {
+        const buckets = countBy(records, (record) => record.date).slice(0, 7);
+        if (buckets.length === 0) {
+          return [{ label: scopeLabel, count: matched || scoped || 1 }];
+        }
+        return buckets.sort((a, b) => a.label.localeCompare(b.label));
+      }
+
+      function renderThemes() {
+        const themes = buildThemes();
+        document.getElementById("themes").innerHTML = themes
+          .map((theme) => {
+            const color = colorFor(theme.label);
+            return `
+              <span class="mf-theme" style="--theme-color: ${color}">
+                <i></i>
+                <span>${escapeHtml(theme.label)} · ${formatNumber(theme.count)}</span>
+              </span>
+            `;
+          })
+          .join("");
+      }
+
+      function renderTimeline() {
+        const buckets = buildTimeline();
+        const max = Math.max(...buckets.map((bucket) => bucket.count), 1);
+        document.getElementById("timeline").innerHTML = buckets
+          .map((bucket) => {
+            const height = Math.max(10, Math.round((bucket.count / max) * 54));
+            return `
+              <div class="mf-day">
+                <div class="mf-day__bar" style="height: ${height}px"></div>
+                <div class="mf-day__label">${escapeHtml(formatDateLabel(bucket.label))}</div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function renderRecords() {
+        const visibleRecords = records.slice(0, 3);
+        setText("recordCount", `${formatNumber(records.length)} items`);
+        if (visibleRecords.length === 0) {
+          document.getElementById("records").innerHTML = `
+            <div class="mf-record">
+              <div class="mf-record__date">统计</div>
+              <div>
+                <p class="mf-record__title">这次查询主要返回覆盖统计</p>
+                <p class="mf-record__summary">如果需要代表记录，可以继续追问“展开几条原始记录”。</p>
+              </div>
+            </div>
+          `;
+          return;
+        }
+        document.getElementById("records").innerHTML = visibleRecords
+          .map((record) => `
+            <div class="mf-record">
+              <div class="mf-record__date">${escapeHtml(formatDateLabel(record.date))}</div>
+              <div>
+                <p class="mf-record__title">${escapeHtml(record.title)}</p>
+                <p class="mf-record__summary">${escapeHtml(record.summary || "暂无摘要")}</p>
+              </div>
+            </div>
+          `)
+          .join("");
+      }
+
+      const shownLabel = complete ? "完整覆盖" : "样本展示";
+      const title = titleByType[cardType] || titleByType.lookup;
+      const question = payload.query ? `问题：${payload.query}` : `${scopeLabel} · ${shownLabel}`;
+      const subtitle = `${scopeLabel}命中 ${formatNumber(matched)} 条，已可视化 ${formatNumber(processed || records.length)} 条。${complete ? "结果已覆盖全部命中记录。" : "卡片先展示代表样本，完整判断以正文回答为准。"}`;
+
+      document.title = title;
+      setText("eyebrow", `${shownLabel} · MindFlow Skill`);
+      setText("title", title);
+      setText("subtitle", question.length > 42 ? subtitle : `${question}。${subtitle}`);
+      setText("heroCount", formatNumber(matched));
+      setText("heroLabel", cardType === "count" ? "总命中" : "命中");
+      setText("scopedCount", formatNumber(scoped));
+      setText("matchedCount", formatNumber(matched));
+      setText("processedCount", formatNumber(processed || records.length));
+      setText("coverageLabel", complete ? "Complete" : "Sample");
+      setText("scopeLabel", scopeLabel);
+      setText("themeTitle", themeTitleByType[cardType] || "主题线索");
+      setText("recordTitle", cardType === "count" ? "查询说明" : "代表记录");
+      setText("freshness", formatGeneratedAt(payload.generatedAt));
+
+      renderThemes();
+      renderTimeline();
+      renderRecords();
+    </script>
+  </body>
+</html>

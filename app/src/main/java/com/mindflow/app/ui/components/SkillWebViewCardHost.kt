@@ -2,12 +2,11 @@ package com.mindflow.app.ui.components
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.view.View
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,14 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,23 +46,19 @@ fun SkillWebViewCardHost(
     url: String,
     modifier: Modifier = Modifier,
     aspectRatio: Float = 1.333f,
-    expandLabel: String = "展开卡片",
 ) {
     val safeAspectRatio = aspectRatio.takeIf { it in 0.5f..2.5f } ?: 1.333f
     var showFullScreen by remember(url) { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
-    Column(
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.96f),
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, BorderSoft),
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Surface(
-            color = WhiteGlass.copy(alpha = 0.96f),
-            shape = MaterialTheme.shapes.large,
-            border = BorderStroke(1.dp, BorderSoft),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Box {
             SkillWebView(
                 url = url,
                 modifier = Modifier
@@ -73,17 +66,24 @@ fun SkillWebViewCardHost(
                     .heightIn(min = 220.dp, max = 360.dp)
                     .aspectRatio(safeAspectRatio),
             )
+
+            Surface(
+                color = WhiteGlass.copy(alpha = 0.9f),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, BorderSoft),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp),
+            ) {
+                IconButton(onClick = { showFullScreen = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Fullscreen,
+                        contentDescription = "展开 Skill 卡片",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
-        AssistChip(
-            onClick = { showFullScreen = true },
-            label = { Text(expandLabel) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Outlined.Fullscreen,
-                    contentDescription = null,
-                )
-            },
-        )
     }
 
     if (showFullScreen) {
@@ -137,6 +137,11 @@ private fun SkillWebView(
                 settings.allowFileAccess = true
                 settings.builtInZoomControls = false
                 settings.displayZoomControls = false
+                settings.useWideViewPort = false
+                settings.loadWithOverviewMode = false
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
                 setBackgroundColor(Color.TRANSPARENT)
                 setOnTouchListener { view, _ ->
                     view.parent?.requestDisallowInterceptTouchEvent(true)

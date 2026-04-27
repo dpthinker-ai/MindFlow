@@ -158,7 +158,11 @@ internal object ReviewChatHistorySkill {
         intent = query.toSkillIntent(),
         query = query.question,
         timeScopeLabel = query.timeScope.toSkillScopeLabel(),
-        needsCard = false,
+        needsCard = query.mode in setOf(
+            ReviewChatQuestionMode.COLLECTION_OVERVIEW,
+            ReviewChatQuestionMode.RECORD_LOOKUP,
+            ReviewChatQuestionMode.TIMELINE_ANCHOR,
+        ),
         modelPass = query.toModelPass(),
     )
 
@@ -226,6 +230,7 @@ internal object ReviewChatHistorySkill {
         return renderJsonObject(
             linkedMapOf(
                 "intent" to runtimeIntent(query),
+                "query" to query.question,
                 "timeScope" to renderTimeScopePayload(query.timeScope),
                 "entityTerms" to corpusContext.selection.entityTerms,
                 "pageSize" to pageSize,
@@ -259,9 +264,10 @@ internal object ReviewChatHistorySkill {
 
     private fun runtimeIntent(
         query: ReviewChatParsedQuery,
-    ): String = when (query.operation) {
-        ReviewChatQueryOperation.COUNT -> "count"
-        ReviewChatQueryOperation.TIMELINE -> "timeline"
+    ): String = when {
+        query.wantsCategories -> "categories"
+        query.operation == ReviewChatQueryOperation.COUNT -> "count"
+        query.operation == ReviewChatQueryOperation.TIMELINE -> "timeline"
         else -> "lookup"
     }
 

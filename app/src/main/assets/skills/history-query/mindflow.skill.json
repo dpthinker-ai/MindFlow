@@ -2,7 +2,7 @@
   "id": "history-query",
   "name": "History Query",
   "description": "Query and summarize MindFlow historical notes.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entry": "scripts/index.html",
   "executor": "js",
   "output": ["text", "webview"],
