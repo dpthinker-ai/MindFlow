@@ -1346,7 +1346,12 @@ class ReviewChatPlanner(
         corpusContext: ReviewChatCorpusContext,
     ): ReviewChatHistorySkillRuntimeResult? {
         val legacy = ReviewChatHistorySkill.run(query, corpusContext)
-            ?.let(::ReviewChatHistorySkillRuntimeResult)
+            ?.let { skillResult ->
+                ReviewChatHistorySkillRuntimeResult(
+                    skillResult = skillResult,
+                    skillWebView = ReviewChatHistorySkill.buildFallbackSkillWebView(query, corpusContext),
+                )
+            }
         val runtime = skillRuntime
         if (runtime == null || !ReviewChatHistorySkill.shouldUseRuntime(query)) {
             return legacy

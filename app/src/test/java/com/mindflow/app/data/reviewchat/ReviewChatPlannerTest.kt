@@ -24,6 +24,7 @@ import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Base64
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -876,6 +877,75 @@ class ReviewChatPlannerTest {
         assertThat(invocations.single().data).contains("\"intent\":\"categories\"")
         assertThat(invocations.single().data).contains("\"query\":\"帮我分析所有的记录，都有哪些分类？\"")
         assertThat(result.skillWebView?.url).contains("insight-card.html")
+    }
+
+    @Test
+    fun answer_categoryLookupKeepsNativeSkillCardWhenRuntimeFails() = runTest {
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "MindFlow 卡片", "聊天界面增加 Skill 可视化卡片"),
+                    sampleNote(2L, "人生建议", "人生是多线程运行"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult =
+                    SkillResult.failure("WebView JS skill failed")
+            },
+            runCloud = { AiChatResult.Success("分类结果") },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "帮我分析所有的记录，都有哪些分类？",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        val cardUrl = result.skillWebView?.url.orEmpty()
+        assertThat(cardUrl).contains("insight-card.html?payload=")
+        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"cardType\":\"categories\"")
+        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"matchedCount\":2")
+    }
+
+    @Test
+    fun answer_countQuestionKeepsNativeSkillCardWithoutRuntime() = runTest {
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "人生建议", "人生是多线程运行"),
+                    sampleNote(2L, "技术实现", "MindFlow 接入 OpenCL"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            skillRuntime = null,
+            runCloud = { AiChatResult.Success("共 2 条记录。") },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我总共有多少条记录",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        val cardUrl = result.skillWebView?.url.orEmpty()
+        assertThat(cardUrl).contains("insight-card.html?payload=")
+        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"cardType\":\"count\"")
+        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"matchedCount\":2")
     }
 
     @Test
@@ -1992,4 +2062,9 @@ class ReviewChatPlannerTest {
         createdAt = 1_000L + id,
         updatedAt = 2_000L + id,
     )
+
+    private fun decodeSkillCardPayload(url: String): String {
+        val payload = url.substringAfter("payload=", "")
+        return String(Base64.getUrlDecoder().decode(payload), Charsets.UTF_8)
+    }
 }

@@ -6,11 +6,15 @@ import com.mindflow.app.data.skills.SkillMiniJsonParser
 import com.mindflow.app.data.skills.SkillModelPass
 import com.mindflow.app.data.skills.SkillResult
 import com.mindflow.app.data.skills.SkillWebViewSpec
+import java.time.Instant
+import java.util.Base64
 
 internal object ReviewChatHistorySkill {
     private const val SKILL_ID = "history-query"
     private const val SKILL_ENTRY = "scripts/index.html"
     private const val SCRIPT_NAME = "skills/history-query/scripts/index.html"
+    private const val INSIGHT_CARD_ASSET_URL =
+        "file:///android_asset/skills/history-query/assets/insight-card.html"
 
     fun run(
         query: ReviewChatParsedQuery,
@@ -62,6 +66,65 @@ internal object ReviewChatHistorySkill {
             scriptName = SKILL_ENTRY,
             data = buildRuntimeInvocationPayload(query, corpusContext),
             modelPass = query.toRuntimeModelPass(),
+        )
+    }
+
+    fun buildFallbackSkillWebView(
+        query: ReviewChatParsedQuery,
+        corpusContext: ReviewChatCorpusContext,
+    ): ReviewChatSkillWebView? {
+        if (!shouldUseRuntime(query)) return null
+        val coverage = buildCoverage(query, corpusContext)
+        val records = corpusContext.selection.queryNotes
+            .sortedBy { it.createdAt }
+            .take(12)
+            .map { note ->
+                linkedMapOf(
+                    "id" to note.id.toString(),
+                    "date" to note.createdLocalDate().format(reviewChatDateFormatter),
+                    "title" to compactCardText(note.topic.ifBlank { "未命名记录" }, 34),
+                    "summary" to compactCardText(
+                        note.content
+                            .replace("\n", " ")
+                            .replace(Regex("\\s+"), " ")
+                            .trim(),
+                        86,
+                    ),
+                    "folder" to note.folderKey.orEmpty(),
+                    "tags" to note.tags.take(4),
+                )
+            }
+        val coveragePayload = linkedMapOf<String, Any?>(
+            "totalCount" to coverage.scopedCount,
+            "matchedCount" to coverage.matchedCount,
+            "processedCount" to coverage.processedCount,
+            "complete" to coverage.complete,
+            "dateRange" to if (coverage.startDateLabel != null && coverage.endDateLabel != null) {
+                linkedMapOf(
+                    "start" to coverage.startDateLabel,
+                    "end" to coverage.endDateLabel,
+                )
+            } else {
+                null
+            },
+            "nextCursor" to coverage.nextCursor,
+        ).filterValues { it != null }
+        val payload = linkedMapOf(
+            "version" to 1,
+            "cardType" to runtimeIntent(query),
+            "query" to compactCardText(query.question, 80),
+            "generatedAt" to Instant.now().toString(),
+            "scopeLabel" to query.timeScope.toSkillScopeLabel(),
+            "coverage" to coveragePayload,
+            "records" to records,
+        )
+        val encodedPayload = Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(renderJsonObject(payload).toByteArray(Charsets.UTF_8))
+        return ReviewChatSkillWebView(
+            url = "$INSIGHT_CARD_ASSET_URL?payload=$encodedPayload",
+            iframe = false,
+            aspectRatio = 0.78f,
         )
     }
 
@@ -416,6 +479,11 @@ private fun SkillWebViewSpec.toReviewChatSkillWebView(): ReviewChatSkillWebView 
         iframe = iframe,
         aspectRatio = aspectRatio,
     )
+
+private fun compactCardText(value: String, maxLength: Int): String {
+    val text = value.replace(Regex("\\s+"), " ").trim()
+    return if (text.length > maxLength) "${text.take(maxLength - 1)}…" else text
+}
 
 private data class ReviewChatRuntimeRecord(
     val id: Long,
