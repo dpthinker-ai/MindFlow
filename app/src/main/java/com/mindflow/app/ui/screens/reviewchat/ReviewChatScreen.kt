@@ -585,59 +585,65 @@ private fun ReviewChatMessageBubble(
                 )
             }
         } else {
-            PanelCard(
+            Column(
                 modifier = Modifier
-                    .widthIn(max = 360.dp)
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = { onRequestCopy(copyPayload) },
-                    ),
+                    .widthIn(max = 390.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (message.structuredAnswer != null) {
-                    ReviewChatStructuredAnswerContent(message.structuredAnswer)
-                } else {
-                    MarkdownText(
-                        markdown = normalizedContent,
-                    )
-                }
                 message.skillWebView?.let { skillWebView ->
                     SkillWebViewCardHost(
                         url = skillWebView.url,
                         aspectRatio = skillWebView.aspectRatio,
-                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-                val providerLabel = when {
-                    providerLine.isNotBlank() -> providerLine
-                    message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
-                    message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
-                    message.provider == ReviewChatProvider.ON_DEVICE -> "端侧回答"
-                    else -> ""
-                }
-                if (providerLabel.isNotBlank()) {
-                    InsightChip(text = providerLabel)
-                }
-                val referencedNotes = when {
-                    message.referencedNotes.isNotEmpty() -> message.referencedNotes
-                    message.referencedNoteId != null -> listOf(
-                        ReviewChatReferencedNote(
-                            noteId = message.referencedNoteId,
-                            title = "原记录",
-                            dateLabel = "",
+
+                PanelCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { onRequestCopy(copyPayload) },
+                        ),
+                ) {
+                    if (message.structuredAnswer != null) {
+                        ReviewChatStructuredAnswerContent(message.structuredAnswer)
+                    } else {
+                        MarkdownText(
+                            markdown = normalizedContent,
                         )
-                    )
-                    else -> emptyList()
-                }
-                if (referencedNotes.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        referencedNotes.forEach { referencedNote ->
-                            GhostActionButton(
-                                text = buildReferencedNoteLabel(referencedNote),
-                                onClick = { onOpenRecord(referencedNote.noteId) },
+                    }
+                    val providerLabel = when {
+                        providerLine.isNotBlank() -> providerLine
+                        message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
+                        message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
+                        message.provider == ReviewChatProvider.ON_DEVICE -> "端侧回答"
+                        else -> ""
+                    }
+                    if (providerLabel.isNotBlank()) {
+                        InsightChip(text = providerLabel)
+                    }
+                    val referencedNotes = when {
+                        message.referencedNotes.isNotEmpty() -> message.referencedNotes
+                        message.referencedNoteId != null -> listOf(
+                            ReviewChatReferencedNote(
+                                noteId = message.referencedNoteId,
+                                title = "原记录",
+                                dateLabel = "",
                             )
+                        )
+                        else -> emptyList()
+                    }
+                    if (referencedNotes.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            referencedNotes.forEach { referencedNote ->
+                                GhostActionButton(
+                                    text = buildReferencedNoteLabel(referencedNote),
+                                    onClick = { onOpenRecord(referencedNote.noteId) },
+                                )
+                            }
                         }
                     }
                 }
