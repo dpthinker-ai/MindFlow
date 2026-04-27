@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.mindflow.app.data.model.OnDeviceModelSettings
 import com.mindflow.app.data.reviewchat.ReviewChatOnDeviceRequest
+import com.mindflow.app.data.reviewchat.ReviewChatOnDeviceTraceEvent
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiConnectionResult
 import com.mindflow.app.data.topic.AiFailureReason
@@ -239,13 +240,26 @@ class LiteRtLmOnDeviceAiClient(
 
         engineMutex.withLock {
             runCatching {
-                val engine = acquireEngine(modelPath)
+                val engine = acquireEngine(
+                    modelPath = modelPath,
+                    trace = request.trace,
+                )
+                val inferenceStartedAt = monotonicNow()
+                request.trace?.invoke(ReviewChatOnDeviceTraceEvent.InferenceStarted(engine.backendName))
                 engine.engine.createConversation(
                     reviewChatConversationConfig(
                         systemInstruction = request.systemInstruction,
                     )
                 ).use { conversation ->
-                    conversation.sendMessage(request.prompt, request.extraContext).toString().trim() to engine.backendName
+                    val content = conversation.sendMessage(request.prompt, request.extraContext).toString().trim()
+                    request.trace?.invoke(
+                        ReviewChatOnDeviceTraceEvent.InferenceFinished(
+                            backendName = engine.backendName,
+                            durationMs = elapsedMs(inferenceStartedAt),
+                            outputChars = content.length,
+                        )
+                    )
+                    content to engine.backendName
                 }
             }.recoverCatching { error ->
                 if (!shouldRetryReviewChatOnCpu(error)) throw error
@@ -253,13 +267,24 @@ class LiteRtLmOnDeviceAiClient(
                 val engine = acquireEngine(
                     modelPath = modelPath,
                     forcedBackendName = "cpu",
+                    trace = request.trace,
                 )
+                val inferenceStartedAt = monotonicNow()
+                request.trace?.invoke(ReviewChatOnDeviceTraceEvent.InferenceStarted(engine.backendName))
                 engine.engine.createConversation(
                     reviewChatConversationConfig(
                         systemInstruction = request.systemInstruction,
                     )
                 ).use { conversation ->
-                    conversation.sendMessage(request.prompt, request.extraContext).toString().trim() to engine.backendName
+                    val content = conversation.sendMessage(request.prompt, request.extraContext).toString().trim()
+                    request.trace?.invoke(
+                        ReviewChatOnDeviceTraceEvent.InferenceFinished(
+                            backendName = engine.backendName,
+                            durationMs = elapsedMs(inferenceStartedAt),
+                            outputChars = content.length,
+                        )
+                    )
+                    content to engine.backendName
                 }
             }.fold(
                 onSuccess = { (content, backendName) ->
@@ -275,6 +300,13 @@ class LiteRtLmOnDeviceAiClient(
                     }
                 },
                 onFailure = { error ->
+                    request.trace?.invoke(
+                        ReviewChatOnDeviceTraceEvent.InferenceFailed(
+                            backendName = "unknown",
+                            durationMs = 0L,
+                            message = error.message ?: "推理失败",
+                        )
+                    )
                     AiChatResult.Failure(
                         reason = AiFailureReason.OTHER,
                         message = "本地模型推理失败：${error.message ?: "请稍后再试"}",
@@ -292,7 +324,10 @@ class LiteRtLmOnDeviceAiClient(
         engineMutex.withLock {
             var emittedAnyChunk = false
             try {
-                val engine = acquireEngine(modelPath)
+                val engine = acquireEngine(
+                    modelPath = modelPath,
+                    trace = request.trace,
+                )
                 emittedAnyChunk = streamReviewChatWithEngine(
                     engine = engine,
                     request = request,
@@ -306,6 +341,7 @@ class LiteRtLmOnDeviceAiClient(
                 val engine = acquireEngine(
                     modelPath = modelPath,
                     forcedBackendName = "cpu",
+                    trace = request.trace,
                 )
                 streamReviewChatWithEngine(
                     engine = engine,
@@ -322,36 +358,72 @@ class LiteRtLmOnDeviceAiClient(
         emitChunk: suspend (String) -> Unit,
     ): Boolean {
         var emittedAnyChunk = false
+        var outputChars = 0
+        val inferenceStartedAt = monotonicNow()
         engine.engine.createConversation(
             reviewChatConversationConfig(
                 systemInstruction = request.systemInstruction,
             )
         ).use { conversation ->
+            request.trace?.invoke(ReviewChatOnDeviceTraceEvent.InferenceStarted(engine.backendName))
             conversation.sendMessageAsync(request.prompt, request.extraContext).collect { message ->
                 val chunk = message.toString()
                 if (chunk.isBlank()) return@collect
+                if (!emittedAnyChunk) {
+                    request.trace?.invoke(
+                        ReviewChatOnDeviceTraceEvent.FirstToken(
+                            backendName = engine.backendName,
+                            durationMs = elapsedMs(inferenceStartedAt),
+                        )
+                    )
+                }
                 emittedAnyChunk = true
+                outputChars += chunk.length
                 emitChunk(chunk)
             }
         }
+        request.trace?.invoke(
+            ReviewChatOnDeviceTraceEvent.InferenceFinished(
+                backendName = engine.backendName,
+                durationMs = elapsedMs(inferenceStartedAt),
+                outputChars = outputChars,
+            )
+        )
         return emittedAnyChunk
     }
 
     private fun acquireEngine(
         modelPath: String,
         forcedBackendName: String? = null,
+        trace: ((ReviewChatOnDeviceTraceEvent) -> Unit)? = null,
     ): CachedEngine {
         cachedEngine
             ?.takeIf {
                 it.modelPath == modelPath &&
                     (forcedBackendName == null || it.backendName == forcedBackendName)
             }
-            ?.let { return it }
+            ?.let { cached ->
+                trace?.invoke(
+                    ReviewChatOnDeviceTraceEvent.ModelLoadFinished(
+                        backendName = cached.backendName,
+                        durationMs = 0L,
+                        cached = true,
+                    )
+                )
+                return cached
+            }
 
         invalidateEngine()
 
         var lastError: Throwable? = null
         for ((backendName, backend) in backendCandidates(forcedBackendName)) {
+            val startedAt = monotonicNow()
+            trace?.invoke(
+                ReviewChatOnDeviceTraceEvent.ModelLoadStarted(
+                    backendName = backendName,
+                    cached = false,
+                )
+            )
             try {
                 val engine = Engine(
                     EngineConfig(
@@ -368,13 +440,32 @@ class LiteRtLmOnDeviceAiClient(
                     engine = engine,
                 )
                 cachedEngine = cached
+                trace?.invoke(
+                    ReviewChatOnDeviceTraceEvent.ModelLoadFinished(
+                        backendName = backendName,
+                        durationMs = elapsedMs(startedAt),
+                        cached = false,
+                    )
+                )
                 return cached
             } catch (error: Throwable) {
                 lastError = error
+                trace?.invoke(
+                    ReviewChatOnDeviceTraceEvent.ModelLoadFailed(
+                        backendName = backendName,
+                        durationMs = elapsedMs(startedAt),
+                        message = error.message ?: "初始化失败",
+                    )
+                )
             }
         }
         throw lastError ?: IllegalStateException("无法初始化本地模型引擎")
     }
+
+    private fun monotonicNow(): Long = System.nanoTime()
+
+    private fun elapsedMs(startedAt: Long): Long =
+        ((System.nanoTime() - startedAt) / 1_000_000L).coerceAtLeast(0L)
 
     private fun backendCandidates(
         forcedBackendName: String? = null,

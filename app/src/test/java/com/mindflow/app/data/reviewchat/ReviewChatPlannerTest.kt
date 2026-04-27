@@ -188,7 +188,7 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun buildReviewChatContextPacket_includesRawAndStructuredInputsButCapsLength() {
+    fun buildReviewChatContextPacket_usesRawInputsAndKeepsKnowledgeLayerOutOfChat() {
         val packet = buildReviewChatContextPacket(
             question = "把最近两周的矛盾串一下",
             intent = ReviewChatIntent.SYNTHESIZE,
@@ -221,10 +221,9 @@ class ReviewChatPlannerTest {
 
         assertThat(packet.rawNoteEvidence).hasSize(4)
         assertThat(packet.rawNoteEvidence.first().title).contains("主题")
-        assertThat(packet.knowledgeBaseSnippets.first()).contains("当前判断")
-        assertThat(packet.wikiSnippets.joinToString("\n")).contains("关键结论")
-        assertThat(packet.structuredSnippets.joinToString("\n")).contains("当前判断")
-        assertThat(packet.structuredSnippets.joinToString("\n")).contains("关键结论")
+        assertThat(packet.knowledgeBaseSnippets).isEmpty()
+        assertThat(packet.wikiSnippets).isEmpty()
+        assertThat(packet.structuredSnippets).isEmpty()
     }
 
     @Test
@@ -265,8 +264,8 @@ class ReviewChatPlannerTest {
         assertThat(packet.historyAnchors.first().label).isEqualTo("最早记录")
         assertThat(packet.historyAnchors.first().item.dateLabel).isEqualTo("1970-01-01")
         assertThat(packet.historyAnchors.first().item.title).isEqualTo("产品方向0")
-        assertThat(packet.wikiSnippets.first()).contains("产品方向")
-        assertThat(packet.knowledgeBaseSnippets).contains("待厘清问题｜待厘清问题")
+        assertThat(packet.wikiSnippets).isEmpty()
+        assertThat(packet.knowledgeBaseSnippets).isEmpty()
     }
 
     @Test
@@ -1190,10 +1189,9 @@ class ReviewChatPlannerTest {
         assertThat(prompt.userMessage).contains("最近问题：")
         assertThat(prompt.userMessage).contains("用户｜上一轮问题")
         assertThat(prompt.userMessage).doesNotContain("上一轮回答")
-        assertThat(prompt.userMessage).contains("历史锚点：")
-        assertThat(prompt.userMessage.indexOf("原始记录：")).isLessThan(prompt.userMessage.indexOf("LM Knowledge Base："))
-        assertThat(prompt.userMessage).contains("LM Knowledge Base：")
         assertThat(prompt.userMessage).contains("原始记录：")
+        assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
+        assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
         assertThat(prompt.systemInstruction).contains("把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section")
@@ -1253,9 +1251,9 @@ class ReviewChatPlannerTest {
         val prompt = ReviewChatPromptFactory.onDevice(packet)
 
         assertThat(prompt.userMessage).contains("当前问题：")
-        assertThat(prompt.userMessage).contains("LM Knowledge Base：")
-        assertThat(prompt.userMessage).contains("LLM Wiki：")
         assertThat(prompt.userMessage).contains("原始记录：")
+        assertThat(prompt.userMessage).doesNotContain("LM Knowledge Base：")
+        assertThat(prompt.userMessage).doesNotContain("LLM Wiki：")
         assertThat(prompt.userMessage.length).isGreaterThan(300)
         assertThat(prompt.userMessage.length).isAtMost(1_800)
     }
@@ -1677,7 +1675,7 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_broadCategoryQuery_usesCategorySummarizerAndBackfillsMissingCategories() = runTest {
+    fun answer_broadCategoryQuery_usesSingleModelCallWithoutPreSummarizer() = runTest {
         var cloudCalls = 0
         val planner = ReviewChatPlanner(
             loadNotes = {
@@ -1702,49 +1700,27 @@ class ReviewChatPlannerTest {
             isOnDeviceReady = { false },
             runCloud = { prompt ->
                 cloudCalls += 1
-                when (cloudCalls) {
-                    1 -> {
-                        assertThat(prompt).contains("当前批次：1/1")
-                        AiChatResult.Success(
-                            """
-                            应用开发：MindFlow 功能迭代、产品体验
-                            技术优化：性能、调试、系统修复
-                            个人成长：原则、方法论、认知提升
-                            生活健康：作息、身体状态、健康管理
-                            """.trimIndent()
-                        )
-                    }
-
-                    2 -> {
-                        assertThat(prompt).contains("候选：")
-                        AiChatResult.Success(
-                            """
-                            应用开发：MindFlow 功能迭代、产品体验
-                            技术优化：性能、调试、系统修复
-                            个人成长：原则、方法论、认知提升
-                            生活健康：作息、身体状态、健康管理
-                            """.trimIndent()
-                        )
-                    }
-
-                    3 -> AiChatResult.Success(
-                        """
+                assertThat(prompt).contains("SkillResult：")
+                assertThat(prompt).doesNotContain("当前批次：")
+                assertThat(prompt).doesNotContain("你在合并多批个人历史记录的类别候选")
+                AiChatResult.Success(
+                    """
+                    {
+                      "summary": "这 12 条记录主要分成几类主题。",
+                      "sections": [
                         {
-                          "summary": "这 12 条记录主要分成几类主题。",
-                          "sections": [
-                            {
-                              "title": "类别",
-                              "items": [
-                                "应用开发：MindFlow 功能迭代、产品体验"
-                              ]
-                            }
+                          "title": "类别",
+                          "items": [
+                            "应用开发：MindFlow 功能迭代、产品体验",
+                            "技术优化：性能、调试、系统修复",
+                            "个人成长：原则、方法论、认知提升",
+                            "生活健康：作息、身体状态、健康管理"
                           ]
                         }
-                        """.trimIndent()
-                    )
-
-                    else -> error("unexpected cloud call $cloudCalls")
-                }
+                      ]
+                    }
+                    """.trimIndent()
+                )
             },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
@@ -1764,11 +1740,11 @@ class ReviewChatPlannerTest {
             "个人成长：原则、方法论、认知提升",
             "生活健康：作息、身体状态、健康管理",
         )
-        assertThat(cloudCalls).isEqualTo(3)
+        assertThat(cloudCalls).isEqualTo(1)
     }
 
     @Test
-    fun answer_broadCategoryQuery_onDeviceOnly_usesOnDeviceCategorySummarizerAndBackfillsMissingCategories() = runTest {
+    fun answer_broadCategoryQuery_onDeviceOnly_usesSingleModelCallWithoutPreSummarizer() = runTest {
         var onDeviceCalls = 0
         val planner = ReviewChatPlanner(
             loadNotes = {
@@ -1794,46 +1770,26 @@ class ReviewChatPlannerTest {
             runCloud = { error("不应该调用云侧") },
             runOnDevice = { request ->
                 onDeviceCalls += 1
-                when (onDeviceCalls) {
-                    1 -> {
-                        assertThat(request.systemInstruction).contains("每行固定格式：类别名称：包含的信息")
-                        AiChatResult.Success(
-                            """
-                            应用开发：MindFlow 功能迭代、产品体验
-                            技术优化：性能、调试、系统修复
-                            个人成长：原则、方法论、认知提升
-                            生活健康：作息、身体状态、健康管理
-                            """.trimIndent()
-                        )
-                    }
-
-                    2 -> AiChatResult.Success(
-                        """
-                        应用开发：MindFlow 功能迭代、产品体验
-                        技术优化：性能、调试、系统修复
-                        个人成长：原则、方法论、认知提升
-                        生活健康：作息、身体状态、健康管理
-                        """.trimIndent()
-                    )
-
-                    3 -> AiChatResult.Success(
-                        """
+                assertThat(request.systemInstruction).contains("每个数组元素只放一条 `类别名称：包含的信息`")
+                assertThat(request.systemInstruction).doesNotContain("每行固定格式：类别名称：包含的信息")
+                AiChatResult.Success(
+                    """
+                    {
+                      "summary": "这 12 条记录主要分成几类主题。",
+                      "sections": [
                         {
-                          "summary": "这 12 条记录主要分成几类主题。",
-                          "sections": [
-                            {
-                              "title": "类别",
-                              "items": [
-                                "应用开发：MindFlow 功能迭代、产品体验"
-                              ]
-                            }
+                          "title": "类别",
+                          "items": [
+                            "应用开发：MindFlow 功能迭代、产品体验",
+                            "技术优化：性能、调试、系统修复",
+                            "个人成长：原则、方法论、认知提升",
+                            "生活健康：作息、身体状态、健康管理"
                           ]
                         }
-                        """.trimIndent()
-                    )
-
-                    else -> error("unexpected on-device call $onDeviceCalls")
-                }
+                      ]
+                    }
+                    """.trimIndent()
+                )
             },
         )
 
@@ -1853,7 +1809,7 @@ class ReviewChatPlannerTest {
             "个人成长：原则、方法论、认知提升",
             "生活健康：作息、身体状态、健康管理",
         )
-        assertThat(onDeviceCalls).isEqualTo(3)
+        assertThat(onDeviceCalls).isEqualTo(1)
     }
 
     @Test

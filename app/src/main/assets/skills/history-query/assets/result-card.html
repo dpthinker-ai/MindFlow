@@ -7,12 +7,16 @@
     <style>
       :root {
         color-scheme: light;
-        --ink: #111827;
-        --muted: #667085;
-        --line: #e6e1d6;
-        --paper: #fffdf7;
-        --accent: #2563eb;
-        --accent-soft: #dbeafe;
+        --ink: #172033;
+        --muted: #687086;
+        --soft: #8b93a7;
+        --paper: #fffaf0;
+        --paper-2: #fff4de;
+        --line: rgba(126, 91, 43, 0.16);
+        --accent: #0f766e;
+        --accent-2: #f59e0b;
+        --accent-3: #2563eb;
+        --shadow: 0 18px 42px rgba(48, 32, 12, 0.16);
       }
 
       * {
@@ -21,131 +25,337 @@
 
       body {
         margin: 0;
-        padding: 10px;
-        font-family: "Noto Serif SC", "Songti SC", serif;
+        padding: 12px;
         background: transparent;
         color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       .card {
-        min-height: calc(100vh - 20px);
-        padding: 16px;
-        border-radius: 18px;
-        background:
-          radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 36%),
-          linear-gradient(135deg, #fffdf7 0%, #f8f2e5 100%);
+        position: relative;
+        min-height: calc(100vh - 24px);
+        overflow: hidden;
         border: 1px solid var(--line);
-        box-shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at 16% 12%, rgba(37, 99, 235, 0.18), transparent 28%),
+          radial-gradient(circle at 86% 8%, rgba(245, 158, 11, 0.22), transparent 30%),
+          linear-gradient(145deg, var(--paper) 0%, var(--paper-2) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(23, 32, 51, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(23, 32, 51, 0.035) 1px, transparent 1px);
+        background-size: 22px 22px;
+        mask-image: linear-gradient(to bottom, black, transparent 72%);
+        pointer-events: none;
+      }
+
+      .content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        min-height: calc(100vh - 24px);
+        flex-direction: column;
+        gap: 16px;
+        padding: 18px;
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
       }
 
       .eyebrow {
-        margin: 0 0 8px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        margin: 0;
         color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .status-pill {
+        flex: 0 0 auto;
+        border: 1px solid rgba(15, 118, 110, 0.18);
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.1);
+        color: var(--accent);
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 800;
       }
 
       h1 {
-        margin: 0 0 14px;
+        margin: 0;
+        max-width: 14em;
+        color: var(--ink);
+        font-size: clamp(24px, 8vw, 34px);
+        line-height: 1.04;
+        letter-spacing: -0.06em;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 108px;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .summary {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .big-number {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+
+      .big-number strong {
+        color: var(--accent);
+        font-size: 54px;
+        line-height: 0.9;
+        letter-spacing: -0.08em;
+      }
+
+      .big-number span {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .range {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .ring {
+        display: grid;
+        width: 108px;
+        height: 108px;
+        place-items: center;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle, #fffaf0 54%, transparent 56%),
+          conic-gradient(var(--accent) var(--processed-angle), rgba(23, 32, 51, 0.08) 0);
+        box-shadow: inset 0 0 0 1px rgba(23, 32, 51, 0.05);
+      }
+
+      .ring-inner {
+        text-align: center;
+      }
+
+      .ring-inner strong {
+        display: block;
+        color: var(--ink);
         font-size: 18px;
-        line-height: 1.28;
+        line-height: 1;
+      }
+
+      .ring-inner span {
+        display: block;
+        margin-top: 4px;
+        color: var(--soft);
+        font-size: 10px;
+        font-weight: 700;
       }
 
       .metrics {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 8px;
-        margin-bottom: 12px;
       }
 
       .metric {
-        padding: 10px 8px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.72);
-        border: 1px solid rgba(230, 225, 214, 0.9);
+        min-width: 0;
+        border: 1px solid rgba(126, 91, 43, 0.12);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.58);
+        padding: 11px 10px;
       }
 
-      .value {
+      .metric strong {
         display: block;
-        font-size: 18px;
-        font-weight: 800;
-        color: var(--accent);
+        color: var(--ink);
+        font-size: 19px;
+        line-height: 1;
       }
 
-      .label {
+      .metric span {
         display: block;
-        margin-top: 2px;
+        margin-top: 5px;
+        color: var(--soft);
         font-size: 11px;
-        color: var(--muted);
-      }
-
-      .range,
-      .status {
-        margin: 8px 0 0;
-        font-size: 13px;
-        line-height: 1.55;
-        color: var(--muted);
-      }
-
-      .records {
-        margin: 12px 0 0;
-        padding: 10px 12px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.68);
-        border: 1px solid rgba(230, 225, 214, 0.78);
-      }
-
-      .records-title {
-        margin: 0 0 6px;
-        font-size: 13px;
         font-weight: 700;
       }
 
-      ul {
-        margin: 0;
-        padding-left: 18px;
+      .records {
+        display: none;
+        border: 1px solid rgba(126, 91, 43, 0.12);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.6);
+        padding: 14px;
       }
 
-      li {
-        margin: 4px 0;
+      .records[data-visible="true"] {
+        display: block;
+      }
+
+      .records-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 0 0 10px;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 850;
+      }
+
+      .records-title span {
+        color: var(--soft);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .record-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .record {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 9px;
+        align-items: start;
+        color: var(--muted);
         font-size: 12px;
         line-height: 1.45;
-        color: var(--muted);
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        margin-top: 5px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+      }
+
+      .footer {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid rgba(126, 91, 43, 0.12);
+        padding-top: 12px;
+        color: var(--soft);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .brand {
+        color: var(--accent);
       }
     </style>
   </head>
   <body>
     <article class="card">
-      <p class="eyebrow">Skill Card</p>
-      <h1>历史检索覆盖情况</h1>
-      <section class="metrics">
-        <div class="metric">
-          <span class="value" id="total">0</span>
-          <span class="label">范围内</span>
+      <div class="content">
+        <div class="topline">
+          <p class="eyebrow">MindFlow Skill Card</p>
+          <span class="status-pill" id="statusPill">已覆盖</span>
         </div>
-        <div class="metric">
-          <span class="value" id="matched">0</span>
-          <span class="label">命中</span>
-        </div>
-        <div class="metric">
-          <span class="value" id="processed">0</span>
-          <span class="label">已处理</span>
-        </div>
-      </section>
-      <p class="range" id="range"></p>
-      <p class="status" id="status"></p>
-      <section class="records" id="recordsBox" hidden>
-        <p class="records-title">示例记录</p>
-        <ul id="records"></ul>
-      </section>
+
+        <h1>历史记录检索结果</h1>
+
+        <section class="hero" aria-label="历史记录检索摘要">
+          <div class="summary">
+            <div class="big-number">
+              <strong id="matchedHero">0</strong>
+              <span>条命中记录</span>
+            </div>
+            <p class="range" id="range">时间范围：全部历史</p>
+          </div>
+          <div class="ring" id="ring">
+            <div class="ring-inner">
+              <strong id="percent">0%</strong>
+              <span>处理进度</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="metrics" aria-label="检索指标">
+          <div class="metric">
+            <strong id="total">0</strong>
+            <span>范围内</span>
+          </div>
+          <div class="metric">
+            <strong id="matched">0</strong>
+            <span>命中</span>
+          </div>
+          <div class="metric">
+            <strong id="processed">0</strong>
+            <span>已处理</span>
+          </div>
+        </section>
+
+        <section class="records" id="recordsBox" aria-label="示例记录">
+          <p class="records-title">示例记录 <span>最多展示 4 条</span></p>
+          <ul class="record-list" id="records"></ul>
+        </section>
+
+        <footer class="footer">
+          <span class="brand">History Query</span>
+          <span id="freshness">刚刚生成</span>
+        </footer>
+      </div>
     </article>
     <script>
       const params = new URLSearchParams(window.location.search);
-      const text = (key, fallback = "0") => params.get(key) || fallback;
-      document.getElementById("total").textContent = text("total");
-      document.getElementById("matched").textContent = text("matched");
-      document.getElementById("processed").textContent = text("processed");
+      const safeText = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+      const intParam = (key) => {
+        const value = Number(params.get(key) || 0);
+        return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+      };
+
+      const total = intParam("total");
+      const matched = intParam("matched");
+      const processed = intParam("processed");
+      const complete = params.get("complete") === "true";
+      const progressBase = matched > 0 ? matched : total;
+      const progress = progressBase > 0 ? Math.min(1, processed / progressBase) : 0;
+      const percent = Math.round(progress * 100);
+
+      document.getElementById("total").textContent = total;
+      document.getElementById("matched").textContent = matched;
+      document.getElementById("processed").textContent = processed;
+      document.getElementById("matchedHero").textContent = matched;
+      document.getElementById("percent").textContent = `${percent}%`;
+      document.getElementById("ring").style.setProperty("--processed-angle", `${Math.round(progress * 360)}deg`);
+      document.getElementById("statusPill").textContent = complete ? "完整覆盖" : "部分展示";
 
       const start = params.get("start");
       const end = params.get("end");
@@ -153,25 +363,23 @@
         ? `时间范围：${start} 至 ${end}`
         : "时间范围：全部历史";
 
-      const complete = params.get("complete") === "true";
-      document.getElementById("status").textContent = complete
-        ? "本次检索已完整覆盖命中记录。"
-        : "本次只展示了部分记录，后续可继续分页。";
+      const generated = params.get("generated");
+      if (generated) {
+        const date = new Date(generated);
+        if (!Number.isNaN(date.getTime())) {
+          document.getElementById("freshness").textContent =
+            `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")} 生成`;
+        }
+      }
 
       const records = (params.get("records") || "")
         .split("\n")
         .map((item) => item.trim())
         .filter(Boolean);
       if (records.length > 0) {
-        document.getElementById("recordsBox").hidden = false;
+        document.getElementById("recordsBox").dataset.visible = "true";
         document.getElementById("records").innerHTML = records
-          .map((item) => `<li>${item.replace(/[&<>"']/g, (char) => ({
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;"
-          })[char])}</li>`)
+          .map((item) => `<li class="record"><span class="dot"></span><span>${safeText(item)}</span></li>`)
           .join("");
       }
     </script>

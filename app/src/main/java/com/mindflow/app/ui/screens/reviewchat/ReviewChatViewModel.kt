@@ -11,6 +11,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatProvider
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
+import com.mindflow.app.data.reviewchat.ReviewChatTurnStage
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +20,19 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+enum class ReviewChatProgressStepState {
+    RUNNING,
+    DONE,
+    FAILED,
+}
+
+data class ReviewChatProgressStep(
+    val id: String,
+    val title: String,
+    val detail: String = "",
+    val state: ReviewChatProgressStepState = ReviewChatProgressStepState.RUNNING,
+)
 
 data class ReviewChatUiState(
     val title: String = "和历史聊聊",
@@ -31,6 +45,7 @@ data class ReviewChatUiState(
     val streamingAnswer: String = "",
     val streamingProvider: ReviewChatProvider? = null,
     val generationStatus: String = "",
+    val progressSteps: List<ReviewChatProgressStep> = emptyList(),
     val errorMessage: String? = null,
     val savedSessionId: Long? = null,
 ) {
@@ -166,6 +181,13 @@ class ReviewChatViewModel(
                     streamingAnswer = "",
                     streamingProvider = null,
                     generationStatus = "正在准备问题…",
+                    progressSteps = listOf(
+                        ReviewChatProgressStep(
+                            id = ReviewChatTurnStage.PREPARE.name,
+                            title = "准备问题",
+                            detail = "整理你的提问和当前对话上下文。",
+                        )
+                    ),
                     errorMessage = null,
                 )
             }
@@ -177,6 +199,13 @@ class ReviewChatViewModel(
                     streamingAnswer = "",
                     streamingProvider = null,
                     generationStatus = "正在准备问题…",
+                    progressSteps = listOf(
+                        ReviewChatProgressStep(
+                            id = ReviewChatTurnStage.PREPARE.name,
+                            title = "准备问题",
+                            detail = "整理你的提问和当前对话上下文。",
+                        )
+                    ),
                     errorMessage = null,
                 )
             }
@@ -198,6 +227,7 @@ class ReviewChatViewModel(
                                     generationStatus = event.message,
                                     streamingProvider = event.provider,
                                     providerLine = event.providerLine,
+                                    progressSteps = state.progressSteps.recordStatus(event),
                                     errorMessage = null,
                                 )
                             }
@@ -210,6 +240,7 @@ class ReviewChatViewModel(
                                     streamingProvider = event.provider,
                                     providerLine = event.providerLine,
                                     generationStatus = "",
+                                    progressSteps = state.progressSteps.recordStreaming(event.providerLine),
                                     errorMessage = null,
                                 )
                             }
@@ -237,6 +268,7 @@ class ReviewChatViewModel(
                                     streamingAnswer = "",
                                     streamingProvider = null,
                                     generationStatus = "",
+                                    progressSteps = state.progressSteps.recordComplete(result.providerLine),
                                     errorMessage = null,
                                 )
                             }
@@ -251,6 +283,7 @@ class ReviewChatViewModel(
                         streamingAnswer = "",
                         streamingProvider = null,
                         generationStatus = "",
+                        progressSteps = it.progressSteps.recordFailure(error.message ?: "生成回答失败，请重试。"),
                         errorMessage = error.message ?: "生成回答失败，请重试。",
                     )
                 }
@@ -309,4 +342,98 @@ class ReviewChatViewModel(
             }
         }
     }
+}
+
+private fun List<ReviewChatProgressStep>.recordStatus(
+    event: ReviewChatTurnEvent.Status,
+): List<ReviewChatProgressStep> {
+    val title = event.message.trim().removeSuffix("…").ifBlank { event.stage.defaultProgressTitle() }
+    val detail = event.detail.ifBlank { event.providerLine }
+    val incoming = ReviewChatProgressStep(
+        id = event.stepId.ifBlank { event.stage.name },
+        title = title,
+        detail = detail,
+        state = if (event.inProgress) ReviewChatProgressStepState.RUNNING else ReviewChatProgressStepState.DONE,
+    )
+    return upsertProgressStep(incoming)
+}
+
+private fun List<ReviewChatProgressStep>.recordStreaming(
+    providerLine: String,
+): List<ReviewChatProgressStep> = upsertProgressStep(
+    ReviewChatProgressStep(
+        id = ReviewChatTurnStage.GENERATE.name,
+        title = "模型正在生成回答",
+        detail = providerLine,
+        state = ReviewChatProgressStepState.RUNNING,
+    )
+)
+
+private fun List<ReviewChatProgressStep>.recordComplete(
+    providerLine: String,
+): List<ReviewChatProgressStep> = upsertProgressStep(
+    ReviewChatProgressStep(
+        id = ReviewChatTurnStage.COMPLETE.name,
+        title = "回答生成完成",
+        detail = providerLine,
+        state = ReviewChatProgressStepState.DONE,
+    ),
+    markExistingRunningDone = true,
+)
+
+private fun List<ReviewChatProgressStep>.recordFailure(
+    message: String,
+): List<ReviewChatProgressStep> = map { step ->
+    if (step.state == ReviewChatProgressStepState.RUNNING) {
+        step.copy(state = ReviewChatProgressStepState.FAILED)
+    } else {
+        step
+    }
+}.upsertProgressStep(
+    ReviewChatProgressStep(
+        id = "FAILED",
+        title = "回答生成失败",
+        detail = message,
+        state = ReviewChatProgressStepState.FAILED,
+    ),
+    markExistingRunningDone = false,
+)
+
+private fun List<ReviewChatProgressStep>.upsertProgressStep(
+    incoming: ReviewChatProgressStep,
+    markExistingRunningDone: Boolean = true,
+): List<ReviewChatProgressStep> {
+    val normalized = if (markExistingRunningDone) {
+        map { step ->
+            if (step.state == ReviewChatProgressStepState.RUNNING && step.id != incoming.id) {
+                step.copy(state = ReviewChatProgressStepState.DONE)
+            } else {
+                step
+            }
+        }
+    } else {
+        this
+    }
+    val index = normalized.indexOfFirst { it.id == incoming.id }
+    return if (index >= 0) {
+        normalized.toMutableList().also { items ->
+            items[index] = incoming
+        }
+    } else {
+        normalized + incoming
+    }
+}
+
+private fun ReviewChatTurnStage.defaultProgressTitle(): String = when (this) {
+    ReviewChatTurnStage.PREPARE -> "准备问题"
+    ReviewChatTurnStage.PARSE_INTENT -> "识别问题意图"
+    ReviewChatTurnStage.LOAD_HISTORY -> "读取历史记录"
+    ReviewChatTurnStage.RETRIEVE_HISTORY -> "检索历史记录"
+    ReviewChatTurnStage.RUN_SKILL -> "运行 Skill"
+    ReviewChatTurnStage.BUILD_CONTEXT -> "组织上下文"
+    ReviewChatTurnStage.CLOUD_MODEL -> "请求云侧模型"
+    ReviewChatTurnStage.ON_DEVICE_CHECK -> "检查端侧模型"
+    ReviewChatTurnStage.ON_DEVICE_MODEL -> "准备端侧模型"
+    ReviewChatTurnStage.GENERATE -> "生成回答"
+    ReviewChatTurnStage.COMPLETE -> "回答完成"
 }

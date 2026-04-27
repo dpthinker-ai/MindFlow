@@ -14,6 +14,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 
+private const val JS_RESULT_BRIDGE_NAME = "MindFlowSkillRuntime"
+private const val NATIVE_TOOL_BRIDGE_NAME = "MindFlowNativeBridge"
+private const val JS_INPUT_BRIDGE_NAME = "MindFlowSkillInput"
+private const val MAX_DIRECT_INVOCATION_DATA_CHARS = 1_000_000
+
 class WebViewJsSkillExecutor(
     private val context: Context,
     private val nativeToolBridge: NativeToolBridge,
@@ -46,9 +51,19 @@ class WebViewJsSkillExecutor(
             finished = true
             webView.removeJavascriptInterface(JS_RESULT_BRIDGE_NAME)
             webView.removeJavascriptInterface(NATIVE_TOOL_BRIDGE_NAME)
+            webView.removeJavascriptInterface(JS_INPUT_BRIDGE_NAME)
             webView.stopLoading()
             webView.destroy()
             complete(result)
+        }
+
+        if (request.invocation.data.length > MAX_DIRECT_INVOCATION_DATA_CHARS) {
+            complete(
+                SkillResult.failure(
+                    "JS skill input is too large: ${request.invocation.data.length} chars",
+                ),
+            )
+            return
         }
 
         val resultBridge = object {
@@ -79,15 +94,24 @@ class WebViewJsSkillExecutor(
             }
         }
 
+        val inputBridge = object {
+            @JavascriptInterface
+            fun getInvocationData(): String = request.invocation.data
+
+            @JavascriptInterface
+            fun getSecret(): String = request.secret
+        }
+
         webView = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             addJavascriptInterface(resultBridge, JS_RESULT_BRIDGE_NAME)
             addJavascriptInterface(nativeBridge, NATIVE_TOOL_BRIDGE_NAME)
+            addJavascriptInterface(inputBridge, JS_INPUT_BRIDGE_NAME)
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     if (finished) return
-                    view.evaluateJavascript(request.toExecutionJavascript(), null)
+                    view.evaluateJavascript(WebViewSkillExecutionScript.build(), null)
                 }
 
                 override fun onReceivedError(
@@ -111,16 +135,25 @@ class WebViewJsSkillExecutor(
 
     private fun SkillExecutionRequest.entryAssetUrl(): String =
         "file:///android_asset/${skill.assetBasePath}/${skill.manifest.entry}"
+}
 
-    private fun SkillExecutionRequest.toExecutionJavascript(): String = """
+internal object WebViewSkillExecutionScript {
+    fun build(): String = """
         (function() {
           if (!window['ai_edge_gallery_get_result']) {
             $JS_RESULT_BRIDGE_NAME.onResult(JSON.stringify({ error: 'missing ai_edge_gallery_get_result' }));
             return;
           }
+          if (!window.$JS_INPUT_BRIDGE_NAME ||
+              typeof window.$JS_INPUT_BRIDGE_NAME.getInvocationData !== 'function') {
+            $JS_RESULT_BRIDGE_NAME.onResult(JSON.stringify({ error: 'missing skill input bridge' }));
+            return;
+          }
           (async function() {
             try {
-              const raw = await window['ai_edge_gallery_get_result'](${invocation.data.asJavascriptString()}, ${secret.asJavascriptString()});
+              const data = String(window.$JS_INPUT_BRIDGE_NAME.getInvocationData() || '{}');
+              const secret = String(window.$JS_INPUT_BRIDGE_NAME.getSecret ? window.$JS_INPUT_BRIDGE_NAME.getSecret() : '');
+              const raw = await window['ai_edge_gallery_get_result'](data, secret);
               $JS_RESULT_BRIDGE_NAME.onResult(String(raw));
             } catch (error) {
               const message = String(error && error.message ? error.message : error);
@@ -129,11 +162,6 @@ class WebViewJsSkillExecutor(
           })();
         })();
     """.trimIndent()
-
-    private companion object {
-        const val JS_RESULT_BRIDGE_NAME = "MindFlowSkillRuntime"
-        const val NATIVE_TOOL_BRIDGE_NAME = "MindFlowNativeBridge"
-    }
 }
 
 private fun String.asJavascriptString(): String = buildString(length + 2) {

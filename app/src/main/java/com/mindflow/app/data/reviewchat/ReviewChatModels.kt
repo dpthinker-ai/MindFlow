@@ -109,11 +109,29 @@ data class ReviewChatTurnResult(
     val skillWebView: ReviewChatSkillWebView? = null,
 )
 
+enum class ReviewChatTurnStage {
+    PREPARE,
+    PARSE_INTENT,
+    LOAD_HISTORY,
+    RETRIEVE_HISTORY,
+    RUN_SKILL,
+    BUILD_CONTEXT,
+    CLOUD_MODEL,
+    ON_DEVICE_CHECK,
+    ON_DEVICE_MODEL,
+    GENERATE,
+    COMPLETE,
+}
+
 sealed interface ReviewChatTurnEvent {
     data class Status(
         val message: String,
         val provider: ReviewChatProvider? = null,
         val providerLine: String = "",
+        val stage: ReviewChatTurnStage = ReviewChatTurnStage.PREPARE,
+        val stepId: String = stage.name,
+        val detail: String = "",
+        val inProgress: Boolean = true,
     ) : ReviewChatTurnEvent
 
     data class Partial(
@@ -133,7 +151,48 @@ data class ReviewChatOnDeviceRequest(
     val systemInstruction: String = "",
     val extraContext: Map<String, String> = emptyMap(),
     val resetConversation: Boolean,
+    val trace: ((ReviewChatOnDeviceTraceEvent) -> Unit)? = null,
 )
+
+sealed interface ReviewChatOnDeviceTraceEvent {
+    data class ModelLoadStarted(
+        val backendName: String,
+        val cached: Boolean,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class ModelLoadFinished(
+        val backendName: String,
+        val durationMs: Long,
+        val cached: Boolean,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class ModelLoadFailed(
+        val backendName: String,
+        val durationMs: Long,
+        val message: String,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class InferenceStarted(
+        val backendName: String,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class FirstToken(
+        val backendName: String,
+        val durationMs: Long,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class InferenceFinished(
+        val backendName: String,
+        val durationMs: Long,
+        val outputChars: Int,
+    ) : ReviewChatOnDeviceTraceEvent
+
+    data class InferenceFailed(
+        val backendName: String,
+        val durationMs: Long,
+        val message: String,
+    ) : ReviewChatOnDeviceTraceEvent
+}
 
 data class ReviewChatOnDevicePrompt(
     val systemInstruction: String,

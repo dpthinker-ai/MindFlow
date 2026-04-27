@@ -387,7 +387,18 @@ MindFlow 的核心是：
 - `SkillResult`
 - `SkillChat/Card/Graph host`
 
-### 10.2 最合理的形态
+### 10.2 当前落地边界
+
+MindFlow 现阶段应该坚持这个边界：
+
+- Native 只做宿主：聊天流、输入框、进度面板、WebView 容器、打开记录、持久化。
+- JS/HTML 负责业务卡片：统计卡、历史检索卡、图谱卡、今日洞察卡、后续自定义可视化。
+- Skill 返回统一协议：`result` 给模型和普通文本流，`webview.url` 给 UI 宿主渲染卡片。
+- 新增卡片时优先新增 `app/src/main/assets/skills/<skill-id>/assets/*.html`，不要在 Compose 里新增业务卡片布局。
+
+这个边界的目的不是“为了用 JS 而用 JS”，而是让后续卡片可以像 Edge Gallery 一样被 Skill 独立生成、独立演进，不让聊天页、图谱页、今日页各自堆一套 Native UI。
+
+### 10.3 最合理的形态
 
 #### JS 负责
 

@@ -28,8 +28,6 @@ object ReviewChatPromptFactory {
         appendCollectionOverviewSection(this, packet.collectionOverview)
         appendPromptSection(this, "近期会话", packet.conversationSnippets)
         appendHistoryAnchorSection(this, packet.historyAnchors)
-        appendPromptSection(this, "LM Knowledge Base", packet.knowledgeBaseSnippets)
-        appendPromptSection(this, "LLM Wiki", packet.wikiSnippets)
         appendEvidenceSection(this, "原始记录", packet.rawNoteEvidence)
         if (packet.rawNoteDetails.isNotEmpty()) {
             appendLine("完整记录：")
@@ -111,7 +109,7 @@ object ReviewChatPromptFactory {
                 appendLine("5. 不要输出 Markdown 表格，也不要使用 Markdown 标题。")
             }
             ReviewChatQuestionMode.ANALYSIS -> {
-                appendLine("2. 这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
+                appendLine("2. 这是分析问题，只综合原始记录、查询结果和当前会话。")
                 appendLine("3. 把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section。")
                 if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
                     appendLine("4. 用户明确追问依据、原因或证据时，才把支撑材料写进 `依据` section 的 items，每个 items 元素只放一条内容。")
@@ -221,23 +219,6 @@ object ReviewChatPromptFactory {
             },
             itemMaxChars = 180,
         )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "LM Knowledge Base",
-            lines = packet.knowledgeBaseSnippets,
-            maxItems = 2,
-            itemMaxChars = 120,
-        )
-        appendSectionWithinBudget(
-            builder = prompt,
-            budget = ON_DEVICE_PROMPT_CHAR_BUDGET,
-            title = "LLM Wiki",
-            lines = packet.wikiSnippets,
-            maxItems = 3,
-            itemMaxChars = 140,
-        )
-
         return ReviewChatOnDevicePrompt(
             systemInstruction = buildString {
                 appendLine(
@@ -305,7 +286,7 @@ object ReviewChatPromptFactory {
                         appendLine("把直接答案写进 summary；如需补充锚点，只写进 `时间线` section 的 items，每个数组元素都写成 `日期《标题》：摘要`。不要输出表格，也不要使用 Markdown 标题。")
                     }
                     ReviewChatQuestionMode.ANALYSIS -> {
-                        appendLine("补充要求：这是分析问题，可以综合原始记录、LM Knowledge Base 和 LLM Wiki。")
+                        appendLine("补充要求：这是分析问题，只综合原始记录、查询结果和当前会话。")
                         appendLine("把总答复写进 summary；默认不要创建 `依据` 或 `下一步` section。")
                         if (responsePolicy.allows(REVIEW_CHAT_SECTION_EVIDENCE)) {
                             appendLine("用户明确追问依据、原因或证据时，才把支撑材料写进 `依据` section 的 items。")

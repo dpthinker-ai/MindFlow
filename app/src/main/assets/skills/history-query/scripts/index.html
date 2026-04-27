@@ -50,10 +50,11 @@
         params.set("matched", String(coverage?.matchedCount || 0));
         params.set("processed", String(coverage?.processedCount || 0));
         params.set("complete", String(Boolean(coverage?.complete)));
+        params.set("generated", new Date().toISOString());
         if (dateRange.start) params.set("start", String(dateRange.start));
         if (dateRange.end) params.set("end", String(dateRange.end));
         const titles = records
-          .slice(0, 3)
+          .slice(0, 4)
           .map((record) => `${record.date || "未知日期"}｜${record.title || "未命名记录"}`);
         if (titles.length > 0) params.set("records", titles.join("\n"));
         return `assets/result-card.html?${params.toString()}`;
@@ -67,6 +68,11 @@
         if (intent === "count") {
           return {
             result: formatCoverage(coverage),
+            webview: {
+              url: buildResultCardUrl(coverage, []),
+              iframe: false,
+              aspectRatio: 0.86
+            },
             metadata: {
               matchedCount: String(coverage?.matchedCount || 0),
               processedCount: String(coverage?.processedCount || 0),
@@ -90,7 +96,7 @@
           webview: {
             url: buildResultCardUrl(queryResult.coverage || coverage, records),
             iframe: false,
-            aspectRatio: 1.333
+            aspectRatio: 0.86
           },
           metadata: {
             matchedCount: String(coverage?.matchedCount || 0),

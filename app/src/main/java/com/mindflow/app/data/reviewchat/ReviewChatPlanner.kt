@@ -16,8 +16,8 @@ import java.time.ZoneId
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.flow
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
@@ -290,26 +290,9 @@ internal fun buildReviewChatContextPacket(
     val corpusContext = corpusContextOverride ?: ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
     val skillResult = skillResultOverride ?: ReviewChatHistorySkill.run(parsedQuery, corpusContext)
     val effectiveRawNoteDetails = rawNoteDetails.ifEmpty { corpusContext.rawNoteDetails }
-    val knowledgeBaseSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
-        buildKnowledgeBaseSnippets(
-            intent = intent,
-            weeklyReview = weeklyReview,
-            maintenanceSnapshot = maintenanceSnapshot,
-        )
-    } else {
-        emptyList()
-    }
-    val wikiSnippets = if (parsedQuery.mode == ReviewChatQuestionMode.ANALYSIS) {
-        buildWikiSnippets(
-            intent = intent,
-            question = question,
-            keywords = parsedQuery.keywords,
-            wikiSnapshot = wikiSnapshot,
-        )
-    } else {
-        emptyList()
-    }
-    val structuredSnippets = knowledgeBaseSnippets + wikiSnippets
+    val knowledgeBaseSnippets = emptyList<String>()
+    val wikiSnippets = emptyList<String>()
+    val structuredSnippets = emptyList<String>()
     return ReviewChatContextPacket(
         questionMode = parsedQuery.mode,
         intent = intent,
@@ -970,15 +953,22 @@ class ReviewChatPlanner(
         error(lastFailure?.message ?: "No provider returned a usable review chat answer")
     }
 
-    fun answerStream(request: ReviewChatTurnRequest): Flow<ReviewChatTurnEvent> = flow {
+    fun answerStream(request: ReviewChatTurnRequest): Flow<ReviewChatTurnEvent> = channelFlow {
         buildLowIntentClarificationResult(request)?.let { result ->
-            emit(ReviewChatTurnEvent.Complete(result))
-            return@flow
+            send(ReviewChatTurnEvent.Complete(result))
+            return@channelFlow
         }
-        emit(ReviewChatTurnEvent.Status(message = "正在读取历史记录…"))
-        val prepared = prepareReviewChatContext(request)
+        send(
+            ReviewChatTurnEvent.Status(
+                message = "准备问题",
+                stage = ReviewChatTurnStage.PREPARE,
+                detail = "整理你的提问和当前对话上下文。",
+            )
+        )
+        val prepared = prepareReviewChatContext(request) { status ->
+            send(status)
+        }
 
-        emit(ReviewChatTurnEvent.Status(message = "正在组织问题上下文…"))
         val cloudPrompt = ReviewChatPromptFactory.cloud(prepared.packet)
         val onDevicePrompt = ReviewChatPromptFactory.onDevice(prepared.packet)
         val attempts = when (resolveExecutionMode()) {
@@ -992,11 +982,13 @@ class ReviewChatPlanner(
             when (provider) {
                 ReviewChatProvider.CLOUD -> {
                     val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
-                    emit(
+                    send(
                         ReviewChatTurnEvent.Status(
-                            message = "正在请求云侧模型…",
+                            message = "请求云侧模型",
                             provider = provider,
                             providerLine = providerLine,
+                            stage = ReviewChatTurnStage.CLOUD_MODEL,
+                            detail = "使用云侧模型生成回答。",
                         )
                     )
                     val result = if (isCloudConfigured()) {
@@ -1007,7 +999,7 @@ class ReviewChatPlanner(
                     if (result is AiChatResult.Success) {
                         val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, result.content)
                         val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
-                        emit(
+                        send(
                             ReviewChatTurnEvent.Complete(
                                 ReviewChatTurnResult(
                                     answer = normalizedAnswer,
@@ -1023,7 +1015,7 @@ class ReviewChatPlanner(
                                 )
                             )
                         )
-                        return@flow
+                        return@channelFlow
                     }
                     if (result is AiChatResult.Failure) {
                         lastFailure = result
@@ -1032,33 +1024,52 @@ class ReviewChatPlanner(
 
                 ReviewChatProvider.ON_DEVICE -> {
                     val providerLine = buildReviewChatProviderLine(provider, fallbackOccurred = index > 0)
-                    emit(
+                    val traceSink: (ReviewChatOnDeviceTraceEvent) -> Unit = { event ->
+                        trySend(event.toReviewChatTurnStatus(provider, providerLine))
+                    }
+                    send(
                         ReviewChatTurnEvent.Status(
-                            message = "正在检查端侧模型…",
+                            message = "检查端侧模型",
                             provider = provider,
                             providerLine = providerLine,
+                            stage = ReviewChatTurnStage.ON_DEVICE_CHECK,
+                            detail = "确认本地模型和推理能力是否可用。",
                         )
                     )
                     if (!isOnDeviceReady()) {
+                        send(
+                            ReviewChatTurnEvent.Status(
+                                message = "端侧模型未就绪",
+                                provider = provider,
+                                providerLine = providerLine,
+                                stage = ReviewChatTurnStage.ON_DEVICE_CHECK,
+                                detail = "准备尝试下一个可用能力。",
+                                inProgress = false,
+                            )
+                        )
                         lastFailure = AiChatResult.Failure(AiFailureReason.CONFIG, "端侧未就绪")
                         return@forEachIndexed
                     }
 
-                    emit(
+                    send(
                         ReviewChatTurnEvent.Status(
-                            message = "正在加载端侧模型并准备推理…",
+                            message = "准备端侧模型",
                             provider = provider,
                             providerLine = providerLine,
+                            stage = ReviewChatTurnStage.ON_DEVICE_MODEL,
+                            detail = "初始化本地模型和推理会话。",
                         )
                     )
                     if (streamOnDevice != null) {
                         val buffer = StringBuilder()
                         runCatching {
-                            emit(
+                            send(
                                 ReviewChatTurnEvent.Status(
-                                    message = "正在端侧推理，首段内容生成后会实时显示…",
+                                    message = "端侧模型生成回答",
                                     provider = provider,
                                     providerLine = providerLine,
+                                    stage = ReviewChatTurnStage.GENERATE,
+                                    detail = "首段内容生成后会实时显示。",
                                 )
                             )
                             streamOnDevice.invoke(
@@ -1068,11 +1079,12 @@ class ReviewChatPlanner(
                                     systemInstruction = onDevicePrompt.systemInstruction,
                                     extraContext = onDevicePrompt.extraContext,
                                     resetConversation = request.priorMessages.isEmpty(),
+                                    trace = traceSink,
                                 )
                             ).collect { chunk ->
                                 if (chunk.isBlank()) return@collect
                                 buffer.append(chunk)
-                                emit(
+                                send(
                                     ReviewChatTurnEvent.Partial(
                                         content = buffer.toString(),
                                         provider = provider,
@@ -1085,7 +1097,7 @@ class ReviewChatPlanner(
                             if (isUsableReviewChatAnswer(content)) {
                                 val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, content)
                                 val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
-                                emit(
+                                send(
                                     ReviewChatTurnEvent.Complete(
                                         ReviewChatTurnResult(
                                             answer = normalizedAnswer,
@@ -1101,7 +1113,7 @@ class ReviewChatPlanner(
                                         )
                                     )
                                 )
-                                return@flow
+                                return@channelFlow
                             }
                             lastFailure = AiChatResult.Failure(
                                 reason = AiFailureReason.OTHER,
@@ -1114,11 +1126,13 @@ class ReviewChatPlanner(
                             )
                         }
                     } else {
-                        emit(
+                        send(
                             ReviewChatTurnEvent.Status(
-                                message = "正在端侧推理…",
+                                message = "端侧模型生成回答",
                                 provider = provider,
                                 providerLine = providerLine,
+                                stage = ReviewChatTurnStage.GENERATE,
+                                detail = "使用本地模型生成回答。",
                             )
                         )
                         val result = runOnDevice(
@@ -1128,12 +1142,13 @@ class ReviewChatPlanner(
                                 systemInstruction = onDevicePrompt.systemInstruction,
                                 extraContext = onDevicePrompt.extraContext,
                                 resetConversation = request.priorMessages.isEmpty(),
+                                trace = traceSink,
                             )
                         )
                         if (result is AiChatResult.Success) {
                             val normalizedAnswer = normalizeReviewChatModelAnswer(prepared, result.content)
                             val structuredAnswer = coerceStructuredAnswer(prepared.packet, normalizedAnswer)
-                            emit(
+                            send(
                                 ReviewChatTurnEvent.Complete(
                                     ReviewChatTurnResult(
                                         answer = normalizedAnswer,
@@ -1149,7 +1164,7 @@ class ReviewChatPlanner(
                                     )
                                 )
                             )
-                            return@flow
+                            return@channelFlow
                         }
                         if (result is AiChatResult.Failure) {
                             lastFailure = result
@@ -1205,19 +1220,67 @@ class ReviewChatPlanner(
 
     private suspend fun prepareReviewChatContext(
         request: ReviewChatTurnRequest,
+        emitStatus: suspend (ReviewChatTurnEvent.Status) -> Unit = {},
     ): PreparedReviewChatContext {
         val parsedQuery = resolveParsedQuery(request.question)
-        val notes = loadNotes()
-        val baseCorpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
-        val corpusContext = maybeAugmentCategoryDigest(
-            sessionId = request.sessionId,
-            query = parsedQuery,
-            corpusContext = baseCorpusContext,
+        emitStatus(
+            ReviewChatTurnEvent.Status(
+                message = "识别问题意图",
+                stage = ReviewChatTurnStage.PARSE_INTENT,
+                detail = buildReviewChatQueryProgressDetail(parsedQuery),
+                inProgress = false,
+            )
         )
+        val notes = loadNotes()
+        emitStatus(
+            ReviewChatTurnEvent.Status(
+                message = "读取历史记录",
+                stage = ReviewChatTurnStage.LOAD_HISTORY,
+                detail = "读取 ${notes.size} 条原始记录。",
+                inProgress = false,
+            )
+        )
+        val corpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
+        emitStatus(
+            ReviewChatTurnEvent.Status(
+                message = "检索历史记录",
+                stage = ReviewChatTurnStage.RETRIEVE_HISTORY,
+                detail = buildReviewChatRetrievalProgressDetail(corpusContext),
+                inProgress = false,
+            )
+        )
+        val willUseSkillRuntime = skillRuntime != null && ReviewChatHistorySkill.shouldUseRuntime(parsedQuery)
+        if (willUseSkillRuntime) {
+            emitStatus(
+                ReviewChatTurnEvent.Status(
+                    message = "运行 history-query Skill",
+                    stage = ReviewChatTurnStage.RUN_SKILL,
+                    detail = "用 Skill 做结构化统计和卡片数据。",
+                )
+            )
+        }
         val runtimeBackedSkillResult = buildRuntimeBackedSkillResult(
             query = parsedQuery,
             corpusContext = corpusContext,
         )
+        if (willUseSkillRuntime) {
+            emitStatus(
+                ReviewChatTurnEvent.Status(
+                    message = if (runtimeBackedSkillResult?.skillWebView != null) {
+                        "生成 Skill 可视化卡片"
+                    } else {
+                        "合并 Skill 检索结果"
+                    },
+                    stage = ReviewChatTurnStage.RUN_SKILL,
+                    detail = if (runtimeBackedSkillResult?.skillWebView != null) {
+                        "已生成可展开的历史结果卡片。"
+                    } else {
+                        "Skill 结果已合并进模型上下文。"
+                    },
+                    inProgress = false,
+                )
+            )
+        }
         val runtimeRawNoteDetails = runtimeBackedSkillResult
             ?.rawNoteDetails
             .orEmpty()
@@ -1261,48 +1324,20 @@ class ReviewChatPlanner(
             corpusContextOverride = corpusContext,
             skillResultOverride = runtimeBackedSkillResult?.skillResult,
         )
+        emitStatus(
+            ReviewChatTurnEvent.Status(
+                message = "组织模型上下文",
+                stage = ReviewChatTurnStage.BUILD_CONTEXT,
+                detail = buildReviewChatContextProgressDetail(packet),
+                inProgress = false,
+            )
+        )
         return PreparedReviewChatContext(
             intent = parsedQuery.intent,
             packet = packet,
             directRawNoteDetails = effectiveRawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
             skillWebView = runtimeBackedSkillResult?.skillWebView,
-        )
-    }
-
-    private suspend fun maybeAugmentCategoryDigest(
-        sessionId: String,
-        query: ReviewChatParsedQuery,
-        corpusContext: ReviewChatCorpusContext,
-    ): ReviewChatCorpusContext {
-        val canSummarizeCategories =
-            query.wantsCategories &&
-                !query.isExternalQuestion &&
-                corpusContext.selection.queryNotes.size >= 12
-        if (!canSummarizeCategories) return corpusContext
-
-        val summarizedCandidates = when (resolveExecutionMode()) {
-            AiExecutionMode.ON_DEVICE_ONLY -> ReviewChatCategorySummarizer.summarizeOnDevice(
-                sessionIdPrefix = sessionId,
-                question = query.question,
-                notes = corpusContext.selection.queryNotes,
-                runOnDevice = runOnDevice,
-            )
-
-            AiExecutionMode.AUTOMATIC,
-            AiExecutionMode.CLOUD_ONLY -> {
-                if (!isCloudConfigured()) return corpusContext
-                ReviewChatCategorySummarizer.summarize(
-                    question = query.question,
-                    notes = corpusContext.selection.queryNotes,
-                    runCloud = runCloud,
-                )
-            }
-        }
-
-        if (summarizedCandidates.isEmpty()) return corpusContext
-        return corpusContext.copy(
-            categoryDigestSnippets = summarizedCandidates,
         )
     }
 
@@ -1377,6 +1412,138 @@ class ReviewChatPlanner(
         )
     }
 }
+
+private fun buildReviewChatQueryProgressDetail(query: ReviewChatParsedQuery): String {
+    val operationLabel = when (query.operation) {
+        ReviewChatQueryOperation.EXTERNAL -> "通用问题"
+        ReviewChatQueryOperation.COUNT -> "统计数量"
+        ReviewChatQueryOperation.LIST -> "查找记录"
+        ReviewChatQueryOperation.FULL_TEXT -> "查看全文"
+        ReviewChatQueryOperation.TIMELINE -> "梳理时间线"
+        ReviewChatQueryOperation.ANALYZE -> "总结分析"
+    }
+    val scopeLabel = when (val scope = query.timeScope) {
+        ReviewChatTimeScope.AllTime -> "全部记录"
+        is ReviewChatTimeScope.Day -> scope.date.format(reviewChatDateFormatter)
+        is ReviewChatTimeScope.Month -> "${scope.month.year}-${scope.month.monthValue.toString().padStart(2, '0')}"
+        is ReviewChatTimeScope.Range -> scope.label.ifBlank {
+            "${scope.start.format(reviewChatDateFormatter)} 至 ${scope.endInclusive.format(reviewChatDateFormatter)}"
+        }
+    }
+    val entityLabel = query.entityTerms
+        .take(3)
+        .joinToString("、")
+        .ifBlank { "无指定主题" }
+    return "意图：$operationLabel；范围：$scopeLabel；主题：$entityLabel。"
+}
+
+private fun buildReviewChatRetrievalProgressDetail(corpusContext: ReviewChatCorpusContext): String {
+    val scopedCount = corpusContext.selection.scopedNotes.size
+    val hitCount = corpusContext.selection.queryNotes.size
+    val evidenceCount = corpusContext.rawNoteEvidence.size + corpusContext.rawNoteDetails.size
+    return "范围内 $scopedCount 条，命中 $hitCount 条，准备 $evidenceCount 条证据。"
+}
+
+private fun buildReviewChatContextProgressDetail(packet: ReviewChatContextPacket): String {
+    val snippets = packet.querySummarySnippets.size +
+        packet.deterministicAnswerSnippets.size +
+        packet.categoryDigestSnippets.size +
+        packet.knowledgeBaseSnippets.size +
+        packet.wikiSnippets.size
+    val evidence = packet.rawNoteEvidence.size + packet.rawNoteDetails.size
+    return "上下文包含 $evidence 条原始证据、$snippets 条结构化摘要。"
+}
+
+private fun ReviewChatOnDeviceTraceEvent.toReviewChatTurnStatus(
+    provider: ReviewChatProvider,
+    providerLine: String,
+): ReviewChatTurnEvent.Status = when (this) {
+    is ReviewChatOnDeviceTraceEvent.ModelLoadStarted -> ReviewChatTurnEvent.Status(
+        message = "加载端侧模型（${backendName.uppercase()}）",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.ON_DEVICE_MODEL,
+        stepId = "ON_DEVICE_MODEL_LOAD_${backendName.uppercase()}",
+        detail = "首次运行会初始化 LiteRT 引擎；第二次会复用已加载模型。",
+    )
+
+    is ReviewChatOnDeviceTraceEvent.ModelLoadFinished -> ReviewChatTurnEvent.Status(
+        message = if (cached) {
+            "复用已加载模型（${backendName.uppercase()}）"
+        } else {
+            "端侧模型加载完成（${backendName.uppercase()}）"
+        },
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.ON_DEVICE_MODEL,
+        stepId = "ON_DEVICE_MODEL_LOAD_${backendName.uppercase()}",
+        detail = if (cached) {
+            "模型已在内存中，本次无需重新加载。"
+        } else {
+            "模型加载耗时 ${formatReviewChatDuration(durationMs)}。"
+        },
+        inProgress = false,
+    )
+
+    is ReviewChatOnDeviceTraceEvent.ModelLoadFailed -> ReviewChatTurnEvent.Status(
+        message = "${backendName.uppercase()} 模型加载失败",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.ON_DEVICE_MODEL,
+        stepId = "ON_DEVICE_MODEL_LOAD_${backendName.uppercase()}",
+        detail = "耗时 ${formatReviewChatDuration(durationMs)}；${message.take(80)}",
+        inProgress = false,
+    )
+
+    is ReviewChatOnDeviceTraceEvent.InferenceStarted -> ReviewChatTurnEvent.Status(
+        message = "开始端侧生成（${backendName.uppercase()}）",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.GENERATE,
+        stepId = "ON_DEVICE_INFERENCE_${backendName.uppercase()}",
+        detail = "模型已加载，开始创建会话并生成回答。",
+    )
+
+    is ReviewChatOnDeviceTraceEvent.FirstToken -> ReviewChatTurnEvent.Status(
+        message = "收到端侧首段内容",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.GENERATE,
+        stepId = "ON_DEVICE_FIRST_TOKEN_${backendName.uppercase()}",
+        detail = "首段等待 ${formatReviewChatDuration(durationMs)}。",
+        inProgress = false,
+    )
+
+    is ReviewChatOnDeviceTraceEvent.InferenceFinished -> ReviewChatTurnEvent.Status(
+        message = "端侧生成完成（${backendName.uppercase()}）",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.GENERATE,
+        stepId = "ON_DEVICE_INFERENCE_${backendName.uppercase()}",
+        detail = buildString {
+            append("生成耗时 ${formatReviewChatDuration(durationMs)}")
+            if (outputChars > 0) append("，输出约 $outputChars 字。") else append("。")
+        },
+        inProgress = false,
+    )
+
+    is ReviewChatOnDeviceTraceEvent.InferenceFailed -> ReviewChatTurnEvent.Status(
+        message = "端侧生成失败",
+        provider = provider,
+        providerLine = providerLine,
+        stage = ReviewChatTurnStage.GENERATE,
+        stepId = "ON_DEVICE_INFERENCE_FAILED",
+        detail = "耗时 ${formatReviewChatDuration(durationMs)}；${message.take(80)}",
+        inProgress = false,
+    )
+}
+
+private fun formatReviewChatDuration(durationMs: Long): String =
+    if (durationMs < 1_000L) {
+        "${durationMs.coerceAtLeast(0L)}ms"
+    } else {
+        "%.1fs".format(durationMs / 1_000.0)
+    }
 
 private fun doesReviewChatModeHaveDeterministicStructure(
     packet: ReviewChatContextPacket,
