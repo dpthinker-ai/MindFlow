@@ -12,7 +12,7 @@
         <section class="mf-hero">
           <div>
             <p class="mf-eyebrow" id="eyebrow">MindFlow Skill</p>
-            <h1 class="mf-title" id="title">历史洞察卡片</h1>
+            <h1 class="mf-title" id="title">历史洞察</h1>
             <p class="mf-subtitle" id="subtitle">正在整理你的历史记录。</p>
           </div>
           <div class="mf-orb" aria-label="命中记录数">
@@ -41,7 +41,7 @@
         <section class="mf-panel" aria-label="主题线索">
           <div class="mf-section-head">
             <strong id="themeTitle">主题线索</strong>
-            <span id="coverageLabel">Sample</span>
+            <span id="coverageLabel">样本</span>
           </div>
           <div class="mf-theme-list" id="themes"></div>
         </section>
@@ -57,7 +57,7 @@
         <section class="mf-panel" aria-label="代表记录">
           <div class="mf-section-head">
             <strong id="recordTitle">代表记录</strong>
-            <span id="recordCount">0 items</span>
+            <span id="recordCount">0 条</span>
           </div>
           <div class="mf-records" id="records"></div>
         </section>
@@ -96,10 +96,10 @@
 
       const titleByType = {
         count: "记录覆盖情况",
-        categories: "历史分类地图",
+        categories: "历史分类",
         timeline: "时间线索",
-        lookup: "命中记录卡片",
-        analysis: "历史洞察卡片"
+        lookup: "命中记录",
+        analysis: "历史洞察"
       };
 
       const themeTitleByType = {
@@ -193,7 +193,7 @@
 
       function renderRecords() {
         const visibleRecords = records.slice(0, 3);
-        setText("recordCount", `${formatNumber(records.length)} items`);
+        setText("recordCount", `${formatNumber(records.length)} 条`);
         if (visibleRecords.length === 0) {
           document.getElementById("records").innerHTML = `
             <div class="mf-record">
@@ -225,7 +225,7 @@
       const subtitle = `${scopeLabel}命中 ${formatNumber(matched)} 条，已可视化 ${formatNumber(processed || records.length)} 条。${complete ? "结果已覆盖全部命中记录。" : "卡片先展示代表样本，完整判断以正文回答为准。"}`;
 
       document.title = title;
-      setText("eyebrow", `${shownLabel} · MindFlow Skill`);
+      setText("eyebrow", `MindFlow Skill · ${shownLabel}`);
       setText("title", title);
       setText("subtitle", question.length > 42 ? subtitle : `${question}。${subtitle}`);
       setText("heroCount", formatNumber(matched));
@@ -233,10 +233,11 @@
       setText("scopedCount", formatNumber(scoped));
       setText("matchedCount", formatNumber(matched));
       setText("processedCount", formatNumber(processed || records.length));
-      setText("coverageLabel", complete ? "Complete" : "Sample");
+      setText("coverageLabel", complete ? "完整" : "样本");
       setText("scopeLabel", scopeLabel);
       setText("themeTitle", themeTitleByType[cardType] || "主题线索");
       setText("recordTitle", cardType === "count" ? "查询说明" : "代表记录");
+      document.querySelector(".mf-brand").textContent = "MindFlow Insight";
       setText("freshness", formatGeneratedAt(payload.generatedAt));
 
       renderThemes();

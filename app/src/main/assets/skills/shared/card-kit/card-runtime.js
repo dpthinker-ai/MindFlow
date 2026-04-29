@@ -1,5 +1,5 @@
 (function () {
-  const FALLBACK_COLORS = ["#0f766e", "#2563eb", "#d97706", "#be123c", "#6d28d9", "#15803d"];
+  const FALLBACK_COLORS = ["#3b82f6", "#60a5fa", "#22c55e", "#ffc34d", "#ff8e79", "#64748b"];
 
   function decodeBase64Url(value) {
     const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
