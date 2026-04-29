@@ -19,6 +19,7 @@
         return {
           timeScope: input.timeScope || { type: "all_time" },
           entityTerms: Array.isArray(input.entityTerms) ? input.entityTerms : [],
+          noteIds: Array.isArray(input.noteIds) ? input.noteIds : [],
           pageSize: typeof input.pageSize === "number" ? input.pageSize : 20,
           cursor: typeof input.cursor === "string" ? input.cursor : null,
           includeContent: Boolean(input.includeContent),

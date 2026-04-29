@@ -43,7 +43,11 @@ class DefaultNativeToolBridge(
         val request = parseHistoryRequest(payloadJson)
         val allNotes = loadActiveNotes()
         val scopedNotes = selectScopedNotes(allNotes, request.timeScope)
-        val matchedNotes = selectMatchedNotes(scopedNotes, request.entityTerms)
+        val matchedNotes = selectMatchedNotes(
+            notes = scopedNotes,
+            entityTerms = request.entityTerms,
+            noteIds = request.noteIds,
+        )
         return renderJsonObject(
             linkedMapOf(
                 "coverage" to buildCoveragePayload(
@@ -60,7 +64,12 @@ class DefaultNativeToolBridge(
         val request = parseHistoryRequest(payloadJson)
         val allNotes = loadActiveNotes()
         val scopedNotes = selectScopedNotes(allNotes, request.timeScope)
-        val matchedNotes = selectMatchedNotes(scopedNotes, request.entityTerms, request.sort)
+        val matchedNotes = selectMatchedNotes(
+            notes = scopedNotes,
+            entityTerms = request.entityTerms,
+            noteIds = request.noteIds,
+            sort = request.sort,
+        )
         val offset = request.cursor ?: 0
         val page = matchedNotes.drop(offset).take(request.pageSize)
         val nextCursor = (offset + page.size).takeIf { it < matchedNotes.size }?.toString()
@@ -101,18 +110,29 @@ class DefaultNativeToolBridge(
     private fun selectMatchedNotes(
         notes: List<NoteEntity>,
         entityTerms: List<String>,
+        noteIds: List<Long> = emptyList(),
         sort: HistorySkillSort = HistorySkillSort.CREATED_AT_ASC,
-    ): List<NoteEntity> = notes
-        .asSequence()
-        .filter { note -> entityTerms.all { note.matchesEntityTerm(it) } }
-        .sortedWith(sort.comparator())
-        .toList()
+    ): List<NoteEntity> {
+        val pinnedIds = noteIds.toSet()
+        return notes
+            .asSequence()
+            .filter { note ->
+                if (pinnedIds.isNotEmpty()) {
+                    note.id in pinnedIds
+                } else {
+                    entityTerms.all { note.matchesEntityTerm(it) }
+                }
+            }
+            .sortedWith(sort.comparator())
+            .toList()
+    }
 
     private fun parseHistoryRequest(payloadJson: String): HistorySkillQueryRequest {
         val payload = SkillMiniJsonParser(payloadJson.ifBlank { "{}" }).parseObject()
         return HistorySkillQueryRequest(
             timeScope = parseTimeScope(payload.objectValue("timeScope")),
             entityTerms = payload.stringArrayValue("entityTerms"),
+            noteIds = payload.stringArrayValue("noteIds").mapNotNull(String::toLongOrNull),
             pageSize = payload.numberValue("pageSize")?.toInt()?.coerceIn(1, 100) ?: 50,
             cursor = payload.stringValue("cursor")?.toIntOrNull(),
             includeContent = payload.booleanValue("includeContent") ?: false,
@@ -219,6 +239,7 @@ class DefaultNativeToolBridge(
 private data class HistorySkillQueryRequest(
     val timeScope: HistorySkillTimeScope = HistorySkillTimeScope.AllTime,
     val entityTerms: List<String> = emptyList(),
+    val noteIds: List<Long> = emptyList(),
     val pageSize: Int = 50,
     val cursor: Int? = null,
     val includeContent: Boolean = false,

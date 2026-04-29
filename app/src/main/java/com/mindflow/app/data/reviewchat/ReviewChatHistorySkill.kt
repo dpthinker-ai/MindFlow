@@ -296,12 +296,20 @@ internal object ReviewChatHistorySkill {
             ReviewChatQuestionMode.TIMELINE_ANCHOR -> "created_at_asc"
             else -> "created_at_asc"
         }
+        val pinnedNoteIds = if (query.entityTerms.isNotEmpty() && corpusContext.selection.queryNotes.isNotEmpty()) {
+            corpusContext.selection.queryNotes
+                .sortedBy { it.createdAt }
+                .map { it.id.toString() }
+        } else {
+            emptyList()
+        }
         return renderJsonObject(
             linkedMapOf(
                 "intent" to runtimeIntent(query),
                 "query" to query.question,
                 "timeScope" to renderTimeScopePayload(query.timeScope),
                 "entityTerms" to corpusContext.selection.entityTerms,
+                "noteIds" to pinnedNoteIds,
                 "pageSize" to pageSize,
                 "cursor" to null,
                 "includeContent" to (query.mode == ReviewChatQuestionMode.FULL_RECORD),

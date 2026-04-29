@@ -47,7 +47,7 @@ class MarkdownImportParser {
             ?.takeUnless { it == "未分类" || it == "无" }
             ?.let { MindFolderCatalog.fromName(it)?.key }
         val tags = NoteTagCodec.normalize(
-            requireMatch(section, "(?m)^- 标签: (.+)$")
+            optionalMatch(section, "(?m)^- 标签: (.+)$")
                 .takeUnless { it == "无" }
                 ?.split(Regex("[、,，]"))
                 .orEmpty()
@@ -158,4 +158,7 @@ class MarkdownImportParser {
     private fun requireMatch(section: String, pattern: String): String =
         Regex(pattern).find(section)?.groupValues?.get(1)?.trim()
             ?: throw IllegalArgumentException("导入内容缺少字段: $pattern")
+
+    private fun optionalMatch(section: String, pattern: String): String? =
+        Regex(pattern).find(section)?.groupValues?.get(1)?.trim()
 }

@@ -185,7 +185,26 @@ internal object ReviewChatCorpusQueryEngine {
                 }
 
                 ReviewChatQueryOperation.LIST -> {
-                    if (hasExplicitScopedLookup(query)) {
+                    if (query.wantsCount) {
+                        val totalCount = selection.queryNotes.size
+                        add(
+                            buildString {
+                                append("直接答案｜")
+                                if (subjectLabel != null) {
+                                    append("关于")
+                                    append(subjectLabel)
+                                    append("的记录")
+                                } else {
+                                    append(scopeLabel)
+                                    append("的记录")
+                                }
+                                append("共 ")
+                                append(totalCount)
+                                append(" 条")
+                            }
+                        )
+                    }
+                    if (!query.wantsCount && hasExplicitScopedLookup(query)) {
                         add("直接答案｜$scopeLabel 共 ${selection.queryNotes.size} 条记录")
                     }
                     if (query.wantsCategories) {

@@ -30,7 +30,7 @@ internal object ReviewChatQueryParser {
             fallbackIsExternalQuestion -> ReviewChatQuestionMode.EXTERNAL
             fallbackWantsFullRecord -> ReviewChatQuestionMode.FULL_RECORD
             fallbackWantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
-            fallbackWantsCount -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
+            fallbackWantsCount && !fallbackWantsCategories -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
             fallbackIsTopicSummary -> ReviewChatQuestionMode.RECORD_LOOKUP
             requestedDate != null || requestedMonth != null || requestedRange != null || fallbackWantsCategories ||
                 listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
@@ -42,8 +42,8 @@ internal object ReviewChatQueryParser {
             fallbackIsExternalQuestion -> ReviewChatQueryOperation.EXTERNAL
             fallbackWantsFullRecord -> ReviewChatQueryOperation.FULL_TEXT
             fallbackWantsTimelineAnchor -> ReviewChatQueryOperation.TIMELINE
-            fallbackWantsCount -> ReviewChatQueryOperation.COUNT
             fallbackWantsCategories -> ReviewChatQueryOperation.LIST
+            fallbackWantsCount -> ReviewChatQueryOperation.COUNT
             fallbackIsTopicSummary && plannedOperation == ReviewChatQueryOperation.ANALYZE -> ReviewChatQueryOperation.LIST
             plannedOperation == ReviewChatQueryOperation.ANALYZE &&
                 (requestedDate != null || requestedMonth != null || requestedRange != null) -> ReviewChatQueryOperation.LIST

@@ -102,6 +102,41 @@ class DefaultNativeToolBridgeTest {
     }
 
     @Test
+    fun historyQuery_canUsePlannerPinnedNoteIdsInsteadOfExactEntityTerms() = runTest {
+        val bridge = DefaultNativeToolBridge(
+            loadAllNotes = {
+                listOf(
+                    note(id = 1L, topic = "人生是多线程运行", content = "守住边界", date = LocalDate.of(2026, 4, 1)),
+                    note(id = 2L, topic = "社交边界与自我保护原则", content = "不要损耗自己的精力", date = LocalDate.of(2026, 4, 2)),
+                    note(id = 3L, topic = "前端输入框问题", content = "与人生经验无关", date = LocalDate.of(2026, 4, 3)),
+                )
+            },
+            zoneId = ZoneId.systemDefault(),
+        )
+
+        val raw = bridge.invoke(
+            apiName = "history.query",
+            payloadJson = """
+                {
+                  "timeScope": {"type": "all_time"},
+                  "entityTerms": ["人生经验"],
+                  "noteIds": ["1", "2"],
+                  "pageSize": 10,
+                  "cursor": null,
+                  "includeContent": false,
+                  "sort": "created_at_asc"
+                }
+            """.trimIndent(),
+        )
+
+        val result = SkillMiniJsonParser(raw).parseObject()
+        val coverage = result.objectValue("coverage")
+        val records = result.arrayValue("records")
+        assertThat(coverage.numberValue("matchedCount")?.toInt()).isEqualTo(2)
+        assertThat(records.map { it.objectValues().stringValue("id") }).containsExactly("1", "2").inOrder()
+    }
+
+    @Test
     fun historyCount_totalCountReflectsScopedNotes() = runTest {
         val bridge = DefaultNativeToolBridge(
             loadAllNotes = {

@@ -69,6 +69,12 @@ class ReviewChatPlannerTest {
         assertThat(countQuery.timeScope).isEqualTo(ReviewChatTimeScope.AllTime)
         assertThat(countQuery.entityTerms).containsExactly("人生态度")
 
+        val lifeExperienceCategoryCountQuery = ReviewChatQueryParser.parse("人生经验我记录了多少条？都有哪些类别")
+        assertThat(lifeExperienceCategoryCountQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(lifeExperienceCategoryCountQuery.wantsCount).isTrue()
+        assertThat(lifeExperienceCategoryCountQuery.wantsCategories).isTrue()
+        assertThat(lifeExperienceCategoryCountQuery.entityTerms).containsExactly("人生经验")
+
         val categoryQuery = ReviewChatQueryParser.parse("帮我总结分析一下，我这所有记录可以分为哪些类别？")
         assertThat(categoryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(categoryQuery.wantsCategories).isTrue()
@@ -196,6 +202,55 @@ class ReviewChatPlannerTest {
         )
         assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("前端输入框问题")
         assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(2)
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_lifeExperienceCategoryCountUsesSemanticMatches() {
+        val packet = buildReviewChatContextPacket(
+            question = "人生经验我记录了多少条？都有哪些类别",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(
+                    1L,
+                    "人生是多线程运行",
+                    "人生不是排队通关，而是多线程运行：提升价值的同时赚钱，在利他的同时守住边界。",
+                ),
+                sampleNote(
+                    2L,
+                    "社交边界与自我保护原则",
+                    "利他要有边界，不要为了取悦别人损耗自己的精力。",
+                ),
+                sampleNote(
+                    3L,
+                    "低成本高效率的生存法则",
+                    "保持独立性，摆脱被动思维，用更低成本换取更高效率。",
+                ),
+                sampleNote(
+                    4L,
+                    "前端输入框问题",
+                    "输入法回车和发送按钮需要拆开处理。",
+                ),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.questionMode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
+        assertThat(packet.wantsCount).isTrue()
+        assertThat(packet.wantsCategories).isTrue()
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
+        assertThat(packet.rawNoteEvidence.map { it.title }).containsAtLeast(
+            "人生是多线程运行",
+            "社交边界与自我保护原则",
+            "低成本高效率的生存法则",
+        )
+        assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("前端输入框问题")
+        assertThat(packet.categoryDigestSnippets).isNotEmpty()
+        assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜关于人生经验的记录共 3 条")
+        assertThat(packet.deterministicAnswerSnippets).contains("分类范围｜当前分类必须覆盖 3 条命中记录")
+        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(3)
     }
 
     @Test
@@ -877,6 +932,26 @@ class ReviewChatPlannerTest {
         assertThat(invocations.single().data).contains("\"intent\":\"categories\"")
         assertThat(invocations.single().data).contains("\"query\":\"帮我分析所有的记录，都有哪些分类？\"")
         assertThat(result.skillWebView?.url).contains("insight-card.html")
+    }
+
+    @Test
+    fun historySkillRuntimeInvocationPinsPlannerMatchedNoteIdsForSemanticEntityQueries() {
+        val query = ReviewChatQueryParser.parse("人生经验我记录了多少条？都有哪些类别")
+        val corpusContext = ReviewChatCorpusQueryEngine.build(
+            query = query,
+            notes = listOf(
+                sampleNote(1L, "人生是多线程运行", "提升价值的同时赚钱，在利他的同时守住边界。"),
+                sampleNote(2L, "社交边界与自我保护原则", "利他要有边界，不要损耗自己的精力。"),
+                sampleNote(3L, "前端输入框问题", "输入法回车和发送按钮需要拆开处理。"),
+            ),
+        )
+
+        val invocation = ReviewChatHistorySkill.buildRuntimeInvocation(query, corpusContext)
+
+        assertThat(corpusContext.selection.queryNotes.map { it.id }).containsExactly(1L, 2L)
+        assertThat(invocation?.data).contains("\"intent\":\"categories\"")
+        assertThat(invocation?.data).contains("\"entityTerms\":[\"人生经验\"]")
+        assertThat(invocation?.data).contains("\"noteIds\":[\"1\", \"2\"]")
     }
 
     @Test
