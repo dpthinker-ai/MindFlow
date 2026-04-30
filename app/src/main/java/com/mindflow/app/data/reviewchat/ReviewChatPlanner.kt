@@ -15,9 +15,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.coroutineScope
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
@@ -1222,31 +1224,40 @@ class ReviewChatPlanner(
     private suspend fun prepareReviewChatContext(
         request: ReviewChatTurnRequest,
         emitStatus: suspend (ReviewChatTurnEvent.Status) -> Unit = {},
-    ): PreparedReviewChatContext {
+    ): PreparedReviewChatContext = coroutineScope {
+        val prepareStartedAt = reviewChatClockNow()
+        val parseStartedAt = reviewChatClockNow()
         val parsedQuery = resolveParsedQuery(request.question)
         emitStatus(
             ReviewChatTurnEvent.Status(
                 message = "识别问题意图",
                 stage = ReviewChatTurnStage.PARSE_INTENT,
-                detail = buildReviewChatQueryProgressDetail(parsedQuery),
+                detail = "${buildReviewChatQueryProgressDetail(parsedQuery)} 耗时 ${formatReviewChatDuration(reviewChatElapsedMs(parseStartedAt))}。",
                 inProgress = false,
             )
         )
-        val notes = loadNotes()
+        val notesDeferred = async { loadNotes() }
+        val weeklyReviewDeferred = async { loadWeeklyReview() }
+        val maintenanceSnapshotDeferred = async { loadMaintenanceSnapshot() }
+        val wikiSnapshotDeferred = async { loadWikiSnapshot() }
+
+        val notesStartedAt = reviewChatClockNow()
+        val notes = notesDeferred.await()
         emitStatus(
             ReviewChatTurnEvent.Status(
                 message = "读取历史记录",
                 stage = ReviewChatTurnStage.LOAD_HISTORY,
-                detail = "读取 ${notes.size} 条原始记录。",
+                detail = "读取 ${notes.size} 条原始记录，耗时 ${formatReviewChatDuration(reviewChatElapsedMs(notesStartedAt))}。",
                 inProgress = false,
             )
         )
+        val retrievalStartedAt = reviewChatClockNow()
         val corpusContext = ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
         emitStatus(
             ReviewChatTurnEvent.Status(
                 message = "检索历史记录",
                 stage = ReviewChatTurnStage.RETRIEVE_HISTORY,
-                detail = buildReviewChatRetrievalProgressDetail(corpusContext),
+                detail = "${buildReviewChatRetrievalProgressDetail(corpusContext)} 耗时 ${formatReviewChatDuration(reviewChatElapsedMs(retrievalStartedAt))}。",
                 inProgress = false,
             )
         )
@@ -1260,6 +1271,7 @@ class ReviewChatPlanner(
                 )
             )
         }
+        val skillStartedAt = reviewChatClockNow()
         val runtimeBackedSkillResult = buildRuntimeBackedSkillResult(
             query = parsedQuery,
             corpusContext = corpusContext,
@@ -1274,9 +1286,9 @@ class ReviewChatPlanner(
                     },
                     stage = ReviewChatTurnStage.RUN_SKILL,
                     detail = if (runtimeBackedSkillResult?.skillWebView != null) {
-                        "已生成可展开的历史结果卡片。"
+                        "已生成可展开的历史结果卡片，耗时 ${formatReviewChatDuration(reviewChatElapsedMs(skillStartedAt))}。"
                     } else {
-                        "Skill 结果已合并进模型上下文。"
+                        "Skill 结果已合并进模型上下文，耗时 ${formatReviewChatDuration(reviewChatElapsedMs(skillStartedAt))}。"
                     },
                     inProgress = false,
                 )
@@ -1304,9 +1316,10 @@ class ReviewChatPlanner(
         val effectiveRawNoteEvidence = runtimeRawNoteEvidence.ifEmpty {
             corpusContext.rawNoteEvidence
         }
-        val weeklyReview = loadWeeklyReview()
-        val maintenanceSnapshot = loadMaintenanceSnapshot()
-        val wikiSnapshot = loadWikiSnapshot()
+        val contextStartedAt = reviewChatClockNow()
+        val weeklyReview = weeklyReviewDeferred.await()
+        val maintenanceSnapshot = maintenanceSnapshotDeferred.await()
+        val wikiSnapshot = wikiSnapshotDeferred.await()
         val packet = buildReviewChatContextPacket(
             question = request.question,
             intent = parsedQuery.intent,
@@ -1329,11 +1342,11 @@ class ReviewChatPlanner(
             ReviewChatTurnEvent.Status(
                 message = "组织模型上下文",
                 stage = ReviewChatTurnStage.BUILD_CONTEXT,
-                detail = buildReviewChatContextProgressDetail(packet),
+                detail = "${buildReviewChatContextProgressDetail(packet)} 本阶段耗时 ${formatReviewChatDuration(reviewChatElapsedMs(contextStartedAt))}；模型前准备总耗时 ${formatReviewChatDuration(reviewChatElapsedMs(prepareStartedAt))}。",
                 inProgress = false,
             )
         )
-        return PreparedReviewChatContext(
+        return@coroutineScope PreparedReviewChatContext(
             intent = parsedQuery.intent,
             packet = packet,
             directRawNoteDetails = effectiveRawNoteDetails,
@@ -1543,6 +1556,11 @@ private fun ReviewChatOnDeviceTraceEvent.toReviewChatTurnStatus(
         inProgress = false,
     )
 }
+
+private fun reviewChatClockNow(): Long = System.nanoTime()
+
+private fun reviewChatElapsedMs(startedAt: Long): Long =
+    ((System.nanoTime() - startedAt) / 1_000_000L).coerceAtLeast(0L)
 
 private fun formatReviewChatDuration(durationMs: Long): String =
     if (durationMs < 1_000L) {

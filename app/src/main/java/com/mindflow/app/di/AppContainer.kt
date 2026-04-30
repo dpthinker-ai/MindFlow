@@ -7,6 +7,7 @@ import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.backup.PreferencesCloudBackupIndexRepository
 import com.mindflow.app.data.backup.WebDavBackupClient
 import com.mindflow.app.BuildConfig
+import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
@@ -75,7 +76,9 @@ import com.mindflow.app.data.wiki.ConceptGraphPlanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class AppContainer(context: Context) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -400,4 +403,17 @@ class AppContainer(context: Context) {
         reminderSettingsRepository = reminderSettingsRepository,
         applicationScope = applicationScope,
     ).also { it.syncInBackground() }
+
+    init {
+        scheduleOnDeviceModelWarmUp()
+    }
+
+    private fun scheduleOnDeviceModelWarmUp() {
+        applicationScope.launch {
+            delay(2_000L)
+            val settings = onDeviceModelSettingsRepository.getCurrent()
+            if (!settings.isReady || settings.executionMode == AiExecutionMode.CLOUD_ONLY) return@launch
+            onDeviceAiClient.warmUp(settings)
+        }
+    }
 }

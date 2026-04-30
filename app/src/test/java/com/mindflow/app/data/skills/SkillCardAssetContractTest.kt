@@ -19,6 +19,9 @@ class SkillCardAssetContractTest {
         assertThat(insightCard).contains("skills/shared/card-kit/card-runtime.js")
         assertThat(insightCard).contains("MindFlowCard")
         assertThat(theme.exists()).isTrue()
+        assertThat(theme.readText()).doesNotContain("backdrop-filter")
+        assertThat(theme.readText()).doesNotContain("filter: blur")
+        assertThat(theme.readText()).doesNotContain("font-weight: 930")
         assertThat(runtime.exists()).isTrue()
         assertThat(assetRoot.resolve("skills/history-query/assets/result-card.html").exists()).isTrue()
     }

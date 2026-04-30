@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 
 interface OnDeviceAiClient {
     suspend fun testModel(settings: OnDeviceModelSettings): AiConnectionResult
+    suspend fun warmUp(settings: OnDeviceModelSettings): AiConnectionResult
     suspend fun generateFlowMainline(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateFlowSettledKnowledge(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateFlowBreakthroughGap(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
@@ -81,6 +82,33 @@ class LiteRtLmOnDeviceAiClient(
             is AiChatResult.Failure -> AiConnectionResult(
                 isConfiguredCorrectly = false,
                 message = result.message,
+            )
+        }
+    }
+
+    override suspend fun warmUp(settings: OnDeviceModelSettings): AiConnectionResult = withContext(Dispatchers.IO) {
+        val modelPath = settings.localModelPath.takeIf { settings.isReady && it.isNotBlank() && File(it).exists() }
+            ?: return@withContext AiConnectionResult(
+                isConfiguredCorrectly = false,
+                message = "请先下载 Gemma 4 E4B 模型",
+            )
+
+        engineMutex.withLock {
+            runCatching {
+                acquireEngine(modelPath = modelPath)
+            }.fold(
+                onSuccess = { engine ->
+                    AiConnectionResult(
+                        isConfiguredCorrectly = true,
+                        message = "本地模型已预热（${engine.backendName.uppercase()}），后续聊天会复用内存中的 LiteRT 引擎",
+                    )
+                },
+                onFailure = { error ->
+                    AiConnectionResult(
+                        isConfiguredCorrectly = false,
+                        message = "本地模型预热失败：${error.message ?: "请检查模型文件或稍后重试"}",
+                    )
+                },
             )
         }
     }

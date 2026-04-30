@@ -184,8 +184,57 @@ class ReviewChatViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.isReadOnly).isFalse()
         assertThat(state.savedSessionId).isEqualTo(9L)
+        assertThat(state.title).isEqualTo("继续刚才的问题")
         assertThat(state.messages.single().content).isEqualTo("继续刚才的问题")
         assertThat(state.draft).isEqualTo("还没发出去的一句")
+    }
+
+    @Test
+    fun sendDraft_replacesStaleWorkingTitleWithCurrentQuestion() = runTest(dispatcher) {
+        val repository = FakeSavedConversationRepository().apply {
+            seedSession(
+                SavedReviewChatSession(
+                    sessionId = 11L,
+                    title = "纸临时标题",
+                    createdAt = 1_000L,
+                    updatedAt = 2_000L,
+                    messages = listOf(
+                        ReviewChatMessage(
+                            role = ReviewChatMessageRole.USER,
+                            content = "旧的问题",
+                            createdAt = 1_000L,
+                        ),
+                    ),
+                    isArchived = false,
+                ),
+            )
+        }
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = "新的回答",
+                            provider = ReviewChatProvider.CLOUD,
+                            fallbackOccurred = false,
+                            providerLine = "本次由云侧完成",
+                            sessionSummary = "新的回答",
+                            titleSuggestion = "新的问题",
+                        )
+                    )
+                )
+            },
+            savedConversationRepository = repository,
+        )
+
+        advanceUntilIdle()
+        viewModel.onDraftChange("新的问题是什么")
+        viewModel.sendDraft()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.title).isEqualTo("新的问题")
+        assertThat(repository.workingSessions.single().title).isEqualTo("新的问题")
     }
 
     @Test

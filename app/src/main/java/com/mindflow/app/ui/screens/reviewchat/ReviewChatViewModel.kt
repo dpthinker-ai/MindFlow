@@ -12,6 +12,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
 import com.mindflow.app.data.reviewchat.ReviewChatTurnStage
+import com.mindflow.app.data.reviewchat.SavedReviewChatSession
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -124,7 +125,7 @@ class ReviewChatViewModel(
             val session = savedConversationRepository.getLatestWorkingSession() ?: return@launch
             _uiState.update {
                 it.copy(
-                    title = session.title,
+                    title = restoredWorkingSessionTitle(session),
                     messages = session.messages,
                     draft = session.draft,
                     isReadOnly = false,
@@ -171,6 +172,7 @@ class ReviewChatViewModel(
         if (appendUserMessage) {
             _uiState.update {
                 it.copy(
+                    title = buildReviewChatDisplayTitle(question),
                     messages = it.messages + ReviewChatMessage(
                         role = ReviewChatMessageRole.USER,
                         content = question,
@@ -252,7 +254,9 @@ class ReviewChatViewModel(
                             pendingPriorMessages = emptyList()
                             _uiState.update { state ->
                                 state.copy(
-                                    title = state.title.takeIf { it != "和历史聊聊" } ?: result.titleSuggestion.ifBlank { state.title },
+                                    title = result.titleSuggestion.ifBlank {
+                                        state.title.ifBlank { buildReviewChatDisplayTitle(question) }
+                                    },
                                     messages = state.messages + ReviewChatMessage(
                                         role = ReviewChatMessageRole.ASSISTANT,
                                         content = result.answer,
@@ -321,10 +325,10 @@ class ReviewChatViewModel(
 
     private fun workingSessionTitle(state: ReviewChatUiState): String {
         if (state.title.isNotBlank() && state.title != "和历史聊聊") return state.title
-        return state.messages.firstOrNull { it.role == ReviewChatMessageRole.USER }
+        return state.messages.lastOrNull { it.role == ReviewChatMessageRole.USER }
             ?.content
-            ?.take(18)
-            ?: state.draft.take(18).ifBlank { "和历史聊聊" }
+            ?.let(::buildReviewChatDisplayTitle)
+            ?: buildReviewChatDisplayTitle(state.draft).ifBlank { "和历史聊聊" }
     }
 
     companion object {
@@ -343,6 +347,18 @@ class ReviewChatViewModel(
         }
     }
 }
+
+private fun restoredWorkingSessionTitle(session: SavedReviewChatSession): String =
+    session.messages.lastOrNull { it.role == ReviewChatMessageRole.USER }
+        ?.content
+        ?.let(::buildReviewChatDisplayTitle)
+        ?: buildReviewChatDisplayTitle(session.draft)
+            .ifBlank { session.title.ifBlank { "和历史聊聊" } }
+
+private fun buildReviewChatDisplayTitle(raw: String): String =
+    raw.trim()
+        .replace(Regex("\\s+"), " ")
+        .take(18)
 
 private fun List<ReviewChatProgressStep>.recordStatus(
     event: ReviewChatTurnEvent.Status,
