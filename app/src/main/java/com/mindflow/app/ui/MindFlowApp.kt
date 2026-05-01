@@ -85,6 +85,7 @@ import com.mindflow.app.ui.screens.flow.FlowRoute
 import com.mindflow.app.ui.screens.flow.FlowViewModel
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
+import com.mindflow.app.ui.screens.reviewchat.ReviewChatHistoryRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatRoute
 import com.mindflow.app.ui.screens.search.SearchRoute
 import com.mindflow.app.ui.screens.settings.SettingsRoute
@@ -166,6 +167,12 @@ fun MindFlowApp(
     fun openReviewChat(seed: ReviewChatSeed) {
         reviewChatSeeds[seed.requestId] = seed
         navController.navigate(MindFlowDestinations.reviewChatRoute(seed.requestId)) {
+            launchSingleTop = true
+        }
+    }
+
+    fun openReviewChatHistory() {
+        navController.navigate(MindFlowDestinations.REVIEW_CHAT_HISTORY) {
             launchSingleTop = true
         }
     }
@@ -279,6 +286,7 @@ fun MindFlowApp(
                     onOpenLatestSavedReviewChat = { sessionId ->
                         openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
                     },
+                    onOpenReviewChatHistory = ::openReviewChatHistory,
                 )
             }
 
@@ -296,6 +304,7 @@ fun MindFlowApp(
                     onOpenLatestSavedReviewChat = { sessionId ->
                         openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
                     },
+                    onOpenReviewChatHistory = ::openReviewChatHistory,
                 )
             }
 
@@ -431,7 +440,21 @@ fun MindFlowApp(
                     planner = reviewChatPlanner,
                     savedConversationRepository = reviewChatSavedConversationRepository,
                     onBack = { navController.popBackStack() },
+                    onOpenHistory = ::openReviewChatHistory,
                     onOpenRecord = openNoteSafely,
+                )
+            }
+
+            composable(MindFlowDestinations.REVIEW_CHAT_HISTORY) {
+                ReviewChatHistoryRoute(
+                    savedConversationRepository = reviewChatSavedConversationRepository,
+                    onBack = { navController.popBackStack() },
+                    onOpenSession = { sessionId ->
+                        openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
+                    },
+                    onStartNewChat = {
+                        openReviewChat(ReviewChatSeed())
+                    },
                 )
             }
 

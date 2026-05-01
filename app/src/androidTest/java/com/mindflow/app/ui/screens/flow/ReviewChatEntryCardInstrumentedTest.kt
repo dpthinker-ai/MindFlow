@@ -16,6 +16,7 @@ class ReviewChatEntryCardInstrumentedTest {
     fun entryCard_opensChatDirectlyAndShowsLatestSavedShortcut() {
         var openLatest = false
         var openChat = false
+        var openHistory = false
         composeRule.setContent {
             MindFlowTheme {
                 ReviewChatEntryCard(
@@ -27,17 +28,20 @@ class ReviewChatEntryCardInstrumentedTest {
                         latestExcerpt = "核心结论",
                     ),
                     onOpenChat = { openChat = true },
-                    onOpenLatestSaved = { openLatest = true },
+                    onOpenHistory = { openHistory = true },
+                    onOpenSaved = { openLatest = true },
                 )
             }
         }
 
         composeRule.onNodeWithText("和历史聊聊").assertIsDisplayed()
-        composeRule.onNodeWithText("进入聊天").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("开始新对话").assertIsDisplayed().performClick()
         assertThat(openChat).isTrue()
+        composeRule.onNodeWithText("查看聊天历史").assertIsDisplayed().performClick()
+        assertThat(openHistory).isTrue()
         composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
         composeRule.onNodeWithText("带着问题进入").assertDoesNotExist()
-        composeRule.onNodeWithText("继续上次保存").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("继续最近对话").assertIsDisplayed().performClick()
         assertThat(openLatest).isTrue()
     }
 
@@ -48,11 +52,12 @@ class ReviewChatEntryCardInstrumentedTest {
                 ReviewChatEntryCard(
                     latestSavedSummary = null,
                     onOpenChat = {},
-                    onOpenLatestSaved = {},
+                    onOpenHistory = {},
+                    onOpenSaved = {},
                 )
             }
         }
 
-        composeRule.onNodeWithText("继续上次保存").assertDoesNotExist()
+        composeRule.onNodeWithText("继续最近对话").assertDoesNotExist()
     }
 }

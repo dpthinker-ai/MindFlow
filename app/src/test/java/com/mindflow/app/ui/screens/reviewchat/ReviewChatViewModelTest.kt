@@ -108,7 +108,7 @@ class ReviewChatViewModelTest {
     }
 
     @Test
-    fun savedSeed_loadsSessionReadOnlyWithoutCallingPlanner() = runTest(dispatcher) {
+    fun savedSeed_loadsSessionEditableWithoutCallingPlanner() = runTest(dispatcher) {
         val repository = FakeSavedConversationRepository().apply {
             seedSession(
                 SavedReviewChatSession(
@@ -146,7 +146,7 @@ class ReviewChatViewModelTest {
 
         val state = viewModel.uiState.value
         assertThat(called).isFalse()
-        assertThat(state.isReadOnly).isTrue()
+        assertThat(state.isReadOnly).isFalse()
         assertThat(state.title).isEqualTo("上次回看")
         assertThat(state.messages).hasSize(2)
     }
@@ -160,13 +160,7 @@ class ReviewChatViewModelTest {
                     title = "未完成聊天",
                     createdAt = 1_000L,
                     updatedAt = 2_000L,
-                    messages = listOf(
-                        ReviewChatMessage(
-                            role = ReviewChatMessageRole.USER,
-                            content = "继续刚才的问题",
-                            createdAt = 1_000L,
-                        ),
-                    ),
+                    messages = emptyList(),
                     draft = "还没发出去的一句",
                     isArchived = false,
                 ),
@@ -184,8 +178,8 @@ class ReviewChatViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.isReadOnly).isFalse()
         assertThat(state.savedSessionId).isEqualTo(9L)
-        assertThat(state.title).isEqualTo("继续刚才的问题")
-        assertThat(state.messages.single().content).isEqualTo("继续刚才的问题")
+        assertThat(state.title).isEqualTo("还没发出去的一句")
+        assertThat(state.messages).isEmpty()
         assertThat(state.draft).isEqualTo("还没发出去的一句")
     }
 
@@ -198,13 +192,8 @@ class ReviewChatViewModelTest {
                     title = "纸临时标题",
                     createdAt = 1_000L,
                     updatedAt = 2_000L,
-                    messages = listOf(
-                        ReviewChatMessage(
-                            role = ReviewChatMessageRole.USER,
-                            content = "旧的问题",
-                            createdAt = 1_000L,
-                        ),
-                    ),
+                    messages = emptyList(),
+                    draft = "旧的问题",
                     isArchived = false,
                 ),
             )
@@ -234,7 +223,9 @@ class ReviewChatViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.uiState.value.title).isEqualTo("新的问题")
-        assertThat(repository.workingSessions.single().title).isEqualTo("新的问题")
+        assertThat(repository.workingSessions).isEmpty()
+        assertThat(repository.savedSessions.single().title).isEqualTo("新的问题")
+        assertThat(repository.savedSessions.single().isArchived).isTrue()
     }
 
     @Test
@@ -253,6 +244,37 @@ class ReviewChatViewModelTest {
         assertThat(working.draft).isEqualTo("先写一半")
         assertThat(working.isArchived).isFalse()
         assertThat(viewModel.uiState.value.savedSessionId).isEqualTo(working.sessionId)
+    }
+
+    @Test
+    fun completeTurn_autoSavesConversationIntoHistory() = runTest(dispatcher) {
+        val repository = FakeSavedConversationRepository()
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "我记了哪些人生建议"),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = "核心建议是提升价值、守住边界。",
+                            provider = ReviewChatProvider.CLOUD,
+                            fallbackOccurred = false,
+                            providerLine = "本次由云侧完成",
+                            sessionSummary = "人生建议",
+                            titleSuggestion = "人生建议",
+                        )
+                    )
+                )
+            },
+            savedConversationRepository = repository,
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.isReadOnly).isFalse()
+        assertThat(repository.workingSessions).isEmpty()
+        assertThat(repository.savedSessions.single().isArchived).isTrue()
+        assertThat(repository.savedSessions.single().messages).hasSize(2)
     }
 
     @Test
@@ -532,22 +554,36 @@ class ReviewChatViewModelTest {
                 updatedAt = System.currentTimeMillis(),
                 messages = messages,
                 draft = draft,
-                isArchived = false,
+                isArchived = messages.isNotEmpty(),
             )
             savedSessions.removeAll { it.sessionId == resolvedSessionId }
             savedSessions += session
+            refreshSavedSummaries()
             return resolvedSessionId
         }
 
         override suspend fun getLatestWorkingSession(): SavedReviewChatSession? =
-            savedSessions.filter { !it.isArchived }.maxByOrNull { it.updatedAt }
+            savedSessions.filter { !it.isArchived && it.messages.isEmpty() }.maxByOrNull { it.updatedAt }
 
         override suspend fun getSession(sessionId: Long): SavedReviewChatSession? =
             savedSessions.firstOrNull { it.sessionId == sessionId }
 
         override fun observeLatestSavedSessionSummary(): Flow<SavedReviewChatSessionSummary?> = latestSummary
 
-        override fun observeSavedSessionSummaries(): Flow<List<SavedReviewChatSessionSummary>> = savedSummaries
+        override fun observeSavedSessionSummaries(query: String): Flow<List<SavedReviewChatSessionSummary>> {
+            val normalizedQuery = query.trim()
+            if (normalizedQuery.isBlank()) return savedSummaries
+            return MutableStateFlow(
+                savedSummaries.value.filter { summary ->
+                    summary.title.contains(normalizedQuery, ignoreCase = true) ||
+                        summary.latestExcerpt.contains(normalizedQuery, ignoreCase = true) ||
+                        savedSessions.firstOrNull { it.sessionId == summary.sessionId }
+                            ?.messages
+                            .orEmpty()
+                            .any { it.content.contains(normalizedQuery, ignoreCase = true) }
+                },
+            )
+        }
 
         override suspend fun deleteSessions(sessionIds: List<Long>) {
             savedSessions.removeAll { it.sessionId in sessionIds }

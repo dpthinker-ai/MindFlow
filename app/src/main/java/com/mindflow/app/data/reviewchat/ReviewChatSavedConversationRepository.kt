@@ -45,7 +45,7 @@ interface ReviewChatSavedConversationRepository {
 
     fun observeLatestSavedSessionSummary(): Flow<SavedReviewChatSessionSummary?>
 
-    fun observeSavedSessionSummaries(): Flow<List<SavedReviewChatSessionSummary>>
+    fun observeSavedSessionSummaries(query: String = ""): Flow<List<SavedReviewChatSessionSummary>>
 
     suspend fun deleteSessions(sessionIds: List<Long>)
 }
@@ -75,7 +75,7 @@ class RoomReviewChatSavedConversationRepository(
         title = title,
         messages = messages,
         draft = draft,
-        isArchived = false,
+        isArchived = messages.isNotEmpty(),
     )
 
     override suspend fun getLatestWorkingSession(): SavedReviewChatSession? {
@@ -168,10 +168,17 @@ class RoomReviewChatSavedConversationRepository(
             entity?.toSummary()
         }
 
-    override fun observeSavedSessionSummaries(): Flow<List<SavedReviewChatSessionSummary>> =
-        dao.observeSavedSessions().map { sessions ->
+    override fun observeSavedSessionSummaries(query: String): Flow<List<SavedReviewChatSessionSummary>> {
+        val normalizedQuery = query.trim()
+        val source = if (normalizedQuery.isBlank()) {
+            dao.observeSavedSessions()
+        } else {
+            dao.observeSavedSessionsMatching(normalizedQuery)
+        }
+        return source.map { sessions ->
             sessions.map { it.toSummary() }
         }
+    }
 
     override suspend fun deleteSessions(sessionIds: List<Long>) {
         val resolvedIds = sessionIds.distinct()

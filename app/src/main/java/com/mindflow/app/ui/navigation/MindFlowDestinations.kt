@@ -19,6 +19,7 @@ object MindFlowDestinations {
     const val CAPTURE_ARG = "captureSeedId"
     const val REVIEW_CHAT = "review-chat/{reviewChatSeedId}"
     const val REVIEW_CHAT_ARG = "reviewChatSeedId"
+    const val REVIEW_CHAT_HISTORY = "review-chat-history"
     const val FOLDER = "folder/{folderKey}"
     const val FOLDER_ARG = "folderKey"
     const val UNCATEGORIZED_FOLDER = "__uncategorized__"

@@ -152,9 +152,9 @@ class ReviewChatViewModel(
                 it.copy(
                     title = session.title,
                     messages = session.messages,
-                    isReadOnly = true,
+                    isReadOnly = false,
                     savedSessionId = session.sessionId,
-                    draft = "",
+                    draft = session.draft,
                 )
             }
         }
@@ -217,7 +217,7 @@ class ReviewChatViewModel(
             runCatching {
                 answerTurnStream(
                     ReviewChatTurnRequest(
-                        sessionId = seed.requestId.toString(),
+                        sessionId = (seed.savedSessionId ?: seed.requestId).toString(),
                         question = question,
                         priorMessages = priorMessages,
                     )

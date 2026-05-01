@@ -13,13 +13,50 @@ interface ReviewChatDao {
     @Insert
     suspend fun insertMessages(entities: List<ReviewChatMessageEntity>)
 
-    @Query("SELECT * FROM review_chat_sessions WHERE isArchived = 1 ORDER BY updatedAt DESC, id DESC LIMIT 1")
+    @Query(
+        """
+        SELECT * FROM review_chat_sessions
+        WHERE isArchived = 1 OR messageCount > 0
+        ORDER BY updatedAt DESC, id DESC
+        LIMIT 1
+        """
+    )
     fun observeLatestSession(): Flow<ReviewChatSessionEntity?>
 
-    @Query("SELECT * FROM review_chat_sessions WHERE isArchived = 1 ORDER BY updatedAt DESC, id DESC")
+    @Query(
+        """
+        SELECT * FROM review_chat_sessions
+        WHERE isArchived = 1 OR messageCount > 0
+        ORDER BY updatedAt DESC, id DESC
+        """
+    )
     fun observeSavedSessions(): Flow<List<ReviewChatSessionEntity>>
 
-    @Query("SELECT * FROM review_chat_sessions WHERE isArchived = 0 ORDER BY updatedAt DESC, id DESC LIMIT 1")
+    @Query(
+        """
+        SELECT DISTINCT s.*
+        FROM review_chat_sessions AS s
+        LEFT JOIN review_chat_messages AS m ON m.sessionId = s.id
+        WHERE (s.isArchived = 1 OR s.messageCount > 0)
+            AND (
+                :query = ''
+                OR s.title LIKE '%' || :query || '%'
+                OR s.latestExcerpt LIKE '%' || :query || '%'
+                OR m.content LIKE '%' || :query || '%'
+            )
+        ORDER BY s.updatedAt DESC, s.id DESC
+        """
+    )
+    fun observeSavedSessionsMatching(query: String): Flow<List<ReviewChatSessionEntity>>
+
+    @Query(
+        """
+        SELECT * FROM review_chat_sessions
+        WHERE isArchived = 0 AND messageCount = 0
+        ORDER BY updatedAt DESC, id DESC
+        LIMIT 1
+        """
+    )
     suspend fun getLatestWorkingSession(): ReviewChatSessionEntity?
 
     @Query("SELECT * FROM review_chat_sessions WHERE id = :sessionId LIMIT 1")

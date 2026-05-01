@@ -36,7 +36,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +95,7 @@ fun ReviewChatRoute(
     planner: ReviewChatPlanner,
     savedConversationRepository: ReviewChatSavedConversationRepository,
     onBack: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenRecord: (Long) -> Unit,
 ) {
     val viewModel: ReviewChatViewModel = viewModel(
@@ -124,7 +125,7 @@ fun ReviewChatRoute(
         onDraftChange = viewModel::onDraftChange,
         onSend = viewModel::sendDraft,
         onRetry = viewModel::retry,
-        onSave = viewModel::saveConversation,
+        onOpenHistory = onOpenHistory,
         onOpenRecord = onOpenRecord,
     )
 }
@@ -136,7 +137,7 @@ private fun ReviewChatScreen(
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onRetry: () -> Unit,
-    onSave: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenRecord: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -207,18 +208,21 @@ private fun ReviewChatScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (uiState.isReadOnly) "这是一段已保存的回看对话。" else "基于你的历史记录和沉淀内容继续聊。",
+                        text = if (uiState.messages.isEmpty()) {
+                            "基于你的历史记录和沉淀内容继续聊。"
+                        } else {
+                            "已自动保存到聊天历史。"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                GhostActionButton(
-                    text = if (uiState.isReadOnly) "已保存" else "保存",
-                    onClick = onSave,
-                    enabled = uiState.canSave,
-                    icon = Icons.Outlined.Save,
+                IconPillButton(
+                    icon = Icons.Outlined.History,
+                    contentDescription = "聊天历史",
+                    onClick = onOpenHistory,
                 )
             }
 

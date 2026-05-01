@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,7 +81,6 @@ import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun FlowRoute(
@@ -94,19 +92,15 @@ fun FlowRoute(
     onCreateCapture: (CaptureSeed) -> Unit,
     onOpenReviewChat: (String) -> Unit,
     onOpenLatestSavedReviewChat: (Long) -> Unit,
+    onOpenReviewChatHistory: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val latestSavedConversationSummary by reviewChatSavedConversationRepository
         .observeLatestSavedSessionSummary()
         .collectAsStateWithLifecycle(initialValue = null)
-    val savedConversationSummaries by reviewChatSavedConversationRepository
-        .observeSavedSessionSummaries()
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val routeScope = rememberCoroutineScope()
     FlowScreen(
         uiState = uiState,
         latestSavedConversationSummary = latestSavedConversationSummary,
-        savedConversationSummaries = savedConversationSummaries,
         focus = initialFocus,
         onRefreshMainline = viewModel::refreshMainline,
         onRefreshLocalKnowledgeBrain = viewModel::refreshLocalKnowledgeBrain,
@@ -116,11 +110,7 @@ fun FlowRoute(
         onCreateCapture = onCreateCapture,
         onOpenReviewChat = onOpenReviewChat,
         onOpenLatestSavedReviewChat = onOpenLatestSavedReviewChat,
-        onDeleteSavedReviewChats = { sessionIds ->
-            routeScope.launch {
-                reviewChatSavedConversationRepository.deleteSessions(sessionIds)
-            }
-        },
+        onOpenReviewChatHistory = onOpenReviewChatHistory,
     )
 }
 
@@ -142,7 +132,6 @@ private fun FlowFocus?.toPage(): FlowPage = when (this) {
 private fun FlowScreen(
     uiState: FlowUiState,
     latestSavedConversationSummary: SavedReviewChatSessionSummary?,
-    savedConversationSummaries: List<SavedReviewChatSessionSummary>,
     focus: FlowFocus?,
     onRefreshMainline: () -> Unit,
     onRefreshLocalKnowledgeBrain: () -> Unit,
@@ -152,7 +141,7 @@ private fun FlowScreen(
     onCreateCapture: (CaptureSeed) -> Unit,
     onOpenReviewChat: (String) -> Unit,
     onOpenLatestSavedReviewChat: (Long) -> Unit,
-    onDeleteSavedReviewChats: (List<Long>) -> Unit,
+    onOpenReviewChatHistory: () -> Unit,
 ) {
     val maintainerSnapshot = uiState.localMaintainerSnapshot
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
@@ -241,10 +230,9 @@ private fun FlowScreen(
                         item {
                             ReviewChatEntryCard(
                                 latestSavedSummary = latestSavedConversationSummary,
-                                savedSummaries = savedConversationSummaries,
                                 onOpenChat = { onOpenReviewChat("") },
+                                onOpenHistory = onOpenReviewChatHistory,
                                 onOpenSaved = onOpenLatestSavedReviewChat,
-                                onDeleteSaved = onDeleteSavedReviewChats,
                             )
                         }
                         item {

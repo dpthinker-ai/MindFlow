@@ -69,6 +69,59 @@ class ReviewChatSavedConversationRepositoryTest {
     }
 
     @Test
+    fun cacheWorkingSession_withMessagesAppearsInHistory() = runTest {
+        val repository = RoomReviewChatSavedConversationRepository(FakeReviewChatDao())
+
+        val sessionId = repository.cacheWorkingSession(
+            sessionId = null,
+            title = "自动保存聊天",
+            messages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "我记了哪些人生建议",
+                    createdAt = 1_000L,
+                ),
+            ),
+            draft = "",
+        )
+
+        val working = repository.getLatestWorkingSession()
+        val summaries = repository.observeSavedSessionSummaries().first()
+
+        assertThat(working).isNull()
+        assertThat(summaries.single().sessionId).isEqualTo(sessionId)
+        assertThat(summaries.single().title).isEqualTo("自动保存聊天")
+    }
+
+    @Test
+    fun observeSavedSessionSummaries_filtersTitleExcerptAndMessages() = runTest {
+        val repository = RoomReviewChatSavedConversationRepository(FakeReviewChatDao())
+        val firstId = repository.saveSession(
+            title = "人生建议总结",
+            messages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "我记了哪些人生建议",
+                    createdAt = 1_000L,
+                ),
+            ),
+        )
+        repository.saveSession(
+            title = "技术优化",
+            messages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "端侧模型加载为什么慢",
+                    createdAt = 2_000L,
+                ),
+            ),
+        )
+
+        assertThat(repository.observeSavedSessionSummaries("人生").first().map { it.sessionId })
+            .containsExactly(firstId)
+    }
+
+    @Test
     fun deleteSessions_removesSingleAndBatchSavedSessions() = runTest {
         val repository = RoomReviewChatSavedConversationRepository(FakeReviewChatDao())
         val firstId = repository.saveSession(
@@ -132,9 +185,19 @@ class ReviewChatSavedConversationRepositoryTest {
 
         override fun observeSavedSessions(): Flow<List<ReviewChatSessionEntity>> = savedSessions
 
+        override fun observeSavedSessionsMatching(query: String): Flow<List<ReviewChatSessionEntity>> =
+            MutableStateFlow(
+                savedSessions.value.filter { session ->
+                    val sessionMessages = messages[session.id].orEmpty()
+                    session.title.contains(query, ignoreCase = true) ||
+                        session.latestExcerpt.contains(query, ignoreCase = true) ||
+                        sessionMessages.any { it.content.contains(query, ignoreCase = true) }
+                },
+            )
+
         override suspend fun getLatestWorkingSession(): ReviewChatSessionEntity? =
             sessions.values
-                .filter { !it.isArchived }
+                .filter { !it.isArchived && it.messageCount == 0 }
                 .maxWithOrNull(compareBy<ReviewChatSessionEntity> { it.updatedAt }.thenBy { it.id })
 
         override suspend fun getSession(sessionId: Long): ReviewChatSessionEntity? = sessions[sessionId]
@@ -177,7 +240,7 @@ class ReviewChatSavedConversationRepositoryTest {
 
         private fun updateLatestArchivedSession() {
             val archivedSessions = sessions.values
-                .filter { it.isArchived }
+                .filter { it.isArchived || it.messageCount > 0 }
                 .sortedWith(compareByDescending<ReviewChatSessionEntity> { it.updatedAt }.thenByDescending { it.id })
             savedSessions.value = archivedSessions
             latestSession.value = archivedSessions

@@ -40,6 +40,7 @@ class ReviewChatScreenInstrumentedTest {
                     planner = samplePlanner(),
                     savedConversationRepository = FakeSavedConversationRepository(),
                     onBack = {},
+                    onOpenHistory = {},
                     onOpenRecord = {},
                 )
             }
@@ -59,6 +60,7 @@ class ReviewChatScreenInstrumentedTest {
                     planner = markdownPlanner(),
                     savedConversationRepository = FakeSavedConversationRepository(),
                     onBack = {},
+                    onOpenHistory = {},
                     onOpenRecord = {},
                 )
             }
@@ -79,6 +81,7 @@ class ReviewChatScreenInstrumentedTest {
                     planner = samplePlanner(),
                     savedConversationRepository = FakeSavedConversationRepository(),
                     onBack = {},
+                    onOpenHistory = {},
                     onOpenRecord = {},
                 )
             }
@@ -145,11 +148,30 @@ class ReviewChatScreenInstrumentedTest {
 
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {
         private val latestSummary = MutableStateFlow<SavedReviewChatSessionSummary?>(null)
+        private val savedSummaries = MutableStateFlow<List<SavedReviewChatSessionSummary>>(emptyList())
 
-        override suspend fun saveSession(title: String, messages: List<ReviewChatMessage>): Long = 1L
+        override suspend fun saveSession(
+            sessionId: Long?,
+            title: String,
+            messages: List<ReviewChatMessage>,
+        ): Long = 1L
+
+        override suspend fun cacheWorkingSession(
+            sessionId: Long?,
+            title: String,
+            messages: List<ReviewChatMessage>,
+            draft: String,
+        ): Long = sessionId ?: 1L
+
+        override suspend fun getLatestWorkingSession(): SavedReviewChatSession? = null
 
         override suspend fun getSession(sessionId: Long): SavedReviewChatSession? = null
 
         override fun observeLatestSavedSessionSummary(): Flow<SavedReviewChatSessionSummary?> = latestSummary
+
+        override fun observeSavedSessionSummaries(query: String): Flow<List<SavedReviewChatSessionSummary>> =
+            savedSummaries
+
+        override suspend fun deleteSessions(sessionIds: List<Long>) = Unit
     }
 }
