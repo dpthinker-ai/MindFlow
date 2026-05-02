@@ -195,6 +195,17 @@ private fun FlowScreen(
                 when (page) {
                     FlowPage.TODAY -> {
                         item {
+                            TodayOverviewCard(
+                                todayCount = uiState.todayCount,
+                                continueNote = uiState.continueNote,
+                                candidate = uiState.mainlineCandidate,
+                                nextActionText = uiState.nextActionText,
+                                onCreateCapture = onCreateCapture,
+                                onOpenThread = onOpenThread,
+                                onOpenNote = onOpenNote,
+                            )
+                        }
+                        item {
                             RecentAbsorptionCard(
                                 snapshot = maintainerSnapshot,
                                 todayCount = uiState.todayCount,
@@ -273,6 +284,65 @@ private fun FlowScreen(
                     }
                 }
 
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayOverviewCard(
+    todayCount: Int,
+    continueNote: NoteEntity?,
+    candidate: MainlineBetCandidate?,
+    nextActionText: String,
+    onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+) {
+    val primaryLine = when {
+        todayCount > 0 -> "今天已经接住 $todayCount 条，下一步是挑一条推进。"
+        continueNote != null || candidate != null -> "今天还没有新记录，但有一条线可以继续。"
+        else -> "今天还没有新记录，先接住一个想法。"
+    }
+    val recommendedAction = nextActionText
+        .takeIf { it.isNotBlank() }
+        ?: candidate?.nextStep?.takeIf { it.isNotBlank() }
+        ?: continueNote?.content?.take(96)?.takeIf { it.isNotBlank() }
+        ?: "先写下一条真实想法，后面再整理。"
+    val hasContinueTarget = continueNote != null || candidate != null
+
+    PanelCard {
+        SectionHeader(
+            title = "今日节奏",
+            headline = primaryLine,
+        )
+        InsightBlock(tone = InsightTone.Primary) {
+            InsightLine(
+                label = "推荐动作",
+                text = recommendedAction,
+                maxLines = 3,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ActionButton(
+                text = "新建记录",
+                onClick = { onCreateCapture(CaptureSeed()) },
+                modifier = Modifier.weight(1f),
+            )
+            if (hasContinueTarget) {
+                GhostActionButton(
+                    text = "继续主线",
+                    onClick = {
+                        candidate?.focusNoteId?.let(onOpenNote)
+                            ?: candidate?.noteId?.let(onOpenNote)
+                            ?: candidate?.threadKey?.let(onOpenThread)
+                            ?: continueNote?.id?.let(onOpenNote)
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }

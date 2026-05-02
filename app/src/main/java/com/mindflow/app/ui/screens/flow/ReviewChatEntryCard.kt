@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.History
@@ -17,8 +18,11 @@ import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightChip
+import com.mindflow.app.ui.components.InsightLine
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
-import com.mindflow.app.ui.theme.TextMain
+import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.util.TimeFormatter
 
@@ -30,14 +34,17 @@ fun ReviewChatEntryCard(
     onOpenSaved: (Long) -> Unit,
 ) {
     PanelCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            InsightChip(text = "自动保存", tone = InsightTone.Primary)
+            InsightChip(text = "可搜索", tone = InsightTone.Neutral)
+        }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "和历史聊聊",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextMain,
+            SectionHeader(
+                title = "回看聊天",
+                headline = latestSavedSummary?.let { "最近聊到：${it.title}" } ?: "把历史记录交给模型重新梳理",
             )
             Text(
-                text = "每次对话都会自动保存，后续可以搜索和继续追问。",
+                text = "适合做统计、分类、复盘和追问。每次对话都会沉淀到历史里。",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSoft,
                 maxLines = 2,
@@ -59,18 +66,11 @@ fun ReviewChatEntryCard(
         )
 
         latestSavedSummary?.let { summary ->
-            InsightBlock {
-                Text(
-                    text = "最近一次对话",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
-                )
-                Text(
+            InsightBlock(tone = InsightTone.Neutral) {
+                InsightLine(
+                    label = "最近一次",
                     text = summary.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMain,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = "${TimeFormatter.compact(summary.updatedAt)} · ${summary.messageCount} 条消息",

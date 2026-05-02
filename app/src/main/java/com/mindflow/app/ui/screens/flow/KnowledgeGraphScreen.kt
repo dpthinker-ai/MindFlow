@@ -76,6 +76,9 @@ import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
+import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightLine
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -306,6 +309,13 @@ internal fun KnowledgeGraphScreen(
                 }
 
                 item {
+                    KnowledgeGraphOverviewCard(
+                        nodeCount = graphNodes.size,
+                        activeNoteCount = notes.count { !it.isArchived },
+                    )
+                }
+
+                item {
                     RecordsHeatmapPanel(
                         notes = notes,
                         graphNodes = graphNodes,
@@ -318,6 +328,35 @@ internal fun KnowledgeGraphScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun KnowledgeGraphOverviewCard(
+    nodeCount: Int,
+    activeNoteCount: Int,
+) {
+    PanelCard {
+        SectionHeader(
+            title = "图谱概览",
+            headline = if (nodeCount > 0) "$nodeCount 个知识点正在连接" else "还没有稳定知识点",
+        )
+        InsightBlock(tone = InsightTone.Primary) {
+            InsightLine(
+                label = "怎么看",
+                text = if (nodeCount > 0) {
+                    "先用记录热度找到活跃日期，再看这些记录点亮了哪些知识点。"
+                } else {
+                    "先持续记录，等知识层生成后，这里会显示概念之间的连接。"
+                },
+                maxLines = 3,
+            )
+        }
+        Text(
+            text = "$activeNoteCount 条活跃记录参与图谱沉淀",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSoft,
+        )
     }
 }
 

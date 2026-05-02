@@ -423,6 +423,21 @@ private fun SettingsHomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "设置",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "把同步、AI、端侧模型和提醒放在这里集中管理。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                    )
+                }
+            }
+
+            item {
                 SettingsEntryCard(
                     title = "云备份",
                     summary = if (uiState.cloudIsConfigured) {

@@ -46,6 +46,8 @@ import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.EmptyState
 import com.mindflow.app.ui.components.GridTwo
+import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.MetricTile
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
@@ -175,15 +177,21 @@ private fun FeedScreen(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                     ) {
                         Column(
                             modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = "灵感易逝，及时行动",
-                                style = MaterialTheme.typography.titleLarge,
+                                text = "记录",
+                                style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "灵感易逝，先接住，再行动。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         TimeBankBadge(
@@ -194,63 +202,33 @@ private fun FeedScreen(
 
                 item {
                     PanelCard {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom,
-                        ) {
-                            Text(
-                                text = "想到就记，记下就做",
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "叉手立办",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        PanelCard {
-                            SectionHeader(
-                                title = "当前状态",
-                                headline = "${formatCount(uiState.totalCount)} 条记录",
-                            )
-                            GridTwo {
-                                MetricTile(
-                                    label = "现在手上",
-                                    value = formatCount(uiState.inProgressCount),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onOpenStatusFilter(NoteStatus.IN_PROGRESS, false) },
-                                    accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
-                                )
-                                MetricTile(
-                                    label = "先记下",
-                                    value = formatCount(uiState.ideaCount),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
-                                    accent = noteStatusAccent(NoteStatus.IDEA),
-                                )
-                            }
-                            GridTwo {
-                                MetricTile(
-                                    label = "已经做完",
-                                    value = formatCount(uiState.doneCount),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onOpenStatusFilter(NoteStatus.DONE, false) },
-                                    accent = noteStatusAccent(NoteStatus.DONE),
-                                )
-                                MetricTile(
-                                    label = "先放着",
-                                    value = formatCount(uiState.archivedCount),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onOpenStatusFilter(null, true) },
-                                    accent = MaterialTheme.colorScheme.onSurface,
-                                )
+                        SectionHeader(
+                            title = "当前状态",
+                            headline = "${formatCount(uiState.totalCount)} 条记录在库",
+                        )
+                        InsightBlock(tone = InsightTone.Primary) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        text = "想到就记，记下就做",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "先降低记录成本，再让后面的 AI 帮你整理。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                         ActionButton(
@@ -259,6 +237,45 @@ private fun FeedScreen(
                             modifier = Modifier.fillMaxWidth(),
                             icon = Icons.Outlined.EditNote,
                         )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            MetricTile(
+                                label = "现在手上",
+                                value = formatCount(uiState.inProgressCount),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenStatusFilter(NoteStatus.IN_PROGRESS, false) },
+                                accent = noteStatusAccent(NoteStatus.IN_PROGRESS),
+                            )
+                            MetricTile(
+                                label = "先记下",
+                                value = formatCount(uiState.ideaCount),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenStatusFilter(NoteStatus.IDEA, false) },
+                                accent = noteStatusAccent(NoteStatus.IDEA),
+                            )
+                        }
+                        GridTwo {
+                            MetricTile(
+                                label = "已经做完",
+                                value = formatCount(uiState.doneCount),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenStatusFilter(NoteStatus.DONE, false) },
+                                accent = noteStatusAccent(NoteStatus.DONE),
+                            )
+                            MetricTile(
+                                label = "先放着",
+                                value = formatCount(uiState.archivedCount),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenStatusFilter(null, true) },
+                                accent = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 }
 
@@ -268,7 +285,7 @@ private fun FeedScreen(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = "记录",
+                            text = "最近记录",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )

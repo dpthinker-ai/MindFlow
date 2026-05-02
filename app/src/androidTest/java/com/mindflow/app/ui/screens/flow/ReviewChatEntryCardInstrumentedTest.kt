@@ -34,7 +34,9 @@ class ReviewChatEntryCardInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithText("和历史聊聊").assertIsDisplayed()
+        composeRule.onNodeWithText("回看聊天").assertIsDisplayed()
+        composeRule.onNodeWithText("自动保存").assertIsDisplayed()
+        composeRule.onNodeWithText("可搜索").assertIsDisplayed()
         composeRule.onNodeWithText("开始新对话").assertIsDisplayed().performClick()
         assertThat(openChat).isTrue()
         composeRule.onNodeWithText("查看聊天历史").assertIsDisplayed().performClick()
