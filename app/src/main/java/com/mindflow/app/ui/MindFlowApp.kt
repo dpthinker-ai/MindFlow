@@ -16,11 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.QueryStats
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SpaceDashboard
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -224,10 +224,10 @@ fun MindFlowApp(
     }
 
     val topLevelDestinations = listOf(
-        TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.SpaceDashboard),
-        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.AutoAwesome),
-        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.Search),
-        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.QueryStats),
+        TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.Edit),
+        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.WbSunny),
+        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.History),
+        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.Hub),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
     )
 
@@ -490,13 +490,14 @@ fun MindFlowApp(
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 color = Panel,
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, BorderSoft),
+                shadowElevation = 10.dp,
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     topLevelDestinations.forEach { destination ->
@@ -504,7 +505,7 @@ fun MindFlowApp(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .background(
                                     if (active) {
                                         Brush.horizontalGradient(

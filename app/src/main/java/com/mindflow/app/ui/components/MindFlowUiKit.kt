@@ -40,15 +40,16 @@ import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.Cream
 import com.mindflow.app.ui.theme.CreamMid
-import com.mindflow.app.ui.theme.CreamTop
+import com.mindflow.app.ui.theme.MintWash
+import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 
-internal val PanelShape = RoundedCornerShape(18.dp)
-internal val CardShape = RoundedCornerShape(13.dp)
+internal val PanelShape = RoundedCornerShape(22.dp)
+internal val CardShape = RoundedCornerShape(16.dp)
 internal val BottomBarClearance = 108.dp
-internal val ScreenHorizontalPadding = 18.dp
+internal val ScreenHorizontalPadding = 20.dp
 
 enum class InsightTone {
     Primary,
@@ -66,8 +67,8 @@ fun ScreenBackground(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        CreamTop,
                         CreamMid,
+                        Cream,
                         Cream,
                     ),
                 ),
@@ -85,12 +86,14 @@ fun PanelCard(
         color = WhiteGlass,
         shape = PanelShape,
         border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 8.dp,
+        tonalElevation = 1.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )
     }
@@ -103,7 +106,7 @@ fun InsightChip(
     tone: InsightTone = InsightTone.Primary,
 ) {
     val containerColor = when (tone) {
-        InsightTone.Primary -> AccentBlue.copy(alpha = 0.1f)
+        InsightTone.Primary -> PanelBlue
         InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.86f)
     }
     val borderColor = when (tone) {
@@ -111,7 +114,7 @@ fun InsightChip(
         InsightTone.Neutral -> BorderSoft.copy(alpha = 0.8f)
     }
     val contentColor = when (tone) {
-        InsightTone.Primary -> AccentBlue
+        InsightTone.Primary -> Accent
         InsightTone.Neutral -> TextSoft
     }
     Surface(
@@ -139,7 +142,7 @@ fun InsightBlock(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val containerColor = when (tone) {
-        InsightTone.Primary -> AccentBlue.copy(alpha = 0.08f)
+        InsightTone.Primary -> MintWash
         InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.8f)
     }
     val borderColor = when (tone) {
@@ -150,6 +153,7 @@ fun InsightBlock(
         color = containerColor,
         shape = CardShape,
         border = BorderStroke(1.dp, borderColor),
+        shadowElevation = if (tone == InsightTone.Primary) 2.dp else 0.dp,
         modifier = modifier,
     ) {
         Column(
@@ -315,6 +319,7 @@ fun MetricTile(
         shape = CardShape,
         modifier = modifier.heightIn(min = 64.dp),
         border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 3.dp,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -373,13 +378,18 @@ fun ActionButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 44.dp),
-        shape = CardShape,
+        modifier = modifier.heightIn(min = 46.dp),
+        shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Accent,
             contentColor = Color.White,
         ),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 4.dp,
+            pressedElevation = 1.dp,
+            disabledElevation = 0.dp,
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null)
@@ -400,14 +410,14 @@ fun GhostActionButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 44.dp),
-        shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        modifier = modifier.heightIn(min = 46.dp),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, Accent.copy(alpha = 0.24f)),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = Color.Transparent,
-            contentColor = TextMain,
+            containerColor = WhiteGlass,
+            contentColor = Accent,
         ),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null)
@@ -427,13 +437,14 @@ fun IconPillButton(
 ) {
     Surface(
         modifier = modifier,
-        color = WhiteGlass,
-        shape = RoundedCornerShape(12.dp),
+        color = PanelBlue,
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 3.dp,
         onClick = onClick,
     ) {
         Box(
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(42.dp),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

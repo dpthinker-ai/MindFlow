@@ -20,6 +20,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
@@ -56,9 +57,10 @@ fun ComposerTextField(
 
     Surface(
         modifier = modifier,
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = WhiteGlass,
         shape = CardShape,
         border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 3.dp,
     ) {
         TextField(
             value = value,
@@ -84,10 +86,10 @@ fun ComposerTextField(
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-                unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-                disabledContainerColor = WhiteGlass.copy(alpha = 0.92f),
-                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                focusedContainerColor = WhiteGlass,
+                unfocusedContainerColor = WhiteGlass,
+                disabledContainerColor = WhiteGlass,
+                focusedIndicatorColor = Accent.copy(alpha = 0.18f),
                 unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                 disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
             ),
