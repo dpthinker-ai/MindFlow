@@ -7,7 +7,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,19 +21,39 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RestorePage
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.SettingsSuggest
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Timelapse
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -45,8 +69,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,6 +90,7 @@ import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
+import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.model.OnDeviceModelSettings
 import com.mindflow.app.data.model.OnDeviceModelStatus
@@ -87,6 +115,13 @@ import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.AccentDanger
+import com.mindflow.app.ui.theme.AccentLavender
+import com.mindflow.app.ui.theme.AccentSuccess
+import com.mindflow.app.ui.theme.AccentTeal
+import com.mindflow.app.ui.theme.AccentWarn
+import com.mindflow.app.ui.theme.PanelBlue
+import com.mindflow.app.ui.theme.PanelSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.util.TimeFormatter
@@ -100,6 +135,8 @@ private enum class SettingsDestination {
     REMINDER,
     TIME_BANK,
     DIRECTION_WIKI,
+    APPEARANCE,
+    ABOUT,
 }
 
 @Composable
@@ -331,6 +368,8 @@ private fun SettingsScreen(
                 onOpenReminder = { destination = SettingsDestination.REMINDER },
                 onOpenTimeBank = { destination = SettingsDestination.TIME_BANK },
                 onOpenDirectionWiki = { destination = SettingsDestination.DIRECTION_WIKI },
+                onOpenAppearance = { destination = SettingsDestination.APPEARANCE },
+                onOpenAbout = { destination = SettingsDestination.ABOUT },
                 onExport = onExport,
                 onImport = onImport,
             )
@@ -391,6 +430,12 @@ private fun SettingsScreen(
                 onBack = { destination = SettingsDestination.HOME },
                 onRefreshDirectionWiki = onRefreshDirectionWiki,
             )
+            SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                onBack = { destination = SettingsDestination.HOME },
+            )
+            SettingsDestination.ABOUT -> AboutSettingsScreen(
+                onBack = { destination = SettingsDestination.HOME },
+            )
         }
     }
 }
@@ -404,6 +449,8 @@ private fun SettingsHomeScreen(
     onOpenReminder: () -> Unit,
     onOpenTimeBank: () -> Unit,
     onOpenDirectionWiki: () -> Unit,
+    onOpenAppearance: () -> Unit,
+    onOpenAbout: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
@@ -430,7 +477,7 @@ private fun SettingsHomeScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "把同步、AI、端侧模型和提醒放在这里集中管理。",
+                        text = "个性化配置，掌控你的 AI 思维系统",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                     )
@@ -438,136 +485,375 @@ private fun SettingsHomeScreen(
             }
 
             item {
-                SettingsEntryCard(
-                    title = "云备份",
-                    summary = if (uiState.cloudIsConfigured) {
-                        if (uiState.cloudLastBackupAt > 0L) "最近备份 ${TimeFormatter.compact(uiState.cloudLastBackupAt)}" else "已连接"
-                    } else {
-                        "未配置"
-                    },
-                    headline = when {
-                        uiState.cloudIsConfigured && uiState.cloudAutoBackupEnabled -> "自动备份"
-                        uiState.cloudIsConfigured -> "已连接"
-                        else -> "未配置"
-                    },
-                    accent = AccentBlue,
-                    onClick = onOpenCloud,
-                )
+                SettingsProfileCard()
             }
 
             item {
-                SettingsEntryCard(
-                    title = "AI 能力",
-                    summary = if (uiState.isConfigured) {
-                        uiState.model.ifBlank { "已配置" }
-                    } else {
-                        "未配置"
-                    },
-                    headline = if (uiState.isConfigured) "AI 整理 + 判断" else "本地规则",
-                    accent = Accent,
-                    onClick = onOpenAi,
-                )
-            }
-
-            item {
-                SettingsEntryCard(
-                    title = "本地模型",
-                    summary = when (uiState.localModelStatus) {
-                        OnDeviceModelStatus.READY -> "${uiState.localModelLabel} · ${formatFileSize(uiState.localModelDownloadedBytes)}"
-                        OnDeviceModelStatus.DOWNLOADING -> "正在下载"
-                        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank {
-                            if (uiState.localModelDownloadedBytes > 0L) "下载中断，可继续下载" else "下载失败"
-                        }
-                        OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
-                    },
-                    headline = when {
-                        uiState.localModelStatus != OnDeviceModelStatus.READY -> "未就绪"
-                        uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC -> "自动"
-                        uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY -> "仅端侧"
-                        else -> "仅云侧"
-                    },
-                    accent = AccentBlue,
-                    onClick = onOpenLocalModel,
-                )
-            }
-
-            item {
-                SettingsEntryCard(
-                    title = "每日提醒",
-                    summary = when {
-                        uiState.morningBriefEnabled && uiState.eveningReviewEnabled -> "晨间 + 晚间"
-                        uiState.morningBriefEnabled -> "仅晨间"
-                        uiState.eveningReviewEnabled -> "仅晚间"
-                        else -> "未开启"
-                    },
-                    headline = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else "未开启",
-                    accent = MaterialTheme.colorScheme.primary,
-                    onClick = onOpenReminder,
-                )
-            }
-
-            item {
-                SettingsEntryCard(
-                    title = "时间银行",
-                    summary = "按每周 ${uiState.timeBankPreview.activeDaysPerWeek} 天估算，还可主动投入 ${uiState.timeBankPreview.remainingActiveDays} 天",
-                    headline = "可用时间",
-                    accent = Accent,
-                    onClick = onOpenTimeBank,
-                )
-            }
-
-            item {
-                SettingsEntryCard(
-                    title = "知识层",
-                    summary = if (uiState.directionWikiLastRefreshedAt > 0L) {
-                        "最近更新 ${TimeFormatter.compact(uiState.directionWikiLastRefreshedAt)}"
-                    } else {
-                        "尚未生成"
-                    },
-                    headline = if (uiState.directionWikiDirectionCount > 0) {
-                        "${uiState.directionWikiDirectionCount} 条方向资产"
-                    } else {
-                        "未生成"
-                    },
-                    accent = AccentBlue,
-                    onClick = onOpenDirectionWiki,
-                )
-            }
-
-            item {
-                Surface(
-                    color = WhiteGlass.copy(alpha = 0.95f),
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        SectionHeader(title = "本地备份", headline = "Markdown")
-                        GridTwo {
-                            ActionButton(
-                                text = if (uiState.isExporting) "导出中..." else "导出",
-                                onClick = onExport,
-                                enabled = !uiState.isExporting,
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Outlined.FileDownload,
-                            )
-                            GhostActionButton(
-                                text = if (uiState.isImporting) "导入中..." else "导入",
-                                onClick = onImport,
-                                modifier = Modifier.weight(1f),
-                                enabled = !uiState.isImporting,
-                                icon = Icons.Outlined.RestorePage,
-                            )
-                        }
-                    }
+                SettingsMenuGroup {
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.AutoAwesome,
+                        iconColor = AccentBlue,
+                        title = "AI 模型与自动化",
+                        summary = buildLocalModelSummary(uiState),
+                        status = buildLocalModelHeadline(uiState),
+                        onClick = onOpenLocalModel,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.SettingsSuggest,
+                        iconColor = AccentLavender,
+                        title = "云端 AI",
+                        summary = if (uiState.isConfigured) uiState.model.ifBlank { "已配置" } else "未配置 API Key",
+                        status = if (uiState.isConfigured && uiState.aiEnabled) "可用" else "未启用",
+                        onClick = onOpenAi,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Bolt,
+                        iconColor = AccentSuccess,
+                        title = "自动化",
+                        summary = when {
+                            uiState.morningBriefEnabled && uiState.eveningReviewEnabled -> "晨间聚焦、晚间回看已开启"
+                            uiState.morningBriefEnabled || uiState.eveningReviewEnabled -> "部分提醒已开启"
+                            else -> "任务识别、提醒与自动处理规则"
+                        },
+                        status = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else null,
+                        onClick = onOpenReminder,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Shield,
+                        iconColor = AccentTeal,
+                        title = "隐私与数据",
+                        summary = buildPrivacyDataSummary(uiState),
+                        status = if (uiState.cloudAutoBackupEnabled) "已开启" else null,
+                        onClick = onOpenCloud,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.NotificationsNone,
+                        iconColor = AccentWarn,
+                        title = "通知",
+                        summary = "提醒方式与通知偏好",
+                        status = null,
+                        onClick = onOpenReminder,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Hub,
+                        iconColor = AccentLavender,
+                        title = "图谱",
+                        summary = if (uiState.directionWikiDirectionCount > 0) {
+                            "${uiState.directionWikiDirectionCount} 个方向正在沉淀"
+                        } else {
+                            "图谱视图、关系与显示设置"
+                        },
+                        status = if (uiState.directionWikiLastRefreshedAt > 0L) TimeFormatter.compact(uiState.directionWikiLastRefreshedAt) else null,
+                        onClick = onOpenDirectionWiki,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Timelapse,
+                        iconColor = Accent,
+                        title = "时间银行",
+                        summary = "还可主动投入 ${uiState.timeBankPreview.remainingActiveDays} 天",
+                        status = "可用时间",
+                        onClick = onOpenTimeBank,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Palette,
+                        iconColor = AccentBlue,
+                        title = "外观",
+                        summary = "主题、颜色与显示偏好",
+                        status = "浅色",
+                        onClick = onOpenAppearance,
+                    )
+                    SettingsDivider()
+                    SettingsMenuRow(
+                        icon = Icons.Outlined.Info,
+                        iconColor = TextSoft,
+                        title = "关于",
+                        summary = "版本信息、帮助与反馈",
+                        status = null,
+                        onClick = onOpenAbout,
+                    )
                 }
+            }
+
+            item {
+                SettingsExportImportCard(
+                    uiState = uiState,
+                    onExport = onExport,
+                    onImport = onImport,
+                )
             }
         }
     }
 }
+
+@Composable
+private fun SettingsProfileCard() {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.98f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, PanelBlue),
+        shadowElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(PanelBlue),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = null,
+                    tint = AccentBlue,
+                    modifier = Modifier.size(34.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "MindFlow 用户",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "专注思考，持续进化",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsMenuGroup(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.98f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.72f)),
+        shadowElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 68.dp)
+            .height(1.dp)
+            .background(PanelSoft),
+    )
+}
+
+@Composable
+private fun SettingsMenuRow(
+    icon: ImageVector,
+    iconColor: Color,
+    title: String,
+    summary: String,
+    status: String?,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(iconColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (!status.isNullOrBlank()) {
+            Text(
+                text = status,
+                style = MaterialTheme.typography.labelMedium,
+                color = iconColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            imageVector = Icons.Outlined.ChevronRight,
+            contentDescription = null,
+            tint = TextSoft.copy(alpha = 0.68f),
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+private fun SettingsDataRow(
+    icon: ImageVector,
+    title: String,
+    summary: String,
+    status: String?,
+    accent: Color,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!status.isNullOrBlank()) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accent,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsExportImportCard(
+    uiState: SettingsUiState,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.72f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SectionHeader(title = "本地备份", headline = "Markdown")
+            GridTwo {
+                ActionButton(
+                    text = if (uiState.isExporting) "导出中..." else "导出",
+                    onClick = onExport,
+                    enabled = !uiState.isExporting,
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.FileDownload,
+                )
+                GhostActionButton(
+                    text = if (uiState.isImporting) "导入中..." else "导入",
+                    onClick = onImport,
+                    modifier = Modifier.weight(1f),
+                    enabled = !uiState.isImporting,
+                    icon = Icons.Outlined.RestorePage,
+                )
+            }
+        }
+    }
+}
+
+private fun buildLocalModelSummary(uiState: SettingsUiState): String =
+    when (uiState.localModelStatus) {
+        OnDeviceModelStatus.READY -> "${uiState.localModelLabel} · ${formatFileSize(uiState.localModelDownloadedBytes)}"
+        OnDeviceModelStatus.DOWNLOADING -> "模型下载中"
+        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank {
+            if (uiState.localModelDownloadedBytes > 0L) "下载中断，可继续" else "模型准备失败"
+        }
+        OnDeviceModelStatus.NOT_DOWNLOADED -> "模型选择、运行位置与任务建议"
+    }
+
+private fun buildLocalModelHeadline(uiState: SettingsUiState): String =
+    when {
+        uiState.localModelStatus != OnDeviceModelStatus.READY -> "未就绪"
+        uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC -> "本地优先"
+        uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY -> "仅本地"
+        else -> "云端"
+    }
+
+private fun buildPrivacyDataSummary(uiState: SettingsUiState): String =
+    when {
+        uiState.cloudIsConfigured && uiState.cloudLastBackupAt > 0L ->
+            "最近备份 ${TimeFormatter.compact(uiState.cloudLastBackupAt)}"
+        uiState.cloudIsConfigured -> "备份与同步已配置"
+        else -> "本地优先、备份与数据管理"
+    }
 
 @Composable
 private fun DirectionWikiSettingsScreen(
@@ -576,18 +862,18 @@ private fun DirectionWikiSettingsScreen(
     onRefreshDirectionWiki: () -> Unit,
 ) {
     DetailScreenFrame(
-        title = "知识层",
-        subtitle = "长期知识资产层",
+        title = "图谱",
+        subtitle = "图谱视图、关系与显示设置",
         onBack = onBack,
     ) {
         item {
             PanelCard {
                 SectionHeader(
-                    title = "当前状态",
-                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 条方向资产" else "尚未生成",
+                    title = "当前结构",
+                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 个方向" else "尚未生成",
                 )
                 Text(
-                    text = "先把关注方向沉淀成知识层切片，再逐步扩展到概念、问题、方法和实验。",
+                    text = "图谱用于展示概念之间的关系、中心节点、孤立节点和近期增长。",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSoft,
                 )
@@ -612,10 +898,54 @@ private fun DirectionWikiSettingsScreen(
                         )
                     }
                 ActionButton(
-                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新知识层",
+                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新图谱结构",
                     onClick = onRefreshDirectionWiki,
                     enabled = !uiState.isRefreshingDirectionWiki,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppearanceSettingsScreen(
+    onBack: () -> Unit,
+) {
+    DetailScreenFrame(
+        title = "外观",
+        subtitle = "主题、颜色与显示偏好",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "当前主题", headline = "浅色")
+                Text(
+                    text = "当前先跟随参考设计保持清爽浅色风格。深色模式、紧凑密度和字号偏好后续可以在这里统一管理。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutSettingsScreen(
+    onBack: () -> Unit,
+) {
+    DetailScreenFrame(
+        title = "关于 MindFlow",
+        subtitle = "版本信息、帮助与反馈",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "MindFlow", headline = "Idea incubator")
+                Text(
+                    text = "MindFlow 用来捕捉易碎想法、发现反复出现的线索，并把成熟内容沉淀成可复用资产。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -641,33 +971,24 @@ private fun LocalModelSettingsScreen(
         OnDeviceModelStatus.NOT_DOWNLOADED -> "未下载"
     }
     DetailScreenFrame(
-        title = "本地模型",
-        subtitle = "默认用 Gemma 4 E4B LiteRT 包，运行时下载，不打进安装包",
+        title = "AI 与自动化",
+        subtitle = "模型、运行位置与自动处理规则",
         onBack = onBack,
     ) {
         item {
             PanelCard {
-                SectionHeader(title = "当前状态", headline = statusHeadline)
+                SectionHeader(title = "当前模型", headline = statusHeadline)
                 Text(
                     text = when {
-                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "模型文件已准备好。本地模型只会在你显式触发测试、编辑召回或手动维护知识层时使用。"
-                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到应用私有目录，进度会自动保存，断开后可以继续下载。"
+                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "${uiState.localModelLabel} 已准备好，可用于本地摘要、标题、转写和图谱整理。"
+                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到本地，断开后可以继续。"
                         uiState.localModelStatus == OnDeviceModelStatus.ERROR && uiState.localModelDownloadedBytes > 0L -> uiState.localModelLastMessage.ifBlank { "下载已中断，当前进度已保留，可以继续下载。" }
                         uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
-                        else -> "已经帮你填好默认直链，可以直接下载到本地。"
+                        else -> "下载 Gemma 4 后，优先在设备本地完成 AI 处理。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                uiState.localModelPath.takeIf { it.isNotBlank() }?.let { path ->
-                    Text(
-                        text = path,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
                 val effectiveTargetBytes = uiState.localModelDownloadTargetBytes
                     .takeIf { it > 0L }
                     ?: OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES
@@ -703,34 +1024,14 @@ private fun LocalModelSettingsScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSoft,
                 )
-                if (uiState.localModelStatus == OnDeviceModelStatus.ERROR) {
-                    Text(
-                        text = "当前实际下载地址：${OnDeviceModelSettings.normalizeDownloadUrl(uiState.localModelDownloadUrl)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
         }
 
         item {
             SettingsSection(
-                title = "模型配置",
-                description = "端侧模型只负责本地主编和知识召回。默认直链指向 Gemma 4 E4B 的官方 LiteRT 包，不会被打进 APK；填仓库页或 repo id 也会自动纠正成可下载直链。",
+                title = "模型运行位置",
+                description = "默认本地优先。云端只在你显式选择相关能力时使用。",
             ) {
-                SettingsField(
-                    value = uiState.localModelDownloadUrl,
-                    onValueChange = onLocalModelDownloadUrlChange,
-                    label = "模型仓库或下载链接",
-                    secret = false,
-                )
-                Text(
-                    text = "官方来源：${OnDeviceModelSettings.DEFAULT_MODEL_SOURCE_URL}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
-                )
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.92f),
                     shape = MaterialTheme.shapes.medium,
@@ -743,9 +1044,9 @@ private fun LocalModelSettingsScreen(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("执行模式", style = MaterialTheme.typography.titleSmall)
+                            Text("运行位置", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "自动模式默认端侧优先；仅端侧和仅云侧会强制固定 provider。",
+                                text = "本地优先更安全；仅本地和云端模式用于排查或明确切换。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -754,7 +1055,7 @@ private fun LocalModelSettingsScreen(
                                 FilterChip(
                                     selected = uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC,
                                     onClick = { onAiExecutionModeChange(AiExecutionMode.AUTOMATIC) },
-                                    label = { Text("自动") },
+                                    label = { Text("本地优先") },
                                     modifier = Modifier.weight(1f),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
@@ -764,7 +1065,7 @@ private fun LocalModelSettingsScreen(
                                 FilterChip(
                                     selected = uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY,
                                     onClick = { onAiExecutionModeChange(AiExecutionMode.ON_DEVICE_ONLY) },
-                                    label = { Text("仅端侧") },
+                                    label = { Text("仅本地") },
                                     modifier = Modifier.weight(1f),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
@@ -775,7 +1076,7 @@ private fun LocalModelSettingsScreen(
                             FilterChip(
                                 selected = uiState.aiExecutionMode == AiExecutionMode.CLOUD_ONLY,
                                 onClick = { onAiExecutionModeChange(AiExecutionMode.CLOUD_ONLY) },
-                                label = { Text("仅云侧") },
+                                label = { Text("云端") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
                                     selectedLabelColor = MaterialTheme.colorScheme.onSurface,
@@ -848,29 +1149,6 @@ private fun LocalModelSettingsScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                uiState.localMaintenanceLastTracePath
-                    .takeIf { it.isNotBlank() }
-                    ?.let { path ->
-                        Text(
-                            text = "维护日志导出位置：$path",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                Text(
-                    text = "崩溃和维护日志目录：${uiState.localMaintenanceLogDir.ifBlank { "Android/data/com.mindflow.app/files/mindflow-logs/" }}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "如果本地整理闪退，请把这个目录里的 latest-crash.md 或 latest-local-maintainer-error.md 发给我。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
-                )
                 GhostActionButton(
                     text = if (uiState.isRefreshingLocalKnowledge) "维护中..." else "立即维护知识层",
                     onClick = onRefreshLocalKnowledge,
@@ -884,6 +1162,11 @@ private fun LocalModelSettingsScreen(
                     enabled = !uiState.isSavingLocalModel,
                     modifier = Modifier.fillMaxWidth(),
                     icon = Icons.Outlined.Save,
+                )
+                Text(
+                    text = "高级设置",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
                 )
                 GhostActionButton(
                     text = if (uiState.isDeletingLocalModel) "删除中..." else "删除本地模型",
@@ -970,8 +1253,8 @@ private fun ReminderSettingsScreen(
     onRequestNotificationPermission: ((() -> Unit) -> Unit),
 ) {
     DetailScreenFrame(
-        title = "AI 提醒",
-        subtitle = "今日聚焦 / 晚间回看",
+        title = "自动化与通知",
+        subtitle = "任务识别、提醒与处理节奏",
         onBack = onBack,
     ) {
         item {
@@ -1079,26 +1362,45 @@ private fun CloudBackupScreen(
     onRestoreRequest: () -> Unit,
 ) {
     DetailScreenFrame(
-        title = "云备份",
-        subtitle = "坚果云 WebDAV",
+        title = "隐私与数据",
+        subtitle = "本地优先、备份与同步",
         onBack = onBack,
     ) {
         item {
             PanelCard {
-                SectionHeader(title = "当前状态", headline = if (uiState.cloudIsConfigured) "已连接" else "未配置")
-                GridTwo {
-                    MetricTile(
-                        label = "备份方式",
-                        value = "WebDAV",
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(AccentTeal.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Security,
+                            contentDescription = null,
+                            tint = AccentTeal,
+                            modifier = Modifier.size(30.dp),
+                        )
+                    }
+                    Column(
                         modifier = Modifier.weight(1f),
-                        accent = if (uiState.cloudIsConfigured) Accent else MaterialTheme.colorScheme.onSurface,
-                    )
-                    MetricTile(
-                        label = "最近备份",
-                        value = if (uiState.cloudLastBackupAt > 0L) TimeFormatter.compact(uiState.cloudLastBackupAt) else "尚未备份",
-                        modifier = Modifier.weight(1f),
-                        accent = AccentBlue,
-                    )
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "本地优先，隐私为先",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                        Text(
+                            text = "数据始终保留在你手中；同步与导出由你明确触发。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
+                    }
                 }
                 if (uiState.cloudLastBackupError.isNotBlank()) {
                     Text(
@@ -1112,9 +1414,30 @@ private fun CloudBackupScreen(
 
         item {
             SettingsSection(
-                title = "WebDAV 配置",
-                description = "用户名填坚果云邮箱，密码填应用密码。",
+                title = "备份与同步",
+                description = "自动备份默认低频执行；手动备份和恢复需要你主动确认。",
             ) {
+                SettingsDataRow(
+                    icon = Icons.Outlined.Sync,
+                    title = "本地备份与同步",
+                    summary = if (uiState.cloudIsConfigured) "WebDAV 已配置" else "未配置同步目录",
+                    status = if (uiState.cloudAutoBackupEnabled) "已开启" else "未开启",
+                    accent = AccentTeal,
+                )
+                SettingsDataRow(
+                    icon = Icons.Outlined.FolderOpen,
+                    title = "备份目录",
+                    summary = uiState.cloudRemoteDir.ifBlank { CloudBackupSettings.DEFAULT_REMOTE_DIR },
+                    status = null,
+                    accent = AccentBlue,
+                )
+                SettingsDataRow(
+                    icon = Icons.Outlined.Storage,
+                    title = "最近备份",
+                    summary = if (uiState.cloudLastBackupAt > 0L) TimeFormatter.compact(uiState.cloudLastBackupAt) else "尚未备份",
+                    status = null,
+                    accent = AccentLavender,
+                )
                 SettingsField(
                     value = uiState.cloudBaseUrl,
                     onValueChange = onCloudBaseUrlChange,
@@ -1233,8 +1556,8 @@ private fun AiSettingsScreen(
     }
 
     DetailScreenFrame(
-        title = "AI 能力",
-        subtitle = if (uiState.aiEnabled) "云端升级 / 编辑整理 / 方向判断" else "当前只用本地与规则",
+        title = "云端 AI",
+        subtitle = if (uiState.aiEnabled) "显式云端升级、编辑整理与连接验证" else "当前只用本地模型",
         onBack = onBack,
     ) {
         item {

@@ -659,6 +659,28 @@ class KnowledgeGraphScreenTest {
         assertThat(activated.map { it.id }).containsExactly("sleep", "recovery").inOrder()
     }
 
+    @Test
+    fun `buildRelatedNotesForConcept prefers source backed records before text matches`() {
+        val concept = ConceptGraphNode(
+            conceptId = "agent",
+            label = "Agent",
+            aliases = listOf("智能体"),
+            summary = "Agent 相关结构。",
+            sourceIds = listOf("note:22"),
+        )
+
+        val related = buildRelatedNotesForConcept(
+            centerNode = concept,
+            notes = listOf(
+                note(11L, "智能体任务流"),
+                note(22L, "没有关键词但来自图谱来源"),
+                note(33L, "完全无关"),
+            ),
+        )
+
+        assertThat(related.map { it.id }).containsExactly(22L, 11L).inOrder()
+    }
+
     private fun denselyConnectedSnapshot(): DirectionWikiSnapshot =
         conceptSnapshot(
             defaultCenterNodeId = "center",

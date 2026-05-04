@@ -29,6 +29,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -76,9 +83,11 @@ import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.DirectionWikiSnapshot
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
+import com.mindflow.app.ui.components.GridTwo
 import com.mindflow.app.ui.components.InsightBlock
 import com.mindflow.app.ui.components.InsightLine
 import com.mindflow.app.ui.components.InsightTone
+import com.mindflow.app.ui.components.MetricTile
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
@@ -88,6 +97,10 @@ import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
+import com.mindflow.app.ui.theme.AccentLavender
+import com.mindflow.app.ui.theme.AccentTeal
+import com.mindflow.app.ui.theme.PanelBlue
+import com.mindflow.app.ui.theme.PanelSoft
 import com.mindflow.app.util.TimeFormatter
 import java.time.DayOfWeek
 import java.time.Instant
@@ -273,9 +286,12 @@ internal fun KnowledgeGraphScreen(
     notes: List<NoteEntity>,
     onOpenNote: (Long) -> Unit,
 ) {
-    val graphNodes = remember(snapshot) {
-        buildConceptGraphVisualState(snapshot).nodes
-    }
+    val graphOverview = remember(snapshot) { buildConceptGraphVisualState(snapshot) }
+    val graphNodes = graphOverview.nodes
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var graphQuery by rememberSaveable { mutableStateOf("") }
+    var structureFilter by rememberSaveable { mutableStateOf(GraphStructureFilter.ALL) }
+    var requestedGraphCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
 
     ScreenBackground {
         Column(
@@ -294,23 +310,42 @@ internal fun KnowledgeGraphScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "图谱",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "先看记录热度，再看思路是怎么连起来的。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                    KnowledgeGraphHeader(
+                        searchExpanded = searchExpanded,
+                        onToggleSearch = { searchExpanded = !searchExpanded },
+                    )
+                }
+
+                if (searchExpanded) {
+                    item {
+                        GraphSearchFilterCard(
+                            nodes = graphNodes,
+                            query = graphQuery,
+                            onQueryChange = { graphQuery = it },
+                            selectedFilter = structureFilter,
+                            onFilterChange = { structureFilter = it },
+                            onSelectNode = { nodeId ->
+                                requestedGraphCenterNodeId = nodeId
+                                searchExpanded = false
+                            },
                         )
                     }
                 }
 
                 item {
+                    KnowledgeGraphPanel(
+                        snapshot = snapshot,
+                        notes = notes,
+                        requestedCenterNodeId = requestedGraphCenterNodeId,
+                        onCenterNodeResolved = { requestedGraphCenterNodeId = it },
+                        onOpenNote = onOpenNote,
+                    )
+                }
+
+                item {
                     KnowledgeGraphOverviewCard(
-                        nodeCount = graphNodes.size,
+                        overview = graphOverview,
+                        graphNodes = graphNodes,
                         activeNoteCount = notes.count { !it.isArchived },
                     )
                 }
@@ -322,9 +357,166 @@ internal fun KnowledgeGraphScreen(
                         onOpenNote = onOpenNote,
                     )
                 }
+            }
+        }
+    }
+}
 
-                item {
-                    KnowledgeGraphPanel(snapshot = snapshot)
+private enum class GraphStructureFilter(val label: String) {
+    ALL("全部"),
+    HUB("中心"),
+    LINKED("连接"),
+    ISOLATED("孤立"),
+}
+
+@Composable
+private fun KnowledgeGraphHeader(
+    searchExpanded: Boolean,
+    onToggleSearch: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "图谱",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "知识图谱概览",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+            )
+        }
+        Surface(
+            onClick = onToggleSearch,
+            color = if (searchExpanded) Accent.copy(alpha = 0.12f) else WhiteGlass.copy(alpha = 0.88f),
+            shape = CircleShape,
+            border = BorderStroke(1.dp, BorderSoft),
+        ) {
+            Box(
+                modifier = Modifier.size(42.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = "搜索图谱",
+                    tint = Accent,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun GraphSearchFilterCard(
+    nodes: List<GraphNodeUi>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    selectedFilter: GraphStructureFilter,
+    onFilterChange: (GraphStructureFilter) -> Unit,
+    onSelectNode: (String) -> Unit,
+) {
+    val filteredNodes = remember(nodes, query, selectedFilter) {
+        val normalizedQuery = query.trim().lowercase()
+        nodes
+            .asSequence()
+            .filter { node ->
+                when (selectedFilter) {
+                    GraphStructureFilter.ALL -> true
+                    GraphStructureFilter.HUB -> node.structureStatus == GraphStructureStatus.HUB
+                    GraphStructureFilter.LINKED -> node.structureStatus == GraphStructureStatus.LINKED
+                    GraphStructureFilter.ISOLATED -> node.structureStatus == GraphStructureStatus.ISOLATED
+                }
+            }
+            .filter { node ->
+                normalizedQuery.isBlank() ||
+                    node.label.lowercase().contains(normalizedQuery) ||
+                    node.summaryLine.lowercase().contains(normalizedQuery) ||
+                    node.aliases.any { it.lowercase().contains(normalizedQuery) }
+            }
+            .take(8)
+            .toList()
+    }
+
+    PanelCard {
+        SectionHeader(title = "搜索与筛选", headline = "${filteredNodes.size} 个结果")
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("搜索概念") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                )
+            },
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+                unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+            ),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GraphStructureFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { onFilterChange(filter) },
+                    label = { Text(filter.label, maxLines = 1) },
+                    leadingIcon = if (filter == GraphStructureFilter.ALL) {
+                        {
+                            Icon(
+                                imageVector = Icons.Outlined.FilterList,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Accent.copy(alpha = 0.16f),
+                        selectedLabelColor = Accent,
+                    ),
+                )
+            }
+        }
+        if (filteredNodes.isEmpty()) {
+            Text(
+                text = "没有匹配的概念。",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+            )
+        } else {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                filteredNodes.forEach { node ->
+                    SwitchableConceptChip(
+                        node = ConceptGraphNode(
+                            conceptId = node.id,
+                            label = node.label,
+                            summary = node.summaryLine,
+                            hotnessScore = node.densityScore,
+                        ),
+                        onClick = { onSelectNode(node.id) },
+                    )
                 }
             }
         }
@@ -333,30 +525,159 @@ internal fun KnowledgeGraphScreen(
 
 @Composable
 private fun KnowledgeGraphOverviewCard(
-    nodeCount: Int,
+    overview: GraphOverviewUi,
+    graphNodes: List<GraphNodeUi>,
     activeNoteCount: Int,
 ) {
+    val hubCount = graphNodes.count { it.structureStatus == GraphStructureStatus.HUB }
+    val isolatedCount = graphNodes.count { it.structureStatus == GraphStructureStatus.ISOLATED }
+    val strongestEdge = remember(overview.edges) { overview.edges.maxByOrNull { it.weight } }
+    val nodeById = remember(graphNodes) { graphNodes.associateBy { it.id } }
     PanelCard {
         SectionHeader(
-            title = "图谱概览",
-            headline = if (nodeCount > 0) "$nodeCount 个知识点正在连接" else "还没有稳定知识点",
+            title = "整体结构趋势",
+            headline = if (graphNodes.isNotEmpty()) "${graphNodes.size} 个概念" else "还没有稳定概念",
         )
-        InsightBlock(tone = InsightTone.Primary) {
-            InsightLine(
-                label = "怎么看",
-                text = if (nodeCount > 0) {
-                    "先用记录热度找到活跃日期，再看这些记录点亮了哪些知识点。"
-                } else {
-                    "先持续记录，等知识层生成后，这里会显示概念之间的连接。"
-                },
-                maxLines = 3,
+        GridTwo {
+            MetricTile(
+                label = "中心概念",
+                value = hubCount.toString(),
+                modifier = Modifier.weight(1f),
+                accent = Accent,
+            )
+            MetricTile(
+                label = "孤立概念",
+                value = isolatedCount.toString(),
+                modifier = Modifier.weight(1f),
+                accent = AccentLavender,
             )
         }
+        if (overview.verdictLine.isNotBlank()) {
+            InsightBlock(tone = InsightTone.Primary) {
+                InsightLine(label = "结构判断", text = overview.verdictLine, maxLines = 3)
+            }
+        }
+        if (strongestEdge != null) {
+            val left = nodeById[strongestEdge.fromId]?.label.orEmpty()
+            val right = nodeById[strongestEdge.toId]?.label.orEmpty()
+            if (left.isNotBlank() && right.isNotBlank()) {
+                GraphRecommendationCard(
+                    title = "$left × $right",
+                    summary = strongestEdge.reasonLine.ifBlank { "这两个概念已经出现稳定关联，适合继续整理成主题。" },
+                )
+            }
+        }
+        HotTopicsStrip(graphNodes = graphNodes)
         Text(
             text = "$activeNoteCount 条活跃记录参与图谱沉淀",
             style = MaterialTheme.typography.bodySmall,
             color = TextSoft,
         )
+    }
+}
+
+@Composable
+private fun HotTopicsStrip(graphNodes: List<GraphNodeUi>) {
+    if (graphNodes.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionHeader(title = "热门主题", headline = "前 ${graphNodes.take(4).size}")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            graphNodes.take(4).forEachIndexed { index, node ->
+                Surface(
+                    color = WhiteGlass.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, node.accent.copy(alpha = 0.18f)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(min = 96.dp, max = 132.dp)
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = node.accent,
+                        )
+                        Text(
+                            text = node.label,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = TextMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${node.noteCount.coerceAtLeast(1)} 记录",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextSoft,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraphRecommendationCard(
+    title: String,
+    summary: String,
+) {
+    Surface(
+        color = Accent.copy(alpha = 0.06f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Accent.copy(alpha = 0.22f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.MoreHoriz,
+                    contentDescription = null,
+                    tint = Accent,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "推荐关联",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Accent,
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -523,27 +844,31 @@ private fun RecordsHeatmapPanel(
 @Composable
 private fun KnowledgeGraphPanel(
     snapshot: DirectionWikiSnapshot,
+    notes: List<NoteEntity>,
+    requestedCenterNodeId: String?,
+    onCenterNodeResolved: (String?) -> Unit,
+    onOpenNote: (Long) -> Unit,
 ) {
-    var requestedCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var previousCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
-    var neighborExpansionCount by rememberSaveable(requestedCenterNodeId) { mutableIntStateOf(0) }
-    var switchableExpansionCount by rememberSaveable(requestedCenterNodeId) { mutableIntStateOf(0) }
+    var neighborExpansionCount by rememberSaveable(activeCenterNodeId) { mutableIntStateOf(0) }
+    var switchableExpansionCount by rememberSaveable(activeCenterNodeId) { mutableIntStateOf(0) }
 
     val viewport = remember(
         snapshot,
-        requestedCenterNodeId,
+        activeCenterNodeId,
         previousCenterNodeId,
         neighborExpansionCount,
         switchableExpansionCount,
     ) {
         buildConceptGraphViewport(
             snapshot = snapshot,
-            currentCenterNodeId = requestedCenterNodeId,
+            currentCenterNodeId = activeCenterNodeId,
             previousCenterNodeId = previousCenterNodeId,
-            expandedCenterNodeIds = requestedCenterNodeId?.let { centerId ->
+            expandedCenterNodeIds = activeCenterNodeId?.let { centerId ->
                 List(neighborExpansionCount) { centerId }
             }.orEmpty(),
-            expandedSwitchableCenterNodeIds = requestedCenterNodeId?.let { centerId ->
+            expandedSwitchableCenterNodeIds = activeCenterNodeId?.let { centerId ->
                 List(switchableExpansionCount) { centerId }
             }.orEmpty(),
         )
@@ -562,27 +887,46 @@ private fun KnowledgeGraphPanel(
             currentCenterNodeId = centerNode?.conceptId,
         )
     }
+    val relatedNotes = remember(centerNode, notes) {
+        if (centerNode == null) {
+            emptyList()
+        } else {
+            buildRelatedNotesForConcept(centerNode, notes)
+        }
+    }
+
+    LaunchedEffect(requestedCenterNodeId) {
+        val nextCenterNodeId = requestedCenterNodeId ?: return@LaunchedEffect
+        if (nextCenterNodeId != activeCenterNodeId) {
+            previousCenterNodeId = centerNode?.conceptId
+            activeCenterNodeId = nextCenterNodeId
+            neighborExpansionCount = 0
+            switchableExpansionCount = 0
+        }
+    }
 
     LaunchedEffect(centerNode?.conceptId) {
         val resolvedCenterNodeId = centerNode?.conceptId ?: return@LaunchedEffect
-        if (requestedCenterNodeId == null) {
-            requestedCenterNodeId = resolvedCenterNodeId
+        if (activeCenterNodeId == null) {
+            activeCenterNodeId = resolvedCenterNodeId
         }
+        onCenterNodeResolved(resolvedCenterNodeId)
     }
 
     fun selectCenter(nodeId: String) {
         val currentCenter = centerNode?.conceptId
         if (nodeId == currentCenter) return
         previousCenterNodeId = currentCenter
-        requestedCenterNodeId = nodeId
+        activeCenterNodeId = nodeId
+        onCenterNodeResolved(nodeId)
         neighborExpansionCount = 0
         switchableExpansionCount = 0
     }
 
     PanelCard {
         SectionHeader(
-            title = "思路连接",
-            headline = headline,
+            title = "知识图谱",
+            headline = centerNode?.label ?: headline,
         )
         if (centerNode == null) {
             Text(
@@ -593,22 +937,6 @@ private fun KnowledgeGraphPanel(
             return@PanelCard
         }
 
-        Text(
-            text = when {
-                viewport.neighbors.isEmpty() && graph.edges.isEmpty() ->
-                    "你最近的思考正在沉淀，连接还在慢慢长出来。"
-                viewport.neighbors.isEmpty() && viewport.switchableNodes.isNotEmpty() ->
-                    "这条思路先长到这里，图里这些相关想法可以继续点开。"
-                viewport.neighbors.isEmpty() ->
-                    "你最近的思考先落在「${centerNode.label}」，这条思路的连接还比较少。"
-                viewport.hiddenNeighborCount > 0 ->
-                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。先看最靠近它的 ${viewport.neighbors.size} 条，图里更淡的点可以继续点开。"
-                else ->
-                    "你最近的思考，正在围绕「${centerNode.label}」长出连接。"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextMain,
-        )
         ConceptGraphViewportCanvas(
             viewport = viewport,
             onSelectNode = ::selectCenter,
@@ -622,6 +950,10 @@ private fun KnowledgeGraphPanel(
             visibleSwitchableCount = viewport.switchableNodes.size,
             hiddenSwitchableCount = viewport.hiddenSwitchableNodeCount,
         )
+        GraphRelatedRecordsCard(
+            records = relatedNotes,
+            onOpenNote = onOpenNote,
+        )
         if (viewport.neighbors.isEmpty() && viewport.hiddenSwitchableNodeCount > 0) {
             TextButton(onClick = { switchableExpansionCount += 1 }) {
                 Text("再展开 ${viewport.hiddenSwitchableNodeCount} 个相关知识点")
@@ -630,20 +962,119 @@ private fun KnowledgeGraphPanel(
     }
 }
 
+@Composable
+private fun GraphRelatedRecordsCard(
+    records: List<NoteEntity>,
+    onOpenNote: (Long) -> Unit,
+) {
+    if (records.isEmpty()) return
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.76f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(title = "相关记录", headline = "${records.size} 条")
+            records.take(3).forEach { note ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenNote(note.id) },
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(AccentTeal.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(AccentTeal),
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = note.topic.ifBlank { "未命名记录" },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TextMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = TimeFormatter.compact(note.updatedAt.coerceAtLeast(note.createdAt)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal fun buildRelatedNotesForConcept(
+    centerNode: ConceptGraphNode,
+    notes: List<NoteEntity>,
+): List<NoteEntity> {
+    if (notes.isEmpty()) return emptyList()
+    val sourceNoteIds = centerNode.sourceIds
+        .mapNotNull { sourceId -> sourceId.removePrefix("note:").toLongOrNull() }
+        .toSet()
+    val conceptTerms = (listOf(centerNode.label) + centerNode.aliases)
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    return notes
+        .filterNot { it.isArchived }
+        .mapNotNull { note ->
+            val sourceScore = if (note.id in sourceNoteIds) 10 else 0
+            val haystack = buildString {
+                append(note.topic)
+                append('\n')
+                append(note.content.take(500))
+                append('\n')
+                append(note.tags.joinToString(" "))
+            }.lowercase()
+            val termScore = conceptTerms.count { term -> haystack.contains(term) }
+            val score = sourceScore + termScore
+            if (score <= 0) null else note to score
+        }
+        .sortedWith(
+            compareByDescending<Pair<NoteEntity, Int>> { it.second }
+                .thenByDescending { it.first.updatedAt.coerceAtLeast(it.first.createdAt) },
+        )
+        .map { it.first }
+        .take(6)
+}
+
 private fun conceptGraphCanvasHeight(cardWidth: Dp, neighborCount: Int): Dp {
     val proportional = cardWidth * when {
-        neighborCount <= 0 -> 0.42f
-        neighborCount <= 2 -> 0.56f
-        neighborCount <= 4 -> 0.68f
-        else -> 0.82f
+        neighborCount <= 0 -> 0.34f
+        neighborCount <= 2 -> 0.42f
+        neighborCount <= 4 -> 0.5f
+        else -> 0.56f
     }
     val baseline = when {
-        neighborCount <= 0 -> 150.dp
-        neighborCount <= 2 -> 184.dp
-        neighborCount <= 4 -> 216.dp
-        else -> 256.dp
+        neighborCount <= 0 -> 128.dp
+        neighborCount <= 2 -> 148.dp
+        neighborCount <= 4 -> 172.dp
+        else -> 196.dp
     }
-    return maxOf(proportional, baseline).coerceAtMost(304.dp)
+    return maxOf(proportional, baseline).coerceAtMost(236.dp)
 }
 
 @Composable
