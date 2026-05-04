@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.markdown.SimpleMarkdown
 import com.mindflow.app.ui.theme.AccentSuccess
 import com.mindflow.app.ui.theme.BorderSoft
+import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
@@ -57,7 +59,18 @@ fun NoteCard(
     onOpen: () -> Unit,
     onShare: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
+    if (compact) {
+        CompactNoteCard(
+            note = note,
+            onOpen = onOpen,
+            onShare = onShare,
+            modifier = modifier,
+        )
+        return
+    }
+
     PanelCard(
         modifier = modifier.clickable(onClick = onOpen),
     ) {
@@ -166,6 +179,150 @@ fun NoteCard(
 }
 
 @Composable
+private fun CompactNoteCard(
+    note: NoteEntity,
+    onOpen: () -> Unit,
+    onShare: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val accent = noteStatusAccent(note.status)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen),
+        color = WhiteGlass,
+        shape = PanelShape,
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 1.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                color = accent.copy(alpha = 0.12f),
+                shape = CircleShape,
+            ) {
+                Box(
+                    modifier = Modifier.size(30.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.EditNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                        tint = accent,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = note.topic.ifBlank { "未命名想法" },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextMain,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = TimeFormatter.compact(note.updatedAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                        maxLines = 1,
+                    )
+                }
+
+                Text(
+                    text = note.compactPreviewText(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CompactBadge(
+                        text = note.status.label,
+                        accent = accent,
+                    )
+                    CompactBadge(text = note.horizon.label)
+                    note.tags.take(1).forEach { tag ->
+                        CompactBadge(text = "#$tag")
+                    }
+                    if (note.tags.size > 1) {
+                        CompactBadge(text = "+${note.tags.size - 1}")
+                    }
+                    if (note.isArchived) {
+                        CompactBadge(text = "已归档")
+                    }
+                }
+            }
+
+            if (onShare != null) {
+                Surface(
+                    color = Color.Transparent,
+                    shape = CircleShape,
+                    onClick = onShare,
+                ) {
+                    Box(
+                        modifier = Modifier.size(30.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "分享",
+                            modifier = Modifier.size(18.dp),
+                            tint = TextSoft,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactBadge(
+    text: String,
+    accent: Color? = null,
+) {
+    Surface(
+        color = accent?.copy(alpha = 0.1f) ?: Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent?.copy(alpha = 0.16f) ?: BorderSoft),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = accent ?: TextSoft,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun NoteEntity.compactPreviewText(): String {
+    val plainText = SimpleMarkdown.toPlainText(content).replace("\n", " ").trim()
+    return plainText.ifBlank { "没有正文" }
+}
+
+@Composable
 private fun OverflowTagBadge(
     extraCount: Int,
 ) {
@@ -249,6 +406,7 @@ fun SwipeRevealNoteCard(
     onShare: (() -> Unit)?,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val revealWidth = 92.dp
     val revealWidthPx = with(LocalDensity.current) { revealWidth.toPx() }
@@ -303,6 +461,7 @@ fun SwipeRevealNoteCard(
                 }
             },
             onShare = onShare,
+            compact = compact,
             modifier = Modifier
                 .offset { IntOffset(offsetX.roundToInt(), 0) }
                 .draggable(

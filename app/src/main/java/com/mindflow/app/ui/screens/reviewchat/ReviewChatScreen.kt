@@ -32,13 +32,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -81,13 +86,25 @@ import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SkillWebViewCardHost
 import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.AccentTeal
 import com.mindflow.app.ui.theme.BorderSoft
+import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
+import com.mindflow.app.ui.navigation.CaptureMode
+import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+internal const val ReviewChatReferenceSourceLimit = 3
+
+internal fun reviewChatReferenceQuickActionLabels(): List<String> =
+    listOf("加入今天", "转成任务", "继续追问", "总结成记录")
+
+internal fun reviewChatReferenceComposerPlaceholder(): String =
+    "继续回看或提问..."
 
 @Composable
 fun ReviewChatRoute(
@@ -97,6 +114,7 @@ fun ReviewChatRoute(
     onBack: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenRecord: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit = {},
 ) {
     val viewModel: ReviewChatViewModel = viewModel(
         key = "review-chat-${seed.requestId}",
@@ -127,6 +145,7 @@ fun ReviewChatRoute(
         onRetry = viewModel::retry,
         onOpenHistory = onOpenHistory,
         onOpenRecord = onOpenRecord,
+        onCreateCapture = onCreateCapture,
     )
 }
 
@@ -139,6 +158,7 @@ private fun ReviewChatScreen(
     onRetry: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenRecord: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val isImeVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
@@ -187,37 +207,42 @@ private fun ReviewChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = ScreenHorizontalPadding, vertical = 12.dp),
+                    .padding(horizontal = ScreenHorizontalPadding, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 IconPillButton(
                     icon = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = "返回",
                     onClick = onBack,
                 )
-                Column(
+                Box(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = uiState.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextMain,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (uiState.messages.isEmpty()) {
-                            "基于你的历史记录和沉淀内容继续聊。"
-                        } else {
-                            "已自动保存到聊天历史。"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "回看",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = TextMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (uiState.messages.isEmpty()) {
+                                "与你的记忆对话"
+                            } else {
+                                "已自动保存"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 IconPillButton(
                     icon = Icons.Outlined.History,
@@ -252,6 +277,8 @@ private fun ReviewChatScreen(
                                 ""
                             },
                             onOpenRecord = onOpenRecord,
+                            onCreateCapture = onCreateCapture,
+                            onDraftChange = onDraftChange,
                             onRequestCopy = { payload ->
                                 copySheet = ReviewChatCopySheetState(
                                     message = payload,
@@ -295,6 +322,8 @@ private fun ReviewChatScreen(
                                     ),
                                     providerLine = uiState.providerLine,
                                     onOpenRecord = onOpenRecord,
+                                    onCreateCapture = onCreateCapture,
+                                    onDraftChange = onDraftChange,
                                     onRequestCopy = { payload ->
                                         copySheet = ReviewChatCopySheetState(
                                             message = payload,
@@ -332,6 +361,7 @@ private fun ReviewChatScreen(
                 Surface(
                     color = WhiteGlass.copy(alpha = 0.96f),
                     border = BorderStroke(1.dp, BorderSoft),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
@@ -354,13 +384,13 @@ private fun ReviewChatScreen(
                                 minLines = 1,
                                 maxLines = 4,
                                 imeAction = ImeAction.Default,
-                                placeholder = "继续追问，或换个角度聊。",
+                                placeholder = reviewChatReferenceComposerPlaceholder(),
                             )
                             ActionButton(
                                 text = if (uiState.isSending) "生成中" else "发送",
                                 onClick = onSend,
                                 enabled = uiState.canSend,
-                                modifier = Modifier.widthIn(min = 76.dp),
+                                modifier = Modifier.widthIn(min = 72.dp),
                             )
                         }
                     }
@@ -550,6 +580,8 @@ private fun ReviewChatMessageBubble(
     message: ReviewChatMessage,
     providerLine: String,
     onOpenRecord: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
+    onDraftChange: (String) -> Unit,
     onRequestCopy: (ReviewChatCopyMessage) -> Unit,
 ) {
     val isUser = message.role == ReviewChatMessageRole.USER
@@ -571,9 +603,14 @@ private fun ReviewChatMessageBubble(
     ) {
         if (isUser) {
             Surface(
-                color = AccentBlue.copy(alpha = 0.12f),
-                shape = MaterialTheme.shapes.large,
-                border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.18f)),
+                color = AccentBlue,
+                shape = RoundedCornerShape(
+                    topStart = 18.dp,
+                    topEnd = 18.dp,
+                    bottomStart = 18.dp,
+                    bottomEnd = 6.dp,
+                ),
+                shadowElevation = 2.dp,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
                     .combinedClickable(
@@ -583,9 +620,9 @@ private fun ReviewChatMessageBubble(
             ) {
                 Text(
                     text = message.content,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMain,
+                    modifier = Modifier.padding(horizontal = 15.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = androidx.compose.ui.graphics.Color.White,
                 )
             }
         } else {
@@ -601,57 +638,222 @@ private fun ReviewChatMessageBubble(
                     )
                 }
 
-                PanelCard(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .combinedClickable(
                             onClick = {},
                             onLongClick = { onRequestCopy(copyPayload) },
                         ),
+                    color = WhiteGlass.copy(alpha = 0.97f),
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+                    shadowElevation = 2.dp,
                 ) {
-                    if (message.structuredAnswer != null) {
-                        ReviewChatStructuredAnswerContent(message.structuredAnswer)
-                    } else {
-                        MarkdownText(
-                            markdown = normalizedContent,
-                        )
-                    }
-                    val providerLabel = when {
-                        providerLine.isNotBlank() -> providerLine
-                        message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
-                        message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
-                        message.provider == ReviewChatProvider.ON_DEVICE -> "端侧回答"
-                        else -> ""
-                    }
-                    if (providerLabel.isNotBlank()) {
-                        InsightChip(text = providerLabel)
-                    }
-                    val referencedNotes = when {
-                        message.referencedNotes.isNotEmpty() -> message.referencedNotes
-                        message.referencedNoteId != null -> listOf(
-                            ReviewChatReferencedNote(
-                                noteId = message.referencedNoteId,
-                                title = "原记录",
-                                dateLabel = "",
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (message.structuredAnswer != null) {
+                            ReviewChatStructuredAnswerContent(message.structuredAnswer)
+                        } else {
+                            MarkdownText(
+                                markdown = normalizedContent,
                             )
-                        )
-                        else -> emptyList()
-                    }
-                    if (referencedNotes.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            referencedNotes.forEach { referencedNote ->
-                                GhostActionButton(
-                                    text = buildReferencedNoteLabel(referencedNote),
-                                    onClick = { onOpenRecord(referencedNote.noteId) },
-                                )
-                            }
+                        }
+                        val providerLabel = when {
+                            providerLine.isNotBlank() -> providerLine
+                            message.provider == ReviewChatProvider.SYSTEM -> "系统提示"
+                            message.provider == ReviewChatProvider.CLOUD -> "云侧回答"
+                            message.provider == ReviewChatProvider.ON_DEVICE -> "端侧回答"
+                            else -> ""
+                        }
+                        if (providerLabel.isNotBlank()) {
+                            InsightChip(text = providerLabel)
                         }
                     }
                 }
+                val referencedNotes = when {
+                    message.referencedNotes.isNotEmpty() -> message.referencedNotes
+                    message.referencedNoteId != null -> listOf(
+                        ReviewChatReferencedNote(
+                            noteId = message.referencedNoteId,
+                            title = "原记录",
+                            dateLabel = "",
+                        )
+                    )
+                    else -> emptyList()
+                }
+                ReviewChatAnswerCompanion(
+                    message = message,
+                    referencedNotes = referencedNotes,
+                    onOpenRecord = onOpenRecord,
+                    onCreateCapture = onCreateCapture,
+                    onDraftChange = onDraftChange,
+                )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReviewChatAnswerCompanion(
+    message: ReviewChatMessage,
+    referencedNotes: List<ReviewChatReferencedNote>,
+    onOpenRecord: (Long) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
+    onDraftChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(
+                text = "来源参考",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val sources = referencedNotes.takeIf { it.isNotEmpty() }
+                    ?: listOf(
+                        ReviewChatReferencedNote(
+                            noteId = -1L,
+                            title = "历史记录与沉淀内容",
+                            dateLabel = "记忆层",
+                        ),
+                        ReviewChatReferencedNote(
+                            noteId = -1L,
+                            title = "本次回看对话",
+                            dateLabel = "对话",
+                        ),
+                        ReviewChatReferencedNote(
+                            noteId = -1L,
+                            title = "自动归纳的要点",
+                            dateLabel = "总结",
+                        )
+                    )
+                sources.take(ReviewChatReferenceSourceLimit).forEach { source ->
+                    ReviewChatSourceCard(
+                        source = source,
+                        onOpenRecord = onOpenRecord,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(
+                text = "快速操作",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ReviewChatQuickAction(
+                    text = "加入今天",
+                    icon = Icons.Outlined.EventAvailable,
+                    onClick = { onCreateCapture(reviewChatAnswerToTodayCaptureSeed(message)) },
+                    modifier = Modifier.weight(1f),
+                )
+                ReviewChatQuickAction(
+                    text = "转成任务",
+                    icon = Icons.Outlined.TaskAlt,
+                    tint = AccentTeal,
+                    onClick = { onCreateCapture(reviewChatAnswerToTaskCaptureSeed(message)) },
+                    modifier = Modifier.weight(1f),
+                )
+                ReviewChatQuickAction(
+                    text = "继续追问",
+                    icon = Icons.Outlined.History,
+                    onClick = { onDraftChange(reviewChatFollowUpPrompt(message)) },
+                    modifier = Modifier.weight(1f),
+                )
+                ReviewChatQuickAction(
+                    text = "总结成记录",
+                    icon = Icons.Outlined.StickyNote2,
+                    onClick = { onCreateCapture(reviewChatAnswerToSummaryCaptureSeed(message)) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewChatSourceCard(
+    source: ReviewChatReferencedNote,
+    onOpenRecord: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = {
+            if (source.noteId > 0) onOpenRecord(source.noteId)
+        },
+        color = WhiteGlass.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(9.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            InsightChip(text = source.dateLabel.ifBlank { "记录" })
+            Text(
+                text = source.title.ifBlank { "相关记录" },
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (source.noteId > 0) "点击打开原始记录" else "基于本地记录和回看上下文整理",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewChatQuickAction(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: androidx.compose.ui.graphics.Color = AccentBlue,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (tint == AccentTeal) AccentTeal.copy(alpha = 0.08f) else PanelBlue,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -724,6 +926,61 @@ private fun buildReferencedNoteLabel(note: ReviewChatReferencedNote): String {
     } else {
         "${note.dateLabel}｜$title"
     }
+}
+
+internal fun reviewChatAnswerToTodayCaptureSeed(message: ReviewChatMessage): CaptureSeed =
+    CaptureSeed(
+        mode = CaptureMode.TEXT,
+        initialTopic = "今日回看",
+        initialTags = listOf("回看", "今天"),
+        initialContent = """
+            今日回看：
+
+            ${message.reviewChatActionContent()}
+        """.trimIndent(),
+    )
+
+internal fun reviewChatAnswerToTaskCaptureSeed(message: ReviewChatMessage): CaptureSeed =
+    CaptureSeed(
+        mode = CaptureMode.TEXT,
+        initialTopic = "回看任务",
+        initialTags = listOf("回看", "任务"),
+        initialContent = """
+            下一步行动：
+            - ${message.reviewChatActionContent()}
+
+            来源：回看对话
+        """.trimIndent(),
+    )
+
+internal fun reviewChatAnswerToSummaryCaptureSeed(message: ReviewChatMessage): CaptureSeed =
+    CaptureSeed(
+        mode = CaptureMode.TEXT,
+        initialTopic = "回看总结",
+        initialTags = listOf("回看"),
+        initialContent = """
+            回看总结：
+
+            ${message.reviewChatActionContent()}
+        """.trimIndent(),
+    )
+
+internal fun reviewChatFollowUpPrompt(message: ReviewChatMessage): String {
+    val excerpt = message.reviewChatActionContent()
+        .lineSequence()
+        .firstOrNull { it.isNotBlank() }
+        ?.take(40)
+        .orEmpty()
+    return if (excerpt.isBlank()) {
+        "继续展开这个方向，给我一个更具体的下一步。"
+    } else {
+        "继续展开“$excerpt”，给我一个更具体的下一步。"
+    }
+}
+
+private fun ReviewChatMessage.reviewChatActionContent(): String {
+    val rendered = structuredAnswer?.let(::renderReviewChatStructuredAnswerAsMarkdown)
+    return (rendered ?: normalizeReviewChatAnswerForDisplay(content)).trim()
 }
 
 @Composable

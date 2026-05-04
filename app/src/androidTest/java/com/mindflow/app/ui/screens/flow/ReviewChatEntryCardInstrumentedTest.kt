@@ -34,15 +34,16 @@ class ReviewChatEntryCardInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithText("回看聊天").assertIsDisplayed()
-        composeRule.onNodeWithText("自动保存").assertIsDisplayed()
-        composeRule.onNodeWithText("可搜索").assertIsDisplayed()
+        composeRule.onNodeWithText("回看").assertIsDisplayed()
+        composeRule.onNodeWithText("与你的记忆对话，回顾与进步").assertIsDisplayed()
+        composeRule.onNodeWithText("搜索回看记录或内容...").assertIsDisplayed()
+        composeRule.onNodeWithText("近期回看").assertIsDisplayed()
+        composeRule.onNodeWithText("推荐问题").assertIsDisplayed()
+        composeRule.onNodeWithText("问问你的记忆，比如：").assertIsDisplayed()
         composeRule.onNodeWithText("开始新对话").assertIsDisplayed().performClick()
         assertThat(openChat).isTrue()
-        composeRule.onNodeWithText("查看聊天历史").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("查看全部 ›").assertIsDisplayed().performClick()
         assertThat(openHistory).isTrue()
-        composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
-        composeRule.onNodeWithText("带着问题进入").assertDoesNotExist()
         composeRule.onNodeWithText("继续最近对话").assertIsDisplayed().performClick()
         assertThat(openLatest).isTrue()
     }

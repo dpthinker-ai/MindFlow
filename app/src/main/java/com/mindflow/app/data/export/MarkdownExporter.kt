@@ -36,6 +36,23 @@ class MarkdownExporter {
                 append("### 内容\n\n")
                 append(note.content.trim())
                 append("\n\n")
+                if (note.aiSummary.isNotBlank() || note.aiKeyPoints.isNotEmpty()) {
+                    append("### AI 洞察\n\n")
+                    append("- 内容指纹: ${note.aiInsightContentHash}\n")
+                    append("- 更新时间: ${note.aiInsightUpdatedAt.takeIf { it > 0L }?.let(TimeFormatter::full) ?: "未知"}\n\n")
+                    if (note.aiSummary.isNotBlank()) {
+                        append("#### 摘要\n\n")
+                        append(note.aiSummary.trim())
+                        append("\n\n")
+                    }
+                    if (note.aiKeyPoints.isNotEmpty()) {
+                        append("#### 要点\n\n")
+                        note.aiKeyPoints.forEach { point ->
+                            append("- ${point.trim()}\n")
+                        }
+                        append("\n")
+                    }
+                }
 
                 val noteHistory = historyByNote[note.id].orEmpty()
                 if (noteHistory.isNotEmpty()) {

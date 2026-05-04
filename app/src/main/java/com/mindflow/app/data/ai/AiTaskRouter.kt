@@ -11,8 +11,16 @@ class AiTaskRouter(
         val startedAt = System.currentTimeMillis()
         val providers = when (mode) {
             AiExecutionMode.AUTOMATIC -> when (request.automaticPreference) {
-                AiAutomaticPreference.PREFER_ON_DEVICE -> listOf(AiProvider.ON_DEVICE, AiProvider.CLOUD)
-                AiAutomaticPreference.PREFER_CLOUD -> listOf(AiProvider.CLOUD, AiProvider.ON_DEVICE)
+                AiAutomaticPreference.PREFER_ON_DEVICE -> if (request.allowProviderFallback) {
+                    listOf(AiProvider.ON_DEVICE, AiProvider.CLOUD)
+                } else {
+                    listOf(AiProvider.ON_DEVICE)
+                }
+                AiAutomaticPreference.PREFER_CLOUD -> if (request.allowProviderFallback) {
+                    listOf(AiProvider.CLOUD, AiProvider.ON_DEVICE)
+                } else {
+                    listOf(AiProvider.CLOUD)
+                }
             }
             AiExecutionMode.ON_DEVICE_ONLY -> listOf(AiProvider.ON_DEVICE)
             AiExecutionMode.CLOUD_ONLY -> listOf(AiProvider.CLOUD)

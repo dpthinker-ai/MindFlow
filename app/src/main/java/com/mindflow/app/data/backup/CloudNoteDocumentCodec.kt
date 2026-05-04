@@ -36,6 +36,23 @@ class CloudNoteDocumentCodec {
         append("## 内容\n\n")
         append(note.content.trim())
         append("\n\n")
+        if (note.aiSummary.isNotBlank() || note.aiKeyPoints.isNotEmpty()) {
+            append("## AI 洞察\n\n")
+            append("- 内容指纹: ${note.aiInsightContentHash}\n")
+            append("- 更新时间: ${note.aiInsightUpdatedAt.takeIf { it > 0L }?.let(TimeFormatter::full) ?: "未知"}\n\n")
+            if (note.aiSummary.isNotBlank()) {
+                append("### 摘要\n\n")
+                append(note.aiSummary.trim())
+                append("\n\n")
+            }
+            if (note.aiKeyPoints.isNotEmpty()) {
+                append("### 要点\n\n")
+                note.aiKeyPoints.forEach { point ->
+                    append("- ${point.trim()}\n")
+                }
+                append("\n")
+            }
+        }
         append("## 状态历史\n\n")
         history
             .sortedBy { it.changedAt }
@@ -89,7 +106,30 @@ class CloudNoteDocumentCodec {
         val createdAt = parseTime(requireMatch(normalized, "(?m)^- 创建时间: (.+)$"))
         val updatedAt = parseTime(requireMatch(normalized, "(?m)^- 更新时间: (.+)$"))
         val isArchived = requireMatch(normalized, "(?m)^- 已归档: (.+)$") == "是"
-        val content = extractBlock(normalized, "## 内容", listOf("## 状态历史")).trim()
+        val content = extractBlock(normalized, "## 内容", listOf("## AI 洞察", "## 状态历史")).trim()
+        val aiInsightBlock = extractBlock(normalized, "## AI 洞察", listOf("## 状态历史"))
+        val aiSummary = extractBlock(aiInsightBlock, "### 摘要", listOf("### 要点")).trim()
+        val aiKeyPoints = extractBlock(aiInsightBlock, "### 要点", emptyList())
+            .lineSequence()
+            .map(String::trim)
+            .filter { it.startsWith("- ") }
+            .map { it.removePrefix("- ").trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+        val aiInsightContentHash = Regex("(?m)^- 内容指纹: (.+)$")
+            .find(aiInsightBlock)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            .orEmpty()
+        val aiInsightUpdatedAt = Regex("(?m)^- 更新时间: (.+)$")
+            .find(aiInsightBlock)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeUnless { it == "未知" }
+            ?.let(TimeFormatter::parseFull)
+            ?: 0L
         val history = extractBlock(normalized, "## 状态历史", emptyList())
             .lineSequence()
             .map(String::trim)
@@ -109,6 +149,10 @@ class CloudNoteDocumentCodec {
                 horizon = horizon,
                 knowledgeTrust = knowledgeTrust,
                 isArchived = isArchived,
+                aiSummary = aiSummary,
+                aiKeyPoints = aiKeyPoints,
+                aiInsightContentHash = aiInsightContentHash,
+                aiInsightUpdatedAt = aiInsightUpdatedAt,
                 createdAt = createdAt,
                 updatedAt = updatedAt,
                 history = history,

@@ -20,9 +20,39 @@ class GemmaTaskPromptFactoryTest {
     }
 
     @Test
+    fun `note insight prompt asks for non overlapping durable summary`() {
+        val prompt = GemmaTaskPromptFactory.summarizeNote("原文")
+        assertThat(prompt).contains("可长期保存")
+        assertThat(prompt).contains("关键要点必须彼此不重复")
+        assertThat(prompt).contains("summary")
+        assertThat(prompt).contains("keyPoints")
+    }
+
+    @Test
     fun `graph relation prompt stays local and layer scoped`() {
         val prompt = GemmaTaskPromptFactory.generateGraphRelations("sleep", listOf("recovery", "focus"))
         assertThat(prompt).contains("只判断中心知识点与候选邻居之间的关系")
         assertThat(prompt).doesNotContain("生成整张图")
+    }
+
+    @Test
+    fun `media prompts keep capture processing local first`() {
+        val audioPrompt = GemmaTaskPromptFactory.transcribeAudio(
+            audioPath = "/private/voice.m4a",
+            localeHint = "zh-CN",
+        )
+        assertThat(audioPrompt).contains("原始录音文件")
+        assertThat(audioPrompt).contains("本地端侧")
+        assertThat(audioPrompt).contains("transcript")
+        assertThat(audioPrompt).contains("topic")
+
+        val imagePrompt = GemmaTaskPromptFactory.understandImage(
+            imagePath = "/private/image.jpg",
+            userNote = "会议白板",
+        )
+        assertThat(imagePrompt).contains("图片文件")
+        assertThat(imagePrompt).contains("根据图片类型选择")
+        assertThat(imagePrompt).contains("extractedText")
+        assertThat(imagePrompt).contains("objects")
     }
 }

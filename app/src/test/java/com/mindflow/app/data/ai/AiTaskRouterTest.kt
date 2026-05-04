@@ -91,6 +91,37 @@ class AiTaskRouterTest {
         assertThat(result.meta.fallbackOccurred).isFalse()
     }
 
+    @Test
+    fun `automatic mode can disable provider fallback for silent background tasks`() = runTest {
+        val router = AiTaskRouter(
+            resolveMode = { AiExecutionMode.AUTOMATIC },
+            onDeviceProvider = FakeProvider(null),
+            cloudProvider = FakeProvider(
+                AiTaskPayload.NoteInsight(summary = "云侧摘要", keyPoints = listOf("云侧要点")),
+            ),
+        )
+
+        val error = runCatching {
+            router.run(
+                AiTaskRequest(
+                    type = AiTaskType.SUMMARIZE_NOTE,
+                    input = AiTaskInput.NoteText("需要后台整理的正文"),
+                    automaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+                    allowProviderFallback = false,
+                    validate = { payload ->
+                        val insight = payload as AiTaskPayload.NoteInsight
+                        insight.summary.isNotBlank() && insight.keyPoints.isNotEmpty()
+                    },
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(AiTaskRoutingException::class.java)
+        val routingError = error as AiTaskRoutingException
+        assertThat(routingError.taskType).isEqualTo(AiTaskType.SUMMARIZE_NOTE)
+        assertThat(routingError.firstFailureReason).isEqualTo("empty_payload")
+    }
+
     private class FakeProvider(
         private val payload: AiTaskPayload?,
     ) : AiTaskProvider {

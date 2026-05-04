@@ -21,6 +21,10 @@ class MarkdownExporterTest {
                 topicSource = TopicSource.MANUAL,
                 status = NoteStatus.IN_PROGRESS,
                 isArchived = false,
+                aiSummary = "记录关注家庭灵感的轻量收集。",
+                aiKeyPoints = listOf("先快速记录", "再整理行动"),
+                aiInsightContentHash = "hash-1",
+                aiInsightUpdatedAt = 2_500,
                 createdAt = 1_000,
                 updatedAt = 2_000,
             )
@@ -45,6 +49,9 @@ class MarkdownExporterTest {
         assertThat(markdown).contains("# MindFlow Export")
         assertThat(markdown).contains("## 1. 家庭灵感池")
         assertThat(markdown).contains("- 状态: 进行中")
+        assertThat(markdown).contains("### AI 洞察")
+        assertThat(markdown).contains("记录关注家庭灵感的轻量收集。")
+        assertThat(markdown).contains("- 先快速记录")
         assertThat(markdown).contains("### 状态历史")
         assertThat(markdown).contains("初始 -> 想法")
         assertThat(markdown).contains("想法 -> 进行中")

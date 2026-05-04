@@ -7,7 +7,6 @@ import com.mindflow.app.data.backup.CloudNoteDocumentCodec
 import com.mindflow.app.data.backup.PreferencesCloudBackupIndexRepository
 import com.mindflow.app.data.backup.WebDavBackupClient
 import com.mindflow.app.BuildConfig
-import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
@@ -25,6 +24,7 @@ import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
+import com.mindflow.app.data.localmodel.StartupOnDeviceWarmUpPolicy
 import com.mindflow.app.data.local.reviewchat.ReviewChatDatabase
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -44,6 +44,8 @@ import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesOnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.NoteInsightPlanner
+import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
@@ -94,6 +96,7 @@ class AppContainer(context: Context) {
         com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_4_5,
         com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_5_6,
         com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_6_7,
+        com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_7_8,
     ).build()
 
     val aiSettingsRepository: AiSettingsRepository = PreferencesAiSettingsRepository(
@@ -188,7 +191,15 @@ class AppContainer(context: Context) {
         aiTaskRouter = aiTaskRouter,
     )
 
-    private val topicExtractor = CombinedTopicExtractor(
+    val noteInsightPlanner = NoteInsightPlanner(
+        aiTaskRouter = aiTaskRouter,
+    )
+
+    val voiceTranscriptionPlanner = VoiceTranscriptionPlanner(
+        aiTaskRouter = aiTaskRouter,
+    )
+
+    val topicExtractor = CombinedTopicExtractor(
         aiTopicExtractor = AiTopicExtractor(
             aiTaskRouter = aiTaskRouter,
         ),
@@ -234,6 +245,7 @@ class AppContainer(context: Context) {
         topicExtractor = topicExtractor,
         folderClassifier = folderClassifier,
         tagExtractor = tagExtractor,
+        noteInsightPlanner = noteInsightPlanner,
         markdownExporter = MarkdownExporter(),
         markdownImportParser = MarkdownImportParser(),
         cloudNoteDocumentCodec = cloudNoteDocumentCodec,
@@ -412,7 +424,7 @@ class AppContainer(context: Context) {
         applicationScope.launch {
             delay(2_000L)
             val settings = onDeviceModelSettingsRepository.getCurrent()
-            if (!settings.isReady || settings.executionMode == AiExecutionMode.CLOUD_ONLY) return@launch
+            if (!StartupOnDeviceWarmUpPolicy.shouldWarmUpAtStartup(settings)) return@launch
             onDeviceAiClient.warmUp(settings)
         }
     }

@@ -37,6 +37,25 @@ class ContentPolishPlannerTest {
     }
 
     @Test
+    fun `title polish planner returns concise first line`() = runTest {
+        val planner = ContentPolishPlanner(
+            aiTaskRouter = routerWith(
+                AiTaskPayload.Polish(
+                    polishedText = "更清晰的标题\n多余解释",
+                    changeSummary = "压缩标题",
+                ),
+            ),
+        )
+
+        val result = planner.polishTitle("旧标题", "正文材料")
+
+        assertThat(result).isInstanceOf(ContentPolishResult.Success::class.java)
+        val success = result as ContentPolishResult.Success
+        assertThat(success.polishedText).isEqualTo("更清晰的标题")
+        assertThat(success.summary).isEqualTo("压缩标题")
+    }
+
+    @Test
     fun `polish planner prefers cloud first in automatic mode`() = runTest {
         val requests = mutableListOf<AiTaskRequest<*>>()
         val planner = ContentPolishPlanner(

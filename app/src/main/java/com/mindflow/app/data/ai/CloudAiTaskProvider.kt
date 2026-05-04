@@ -1,10 +1,10 @@
 package com.mindflow.app.data.ai
 
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.skills.SkillJsonValue
+import com.mindflow.app.data.skills.SkillMiniJsonParser
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiServiceClient
-import org.json.JSONArray
-import org.json.JSONObject
 
 class CloudAiTaskProvider(
     private val settingsRepository: AiSettingsRepository,
@@ -19,7 +19,15 @@ class CloudAiTaskProvider(
             AiTaskType.EXTRACT_TOPIC -> client.extractTopic(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.EXTRACT_TAGS -> client.extractTags(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.CLASSIFY_CATEGORY -> client.classifyFolder(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.POLISH_TITLE -> {
+                val title = input as AiTaskInput.TitleText
+                client.polishTitle(settings, title.title, title.content)
+            }
+            AiTaskType.SUMMARIZE_NOTE -> client.summarizeNote(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.POLISH_CONTENT -> client.polishContent(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.TRANSCRIBE_AUDIO,
+            AiTaskType.TRANSLATE_AUDIO,
+            AiTaskType.UNDERSTAND_IMAGE -> return null
             AiTaskType.GRAPH_EXTRACT_CONCEPTS -> client.extractConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> client.canonicalizeConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_GENERATE_RELATIONS -> client.generateConceptGraphRelations(settings, (input as AiTaskInput.GraphContext).contextSummary)
@@ -37,54 +45,101 @@ private fun parsePayload(taskType: AiTaskType, raw: String): AiTaskPayload? = wh
     AiTaskType.EXTRACT_TOPIC -> parseTopicPayload(raw)
     AiTaskType.EXTRACT_TAGS -> parseTagsPayload(raw)
     AiTaskType.CLASSIFY_CATEGORY -> parseFolderPayload(raw)
+    AiTaskType.POLISH_TITLE -> parsePolishPayload(raw)
+    AiTaskType.SUMMARIZE_NOTE -> parseNoteInsightPayload(raw)
     AiTaskType.POLISH_CONTENT -> parsePolishPayload(raw)
+    AiTaskType.TRANSCRIBE_AUDIO -> parseAudioTranscriptionPayload(raw)
+    AiTaskType.TRANSLATE_AUDIO -> parseAudioTranslationPayload(raw)
+    AiTaskType.UNDERSTAND_IMAGE -> parseImageUnderstandingPayload(raw)
     AiTaskType.GRAPH_EXTRACT_CONCEPTS -> parseGraphConceptsPayload(raw)
     AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> parseCanonicalizationPayload(raw)
     AiTaskType.GRAPH_GENERATE_RELATIONS -> parseRelationsPayload(raw)
 }
 
-private fun extractJsonObject(raw: String): JSONObject? {
+private fun extractJsonObject(raw: String): Map<String, SkillJsonValue>? {
     val start = raw.indexOf('{')
     val end = raw.lastIndexOf('}')
     if (start < 0 || end <= start) return null
-    return runCatching { JSONObject(raw.substring(start, end + 1)) }.getOrNull()
+    return runCatching { SkillMiniJsonParser(raw.substring(start, end + 1)).parseObject() }.getOrNull()
 }
 
 private fun parseTopicPayload(raw: String): AiTaskPayload.Topic {
     val json = extractJsonObject(raw)
-    val topic = json?.optString("topic").orEmpty().ifBlank { raw.lineSequence().firstOrNull()?.trim().orEmpty() }
-    val confidence = json?.optDouble("confidence", 0.0)?.toFloat() ?: 0f
+    val topic = json.stringValue("topic").orEmpty().ifBlank { raw.lineSequence().firstOrNull()?.trim().orEmpty() }
+    val confidence = json.doubleValue("confidence").toFloat()
     return AiTaskPayload.Topic(topic = topic.trim(), confidence = confidence)
 }
 
 private fun parseTagsPayload(raw: String): AiTaskPayload.Tags {
     val json = extractJsonObject(raw)
-    val tags = json?.optJSONArray("tags")?.toStringList()
+    val tags = json.stringArrayValue("tags").takeIf { it.isNotEmpty() }
         ?: raw.split(',', '，', '\n').map { it.trim() }.filter { it.isNotBlank() }
     return AiTaskPayload.Tags(
         tags = tags.take(6),
-        primaryCategory = json?.optString("primaryCategory")?.takeIf { !it.isNullOrBlank() },
+        primaryCategory = json.stringValue("primaryCategory"),
     )
 }
 
 private fun parseFolderPayload(raw: String): AiTaskPayload.Folder {
     val json = extractJsonObject(raw)
-    val folder = json?.optString("folderKey").orEmpty().ifBlank { raw.lineSequence().firstOrNull()?.trim().orEmpty() }
-    val confidence = json?.optDouble("confidence", 0.0)?.toFloat() ?: 0f
+    val folder = json.stringValue("folderKey").orEmpty().ifBlank { raw.lineSequence().firstOrNull()?.trim().orEmpty() }
+    val confidence = json.doubleValue("confidence").toFloat()
     return AiTaskPayload.Folder(folderKey = folder, confidence = confidence)
 }
 
 private fun parsePolishPayload(raw: String): AiTaskPayload.Polish {
     val json = extractJsonObject(raw)
     return AiTaskPayload.Polish(
-        polishedText = json?.optString("polishedText").orEmpty().ifBlank { raw.trim() },
-        changeSummary = json?.optString("changeSummary").orEmpty(),
+        polishedText = json.stringValue("polishedText").orEmpty().ifBlank { raw.trim() },
+        changeSummary = json.stringValue("changeSummary").orEmpty(),
+    )
+}
+
+private fun parseNoteInsightPayload(raw: String): AiTaskPayload.NoteInsight {
+    val json = extractJsonObject(raw)
+    val keyPoints = json.stringArrayValue("keyPoints").ifEmpty {
+        json.stringArrayValue("points")
+    }
+    return AiTaskPayload.NoteInsight(
+        summary = json.stringValue("summary").orEmpty(),
+        keyPoints = keyPoints,
+    )
+}
+
+private fun parseAudioTranscriptionPayload(raw: String): AiTaskPayload.AudioTranscription {
+    val json = extractJsonObject(raw)
+    return AiTaskPayload.AudioTranscription(
+        transcript = json.stringValue("transcript").orEmpty().ifBlank { raw.trim() },
+        language = json.stringValue("language"),
+        topic = json.stringValue("topic").orEmpty(),
+        confidence = json.doubleValue("confidence").toFloat(),
+    )
+}
+
+private fun parseAudioTranslationPayload(raw: String): AiTaskPayload.AudioTranslation {
+    val json = extractJsonObject(raw)
+    return AiTaskPayload.AudioTranslation(
+        translatedText = json.stringValue("translatedText").orEmpty().ifBlank { raw.trim() },
+        sourceLanguage = json.stringValue("sourceLanguage"),
+        targetLanguage = json.stringValue("targetLanguage").orEmpty(),
+        confidence = json.doubleValue("confidence").toFloat(),
+    )
+}
+
+private fun parseImageUnderstandingPayload(raw: String): AiTaskPayload.ImageUnderstanding {
+    val json = extractJsonObject(raw)
+    return AiTaskPayload.ImageUnderstanding(
+        summary = json.stringValue("summary").orEmpty().ifBlank { raw.trim() },
+        imageType = json.stringValue("imageType").orEmpty(),
+        extractedText = json.stringValue("extractedText").orEmpty(),
+        objects = json.stringArrayValue("objects"),
+        confidence = json.doubleValue("confidence").toFloat(),
     )
 }
 
 private fun parseGraphConceptsPayload(raw: String): AiTaskPayload.GraphConcepts {
     val json = extractJsonObject(raw)
-    val concepts = json?.optJSONArray("concepts")?.toStringList()
+    val concepts = json.stringArrayValue("concepts").takeIf { it.isNotEmpty() }
         ?: raw.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
     return AiTaskPayload.GraphConcepts(concepts = concepts)
 }
@@ -92,9 +147,9 @@ private fun parseGraphConceptsPayload(raw: String): AiTaskPayload.GraphConcepts 
 private fun parseCanonicalizationPayload(raw: String): AiTaskPayload.GraphCanonicalization {
     val json = extractJsonObject(raw)
     val canonical = linkedMapOf<String, List<String>>()
-    json?.optJSONObject("canonical")?.let { map ->
-        map.keys().forEach { key ->
-            canonical[key] = map.optJSONArray(key)?.toStringList().orEmpty()
+    json.objectValue("canonical").let { map ->
+        map.keys.forEach { key ->
+            canonical[key] = map.stringArrayValue(key)
         }
     }
     return AiTaskPayload.GraphCanonicalization(canonical = canonical)
@@ -102,28 +157,37 @@ private fun parseCanonicalizationPayload(raw: String): AiTaskPayload.GraphCanoni
 
 private fun parseRelationsPayload(raw: String): AiTaskPayload.GraphRelations {
     val json = extractJsonObject(raw)
-    val relations = json?.optJSONArray("relations")?.let { array ->
-        buildList {
-            for (index in 0 until array.length()) {
-                val item = array.optJSONObject(index) ?: continue
-                add(
-                    GraphRelation(
-                        fromConceptId = item.optString("fromConceptId"),
-                        toConceptId = item.optString("toConceptId"),
-                        relationType = item.optString("relationType"),
-                        reasonLine = item.optString("reasonLine"),
-                        confidence = item.optDouble("confidence", 0.0).toFloat(),
-                    )
-                )
-            }
-        }
-    }.orEmpty()
+    val relations = json.objectArrayValue("relations").map { item ->
+        GraphRelation(
+            fromConceptId = item.stringValue("fromConceptId").orEmpty(),
+            toConceptId = item.stringValue("toConceptId").orEmpty(),
+            relationType = item.stringValue("relationType").orEmpty(),
+            reasonLine = item.stringValue("reasonLine").orEmpty(),
+            confidence = item.doubleValue("confidence").toFloat(),
+        )
+    }
     return AiTaskPayload.GraphRelations(relations = relations)
 }
 
-private fun JSONArray.toStringList(): List<String> = buildList {
-    for (index in 0 until length()) {
-        val value = optString(index).trim()
-        if (value.isNotBlank()) add(value)
+private fun Map<String, SkillJsonValue>?.stringValue(key: String): String? =
+    ((this?.get(key) as? SkillJsonValue.JsonString)?.value)?.takeIf { it.isNotBlank() }
+
+private fun Map<String, SkillJsonValue>?.doubleValue(key: String): Double =
+    (this?.get(key) as? SkillJsonValue.JsonNumber)?.value ?: 0.0
+
+private fun Map<String, SkillJsonValue>?.objectValue(key: String): Map<String, SkillJsonValue> =
+    (this?.get(key) as? SkillJsonValue.JsonObject)?.values.orEmpty()
+
+private fun Map<String, SkillJsonValue>?.stringArrayValue(key: String): List<String> {
+    val array = this?.get(key) as? SkillJsonValue.JsonArray ?: return emptyList()
+    return array.items.mapNotNull { item ->
+        (item as? SkillJsonValue.JsonString)?.value?.trim()?.takeIf { it.isNotBlank() }
+    }
+}
+
+private fun Map<String, SkillJsonValue>?.objectArrayValue(key: String): List<Map<String, SkillJsonValue>> {
+    val array = this?.get(key) as? SkillJsonValue.JsonArray ?: return emptyList()
+    return array.items.mapNotNull { item ->
+        (item as? SkillJsonValue.JsonObject)?.values
     }
 }

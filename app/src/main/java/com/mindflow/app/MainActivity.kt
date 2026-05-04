@@ -14,6 +14,8 @@ import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.TopicExtractor
+import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
@@ -77,6 +79,9 @@ class MainActivity : ComponentActivity() {
         val directionWikiCoordinator: DirectionWikiCoordinator = appContainer.directionWikiCoordinator
         val aiServiceClient: AiServiceClient = appContainer.aiServiceClient
         val contentPolishPlanner: ContentPolishPlanner = appContainer.contentPolishPlanner
+        val topicExtractor: TopicExtractor = appContainer.topicExtractor
+        val noteInsightPlanner = appContainer.noteInsightPlanner
+        val voiceTranscriptionPlanner: VoiceTranscriptionPlanner = appContainer.voiceTranscriptionPlanner
         val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
         val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
         val localKnowledgeMaintenancePlanner = appContainer.localKnowledgeMaintenancePlanner
@@ -109,6 +114,9 @@ class MainActivity : ComponentActivity() {
                     directionWikiCoordinator = directionWikiCoordinator,
                     aiServiceClient = aiServiceClient,
                     contentPolishPlanner = contentPolishPlanner,
+                    topicExtractor = topicExtractor,
+                    noteInsightPlanner = noteInsightPlanner,
+                    voiceTranscriptionPlanner = voiceTranscriptionPlanner,
                     onDeviceAiClient = onDeviceAiClient,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,

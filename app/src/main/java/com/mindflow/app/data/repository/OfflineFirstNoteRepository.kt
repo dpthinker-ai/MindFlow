@@ -28,6 +28,10 @@ import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicRefreshResult
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.topic.FolderClassifier
+import com.mindflow.app.data.topic.NoteInsightPlanner
+import com.mindflow.app.data.topic.NoteInsightResult
+import com.mindflow.app.data.topic.noteInsightSourceContent
+import com.mindflow.app.data.topic.shouldAutoGenerateVoiceInsight
 import com.mindflow.app.data.topic.TagExtractor
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.util.TimeFormatter
@@ -46,6 +50,7 @@ class OfflineFirstNoteRepository(
     private val topicExtractor: TopicExtractor,
     private val folderClassifier: FolderClassifier,
     private val tagExtractor: TagExtractor,
+    private val noteInsightPlanner: NoteInsightPlanner? = null,
     private val markdownExporter: MarkdownExporter,
     private val markdownImportParser: MarkdownImportParser,
     private val applicationScope: CoroutineScope,
@@ -85,10 +90,15 @@ class OfflineFirstNoteRepository(
         folderManuallyEdited: Boolean,
         topicManuallyEdited: Boolean,
         tagsManuallyEdited: Boolean,
+        aiSummary: String,
+        aiKeyPoints: List<String>,
+        aiInsightContentHash: String,
+        aiInsightUpdatedAt: Long,
     ): Long {
         val normalizedContent = content.trim()
+        val topicContent = topicExtractionContent(normalizedContent)
         val now = System.currentTimeMillis()
-        val fallbackTopic = topicExtractor.extractRule(normalizedContent)
+        val fallbackTopic = topicExtractor.extractRule(topicContent)
         val manualTopic = topic.trim()
         val ruleFolder = folderClassifier.classifyRule(normalizedContent)
         val fallbackFolder = if (folderManuallyEdited) {
@@ -116,6 +126,10 @@ class OfflineFirstNoteRepository(
                     horizon = horizon,
                     knowledgeTrust = knowledgeTrust,
                     isArchived = isArchived,
+                    aiSummary = aiSummary.trim(),
+                    aiKeyPoints = aiKeyPoints.map { it.trim() }.filter { it.isNotBlank() }.take(4),
+                    aiInsightContentHash = aiInsightContentHash,
+                    aiInsightUpdatedAt = aiInsightUpdatedAt,
                     createdAt = now,
                     updatedAt = now,
                 )
@@ -150,6 +164,9 @@ class OfflineFirstNoteRepository(
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)
+            if (shouldAutoGenerateVoiceInsight(normalizedContent)) {
+                ensureAiInsight(noteId)
+            }
             refreshWidget()
         }
 
@@ -172,7 +189,8 @@ class OfflineFirstNoteRepository(
     ) {
         val existing = noteDao.getNoteById(noteId) ?: return
         val normalizedContent = content.trim()
-        val normalizedTopic = topic.trim().ifBlank { topicExtractor.extractRule(normalizedContent).topic }
+        val topicContent = topicExtractionContent(normalizedContent)
+        val normalizedTopic = topic.trim().ifBlank { topicExtractor.extractRule(topicContent).topic }
         val normalizedFolderKey = folderKey?.trim()?.ifBlank { null }
         val normalizedTags = NoteTagCodec.normalize(tags)
         val now = System.currentTimeMillis()
@@ -207,6 +225,10 @@ class OfflineFirstNoteRepository(
                     horizon = horizon,
                     knowledgeTrust = knowledgeTrust,
                     isArchived = isArchived,
+                    aiSummary = if (contentChanged) "" else existing.aiSummary,
+                    aiKeyPoints = if (contentChanged) emptyList() else existing.aiKeyPoints,
+                    aiInsightContentHash = if (contentChanged) "" else existing.aiInsightContentHash,
+                    aiInsightUpdatedAt = if (contentChanged) 0L else existing.aiInsightUpdatedAt,
                     updatedAt = now,
                 )
             )
@@ -223,10 +245,20 @@ class OfflineFirstNoteRepository(
             }
         }
 
-        if (contentChanged && nextFolderSource != FolderSource.MANUAL) {
+        if (
+            contentChanged &&
+            (nextSource != TopicSource.MANUAL || nextFolderSource != FolderSource.MANUAL || shouldAutoGenerateVoiceInsight(normalizedContent))
+        ) {
             applicationScope.launch {
-                val result = refreshFolderIfPossible(noteId, updateTimestamp = false)
-                result.notice?.let(::emitSystemNotice)
+                if (nextSource != TopicSource.MANUAL) {
+                    refreshTopicIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
+                }
+                if (nextFolderSource != FolderSource.MANUAL) {
+                    refreshFolderIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
+                }
+                if (shouldAutoGenerateVoiceInsight(normalizedContent)) {
+                    ensureAiInsight(noteId)
+                }
                 refreshWidget()
             }
         }
@@ -249,6 +281,44 @@ class OfflineFirstNoteRepository(
     override suspend fun deleteNote(noteId: Long) {
         noteDao.deleteById(noteId)
         refreshWidget()
+    }
+
+    override suspend fun ensureAiInsight(noteId: Long): Boolean {
+        val planner = noteInsightPlanner ?: return false
+        val existing = noteDao.getNoteById(noteId) ?: return false
+        val contentHash = NoteInsightPlanner.contentHash(existing.content)
+        if (
+            existing.aiSummary.isNotBlank() &&
+            existing.aiKeyPoints.isNotEmpty() &&
+            existing.aiInsightContentHash == contentHash
+        ) {
+            return false
+        }
+
+        val result = planner.generate(existing.content)
+        val insight = (result as? NoteInsightResult.Success)?.insight ?: return false
+        val latest = noteDao.getNoteById(noteId) ?: return false
+        if (latest.content != existing.content) return false
+        val topicContent = topicExtractionContent(latest.content)
+        val topicSuggestion = if (latest.topicSource == TopicSource.MANUAL || topicContent.isBlank()) {
+            null
+        } else {
+            runCatching {
+                topicExtractor.extract(topicContent, AiAutomaticPreference.PREFER_ON_DEVICE).suggestion
+            }.getOrNull()
+        }
+
+        noteDao.updateNote(
+            latest.copy(
+                topic = topicSuggestion?.topic ?: latest.topic,
+                topicSource = topicSuggestion?.source ?: latest.topicSource,
+                aiSummary = insight.summary,
+                aiKeyPoints = insight.keyPoints,
+                aiInsightContentHash = contentHash,
+                aiInsightUpdatedAt = insight.generatedAt,
+            ),
+        )
+        return true
     }
 
     override suspend fun classifyPendingFolders(): Int {
@@ -372,7 +442,7 @@ class OfflineFirstNoteRepository(
             return TopicRefreshResult()
         }
 
-        val extraction = topicExtractor.extract(existing.content, automaticPreference)
+        val extraction = topicExtractor.extract(topicExtractionContent(existing.content), automaticPreference)
         val suggestion = extraction.suggestion
         val topicChanged = suggestion.topic != existing.topic || suggestion.source != existing.topicSource
         if (!topicChanged && !force) {
@@ -388,6 +458,9 @@ class OfflineFirstNoteRepository(
         )
         return TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
     }
+
+    private fun topicExtractionContent(content: String): String =
+        noteInsightSourceContent(content).ifBlank { content }
 
     private suspend fun refreshFolderIfPossible(
         noteId: Long,
@@ -472,6 +545,10 @@ class OfflineFirstNoteRepository(
                         horizon = importedNote.horizon,
                         knowledgeTrust = importedNote.knowledgeTrust,
                         isArchived = importedNote.isArchived,
+                        aiSummary = importedNote.aiSummary,
+                        aiKeyPoints = importedNote.aiKeyPoints,
+                        aiInsightContentHash = importedNote.aiInsightContentHash,
+                        aiInsightUpdatedAt = importedNote.aiInsightUpdatedAt,
                         createdAt = importedNote.createdAt,
                         updatedAt = importedNote.updatedAt,
                     )

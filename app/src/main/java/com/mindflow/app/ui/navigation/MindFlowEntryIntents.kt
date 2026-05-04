@@ -11,8 +11,16 @@ enum class FlowFocus {
     MAINLINE,
 }
 
+enum class CaptureMode {
+    TEXT,
+    VOICE,
+    IMAGE,
+    ARTICLE,
+}
+
 data class CaptureSeed(
     val requestId: Long = System.currentTimeMillis(),
+    val mode: CaptureMode = CaptureMode.TEXT,
     val initialContent: String = "",
     val initialTopic: String = "",
     val initialFolderKey: String? = null,
@@ -49,6 +57,7 @@ sealed interface MindFlowLaunchRequest {
 object MindFlowEntryIntents {
     const val ACTION_OPEN_CAPTURE = "com.mindflow.app.action.OPEN_CAPTURE"
     const val ACTION_OPEN_CAPTURE_VOICE = "com.mindflow.app.action.OPEN_CAPTURE_VOICE"
+    const val ACTION_OPEN_CAPTURE_IMAGE = "com.mindflow.app.action.OPEN_CAPTURE_IMAGE"
     const val ACTION_OPEN_SEARCH = "com.mindflow.app.action.OPEN_SEARCH"
     const val ACTION_OPEN_FLOW = "com.mindflow.app.action.OPEN_FLOW"
     const val EXTRA_NOTE_ID = "extra_note_id"
@@ -65,7 +74,8 @@ object MindFlowEntryIntents {
             Intent.ACTION_SEND -> parseSharedText(safeIntent)
             Intent.ACTION_PROCESS_TEXT -> parseProcessText(safeIntent)
             ACTION_OPEN_CAPTURE -> parseCaptureIntent(safeIntent, autoStartVoiceInput = false)
-            ACTION_OPEN_CAPTURE_VOICE -> parseCaptureIntent(safeIntent, autoStartVoiceInput = true)
+            ACTION_OPEN_CAPTURE_VOICE -> parseVoiceCaptureIntent(safeIntent)
+            ACTION_OPEN_CAPTURE_IMAGE -> parseImageCaptureIntent(safeIntent)
             ACTION_OPEN_SEARCH -> MindFlowLaunchRequest.OpenSearch()
             ACTION_OPEN_FLOW -> parseFlowIntent(safeIntent)
             else -> null
@@ -89,16 +99,69 @@ object MindFlowEntryIntents {
     private fun parseCaptureIntent(
         intent: Intent,
         autoStartVoiceInput: Boolean,
-    ): MindFlowLaunchRequest =
-        MindFlowLaunchRequest.OpenCapture(
+    ): MindFlowLaunchRequest {
+        val initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT).orEmpty()
+        val initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty()
+        val initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty()
+        return MindFlowLaunchRequest.OpenCapture(
             CaptureSeed(
-                initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT).orEmpty(),
-                initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty(),
+                mode = inferCaptureMode(initialContent, initialTags, autoStartVoiceInput),
+                initialContent = initialContent,
+                initialTopic = initialTopic,
                 initialFolderKey = intent.getStringExtra(EXTRA_CAPTURE_FOLDER)?.takeIf { it.isNotBlank() },
-                initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty(),
+                initialTags = initialTags,
                 autoStartVoiceInput = autoStartVoiceInput,
             ),
         )
+    }
+
+    private fun parseVoiceCaptureIntent(intent: Intent): MindFlowLaunchRequest {
+        val initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT).orEmpty()
+        val initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty()
+        val initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty()
+        return MindFlowLaunchRequest.OpenCapture(
+            CaptureSeed(
+                mode = CaptureMode.VOICE,
+                initialContent = initialContent,
+                initialTopic = initialTopic,
+                initialFolderKey = intent.getStringExtra(EXTRA_CAPTURE_FOLDER)?.takeIf { it.isNotBlank() },
+                initialTags = initialTags,
+                autoStartVoiceInput = false,
+            ),
+        )
+    }
+
+    private fun parseImageCaptureIntent(intent: Intent): MindFlowLaunchRequest {
+        val initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT)
+            ?.takeIf { it.isNotBlank() }
+            ?: "图片：\n补充说明："
+        val initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC)
+            ?.takeIf { it.isNotBlank() }
+            ?: "图片记录"
+        val initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty()
+        return MindFlowLaunchRequest.OpenCapture(
+            defaultImageCaptureSeed(
+                initialContent = initialContent,
+                initialTopic = initialTopic,
+                initialFolderKey = intent.getStringExtra(EXTRA_CAPTURE_FOLDER)?.takeIf { it.isNotBlank() },
+                initialTags = (initialTags + "图片").distinct(),
+            ),
+        )
+    }
+
+    internal fun defaultImageCaptureSeed(
+        initialContent: String = "图片：\n补充说明：",
+        initialTopic: String = "图片记录",
+        initialFolderKey: String? = null,
+        initialTags: List<String> = listOf("图片"),
+    ): CaptureSeed = CaptureSeed(
+        mode = CaptureMode.IMAGE,
+        initialContent = initialContent,
+        initialTopic = initialTopic,
+        initialFolderKey = initialFolderKey,
+        initialTags = initialTags,
+        autoStartVoiceInput = false,
+    )
 
     private fun parseSharedText(intent: Intent): MindFlowLaunchRequest? {
         if (intent.type?.startsWith("text/") != true) return null
@@ -108,8 +171,10 @@ object MindFlowEntryIntents {
         val topic = sharedSubject.takeIf { it.isNotBlank() && it != sharedText }
         return MindFlowLaunchRequest.OpenCapture(
             CaptureSeed(
+                mode = inferCaptureMode(sharedText, emptyList(), autoStartVoiceInput = false),
                 initialContent = sharedText,
                 initialTopic = topic.orEmpty(),
+                initialTags = if (containsUrl(sharedText)) listOf("文章") else emptyList(),
             ),
         )
     }
@@ -119,8 +184,23 @@ object MindFlowEntryIntents {
         if (text.isBlank()) return null
         return MindFlowLaunchRequest.OpenCapture(
             CaptureSeed(
+                mode = inferCaptureMode(text, emptyList(), autoStartVoiceInput = false),
                 initialContent = text,
+                initialTags = if (containsUrl(text)) listOf("文章") else emptyList(),
             ),
         )
     }
+
+    private fun inferCaptureMode(
+        content: String,
+        tags: List<String>,
+        autoStartVoiceInput: Boolean,
+    ): CaptureMode = when {
+        autoStartVoiceInput -> CaptureMode.VOICE
+        containsUrl(content) || tags.any { it == "文章" || it == "链接" } -> CaptureMode.ARTICLE
+        else -> CaptureMode.TEXT
+    }
+
+    private fun containsUrl(text: String): Boolean =
+        Regex("""https?://[^\s，。)）]+""").containsMatchIn(text)
 }

@@ -16,7 +16,24 @@ class OnDeviceAiTaskProvider(
             AiTaskType.EXTRACT_TOPIC -> client.extractTopic(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.EXTRACT_TAGS -> client.extractTags(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.CLASSIFY_CATEGORY -> client.classifyFolder(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.POLISH_TITLE -> {
+                val title = input as AiTaskInput.TitleText
+                client.polishTitle(settings, title.title, title.content)
+            }
+            AiTaskType.SUMMARIZE_NOTE -> client.summarizeNote(settings, (input as AiTaskInput.NoteText).content)
             AiTaskType.POLISH_CONTENT -> client.polishContent(settings, (input as AiTaskInput.NoteText).content)
+            AiTaskType.TRANSCRIBE_AUDIO -> {
+                val audio = input as AiTaskInput.AudioFile
+                client.transcribeAudio(settings, audio.path, audio.localeHint)
+            }
+            AiTaskType.TRANSLATE_AUDIO -> {
+                val audio = input as AiTaskInput.AudioFile
+                client.translateAudio(settings, audio.path, audio.targetLanguage ?: "zh-CN")
+            }
+            AiTaskType.UNDERSTAND_IMAGE -> {
+                val image = input as AiTaskInput.ImageFile
+                client.understandImage(settings, image.path, image.userNote)
+            }
             AiTaskType.GRAPH_EXTRACT_CONCEPTS -> client.extractConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> client.canonicalizeConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_GENERATE_RELATIONS -> client.generateConceptGraphRelations(settings, (input as AiTaskInput.GraphContext).contextSummary)

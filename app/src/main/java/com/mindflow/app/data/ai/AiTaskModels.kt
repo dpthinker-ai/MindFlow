@@ -2,9 +2,14 @@ package com.mindflow.app.data.ai
 
 enum class AiTaskType {
     POLISH_CONTENT,
+    POLISH_TITLE,
+    SUMMARIZE_NOTE,
     EXTRACT_TOPIC,
     EXTRACT_TAGS,
     CLASSIFY_CATEGORY,
+    TRANSCRIBE_AUDIO,
+    TRANSLATE_AUDIO,
+    UNDERSTAND_IMAGE,
     GRAPH_EXTRACT_CONCEPTS,
     GRAPH_CANONICALIZE_CONCEPTS,
     GRAPH_GENERATE_RELATIONS,
@@ -17,7 +22,20 @@ enum class AiAutomaticPreference {
 
 sealed interface AiTaskInput {
     data class NoteText(val content: String) : AiTaskInput
+    data class TitleText(val title: String, val content: String) : AiTaskInput
     data class GraphContext(val contextSummary: String) : AiTaskInput
+    data class AudioFile(
+        val path: String,
+        val mimeType: String? = null,
+        val localeHint: String? = null,
+        val targetLanguage: String? = null,
+    ) : AiTaskInput
+
+    data class ImageFile(
+        val path: String,
+        val mimeType: String? = null,
+        val userNote: String = "",
+    ) : AiTaskInput
 }
 
 sealed interface AiTaskPayload {
@@ -25,6 +43,32 @@ sealed interface AiTaskPayload {
     data class Tags(val tags: List<String>, val primaryCategory: String? = null) : AiTaskPayload
     data class Folder(val folderKey: String, val confidence: Float) : AiTaskPayload
     data class Polish(val polishedText: String, val changeSummary: String) : AiTaskPayload
+    data class NoteInsight(
+        val summary: String,
+        val keyPoints: List<String>,
+    ) : AiTaskPayload
+    data class AudioTranscription(
+        val transcript: String,
+        val language: String? = null,
+        val topic: String = "",
+        val confidence: Float = 0f,
+    ) : AiTaskPayload
+
+    data class AudioTranslation(
+        val translatedText: String,
+        val sourceLanguage: String? = null,
+        val targetLanguage: String,
+        val confidence: Float = 0f,
+    ) : AiTaskPayload
+
+    data class ImageUnderstanding(
+        val summary: String,
+        val imageType: String,
+        val extractedText: String = "",
+        val objects: List<String> = emptyList(),
+        val confidence: Float = 0f,
+    ) : AiTaskPayload
+
     data class GraphConcepts(val concepts: List<String>) : AiTaskPayload
     data class GraphCanonicalization(val canonical: Map<String, List<String>>) : AiTaskPayload
     data class GraphRelations(val relations: List<GraphRelation>) : AiTaskPayload
@@ -63,6 +107,7 @@ data class AiTaskRequest<T : AiTaskPayload>(
     val type: AiTaskType,
     val input: AiTaskInput,
     val automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
+    val allowProviderFallback: Boolean = true,
     val validate: (T) -> Boolean,
 )
 

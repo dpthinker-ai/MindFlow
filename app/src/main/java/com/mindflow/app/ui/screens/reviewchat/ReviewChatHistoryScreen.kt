@@ -2,6 +2,7 @@ package com.mindflow.app.ui.screens.reviewchat
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,9 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -26,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,12 +49,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.components.ActionButton
+import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.InsightBlock
+import com.mindflow.app.ui.components.InsightChip
+import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
+import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
@@ -88,6 +98,15 @@ fun ReviewChatHistoryRoute(
     )
 }
 
+internal fun reviewHistoryReferenceFilterLabels(): List<String> =
+    ReviewHistoryFilterTab.entries.map { it.label } +
+        listOf(
+            ReviewHistoryTimeScope.TODAY,
+            ReviewHistoryTimeScope.WEEK,
+            ReviewHistoryTimeScope.MONTH,
+            ReviewHistoryTimeScope.LAST_YEAR_TODAY,
+        ).map { it.label }
+
 @Composable
 private fun ReviewChatHistoryScreen(
     query: String,
@@ -99,8 +118,21 @@ private fun ReviewChatHistoryScreen(
     onDeleteSession: (Long) -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<SavedReviewChatSessionSummary?>(null) }
-    val groupedSummaries = remember(summaries) {
-        summaries.groupBy { summary -> historyGroupLabel(summary.updatedAt) }
+    var selectedTab by rememberSaveable { mutableStateOf(ReviewHistoryFilterTab.ALL) }
+    var selectedTimeScope by rememberSaveable { mutableStateOf(ReviewHistoryTimeScope.ALL) }
+    val zone = remember { ZoneId.systemDefault() }
+    val today = remember { LocalDate.now(zone) }
+    val filteredSummaries = remember(summaries, selectedTab, selectedTimeScope, today, zone) {
+        filterReviewHistorySummaries(
+            summaries = summaries,
+            selectedTab = selectedTab,
+            selectedTimeScope = selectedTimeScope,
+            today = today,
+            zone = zone,
+        )
+    }
+    val groupedSummaries = remember(filteredSummaries) {
+        filteredSummaries.groupBy { summary -> historyGroupLabel(summary.updatedAt) }
     }
 
     ScreenBackground {
@@ -127,12 +159,12 @@ private fun ReviewChatHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = "聊天历史",
+                        text = "回看",
                         style = MaterialTheme.typography.headlineSmall,
                         color = TextMain,
                     )
                     Text(
-                        text = "自动保存每次对话，可搜索后继续追问。",
+                        text = "按时间、主题和任务重新找回你的记忆。",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                         maxLines = 1,
@@ -153,20 +185,36 @@ private fun ReviewChatHistoryScreen(
             ) {
                 item("actions") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionButton(
-                            text = "开始新对话",
-                            onClick = onStartNewChat,
-                            modifier = Modifier.fillMaxWidth(),
-                            icon = Icons.Outlined.AddComment,
+                        ReviewHistoryFilterTabs(
+                            selectedTab = selectedTab,
+                            onSelectTab = { tab ->
+                                selectedTab = tab
+                                if (tab == ReviewHistoryFilterTab.ALL) {
+                                    selectedTimeScope = ReviewHistoryTimeScope.ALL
+                                }
+                            },
+                        )
+                        ReviewHistoryTimeChips(
+                            selectedTimeScope = selectedTimeScope,
+                            onSelectTimeScope = { scope ->
+                                selectedTimeScope = scope
+                                if (selectedTab == ReviewHistoryFilterTab.ALL) {
+                                    selectedTab = ReviewHistoryFilterTab.TIME
+                                }
+                            },
                         )
                         ReviewChatHistorySearchField(
                             query = query,
                             onQueryChange = onQueryChange,
                         )
+                        ReviewHistoryTopicSummary(
+                            summaries = filteredSummaries,
+                            onStartNewChat = onStartNewChat,
+                        )
                     }
                 }
 
-                if (summaries.isEmpty()) {
+                if (filteredSummaries.isEmpty()) {
                     item("empty") {
                         ReviewChatHistoryEmptyState(query = query)
                     }
@@ -175,12 +223,7 @@ private fun ReviewChatHistoryScreen(
                         val items = groupedSummaries[group].orEmpty()
                         if (items.isNotEmpty()) {
                             item("group-$group") {
-                                Text(
-                                    text = group,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = TextSoft,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
+                                ReviewHistoryResultHeader(group = group)
                             }
                             items(items, key = { it.sessionId }) { summary ->
                                 ReviewChatHistoryRow(
@@ -240,6 +283,153 @@ private fun ReviewChatHistoryScreen(
 }
 
 @Composable
+private fun ReviewHistoryFilterTabs(
+    selectedTab: ReviewHistoryFilterTab,
+    onSelectTab: (ReviewHistoryFilterTab) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReviewHistoryFilterTab.entries.forEach { tab ->
+            val selected = tab == selectedTab
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelectTab(tab) },
+            ) {
+                Text(
+                    text = tab.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) AccentBlue else TextSoft,
+                )
+                Surface(
+                    color = if (selected) AccentBlue else androidx.compose.ui.graphics.Color.Transparent,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(2.dp),
+                    content = {},
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewHistoryTimeChips(
+    selectedTimeScope: ReviewHistoryTimeScope,
+    onSelectTimeScope: (ReviewHistoryTimeScope) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(
+            ReviewHistoryTimeScope.TODAY,
+            ReviewHistoryTimeScope.WEEK,
+            ReviewHistoryTimeScope.MONTH,
+            ReviewHistoryTimeScope.LAST_YEAR_TODAY,
+        ).forEach { scope ->
+            InsightChip(
+                text = scope.label,
+                tone = if (scope == selectedTimeScope) InsightTone.Primary else InsightTone.Neutral,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable {
+                        onSelectTimeScope(
+                            if (scope == selectedTimeScope) ReviewHistoryTimeScope.ALL else scope
+                        )
+                    },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewHistoryTopicSummary(
+    summaries: List<SavedReviewChatSessionSummary>,
+    onStartNewChat: () -> Unit,
+) {
+    PanelCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                color = PanelBlue,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(52.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddComment,
+                        contentDescription = null,
+                        tint = AccentBlue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "主题回看",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextMain,
+                )
+                Text(
+                    text = "相关记录 ${summaries.sumOf { it.messageCount }.coerceAtLeast(summaries.size)} 条",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            }
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextSoft,
+            )
+        }
+        Text(
+            text = summaries.firstOrNull()?.latestExcerpt?.ifBlank { null }
+                ?: "本月的回看会按主题聚合，帮助你找回旧问题、旧判断和未推进的行动。",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSoft,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        ActionButton(
+            text = "开始新对话",
+            onClick = onStartNewChat,
+            modifier = Modifier.fillMaxWidth(),
+            icon = Icons.Outlined.AddComment,
+        )
+    }
+}
+
+@Composable
+private fun ReviewHistoryResultHeader(group: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "回看结果",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextMain,
+        )
+        Text(
+            text = group,
+            style = MaterialTheme.typography.labelLarge,
+            color = TextSoft,
+        )
+    }
+}
+
+@Composable
 private fun ReviewChatHistorySearchField(
     query: String,
     onQueryChange: (String) -> Unit,
@@ -291,55 +481,97 @@ private fun ReviewChatHistoryRow(
     onOpen: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    PanelCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen),
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 12.dp),
+        ) {
+            Surface(
+                color = AccentBlue,
+                shape = CircleShape,
+                modifier = Modifier.size(8.dp),
+                content = {},
+            )
+            Surface(
+                color = AccentBlue.copy(alpha = 0.22f),
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(72.dp),
+                content = {},
+            )
+        }
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onOpen),
+            color = WhiteGlass.copy(alpha = 0.94f),
+            shape = CardShape,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+            shadowElevation = 0.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = summary.title.ifBlank { "未命名回看" },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TextMain,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "已总结为 ${summary.messageCount.coerceAtLeast(1)} 个要点",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
+                    }
                     Text(
-                        text = summary.title.ifBlank { "未命名聊天" },
+                        text = "›",
                         style = MaterialTheme.typography.titleMedium,
-                        color = TextMain,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${TimeFormatter.compact(summary.updatedAt)} · ${summary.messageCount} 条消息",
-                        style = MaterialTheme.typography.bodySmall,
                         color = TextSoft,
                     )
                 }
-                TextButton(onClick = onDelete) {
+                summary.latestExcerpt.takeIf { it.isNotBlank() }?.let { excerpt ->
                     Text(
-                        text = "删除",
-                        color = MaterialTheme.colorScheme.error,
+                        text = excerpt,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSoft,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = TimeFormatter.compact(summary.updatedAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSoft,
+                    )
+                    TextButton(onClick = onDelete) {
+                        Text(
+                            text = "删除",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
-            summary.latestExcerpt.takeIf { it.isNotBlank() }?.let { excerpt ->
-                Text(
-                    text = excerpt,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            GhostActionButton(
-                text = "继续这段对话",
-                onClick = onOpen,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }
@@ -365,6 +597,63 @@ private fun ReviewChatHistoryEmptyState(query: String) {
 }
 
 private val historyGroupOrder = listOf("今天", "昨天", "本周", "更早")
+
+internal enum class ReviewHistoryFilterTab(val label: String) {
+    ALL("全部"),
+    TIME("时间"),
+    TOPIC("主题"),
+    TASK("任务"),
+}
+
+internal enum class ReviewHistoryTimeScope(val label: String) {
+    ALL("全部"),
+    TODAY("今天"),
+    WEEK("本周"),
+    MONTH("本月"),
+    LAST_YEAR_TODAY("去年今日"),
+}
+
+internal fun filterReviewHistorySummaries(
+    summaries: List<SavedReviewChatSessionSummary>,
+    selectedTab: ReviewHistoryFilterTab,
+    selectedTimeScope: ReviewHistoryTimeScope,
+    today: LocalDate,
+    zone: ZoneId,
+): List<SavedReviewChatSessionSummary> =
+    summaries.filter { summary ->
+        summary.matchesReviewHistoryTab(selectedTab) &&
+            summary.matchesReviewHistoryTimeScope(selectedTimeScope, today, zone)
+    }
+
+private fun SavedReviewChatSessionSummary.matchesReviewHistoryTab(tab: ReviewHistoryFilterTab): Boolean =
+    when (tab) {
+        ReviewHistoryFilterTab.ALL,
+        ReviewHistoryFilterTab.TIME -> true
+        ReviewHistoryFilterTab.TOPIC -> !isTaskLikeReviewHistorySession()
+        ReviewHistoryFilterTab.TASK -> isTaskLikeReviewHistorySession()
+    }
+
+private fun SavedReviewChatSessionSummary.matchesReviewHistoryTimeScope(
+    scope: ReviewHistoryTimeScope,
+    today: LocalDate,
+    zone: ZoneId,
+): Boolean {
+    val date = Instant.ofEpochMilli(updatedAt).atZone(zone).toLocalDate()
+    return when (scope) {
+        ReviewHistoryTimeScope.ALL -> true
+        ReviewHistoryTimeScope.TODAY -> date == today
+        ReviewHistoryTimeScope.WEEK -> !date.isBefore(today.minusDays(6)) && !date.isAfter(today)
+        ReviewHistoryTimeScope.MONTH -> date.year == today.year && date.month == today.month
+        ReviewHistoryTimeScope.LAST_YEAR_TODAY -> date == today.minusYears(1)
+    }
+}
+
+private fun SavedReviewChatSessionSummary.isTaskLikeReviewHistorySession(): Boolean {
+    val text = "$title $latestExcerpt".lowercase()
+    return listOf("任务", "行动", "待办", "推进", "计划", "完成", "todo", "next").any { keyword ->
+        text.contains(keyword)
+    }
+}
 
 private fun historyGroupLabel(timestamp: Long): String {
     val zone = ZoneId.systemDefault()

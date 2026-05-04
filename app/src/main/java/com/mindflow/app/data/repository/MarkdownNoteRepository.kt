@@ -27,6 +27,10 @@ import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicRefreshResult
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.topic.FolderClassifier
+import com.mindflow.app.data.topic.NoteInsightPlanner
+import com.mindflow.app.data.topic.NoteInsightResult
+import com.mindflow.app.data.topic.noteInsightSourceContent
+import com.mindflow.app.data.topic.shouldAutoGenerateVoiceInsight
 import com.mindflow.app.data.topic.TagExtractor
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.ui.navigation.MindFlowDestinations
@@ -52,6 +56,7 @@ class MarkdownNoteRepository(
     private val topicExtractor: TopicExtractor,
     private val folderClassifier: FolderClassifier,
     private val tagExtractor: TagExtractor,
+    private val noteInsightPlanner: NoteInsightPlanner,
     private val markdownExporter: MarkdownExporter,
     private val markdownImportParser: MarkdownImportParser,
     private val cloudNoteDocumentCodec: CloudNoteDocumentCodec,
@@ -128,10 +133,15 @@ class MarkdownNoteRepository(
         folderManuallyEdited: Boolean,
         topicManuallyEdited: Boolean,
         tagsManuallyEdited: Boolean,
+        aiSummary: String,
+        aiKeyPoints: List<String>,
+        aiInsightContentHash: String,
+        aiInsightUpdatedAt: Long,
     ): Long {
         val normalizedContent = content.trim()
+        val topicContent = topicExtractionContent(normalizedContent)
         val now = System.currentTimeMillis()
-        val fallbackTopic = topicExtractor.extractRule(normalizedContent)
+        val fallbackTopic = topicExtractor.extractRule(topicContent)
         val manualTopic = topic.trim()
         val fallbackFolder = if (folderManuallyEdited) {
             com.mindflow.app.data.model.FolderSuggestion(
@@ -159,6 +169,10 @@ class MarkdownNoteRepository(
                 horizon = horizon,
                 knowledgeTrust = knowledgeTrust,
                 isArchived = isArchived,
+                aiSummary = aiSummary.trim(),
+                aiKeyPoints = aiKeyPoints.map { it.trim() }.filter { it.isNotBlank() }.take(4),
+                aiInsightContentHash = aiInsightContentHash,
+                aiInsightUpdatedAt = aiInsightUpdatedAt,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -195,6 +209,9 @@ class MarkdownNoteRepository(
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)
+            if (shouldAutoGenerateVoiceInsight(normalizedContent)) {
+                ensureAiInsight(document.note.id)
+            }
             onNoteMutated(document.note.id)
             refreshWidget()
         }
@@ -219,7 +236,8 @@ class MarkdownNoteRepository(
         val updated = storageMutex.withLock {
             val existing = storeState.value[noteId] ?: return
             val normalizedContent = content.trim()
-            val normalizedTopic = topic.trim().ifBlank { topicExtractor.extractRule(normalizedContent).topic }
+            val topicContent = topicExtractionContent(normalizedContent)
+            val normalizedTopic = topic.trim().ifBlank { topicExtractor.extractRule(topicContent).topic }
             val normalizedFolderKey = folderKey?.trim()?.ifBlank { null }
             val normalizedTags = NoteTagCodec.normalize(tags)
             val now = System.currentTimeMillis()
@@ -264,6 +282,10 @@ class MarkdownNoteRepository(
                     horizon = horizon,
                     knowledgeTrust = knowledgeTrust,
                     isArchived = isArchived,
+                    aiSummary = if (contentChanged) "" else existing.note.aiSummary,
+                    aiKeyPoints = if (contentChanged) emptyList() else existing.note.aiKeyPoints,
+                    aiInsightContentHash = if (contentChanged) "" else existing.note.aiInsightContentHash,
+                    aiInsightUpdatedAt = if (contentChanged) 0L else existing.note.aiInsightUpdatedAt,
                     updatedAt = now,
                 ),
                 history = nextHistory,
@@ -273,13 +295,22 @@ class MarkdownNoteRepository(
                 note = next.note,
                 contentChanged = contentChanged,
                 shouldRefreshFolder = contentChanged && nextFolderSource != FolderSource.MANUAL,
+                shouldRefreshTopic = contentChanged && nextSource != TopicSource.MANUAL,
+                shouldRefreshVoiceInsight = contentChanged && shouldAutoGenerateVoiceInsight(normalizedContent),
             )
         }
 
-        if (updated.shouldRefreshFolder) {
+        if (updated.shouldRefreshTopic || updated.shouldRefreshFolder || updated.shouldRefreshVoiceInsight) {
             applicationScope.launch {
-                val result = refreshFolderIfPossible(noteId, updateTimestamp = false)
-                result.notice?.let(::emitSystemNotice)
+                if (updated.shouldRefreshTopic) {
+                    refreshTopicIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
+                }
+                if (updated.shouldRefreshFolder) {
+                    refreshFolderIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
+                }
+                if (updated.shouldRefreshVoiceInsight) {
+                    ensureAiInsight(noteId)
+                }
                 onNoteMutated(noteId)
                 refreshWidget()
             }
@@ -313,6 +344,53 @@ class MarkdownNoteRepository(
             storeState.value = current - noteId
         }
         refreshWidget()
+    }
+
+    override suspend fun ensureAiInsight(noteId: Long): Boolean {
+        val snapshot = storageMutex.withLock {
+            val existing = storeState.value[noteId] ?: return false
+            val contentHash = NoteInsightPlanner.contentHash(existing.note.content)
+            if (
+                existing.note.aiSummary.isNotBlank() &&
+                existing.note.aiKeyPoints.isNotEmpty() &&
+                existing.note.aiInsightContentHash == contentHash
+            ) {
+                return false
+            }
+            existing
+        }
+
+        val result = noteInsightPlanner.generate(snapshot.note.content)
+        val insight = (result as? NoteInsightResult.Success)?.insight ?: return false
+        val contentHash = NoteInsightPlanner.contentHash(snapshot.note.content)
+
+        return storageMutex.withLock {
+            val latest = storeState.value[noteId] ?: return false
+            if (latest.note.content != snapshot.note.content) {
+                return false
+            }
+            val topicContent = topicExtractionContent(latest.note.content)
+            val topicSuggestion = if (latest.note.topicSource == TopicSource.MANUAL || topicContent.isBlank()) {
+                null
+            } else {
+                runCatching {
+                    topicExtractor.extract(topicContent, AiAutomaticPreference.PREFER_ON_DEVICE).suggestion
+                }.getOrNull()
+            }
+            upsertLocked(
+                latest.copy(
+                    note = latest.note.copy(
+                        topic = topicSuggestion?.topic ?: latest.note.topic,
+                        topicSource = topicSuggestion?.source ?: latest.note.topicSource,
+                        aiSummary = insight.summary,
+                        aiKeyPoints = insight.keyPoints,
+                        aiInsightContentHash = contentHash,
+                        aiInsightUpdatedAt = insight.generatedAt,
+                    ),
+                ),
+            )
+            true
+        }
     }
 
     override suspend fun classifyPendingFolders(): Int {
@@ -430,7 +508,7 @@ class MarkdownNoteRepository(
             existing
         }
 
-        val extraction = topicExtractor.extract(snapshot.note.content, automaticPreference)
+        val extraction = topicExtractor.extract(topicExtractionContent(snapshot.note.content), automaticPreference)
         val suggestion = extraction.suggestion
         return storageMutex.withLock {
             val latest = storeState.value[noteId] ?: return TopicRefreshResult()
@@ -463,6 +541,9 @@ class MarkdownNoteRepository(
             TopicRefreshResult(suggestion = suggestion, notice = extraction.notice)
         }
     }
+
+    private fun topicExtractionContent(content: String): String =
+        noteInsightSourceContent(content).ifBlank { content }
 
     private suspend fun refreshFolderIfPossible(
         noteId: Long,
@@ -700,6 +781,10 @@ class MarkdownNoteRepository(
             horizon = horizon,
             knowledgeTrust = knowledgeTrust,
             isArchived = isArchived,
+            aiSummary = aiSummary,
+            aiKeyPoints = aiKeyPoints,
+            aiInsightContentHash = aiInsightContentHash,
+            aiInsightUpdatedAt = aiInsightUpdatedAt,
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
@@ -735,7 +820,9 @@ class MarkdownNoteRepository(
         val trimmedQuery = filters.query.trim()
         if (trimmedQuery.isNotEmpty()) {
             val matchesQuery = topic.contains(trimmedQuery, ignoreCase = true) ||
-                content.contains(trimmedQuery, ignoreCase = true)
+                content.contains(trimmedQuery, ignoreCase = true) ||
+                aiSummary.contains(trimmedQuery, ignoreCase = true) ||
+                aiKeyPoints.any { it.contains(trimmedQuery, ignoreCase = true) }
             if (!matchesQuery) return false
         }
 
@@ -774,6 +861,8 @@ class MarkdownNoteRepository(
         val note: NoteEntity,
         val contentChanged: Boolean,
         val shouldRefreshFolder: Boolean,
+        val shouldRefreshTopic: Boolean,
+        val shouldRefreshVoiceInsight: Boolean,
     )
 
     private companion object {

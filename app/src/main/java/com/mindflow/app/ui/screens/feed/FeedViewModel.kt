@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class FeedUiState(
+    val isLoading: Boolean = true,
     val notes: List<NoteEntity> = emptyList(),
     val totalCount: Int = 0,
     val ideaCount: Int = 0,
@@ -44,6 +45,7 @@ class FeedViewModel(
     ) { feedNotes, allNotes, timeBankSettings ->
         val activeNotes = allNotes.filter { !it.isArchived }
         FeedUiState(
+            isLoading = false,
             notes = feedNotes,
             totalCount = allNotes.size,
             ideaCount = activeNotes.count { it.status == NoteStatus.IDEA },

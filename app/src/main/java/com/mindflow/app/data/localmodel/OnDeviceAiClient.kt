@@ -1,7 +1,9 @@
 package com.mindflow.app.data.localmodel
 
 import android.content.Context
+import android.os.Build
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
@@ -24,6 +26,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal const val LITERT_LM_DEFAULT_RUNTIME_MAX_TOKENS = 2048
+internal const val LITERT_LM_EMULATOR_RUNTIME_MAX_TOKENS = 512
+internal const val LITERT_LM_EMULATOR_UNSAFE_MODEL_BYTES = 2L * 1024L * 1024L * 1024L
+
 interface OnDeviceAiClient {
     suspend fun testModel(settings: OnDeviceModelSettings): AiConnectionResult
     suspend fun warmUp(settings: OnDeviceModelSettings): AiConnectionResult
@@ -38,7 +44,12 @@ interface OnDeviceAiClient {
     suspend fun extractTopic(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun extractTags(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun classifyFolder(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun polishTitle(settings: OnDeviceModelSettings, title: String, content: String): AiChatResult
+    suspend fun summarizeNote(settings: OnDeviceModelSettings, content: String): AiChatResult
     suspend fun polishContent(settings: OnDeviceModelSettings, content: String): AiChatResult
+    suspend fun transcribeAudio(settings: OnDeviceModelSettings, audioPath: String, localeHint: String?): AiChatResult
+    suspend fun translateAudio(settings: OnDeviceModelSettings, audioPath: String, targetLanguage: String): AiChatResult
+    suspend fun understandImage(settings: OnDeviceModelSettings, imagePath: String, userNote: String): AiChatResult
     suspend fun extractConceptGraphConcepts(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun canonicalizeConceptGraphConcepts(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
     suspend fun generateConceptGraphRelations(settings: OnDeviceModelSettings, contextSummary: String): AiChatResult
@@ -51,19 +62,20 @@ class LiteRtLmOnDeviceAiClient(
         // Gemma 4 E4B supports a much larger architectural context window.
         // This value is the mobile runtime budget we hand to LiteRT for
         // input + output tokens, not the model card maximum.
-        const val RUNTIME_MAX_TOKENS = 2048
+        const val RUNTIME_MAX_TOKENS = LITERT_LM_DEFAULT_RUNTIME_MAX_TOKENS
     }
 
     private data class CachedEngine(
         val modelPath: String,
         val backendName: String,
+        val audioEnabled: Boolean,
         val engine: Engine,
     )
 
     private val engineMutex = Mutex()
     private var cachedEngine: CachedEngine? = null
-    private val cacheDir by lazy {
-        File(context.cacheDir, "litert-lm").apply { mkdirs() }
+    private val legacyDiskCacheDir by lazy {
+        File(context.cacheDir, "litert-lm")
     }
 
     override suspend fun testModel(settings: OnDeviceModelSettings): AiConnectionResult = withContext(Dispatchers.IO) {
@@ -92,6 +104,12 @@ class LiteRtLmOnDeviceAiClient(
                 isConfiguredCorrectly = false,
                 message = "请先下载 Gemma 4 E4B 模型",
             )
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            return@withContext AiConnectionResult(
+                isConfiguredCorrectly = false,
+                message = message,
+            )
+        }
 
         engineMutex.withLock {
             runCatching {
@@ -159,6 +177,10 @@ class LiteRtLmOnDeviceAiClient(
                 )
                 return@callbackFlow
             }
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            close(IllegalStateException(message))
+            return@callbackFlow
+        }
 
         val job = launch(Dispatchers.IO) {
             runCatching {
@@ -193,10 +215,47 @@ class LiteRtLmOnDeviceAiClient(
         content: String,
     ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.classifyFolder(content))
 
+    override suspend fun polishTitle(
+        settings: OnDeviceModelSettings,
+        title: String,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.polishTitle(title, content))
+
+    override suspend fun summarizeNote(
+        settings: OnDeviceModelSettings,
+        content: String,
+    ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.summarizeNote(content))
+
     override suspend fun polishContent(
         settings: OnDeviceModelSettings,
         content: String,
     ): AiChatResult = runPrompt(settings, GemmaTaskPromptFactory.polish(content))
+
+    override suspend fun transcribeAudio(
+        settings: OnDeviceModelSettings,
+        audioPath: String,
+        localeHint: String?,
+    ): AiChatResult = runAudioPrompt(
+        settings = settings,
+        audioPath = audioPath,
+        prompt = GemmaTaskPromptFactory.transcribeAudio(audioPath, localeHint),
+    )
+
+    override suspend fun translateAudio(
+        settings: OnDeviceModelSettings,
+        audioPath: String,
+        targetLanguage: String,
+    ): AiChatResult = runAudioPrompt(
+        settings = settings,
+        audioPath = audioPath,
+        prompt = GemmaTaskPromptFactory.translateAudio(audioPath, targetLanguage),
+    )
+
+    override suspend fun understandImage(
+        settings: OnDeviceModelSettings,
+        imagePath: String,
+        userNote: String,
+    ): AiChatResult = mediaPipelineNotReady("图片理解")
 
     override suspend fun extractConceptGraphConcepts(
         settings: OnDeviceModelSettings,
@@ -222,9 +281,15 @@ class LiteRtLmOnDeviceAiClient(
                 reason = AiFailureReason.CONFIG,
                 message = "本地模型还没准备好",
             )
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.OTHER,
+                message = message,
+            )
+        }
 
         engineMutex.withLock {
-            val cachedEngine = runCatching { acquireEngine(modelPath) }.getOrElse { error ->
+            val cachedEngine = runCatching { acquireEngine(modelPath = modelPath) }.getOrElse { error ->
                 return@withLock AiChatResult.Failure(
                     reason = AiFailureReason.OTHER,
                     message = "本地模型初始化失败：${error.message ?: "请检查模型文件或切换模型后重试"}",
@@ -256,6 +321,75 @@ class LiteRtLmOnDeviceAiClient(
         }
     }
 
+    private fun mediaPipelineNotReady(feature: String): AiChatResult =
+        AiChatResult.Failure(
+            reason = AiFailureReason.OTHER,
+            message = "$feature 接口已定义，等待 Gemma 4 端侧媒体管线接入后启用",
+        )
+
+    private suspend fun runAudioPrompt(
+        settings: OnDeviceModelSettings,
+        audioPath: String,
+        prompt: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        val modelPath = settings.localModelPath.takeIf { it.isNotBlank() && File(it).exists() }
+            ?: return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.CONFIG,
+                message = "本地模型还没准备好",
+            )
+        val audioFile = File(audioPath.trim())
+        if (!audioFile.exists() || !audioFile.isFile || audioFile.length() <= 0L) {
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.CONFIG,
+                message = "录音文件不存在，无法转写",
+            )
+        }
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.OTHER,
+                message = message,
+            )
+        }
+
+        engineMutex.withLock {
+            val cachedEngine = runCatching { acquireEngine(modelPath = modelPath, audioEnabled = true) }.getOrElse { error ->
+                return@withLock AiChatResult.Failure(
+                    reason = AiFailureReason.OTHER,
+                    message = "本地模型初始化失败：${error.message ?: "请检查模型文件或切换模型后重试"}",
+                )
+            }
+
+            runCatching {
+                cachedEngine.engine.createConversation(defaultConversationConfig()).use { conversation ->
+                    conversation.sendMessage(
+                        Contents.of(
+                            Content.AudioBytes(audioFile.readBytes()),
+                            Content.Text(prompt),
+                        ),
+                        emptyMap(),
+                    ).toString().trim()
+                }
+            }.fold(
+                onSuccess = { content ->
+                    if (content.isBlank()) {
+                        AiChatResult.Failure(
+                            reason = AiFailureReason.OTHER,
+                            message = "Gemma 4 没有返回可用转写内容",
+                        )
+                    } else {
+                        AiChatResult.Success(content = content)
+                    }
+                },
+                onFailure = { error ->
+                    AiChatResult.Failure(
+                        reason = AiFailureReason.OTHER,
+                        message = "端侧语音转写失败：${error.message ?: "请确认当前 LiteRT-LM 模型和运行时支持音频输入"}",
+                    )
+                },
+            )
+        }
+    }
+
     private suspend fun runReviewChatPrompt(
         settings: OnDeviceModelSettings,
         request: ReviewChatOnDeviceRequest,
@@ -265,6 +399,12 @@ class LiteRtLmOnDeviceAiClient(
                 reason = AiFailureReason.CONFIG,
                 message = "本地模型还没准备好",
             )
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.OTHER,
+                message = message,
+            )
+        }
 
         engineMutex.withLock {
             runCatching {
@@ -423,12 +563,14 @@ class LiteRtLmOnDeviceAiClient(
     private fun acquireEngine(
         modelPath: String,
         forcedBackendName: String? = null,
+        audioEnabled: Boolean = false,
         trace: ((ReviewChatOnDeviceTraceEvent) -> Unit)? = null,
     ): CachedEngine {
         cachedEngine
             ?.takeIf {
                 it.modelPath == modelPath &&
-                    (forcedBackendName == null || it.backendName == forcedBackendName)
+                    (forcedBackendName == null || it.backendName == forcedBackendName) &&
+                    (!audioEnabled || it.audioEnabled)
             }
             ?.let { cached ->
                 trace?.invoke(
@@ -442,6 +584,7 @@ class LiteRtLmOnDeviceAiClient(
             }
 
         invalidateEngine()
+        deleteLegacyLiteRtLmDiskCache(legacyDiskCacheDir)
 
         var lastError: Throwable? = null
         for ((backendName, backend) in backendCandidates(forcedBackendName)) {
@@ -454,17 +597,18 @@ class LiteRtLmOnDeviceAiClient(
             )
             try {
                 val engine = Engine(
-                    EngineConfig(
+                    buildLiteRtLmTextEngineConfig(
                         modelPath = modelPath,
                         backend = backend,
-                        maxNumTokens = RUNTIME_MAX_TOKENS,
-                        cacheDir = cacheDir.absolutePath,
+                        audioEnabled = audioEnabled,
+                        maxNumTokens = liteRtLmRuntimeMaxTokens(),
                     )
                 )
                 engine.initialize()
                 val cached = CachedEngine(
                     modelPath = modelPath,
                     backendName = backendName,
+                    audioEnabled = audioEnabled,
                     engine = engine,
                 )
                 cachedEngine = cached
@@ -497,13 +641,7 @@ class LiteRtLmOnDeviceAiClient(
 
     private fun backendCandidates(
         forcedBackendName: String? = null,
-    ): List<Pair<String, Backend>> {
-        val candidates = listOf(
-            "gpu" to Backend.GPU(),
-            "cpu" to Backend.CPU(),
-        )
-        return if (forcedBackendName == null) candidates else candidates.filter { it.first == forcedBackendName }
-    }
+    ): List<Pair<String, Backend>> = liteRtLmTextBackendCandidates(forcedBackendName)
 
     private fun shouldRetryReviewChatOnCpu(error: Throwable): Boolean {
         val message = error.message.orEmpty().lowercase()
@@ -549,4 +687,101 @@ class LiteRtLmOnDeviceAiClient(
             seed = 0,
         )
     )
+}
+
+internal fun buildLiteRtLmTextEngineConfig(
+    modelPath: String,
+    backend: Backend,
+    audioEnabled: Boolean = false,
+    maxNumTokens: Int,
+): EngineConfig = EngineConfig(
+    modelPath = modelPath,
+    backend = backend,
+    audioBackend = if (audioEnabled) Backend.CPU() else null,
+    maxNumTokens = maxNumTokens,
+    cacheDir = null,
+)
+
+internal fun deleteLegacyLiteRtLmDiskCache(cacheDir: File): Boolean =
+    runCatching {
+        cacheDir.exists() && cacheDir.deleteRecursively()
+    }.getOrDefault(false)
+
+internal fun liteRtLmRuntimeMaxTokens(
+    deviceProfile: LocalInferenceDeviceProfile = LocalInferenceDeviceProfile.current(),
+): Int =
+    if (deviceProfile.isEmulator()) {
+        LITERT_LM_EMULATOR_RUNTIME_MAX_TOKENS
+    } else {
+        LITERT_LM_DEFAULT_RUNTIME_MAX_TOKENS
+    }
+
+internal fun liteRtLmRuntimeSafetyFailureMessage(
+    modelFile: File,
+    deviceProfile: LocalInferenceDeviceProfile = LocalInferenceDeviceProfile.current(),
+): String? {
+    if (!deviceProfile.isEmulator()) return null
+    if (modelFile.length() < LITERT_LM_EMULATOR_UNSAFE_MODEL_BYTES) return null
+    return "模拟器 CPU 内存不足，暂不在模拟器初始化 3GB+ Gemma 4 模型，避免 LiteRT native 崩溃；请在真机上测试本地模型，或换用更小的端侧模型。"
+}
+
+internal data class LocalInferenceDeviceProfile(
+    val fingerprint: String,
+    val model: String,
+    val manufacturer: String,
+    val brand: String,
+    val device: String,
+    val product: String,
+    val hardware: String,
+) {
+    companion object {
+        fun current(): LocalInferenceDeviceProfile = LocalInferenceDeviceProfile(
+            fingerprint = Build.FINGERPRINT.orEmpty(),
+            model = Build.MODEL.orEmpty(),
+            manufacturer = Build.MANUFACTURER.orEmpty(),
+            brand = Build.BRAND.orEmpty(),
+            device = Build.DEVICE.orEmpty(),
+            product = Build.PRODUCT.orEmpty(),
+            hardware = Build.HARDWARE.orEmpty(),
+        )
+    }
+}
+
+internal fun liteRtLmTextBackendCandidates(
+    forcedBackendName: String? = null,
+    deviceProfile: LocalInferenceDeviceProfile = LocalInferenceDeviceProfile.current(),
+): List<Pair<String, Backend>> {
+    val candidates = if (deviceProfile.isEmulator()) {
+        listOf("cpu" to Backend.CPU(1))
+    } else {
+        listOf(
+            "gpu" to Backend.GPU(),
+            "npu" to Backend.NPU(),
+            "cpu" to Backend.CPU(),
+        )
+    }
+    return if (forcedBackendName == null) candidates else candidates.filter { it.first == forcedBackendName }
+}
+
+internal fun LocalInferenceDeviceProfile.isEmulator(): Boolean {
+    val fingerprint = fingerprint.lowercase()
+    val model = model.lowercase()
+    val manufacturer = manufacturer.lowercase()
+    val brand = brand.lowercase()
+    val device = device.lowercase()
+    val product = product.lowercase()
+    val hardware = hardware.lowercase()
+
+    return fingerprint.startsWith("generic") ||
+        model.contains("sdk") ||
+        model.contains("emulator") ||
+        model.contains("android sdk built for") ||
+        manufacturer.contains("genymotion") ||
+        hardware == "goldfish" ||
+        hardware == "ranchu" ||
+        product.contains("sdk") ||
+        product.contains("emulator") ||
+        product.contains("vbox86p") ||
+        device.contains("emulator") ||
+        (brand.startsWith("generic") && device.startsWith("generic"))
 }

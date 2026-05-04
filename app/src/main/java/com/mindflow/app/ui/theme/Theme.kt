@@ -41,9 +41,9 @@ fun MindFlowTheme(
         colorScheme = LightColors,
         typography = MindFlowTypography,
         shapes = Shapes(
-            small = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-            medium = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-            large = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            small = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            large = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
         ),
         content = content,
     )

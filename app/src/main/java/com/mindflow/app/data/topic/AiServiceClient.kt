@@ -131,6 +131,35 @@ class AiServiceClient {
         )
     }
 
+    suspend fun polishTitle(
+        settings: AiSettings,
+        title: String,
+        content: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = "当前标题：${title.take(200)}\n正文：${content.take(1_500)}",
+            systemPrompt = "Polish a Chinese note title. Keep the meaning, make it shorter and more specific, do not invent facts, and keep it within 18 Chinese characters or 8 English words. Return only JSON: {\"polishedText\":\"...\",\"changeSummary\":\"...\"}.",
+            maxTokens = 160,
+            temperature = 0.25,
+            thinkingEnabled = false,
+        )
+    }
+
+    suspend fun summarizeNote(
+        settings: AiSettings,
+        content: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        requestChatCompletion(
+            settings = settings,
+            userPrompt = content.take(5_000),
+            systemPrompt = "You are generating durable Chinese reading insight for one personal note. Read the full note, then return JSON only: {\"summary\":\"...\",\"keyPoints\":[\"...\",\"...\"]}. Requirements: summary is exactly one concise sentence that captures the core judgment, question, or tension; keyPoints are 2-4 concise non-overlapping points and must not repeat the summary; use only facts present in the note; do not invent advice, generic encouragement, labels, numbering, or explanations.",
+            maxTokens = 520,
+            temperature = 0.35,
+            thinkingEnabled = false,
+        )
+    }
+
     suspend fun generateDailyBrief(
         settings: AiSettings,
         contextSummary: String,

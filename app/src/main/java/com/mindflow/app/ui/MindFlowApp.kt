@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -73,17 +75,23 @@ import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.NoteInsightPlanner
+import com.mindflow.app.data.topic.TopicExtractor
+import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
 import com.mindflow.app.ui.navigation.ReviewChatSeed
+import com.mindflow.app.ui.components.MindFlowUiTestTags
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.FlowRoute
 import com.mindflow.app.ui.screens.flow.FlowViewModel
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
+import com.mindflow.app.ui.screens.flow.TodayDiscoveryRoute
+import com.mindflow.app.ui.screens.flow.TodayTaskDetailRoute
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatHistoryRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatRoute
@@ -101,6 +109,7 @@ private data class TopLevelDestination(
     val route: String,
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val testTag: String,
 )
 
 @Composable
@@ -127,6 +136,9 @@ fun MindFlowApp(
     directionWikiCoordinator: DirectionWikiCoordinator,
     aiServiceClient: AiServiceClient,
     contentPolishPlanner: ContentPolishPlanner,
+    topicExtractor: TopicExtractor,
+    noteInsightPlanner: NoteInsightPlanner,
+    voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
@@ -224,11 +236,11 @@ fun MindFlowApp(
     }
 
     val topLevelDestinations = listOf(
-        TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.Edit),
-        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.WbSunny),
-        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.History),
-        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.Hub),
-        TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings),
+        TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.Edit, MindFlowUiTestTags.NAV_RECORD),
+        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.WbSunny, MindFlowUiTestTags.NAV_TODAY),
+        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.History, MindFlowUiTestTags.NAV_REVIEW),
+        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.Hub, MindFlowUiTestTags.NAV_GRAPH),
+        TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings, MindFlowUiTestTags.NAV_SETTINGS),
     )
 
     val normalizedRoute = when {
@@ -259,7 +271,7 @@ fun MindFlowApp(
                 FeedRoute(
                     noteRepository = noteRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
-                    onCreateNote = { openCapture() },
+                    onCreateCapture = ::openCapture,
                     onOpenStatusFilter = { status, archivedOnly ->
                         navController.navigate(
                             MindFlowDestinations.searchRoute(
@@ -280,6 +292,10 @@ fun MindFlowApp(
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
+                    onOpenTodayDiscovery = { navController.navigate(MindFlowDestinations.TODAY_DISCOVERY) },
+                    onOpenTodayTask = { threadKey ->
+                        navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
+                    },
                     onOpenReviewChat = { question ->
                         openReviewChat(ReviewChatSeed(initialQuestion = question))
                     },
@@ -298,6 +314,10 @@ fun MindFlowApp(
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
+                    onOpenTodayDiscovery = { navController.navigate(MindFlowDestinations.TODAY_DISCOVERY) },
+                    onOpenTodayTask = { threadKey ->
+                        navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
+                    },
                     onOpenReviewChat = { question ->
                         openReviewChat(ReviewChatSeed(initialQuestion = question))
                     },
@@ -305,6 +325,36 @@ fun MindFlowApp(
                         openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
                     },
                     onOpenReviewChatHistory = ::openReviewChatHistory,
+                )
+            }
+
+            composable(MindFlowDestinations.TODAY_DISCOVERY) {
+                TodayDiscoveryRoute(
+                    viewModel = sharedFlowViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenTaskDetail = { threadKey ->
+                        navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
+                    },
+                    onCreateCapture = ::openCapture,
+                )
+            }
+
+            composable(
+                route = MindFlowDestinations.TODAY_TASK_DETAIL,
+                arguments = listOf(navArgument(MindFlowDestinations.TODAY_TASK_DETAIL_ARG) { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val rawThreadKey = backStackEntry.arguments
+                    ?.getString(MindFlowDestinations.TODAY_TASK_DETAIL_ARG)
+                    .orEmpty()
+                val threadKey = Uri.decode(rawThreadKey)
+                TodayTaskDetailRoute(
+                    viewModel = sharedFlowViewModel,
+                    threadKey = threadKey,
+                    onBack = { navController.popBackStack() },
+                    onOpenThread = { key -> navController.navigate(MindFlowDestinations.threadRoute(key)) },
+                    onAskReview = { question ->
+                        openReviewChat(ReviewChatSeed(initialQuestion = question))
+                    },
                 )
             }
 
@@ -404,9 +454,13 @@ fun MindFlowApp(
                 EditorRoute(
                     noteRepository = noteRepository,
                     contentPolishPlanner = contentPolishPlanner,
+                    topicExtractor = topicExtractor,
+                    noteInsightPlanner = noteInsightPlanner,
+                    voiceTranscriptionPlanner = voiceTranscriptionPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = null,
                     captureSessionKey = seedId,
+                    captureMode = captureSeed.mode,
                     initialContent = captureSeed.initialContent,
                     initialTopic = captureSeed.initialTopic,
                     initialFolderKey = captureSeed.initialFolderKey,
@@ -442,6 +496,7 @@ fun MindFlowApp(
                     onBack = { navController.popBackStack() },
                     onOpenHistory = ::openReviewChatHistory,
                     onOpenRecord = openNoteSafely,
+                    onCreateCapture = ::openCapture,
                 )
             }
 
@@ -466,9 +521,13 @@ fun MindFlowApp(
                 EditorRoute(
                     noteRepository = noteRepository,
                     contentPolishPlanner = contentPolishPlanner,
+                    topicExtractor = topicExtractor,
+                    noteInsightPlanner = noteInsightPlanner,
+                    voiceTranscriptionPlanner = voiceTranscriptionPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = noteId,
                     captureSessionKey = null,
+                    captureMode = com.mindflow.app.ui.navigation.CaptureMode.TEXT,
                     initialContent = "",
                     initialTopic = "",
                     initialFolderKey = null,
@@ -488,30 +547,30 @@ fun MindFlowApp(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 color = Panel,
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(18.dp),
                 border = BorderStroke(1.dp, BorderSoft),
-                shadowElevation = 10.dp,
+                shadowElevation = 2.dp,
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 7.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     topLevelDestinations.forEach { destination ->
                         val active = normalizedRoute == destination.route
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(
                                     if (active) {
                                         Brush.horizontalGradient(
                                             listOf(
-                                                AccentBlue.copy(alpha = 0.12f),
-                                                AccentBlue.copy(alpha = 0.12f),
+                                                AccentBlue.copy(alpha = 0.10f),
+                                                AccentBlue.copy(alpha = 0.10f),
                                             ),
                                         )
                                     } else {
@@ -519,13 +578,16 @@ fun MindFlowApp(
                                     },
                                 ),
                         ) {
-                            TextButton(
-                                onClick = {
-                                    openTopLevel(destination.route)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(vertical = 10.dp),
-                            ) {
+                                TextButton(
+                                    onClick = {
+                                        openTopLevel(destination.route)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
+                                        .testTag(destination.testTag),
+                                    contentPadding = PaddingValues(vertical = 7.dp),
+                                ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
@@ -533,9 +595,10 @@ fun MindFlowApp(
                                     Icon(
                                         imageVector = destination.icon,
                                         contentDescription = destination.label,
+                                        modifier = Modifier.size(23.dp),
                                         tint = if (active) Accent else TextSoft,
                                     )
-                                    Spacer(modifier = Modifier.size(4.dp))
+                                    Spacer(modifier = Modifier.size(2.dp))
                                     Text(
                                         text = destination.label,
                                         style = MaterialTheme.typography.labelSmall,

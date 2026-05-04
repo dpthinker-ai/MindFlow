@@ -50,7 +50,7 @@ Immediate work:
 
 This phase should produce:
 
-- one consistent product definition across `README.md`, `AGENT.md`, `PLANS.md`, and `DESIGN.md`
+- one consistent product definition across `README.md`, `PROJECT_GUIDE.md`, `PLANS.md`, and `DESIGN.md`
 - bottom navigation aligned to `记录 / Flow / 查询 / 图谱 / 设置`
 - explicit local-first and cloud-escalation rules
 

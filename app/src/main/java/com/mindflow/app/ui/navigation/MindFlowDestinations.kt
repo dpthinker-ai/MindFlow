@@ -2,12 +2,17 @@ package com.mindflow.app.ui.navigation
 
 import android.net.Uri
 import com.mindflow.app.data.model.NoteStatus
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 object MindFlowDestinations {
     const val FEED = "feed"
     const val FLOW_TODAY = "flow/today"
     const val FLOW_REVIEW = "flow/review"
     const val FLOW_GRAPH = "flow/graph"
+    const val TODAY_DISCOVERY = "flow/today/discovery"
+    const val TODAY_TASK_DETAIL = "flow/today/task/{threadKey}"
+    const val TODAY_TASK_DETAIL_ARG = "threadKey"
     const val THREAD = "flow/thread/{threadKey}"
     const val THREAD_ARG = "threadKey"
     const val SEARCH_BASE = "search"
@@ -29,6 +34,7 @@ object MindFlowDestinations {
     fun folderRoute(folderKey: String): String = "folder/$folderKey"
     fun detailRoute(noteId: Long): String = "detail/$noteId"
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
+    fun todayTaskDetailRoute(threadKey: String): String = "flow/today/task/${threadKey.encodeRouteSegment()}"
     fun graphRoute(): String = FLOW_GRAPH
     fun captureRoute(seedId: Long): String = "capture/$seedId"
     fun reviewChatRoute(seedId: Long): String = "review-chat/$seedId"
@@ -52,3 +58,7 @@ object MindFlowDestinations {
         return if (params.isEmpty()) SEARCH_BASE else "$SEARCH_BASE?${params.joinToString("&")}"
     }
 }
+
+private fun String.encodeRouteSegment(): String =
+    URLEncoder.encode(this, StandardCharsets.UTF_8.toString())
+        .replace("+", "%20")

@@ -59,8 +59,43 @@ class MarkdownImportParser {
         val content = extractBlock(
             section = section,
             startMarker = "### 内容",
+            endMarkers = listOf("### AI 洞察", "### 状态历史", "---"),
+        )
+
+        val aiInsightSection = extractBlock(
+            section = section,
+            startMarker = "### AI 洞察",
             endMarkers = listOf("### 状态历史", "---"),
         )
+        val aiSummary = extractBlock(
+            section = aiInsightSection,
+            startMarker = "#### 摘要",
+            endMarkers = listOf("#### 要点"),
+        )
+        val aiKeyPoints = extractBlock(
+            section = aiInsightSection,
+            startMarker = "#### 要点",
+            endMarkers = emptyList(),
+        ).lineSequence()
+            .map(String::trim)
+            .filter { it.startsWith("- ") }
+            .map { it.removePrefix("- ").trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+        val aiInsightContentHash = Regex("(?m)^- 内容指纹: (.+)$")
+            .find(aiInsightSection)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            .orEmpty()
+        val aiInsightUpdatedAt = Regex("(?m)^- 更新时间: (.+)$")
+            .find(aiInsightSection)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeUnless { it == "未知" }
+            ?.let(TimeFormatter::parseFull)
+            ?: 0L
 
         val historySection = extractBlock(
             section = section,
@@ -90,6 +125,10 @@ class MarkdownImportParser {
             horizon = horizon,
             knowledgeTrust = knowledgeTrust,
             isArchived = isArchived,
+            aiSummary = aiSummary,
+            aiKeyPoints = aiKeyPoints,
+            aiInsightContentHash = aiInsightContentHash,
+            aiInsightUpdatedAt = aiInsightUpdatedAt,
             createdAt = createdAt,
             updatedAt = updatedAt,
             history = history,

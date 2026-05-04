@@ -22,7 +22,7 @@ import com.mindflow.app.data.local.entity.NoteStatusHistoryEntity
         MemoryThreadEntity::class,
         MemoryDigestEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @TypeConverters(MindFlowConverters::class)
@@ -119,6 +119,15 @@ abstract class MindFlowDatabase : RoomDatabase() {
                     )
                     """.trimIndent(),
                 )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN aiSummary TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE notes ADD COLUMN aiKeyPoints TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE notes ADD COLUMN aiInsightContentHash TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE notes ADD COLUMN aiInsightUpdatedAt INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

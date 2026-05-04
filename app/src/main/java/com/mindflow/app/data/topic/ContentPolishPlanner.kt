@@ -47,6 +47,40 @@ class ContentPolishPlanner(
         }
     }
 
+    suspend fun polishTitle(title: String, content: String): ContentPolishResult {
+        val currentTitle = title.trim()
+        if (currentTitle.isBlank() && content.isBlank()) {
+            return ContentPolishResult.Failure("先写标题或正文，再交给 AI 生成标题")
+        }
+
+        val result = runCatching {
+            aiTaskRouter.run(
+                AiTaskRequest(
+                    type = AiTaskType.POLISH_TITLE,
+                    input = AiTaskInput.TitleText(currentTitle, content.trim()),
+                    automaticPreference = AiAutomaticPreference.PREFER_CLOUD,
+                    validate = { payload ->
+                        val polish = payload as AiTaskPayload.Polish
+                        polish.polishedText.isNotBlank()
+                    },
+                ),
+            )
+        }.getOrElse { error ->
+            if (error is AiTaskRoutingException && error.mode == AiExecutionMode.ON_DEVICE_ONLY) {
+                return ContentPolishResult.Failure("端侧模型这次没有给出可用标题")
+            }
+            return ContentPolishResult.Failure(error.message ?: "AI 标题润色失败")
+        }
+
+        val payload = result.payload as AiTaskPayload.Polish
+        val polished = normalizeTitle(payload.polishedText)
+        return if (polished == currentTitle) {
+            ContentPolishResult.NoChange
+        } else {
+            ContentPolishResult.Success(polishedText = polished, summary = payload.changeSummary)
+        }
+    }
+
     private fun normalize(raw: String): String =
         raw
             .trim()
@@ -55,4 +89,12 @@ class ContentPolishPlanner(
             .removePrefix("```")
             .removeSuffix("```")
             .trim()
+
+    private fun normalizeTitle(raw: String): String =
+        normalize(raw)
+            .lineSequence()
+            .map { it.trim().trim('"', '“', '”', '\'', '`') }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+            .take(48)
 }

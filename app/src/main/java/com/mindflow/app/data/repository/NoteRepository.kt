@@ -37,6 +37,10 @@ interface NoteRepository {
         folderManuallyEdited: Boolean = false,
         topicManuallyEdited: Boolean = false,
         tagsManuallyEdited: Boolean = false,
+        aiSummary: String = "",
+        aiKeyPoints: List<String> = emptyList(),
+        aiInsightContentHash: String = "",
+        aiInsightUpdatedAt: Long = 0L,
     ): Long
     suspend fun updateNote(
         noteId: Long,
@@ -55,6 +59,7 @@ interface NoteRepository {
 
     suspend fun setArchived(noteId: Long, archived: Boolean)
     suspend fun deleteNote(noteId: Long)
+    suspend fun ensureAiInsight(noteId: Long): Boolean
     suspend fun classifyPendingFolders(): Int
     suspend fun retriggerFolderClassification(noteId: Long): FolderRefreshResult
     suspend fun retriggerTopicExtraction(noteId: Long): TopicRefreshResult

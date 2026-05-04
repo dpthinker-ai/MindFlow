@@ -46,9 +46,9 @@ import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 
-internal val PanelShape = RoundedCornerShape(22.dp)
-internal val CardShape = RoundedCornerShape(16.dp)
-internal val BottomBarClearance = 108.dp
+internal val PanelShape = RoundedCornerShape(18.dp)
+internal val CardShape = RoundedCornerShape(14.dp)
+internal val BottomBarClearance = 88.dp
 internal val ScreenHorizontalPadding = 20.dp
 
 enum class InsightTone {
@@ -64,15 +64,7 @@ fun ScreenBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        CreamMid,
-                        Cream,
-                        Cream,
-                    ),
-                ),
-            ),
+            .background(Cream),
         content = content,
     )
 }
@@ -86,8 +78,8 @@ fun PanelCard(
         color = WhiteGlass,
         shape = PanelShape,
         border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 8.dp,
-        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
+        tonalElevation = 0.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(
@@ -317,9 +309,9 @@ fun MetricTile(
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = CardShape,
-        modifier = modifier.heightIn(min = 64.dp),
+        modifier = modifier.heightIn(min = 56.dp),
         border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 3.dp,
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -385,8 +377,8 @@ fun ActionButton(
             contentColor = Color.White,
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 4.dp,
-            pressedElevation = 1.dp,
+            defaultElevation = 1.dp,
+            pressedElevation = 0.dp,
             disabledElevation = 0.dp,
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),

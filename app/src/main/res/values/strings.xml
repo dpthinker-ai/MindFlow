@@ -5,7 +5,7 @@
     <string name="shortcut_capture_short">新建记录</string>
     <string name="shortcut_capture_long">快速写下一条记录</string>
     <string name="shortcut_voice_short">语音记录</string>
-    <string name="shortcut_voice_long">直接说出一条新记录</string>
+    <string name="shortcut_voice_long">打开语音记录界面</string>
     <string name="shortcut_search_short">查找记录</string>
     <string name="shortcut_search_long">打开查找与筛选</string>
     <string name="shortcut_flow_short">打开 Flow</string>

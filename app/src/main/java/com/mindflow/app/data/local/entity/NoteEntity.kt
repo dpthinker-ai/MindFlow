@@ -23,6 +23,10 @@ data class NoteEntity(
     val horizon: NoteHorizon = NoteHorizon.MEDIUM,
     val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
     val isArchived: Boolean,
+    val aiSummary: String = "",
+    val aiKeyPoints: List<String> = emptyList(),
+    val aiInsightContentHash: String = "",
+    val aiInsightUpdatedAt: Long = 0L,
     val createdAt: Long,
     val updatedAt: Long,
 )

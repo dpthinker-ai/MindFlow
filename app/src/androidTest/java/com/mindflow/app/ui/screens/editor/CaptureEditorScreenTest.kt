@@ -24,15 +24,24 @@ class CaptureEditorScreenTest {
                     onContentChange = {},
                     onSave = {},
                     onSaveAndExit = {},
-                    onVoiceCapture = {},
                 )
             }
         }
 
         composeRule.onNodeWithTag(CaptureContentFieldTestTag).assertExists()
-        composeRule.onNodeWithText("快速记录").assertExists()
-        composeRule.onNodeWithText("语音").assertExists()
-        composeRule.onNodeWithText("保存").assertExists()
+        composeRule.onNodeWithText("纯文本输入").assertExists()
+        composeRule.onNodeWithText("内容（可编辑）").assertExists()
+        composeRule.onNodeWithText("AI 建议标题").assertExists()
+        composeRule.onNodeWithText("类型识别").assertExists()
+        composeRule.onNodeWithText("附件").assertExists()
+        composeRule.onNodeWithText("更多选项").assertExists()
+        composeRule.onNodeWithText("添加图片").assertExists()
+        composeRule.onNodeWithText("添加链接").assertExists()
+        composeRule.onNodeWithText("存为草稿").assertExists()
+        composeRule.onNodeWithText("AI 建议").assertExists()
+        composeRule.onNodeWithText("完成记录").assertExists()
+        composeRule.onNodeWithContentDescription("保存").assertExists()
+        composeRule.onNodeWithContentDescription("语音输入").assertDoesNotExist()
         composeRule.onNodeWithText("AI 整理").assertDoesNotExist()
         composeRule.onNodeWithText("补充信息").assertDoesNotExist()
         composeRule.onNodeWithText("方向提示").assertDoesNotExist()

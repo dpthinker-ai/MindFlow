@@ -19,8 +19,10 @@ object NoteSearchQueryBuilder {
 
         val trimmedQuery = filters.query.trim()
         if (trimmedQuery.isNotEmpty()) {
-            clauses += "(topic LIKE ? OR content LIKE ?)"
+            clauses += "(topic LIKE ? OR content LIKE ? OR aiSummary LIKE ? OR aiKeyPoints LIKE ?)"
             val queryArg = "%$trimmedQuery%"
+            args += queryArg
+            args += queryArg
             args += queryArg
             args += queryArg
         }

@@ -52,6 +52,63 @@ class ReviewChatScreenInstrumentedTest {
     }
 
     @Test
+    fun route_showsReviewAnswerSourcesAndQuickActions() {
+        composeRule.setContent {
+            MindFlowTheme {
+                ReviewChatRoute(
+                    seed = ReviewChatSeed(initialQuestion = "我之前关于 MindFlow 说过什么？"),
+                    planner = samplePlanner(),
+                    savedConversationRepository = FakeSavedConversationRepository(),
+                    onBack = {},
+                    onOpenHistory = {},
+                    onOpenRecord = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("来源参考").assertIsDisplayed()
+        composeRule.onNodeWithText("快速操作").assertIsDisplayed()
+        composeRule.onNodeWithText("加入今天").assertIsDisplayed()
+        composeRule.onNodeWithText("转成任务").assertIsDisplayed()
+        composeRule.onNodeWithText("总结成记录").assertIsDisplayed()
+    }
+
+    @Test
+    fun historyRoute_showsReferenceFilterTabsAndTimeline() {
+        val repository = FakeSavedConversationRepository().apply {
+            seedSummary(
+                SavedReviewChatSessionSummary(
+                    sessionId = 11L,
+                    title = "MindFlow 主题回看",
+                    updatedAt = System.currentTimeMillis(),
+                    messageCount = 4,
+                    latestExcerpt = "已总结为 4 个要点",
+                )
+            )
+        }
+
+        composeRule.setContent {
+            MindFlowTheme {
+                ReviewChatHistoryRoute(
+                    savedConversationRepository = repository,
+                    onBack = {},
+                    onOpenSession = {},
+                    onStartNewChat = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("全部").assertIsDisplayed()
+        composeRule.onNodeWithText("时间").assertIsDisplayed()
+        composeRule.onNodeWithText("主题").assertIsDisplayed()
+        composeRule.onNodeWithText("任务").assertIsDisplayed()
+        composeRule.onNodeWithText("今天").assertIsDisplayed()
+        composeRule.onNodeWithText("本月").assertIsDisplayed()
+        composeRule.onNodeWithText("主题回看").assertIsDisplayed()
+        composeRule.onNodeWithText("回看结果").assertIsDisplayed()
+    }
+
+    @Test
     fun route_rendersAssistantMarkdownInsteadOfRawSyntax() {
         composeRule.setContent {
             MindFlowTheme {
@@ -173,5 +230,11 @@ class ReviewChatScreenInstrumentedTest {
             savedSummaries
 
         override suspend fun deleteSessions(sessionIds: List<Long>) = Unit
+
+        fun seedSummary(summary: SavedReviewChatSessionSummary) {
+            savedSummaries.value = listOf(summary)
+            latestSummary.value = summary
+        }
+
     }
 }

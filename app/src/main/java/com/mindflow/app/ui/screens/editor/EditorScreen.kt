@@ -1,19 +1,24 @@
 package com.mindflow.app.ui.screens.editor
 
-import android.app.Activity
-import android.content.ActivityNotFoundException
+import android.Manifest
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
-import android.speech.RecognizerIntent
+import android.media.MediaPlayer
+import android.net.Uri
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,22 +27,42 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +76,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +87,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -68,8 +98,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
 import com.mindflow.app.MindFlowApplication
 import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.ai.AiProvider
@@ -88,10 +120,13 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallResult
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.NoteInsightPlanner
+import com.mindflow.app.data.topic.TopicExtractor
+import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
+import com.mindflow.app.ui.navigation.CaptureMode
 import com.mindflow.app.ui.components.ActionButton
 import com.mindflow.app.ui.components.GhostActionButton
 import com.mindflow.app.ui.components.GridTwo
-import com.mindflow.app.ui.components.IconPillButton
 import com.mindflow.app.ui.components.MarkdownText
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
@@ -106,6 +141,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 internal data class EditorDraftAnalysisInput(
@@ -181,9 +217,14 @@ internal fun buildEditorAiRunFeedback(
 ): String {
     val actionLabel = when (taskType) {
         AiTaskType.POLISH_CONTENT -> "整理正文"
+        AiTaskType.POLISH_TITLE -> "润色标题"
+        AiTaskType.SUMMARIZE_NOTE -> "整理洞察"
         AiTaskType.EXTRACT_TOPIC -> "整理主题"
         AiTaskType.EXTRACT_TAGS -> "整理标签"
         AiTaskType.CLASSIFY_CATEGORY -> "整理分类"
+        AiTaskType.TRANSCRIBE_AUDIO -> "语音识别"
+        AiTaskType.TRANSLATE_AUDIO -> "语音翻译"
+        AiTaskType.UNDERSTAND_IMAGE -> "图片理解"
         AiTaskType.GRAPH_EXTRACT_CONCEPTS,
         AiTaskType.GRAPH_CANONICALIZE_CONCEPTS,
         AiTaskType.GRAPH_GENERATE_RELATIONS,
@@ -198,6 +239,21 @@ internal fun buildEditorAiRunFeedback(
     } else {
         "本次${actionLabel}由${providerLabel}完成。"
     }
+}
+
+internal fun textContentEditorMinLines(content: String): Int {
+    val explicitLines = content.lineSequence().count().coerceAtLeast(1)
+    return explicitLines.coerceIn(3, 6)
+}
+
+internal fun voiceTranscriptEditorMinLines(transcript: String): Int {
+    val explicitLines = transcript.lineSequence().count().coerceAtLeast(1)
+    val lengthLines = when {
+        transcript.length >= 420 -> 8
+        transcript.length >= 220 -> 6
+        else -> 4
+    }
+    return maxOf(explicitLines, lengthLines).coerceIn(4, 10)
 }
 
 internal fun parseEditorAiTraceSnapshot(raw: String): EditorAiTraceSnapshot? {
@@ -254,9 +310,13 @@ private fun readLatestEditorAiRunFeedback(
 fun EditorRoute(
     noteRepository: NoteRepository,
     contentPolishPlanner: ContentPolishPlanner,
+    topicExtractor: TopicExtractor,
+    noteInsightPlanner: NoteInsightPlanner,
+    voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     noteId: Long?,
     captureSessionKey: Long? = null,
+    captureMode: CaptureMode = CaptureMode.TEXT,
     initialContent: String = "",
     initialTopic: String = "",
     initialFolderKey: String? = null,
@@ -277,6 +337,9 @@ fun EditorRoute(
         factory = NoteEditorViewModel.factory(
             noteRepository = noteRepository,
             contentPolishPlanner = contentPolishPlanner,
+            topicExtractor = topicExtractor,
+            noteInsightPlanner = noteInsightPlanner,
+            voiceTranscriptionPlanner = voiceTranscriptionPlanner,
             noteId = noteId,
             initialContent = initialContent,
             initialTopic = initialTopic,
@@ -287,42 +350,21 @@ fun EditorRoute(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var autoVoiceStarted by rememberSaveable(captureSessionKey ?: -1L) { mutableStateOf(false) }
-    val speechInputLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val recognizedText = result.data
-            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            ?.firstOrNull()
-            ?.trim()
-            .orEmpty()
-        if (recognizedText.isBlank()) return@rememberLauncherForActivityResult
-        val mergedContent = when {
-            uiState.content.isBlank() -> recognizedText
-            else -> uiState.content.trimEnd() + "\n\n" + recognizedText
-        }
-        viewModel.onContentChange(mergedContent)
-        Toast.makeText(context, "已转成正文，可继续编辑", Toast.LENGTH_SHORT).show()
+    var inlineVoiceRequested by rememberSaveable(noteId, captureSessionKey) { mutableStateOf(false) }
+    val launchVoiceCapture = remember {
+        { inlineVoiceRequested = true }
     }
-    val startVoiceCapture: () -> Unit = remember(speechInputLauncher, context) {
-        {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-                )
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "说出你现在想记下的内容")
-            }
-            runCatching { speechInputLauncher.launch(intent) }
-                .onFailure {
-                    val message = if (it is ActivityNotFoundException) {
-                        "设备上没有可用的语音识别服务"
-                    } else {
-                        "暂时无法启动语音输入"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                }
+    val launchedAsVoiceCapture = uiState.isNew && captureMode == CaptureMode.VOICE
+    val showVoiceCapture = shouldShowVoiceCaptureScreen(
+        isNew = uiState.isNew,
+        launchCaptureMode = captureMode,
+        inlineVoiceRequested = inlineVoiceRequested,
+    )
+    val leaveVoiceCapture: () -> Unit = {
+        if (inlineVoiceRequested && !launchedAsVoiceCapture) {
+            inlineVoiceRequested = false
+        } else {
+            onBack()
         }
     }
 
@@ -335,26 +377,49 @@ fun EditorRoute(
         }
     }
 
-    LaunchedEffect(autoStartVoiceInput, uiState.isLoading, uiState.noteId) {
-        if (
-            autoStartVoiceInput &&
-            !autoVoiceStarted &&
-            !uiState.isLoading &&
-            uiState.noteId == null
-        ) {
-            autoVoiceStarted = true
-            startVoiceCapture()
-        }
-    }
-
-    if (uiState.isNew) {
+    if (showVoiceCapture) {
+        VoiceCaptureScreen(
+            uiState = uiState,
+            autoStartRecording = shouldAutoStartVoiceCapture(
+                launchAutoStart = autoStartVoiceInput,
+                inlineVoiceRequested = inlineVoiceRequested,
+            ),
+            cleanupFilesOnLeaveWithoutSaving = launchedAsVoiceCapture,
+            onBack = leaveVoiceCapture,
+            onContentChange = viewModel::onContentChange,
+            onEnsureVoiceInsight = viewModel::ensureVoiceAiInsight,
+            onEnsureVoiceTranscription = viewModel::ensureVoiceTranscription,
+            onSave = { viewModel.save(exitAfterSave = false) },
+            onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+            onCaptureAction = viewModel::saveWithCaptureAction,
+        )
+    } else if (uiState.isNew && captureMode == CaptureMode.ARTICLE) {
+        ArticleCaptureScreen(
+            uiState = uiState,
+            onBack = onBack,
+            onContentChange = viewModel::onContentChange,
+            onSave = { viewModel.save(exitAfterSave = false) },
+            onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+            onCaptureAction = viewModel::saveWithCaptureAction,
+        )
+    } else if (uiState.isNew && captureMode == CaptureMode.IMAGE) {
+        ImageCaptureScreen(
+            uiState = uiState,
+            onBack = onBack,
+            onContentChange = viewModel::onContentChange,
+            onSave = { viewModel.save(exitAfterSave = false) },
+            onSaveAndExit = { viewModel.save(exitAfterSave = true) },
+            onCaptureAction = viewModel::saveWithCaptureAction,
+        )
+    } else if (uiState.isNew) {
         CaptureEditorScreen(
             uiState = uiState,
             onBack = onBack,
             onContentChange = viewModel::onContentChange,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
-            onVoiceCapture = startVoiceCapture,
+            onGenerateTitle = viewModel::generateTitle,
+            onCaptureTypeSelect = viewModel::onCaptureTypeChange,
         )
     } else {
         FullEditorScreen(
@@ -366,17 +431,16 @@ fun EditorRoute(
             onTopicChange = viewModel::onTopicChange,
             onFolderChange = viewModel::onFolderChange,
             onAddTag = viewModel::addTag,
-            onRemoveTag = viewModel::removeTag,
             onStatusChange = viewModel::onStatusChange,
-            onHorizonChange = viewModel::onHorizonChange,
-            onKnowledgeTrustChange = viewModel::onKnowledgeTrustChange,
             onArchiveChange = viewModel::onArchivedChange,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
-            onVoiceCapture = startVoiceCapture,
             onPolishContent = viewModel::polishContent,
+            onGenerateTitle = viewModel::generateTitle,
+            onCaptureTypeSelect = viewModel::onCaptureTypeChange,
             onApplyPolishedContent = viewModel::applyPolishedContent,
             onDiscardPolishedContent = viewModel::discardPolishedContent,
+            onEnsureVoiceTranscription = { viewModel.ensureVoiceTranscription() },
             onRetriggerFolder = viewModel::retriggerFolderClassification,
             onRetriggerTopic = viewModel::retriggerTopicExtraction,
             onRetriggerTag = viewModel::retriggerTagExtraction,
@@ -385,6 +449,17 @@ fun EditorRoute(
         )
     }
 }
+
+internal fun shouldShowVoiceCaptureScreen(
+    isNew: Boolean,
+    launchCaptureMode: CaptureMode,
+    inlineVoiceRequested: Boolean,
+): Boolean = inlineVoiceRequested || (isNew && launchCaptureMode == CaptureMode.VOICE)
+
+internal fun shouldAutoStartVoiceCapture(
+    launchAutoStart: Boolean,
+    inlineVoiceRequested: Boolean,
+): Boolean = launchAutoStart
 
 internal fun buildEditorDraftAnalysis(input: EditorDraftAnalysisInput): EditorDraftAnalysis {
     val noteId = input.noteId ?: return EditorDraftAnalysis()
@@ -467,8 +542,13 @@ internal fun CaptureEditorScreen(
     onContentChange: (String) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
-    onVoiceCapture: () -> Unit,
+    onGenerateTitle: () -> Unit,
+    onCaptureTypeSelect: (String) -> Unit,
 ) {
+    val context = LocalContext.current
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val writingCardHeight = remember(screenHeightDp) { textCaptureWritingCardHeight(screenHeightDp) }
+    val sectionSpacing = if (screenHeightDp < 720) 8.dp else 10.dp
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
     fun requestBack() {
@@ -492,6 +572,638 @@ internal fun CaptureEditorScreen(
             },
             onLeaveWithoutSaving = {
                 showExitDialog = false
+                leaveNewCaptureWithoutSaving(context, uiState, onBack)
+            },
+        )
+    }
+
+    ScreenBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing),
+        ) {
+            EditorTopBar(
+                title = "纯文本输入",
+                onBack = ::requestBack,
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(sectionSpacing),
+            ) {
+                Text(
+                    text = "内容（可编辑）",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                CaptureWritingCard(
+                    uiState = uiState,
+                    onContentChange = onContentChange,
+                    height = writingCardHeight,
+                )
+                CaptureSuggestionRow(
+                    uiState = uiState,
+                    onGenerateTitle = onGenerateTitle,
+                )
+                CaptureTypeSection(
+                    uiState = uiState,
+                    onTypeSelect = onCaptureTypeSelect,
+                )
+                CaptureTagSection(uiState = uiState)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                CaptureAttachmentSection(modifier = Modifier.fillMaxWidth())
+                InputStickyActionBar(
+                    actions = listOf(
+                        InputActionSpec(
+                            text = if (uiState.isSaving) "保存中..." else "完成记录",
+                            icon = Icons.Outlined.Check,
+                            onClick = onSave,
+                            enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                            primary = true,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CaptureWritingCard(
+    uiState: NoteEditorUiState,
+    onContentChange: (String) -> Unit,
+    height: Dp,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        color = WhiteGlass,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 0.dp,
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            PaperField(
+                value = uiState.content,
+                onValueChange = onContentChange,
+                placeholder = "写下此刻想记录的内容。",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 26.dp)
+                    .testTag(CaptureContentFieldTestTag),
+                minLines = 7,
+                maxLines = 18,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                expandToContainer = true,
+            )
+            Text(
+                text = "${uiState.content.length} 字",
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 18.dp, bottom = 12.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+            )
+        }
+    }
+}
+
+private fun textCaptureWritingCardHeight(screenHeightDp: Int): Dp = when {
+    screenHeightDp < 700 -> 300.dp
+    screenHeightDp < 820 -> 348.dp
+    else -> 384.dp
+}
+
+@Composable
+private fun CaptureSuggestionRow(
+    uiState: NoteEditorUiState,
+    onGenerateTitle: () -> Unit,
+) {
+    val isHint = uiState.topic.isBlank()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "AI 建议标题",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = WhiteGlass,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, BorderSoft),
+            shadowElevation = 1.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 14.dp, top = 11.dp, end = 6.dp, bottom = 11.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = suggestedCaptureTitle(uiState),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isHint) TextSoft else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                FieldIconAction(
+                    icon = Icons.Outlined.Refresh,
+                    contentDescription = if (uiState.isRefreshingTopic) "正在重新建议标题" else "重新建议标题",
+                    onClick = onGenerateTitle,
+                    enabled = !uiState.isRefreshingTopic && uiState.content.isNotBlank(),
+            )
+        }
+    }
+}
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CaptureTypeSection(
+    uiState: NoteEditorUiState,
+    onTypeSelect: (String) -> Unit,
+) {
+    val selected = remember(uiState.content, uiState.status, uiState.tags) {
+        inferCaptureType(uiState)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "类型识别",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CaptureType.entries.forEach { type ->
+                CaptureTypeChip(
+                    type = type,
+                    selected = type == selected,
+                    onClick = { onTypeSelect(type.label) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CaptureTagSection(uiState: NoteEditorUiState) {
+    val tags = remember(uiState.content, uiState.tags) {
+        uiState.tags.filterNot { it in TextCaptureTypeLabels }
+            .ifEmpty { textInputPreviewTags(uiState.content) }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "标签",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            tags.take(3).forEach { tag ->
+                AssistChip(text = tag, accent = if (tag in uiState.tags) AccentBlue else TextSoft)
+            }
+            AssistChip(text = "保存后整理", accent = TextSoft)
+        }
+    }
+}
+
+@Composable
+private fun CaptureAttachmentSection(modifier: Modifier = Modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "附件",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AttachmentHint(
+                icon = Icons.Outlined.Image,
+                text = "图片",
+                modifier = Modifier.weight(1f),
+            )
+            AttachmentHint(
+                icon = Icons.Outlined.Link,
+                text = "链接",
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachmentHint(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.height(46.dp),
+        color = WhiteGlass.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = TextSoft,
+                modifier = Modifier.size(19.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private enum class CaptureType(
+    val label: String,
+    val icon: ImageVector,
+) {
+    IDEA("想法", Icons.Outlined.AutoFixHigh),
+    TASK("任务", Icons.Outlined.CheckCircle),
+    DOCUMENT("文档", Icons.Outlined.Article),
+    SPARK("灵感", Icons.Outlined.Edit),
+}
+
+@Composable
+private fun CaptureTypeChip(
+    type: CaptureType,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .heightIn(min = 44.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            color = if (selected) AccentBlue.copy(alpha = 0.12f) else Color.Transparent,
+            shape = RoundedCornerShape(999.dp),
+            border = if (selected) BorderStroke(1.dp, AccentBlue.copy(alpha = 0.28f)) else null,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = type.icon,
+                    contentDescription = null,
+                    tint = if (selected) AccentBlue else TextSoft,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = type.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun suggestedCaptureTitle(uiState: NoteEditorUiState): String {
+    if (uiState.topic.isNotBlank()) return uiState.topic
+    if (uiState.isRefreshingTopic) return "正在生成标题..."
+    return "点击刷新自动生成标题"
+}
+
+private fun inferCaptureType(uiState: NoteEditorUiState): CaptureType {
+    val tagSet = uiState.tags.toSet()
+    val haystack = (uiState.content + " " + uiState.topic).lowercase()
+    return when {
+        "想法" in tagSet -> CaptureType.IDEA
+        "任务" in tagSet -> CaptureType.TASK
+        "文档" in tagSet -> CaptureType.DOCUMENT
+        "灵感" in tagSet -> CaptureType.SPARK
+        uiState.status == NoteStatus.IN_PROGRESS || uiState.status == NoteStatus.DONE || "任务" in haystack || "todo" in haystack ->
+            CaptureType.TASK
+        "文档" in haystack || "资料" in haystack || "链接" in haystack || "http://" in haystack || "https://" in haystack ->
+            CaptureType.DOCUMENT
+        "灵感" in haystack || "spark" in haystack ->
+            CaptureType.SPARK
+        else -> CaptureType.IDEA
+    }
+}
+
+private fun textInputPreviewTags(content: String): List<String> {
+    val haystack = content.lowercase()
+    val tags = buildList {
+        add("文本")
+        if ("产品" in haystack || "用户" in haystack) add("产品")
+        if ("ai" in haystack || "AI" in content || "智能" in content) add("AI")
+        if ("设计" in haystack || "体验" in content) add("体验")
+        if (size == 1) add("待整理")
+    }
+    return tags.distinct().take(3)
+}
+
+@Composable
+internal fun ArticleCaptureScreen(
+    uiState: NoteEditorUiState,
+    onBack: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndExit: () -> Unit,
+    onCaptureAction: (CapturePostAction) -> Unit,
+) {
+    val context = LocalContext.current
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+    val model = remember(uiState.topic, uiState.content, uiState.tags, uiState.updatedAt) {
+        buildArticleCaptureModel(
+            topic = uiState.topic,
+            content = uiState.content,
+            tags = uiState.tags,
+            updatedAt = uiState.updatedAt,
+        )
+    }
+
+    fun requestBack() {
+        if (uiState.hasUnsavedChanges) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
+
+    if (showExitDialog) {
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
+            },
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                leaveNewCaptureWithoutSaving(context, uiState, onBack)
+            },
+        )
+    }
+
+    ScreenBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EditorTopBar(
+                title = "文章收藏解析",
+                onBack = ::requestBack,
+                actionIcon = Icons.Outlined.MoreVert,
+                actionContentDescription = "更多",
+                onAction = {},
+                actionAccent = TextSoft,
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ArticleSourceCard(model = model)
+                ArticleSectionCard(title = "AI 生成摘要") {
+                    Text(
+                        text = model.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ArticleSectionCard(title = "关键要点") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        model.keyPoints.forEach { point ->
+                            BulletText(text = point)
+                        }
+                    }
+                }
+                ArticleSectionCard(title = "相关主题") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        model.topics.forEach { topic ->
+                            AssistChip(text = topic, accent = AccentBlue)
+                        }
+                    }
+                }
+                ArticleSourceInput(
+                    value = uiState.content,
+                    onValueChange = onContentChange,
+                )
+            }
+            CaptureStickyActionBar(
+                isSaving = uiState.isSaving,
+                canSave = uiState.content.isNotBlank(),
+                primaryText = "保存收藏",
+                secondaryText = "查看原文",
+                secondaryIcon = Icons.Outlined.OpenInNew,
+                onSecondary = {},
+                onSave = onSave,
+                onCaptureAction = onCaptureAction,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun VoiceCaptureScreen(
+    uiState: NoteEditorUiState,
+    autoStartRecording: Boolean = false,
+    cleanupFilesOnLeaveWithoutSaving: Boolean = false,
+    onBack: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onEnsureVoiceInsight: () -> Unit,
+    onEnsureVoiceTranscription: (String) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndExit: () -> Unit,
+    onCaptureAction: (CapturePostAction) -> Unit,
+) {
+    val context = LocalContext.current
+    val model = remember(uiState.topic, uiState.content, uiState.tags, uiState.updatedAt) {
+        buildVoiceCaptureModel(
+            topic = uiState.topic,
+            content = uiState.content,
+            tags = uiState.tags,
+            updatedAt = uiState.updatedAt,
+        )
+    }
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+    var recordingState by rememberSaveable { mutableStateOf(VoiceRecordingState.IDLE) }
+    var recordedPath by rememberSaveable(uiState.content) { mutableStateOf(extractCaptureField(uiState.content, "原始录音")) }
+    var elapsedSeconds by rememberSaveable { mutableStateOf(0) }
+    var recordingStartedAt by rememberSaveable { mutableStateOf(0L) }
+    var autoStartConsumed by rememberSaveable { mutableStateOf(false) }
+    var amplitudeLevel by rememberSaveable { mutableStateOf(0f) }
+    var waveformTick by rememberSaveable { mutableStateOf(0) }
+    val recorder = remember(context.applicationContext) { VoiceCaptureRecorder(context.applicationContext) }
+    val transcriptText = remember(uiState.content) { voiceTranscriptFromContent(uiState.content) }
+    val recognitionStatus = remember(uiState.content) { voiceRecognitionStatusFromContent(uiState.content) }
+    val fallbackVoiceAiSummary = remember(uiState.content) { extractCaptureField(uiState.content, VoiceAiSummaryFieldLabel) }
+    val fallbackVoiceKeyPoints = remember(uiState.content) { voiceKeyPointsFromContent(uiState.content) }
+    val voiceAiSummary = uiState.aiSummary.ifBlank { fallbackVoiceAiSummary }
+    val voiceKeyPoints = if (uiState.aiKeyPoints.isNotEmpty()) uiState.aiKeyPoints else fallbackVoiceKeyPoints
+
+    fun requestBack() {
+        if (uiState.hasUnsavedChanges) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    fun startRecording() {
+        runCatching {
+            recorder.start()
+        }.onSuccess {
+            recordingStartedAt = System.currentTimeMillis()
+            elapsedSeconds = 0
+            recordedPath = it.absolutePath
+            recordingState = VoiceRecordingState.RECORDING
+        }.onFailure {
+            recordingState = VoiceRecordingState.IDLE
+            Toast.makeText(context, "暂时无法开始录音", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            startRecording()
+        } else {
+            Toast.makeText(context, "需要录音权限才能保存原始音频", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun requestStartRecording() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startRecording()
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    fun stopRecording() {
+        val file = recorder.stop()
+        recordingState = if (file != null) VoiceRecordingState.SAVED else VoiceRecordingState.IDLE
+        if (file == null) {
+            Toast.makeText(context, "录音太短，未保存文件", Toast.LENGTH_SHORT).show()
+            return
+        }
+        recordedPath = file.absolutePath
+        onContentChange(
+            replaceCaptureField(
+                ensureCaptureSections(
+                    replaceCaptureField(uiState.content, "原始录音", file.absolutePath),
+                    listOf(VoiceTranscriptFieldLabel, VoiceRecognitionFieldLabel),
+                ),
+                VoiceRecognitionFieldLabel,
+                "正在转写音频…",
+            ),
+        )
+        onEnsureVoiceTranscription(file.absolutePath)
+        Toast.makeText(context, "原始录音已保存", Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(recordingState, recordingStartedAt) {
+        while (recordingState == VoiceRecordingState.RECORDING && isActive) {
+            elapsedSeconds = ((System.currentTimeMillis() - recordingStartedAt) / 1000L).toInt().coerceAtLeast(0)
+            delay(500)
+        }
+    }
+
+    LaunchedEffect(recordingState) {
+        while (recordingState == VoiceRecordingState.RECORDING && isActive) {
+            val measuredLevel = recorder.maxAmplitudeLevel()
+            val voiceLevel = normalizeVoiceAmplitude(measuredLevel)
+            amplitudeLevel = maxOf(voiceLevel, amplitudeLevel * 0.55f)
+            if (voiceLevel > 0.02f) {
+                waveformTick += 1
+            }
+            delay(90)
+        }
+        amplitudeLevel = 0f
+    }
+
+    LaunchedEffect(autoStartRecording, autoStartConsumed) {
+        if (autoStartRecording && !autoStartConsumed && recordingState == VoiceRecordingState.IDLE) {
+            autoStartConsumed = true
+            requestStartRecording()
+        }
+    }
+
+    LaunchedEffect(transcriptText, voiceAiSummary, voiceKeyPoints, uiState.isExtractingVoiceInfo) {
+        if (
+            transcriptText.isNotBlank() &&
+            voiceAiSummary.isBlank() &&
+            voiceKeyPoints.isEmpty() &&
+            !uiState.isExtractingVoiceInfo
+        ) {
+            delay(700)
+            onEnsureVoiceInsight()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder.release()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
+
+    if (showExitDialog) {
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
+            },
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                if (cleanupFilesOnLeaveWithoutSaving) {
+                    cleanupCaptureFilesForDiscard(context, uiState.content)
+                }
                 onBack()
             },
         )
@@ -507,44 +1219,2433 @@ internal fun CaptureEditorScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             EditorTopBar(
-                title = "快速记录",
+                title = model.title,
                 onBack = ::requestBack,
+                actionIcon = Icons.Outlined.MoreVert,
+                actionContentDescription = "更多",
+                onAction = {},
+                actionAccent = TextSoft,
             )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                VoiceRecorderPanel(
+                    state = recordingState,
+                    elapsedSeconds = elapsedSeconds,
+                    recordedPath = recordedPath,
+                    amplitudeLevel = amplitudeLevel,
+                    waveformTick = waveformTick,
+                    onStart = ::requestStartRecording,
+                    onPause = {
+                        recorder.pause()
+                        recordingState = VoiceRecordingState.PAUSED
+                    },
+                    onResume = {
+                        recorder.resume()
+                        recordingState = VoiceRecordingState.RECORDING
+                    },
+                    onStop = ::stopRecording,
+                )
+                ArticleSectionCard(title = "原始内容信息") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "转写内容",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = formatRecordingDuration(elapsedSeconds),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                    }
+                    PaperField(
+                        value = transcriptText,
+                        onValueChange = { value ->
+                            onContentChange(
+                                replaceCaptureField(uiState.content, VoiceTranscriptFieldLabel, value),
+                            )
+                        },
+                        placeholder = voiceTranscriptPlaceholder(
+                            hasRecording = !recordedPath.isNullOrBlank(),
+                            recordingState = recordingState.name,
+                            isTranscribing = uiState.isTranscribingVoice,
+                        ),
+                        minLines = 4,
+                        maxLines = 8,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                    )
+                    voiceTranscriptHelperText(
+                        recognitionStatus = recognitionStatus,
+                        isTranscribing = uiState.isTranscribingVoice,
+                        transcript = transcriptText,
+                    )?.let { helperText ->
+                        Text(
+                            text = helperText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (helperText.startsWith("转写失败")) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                VoiceRecognitionStatusStrip(
+                    items = listOf(
+                        "音频" to if (recordedPath.isNullOrBlank()) "未保存" else "已暂存",
+                        "转写" to voiceTranscriptStatus(
+                            hasRecording = !recordedPath.isNullOrBlank(),
+                            transcript = transcriptText,
+                            isTranscribing = uiState.isTranscribingVoice,
+                            recognitionStatus = recognitionStatus,
+                        ),
+                        "时长" to formatRecordingDuration(elapsedSeconds),
+                        "整理" to if (voiceAiSummary.isBlank()) "待提取" else "已提取",
+                    ),
+                )
+                ArticleSectionCard(title = "AI 洞察") {
+                    if (voiceAiSummary.isNotBlank() || voiceKeyPoints.isNotEmpty()) {
+                        voiceAiSummary.takeIf { it.isNotBlank() }?.let { summary ->
+                            Text(
+                                text = summary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            voiceKeyPoints.forEach { point -> BulletText(text = point) }
+                        }
+                    } else {
+                        AiInsightPendingRow(
+                            text = if (uiState.isExtractingVoiceInfo) {
+                                "正在整理这段语音"
+                            } else {
+                                "转写完成后自动生成洞察"
+                            },
+                        )
+                    }
+                }
+            }
+            InputStickyActionBar(
+                actions = listOf(
+                    InputActionSpec(
+                        text = "删除",
+                        icon = Icons.Outlined.Close,
+                        onClick = {
+                            if (recordingState == VoiceRecordingState.RECORDING || recordingState == VoiceRecordingState.PAUSED) {
+                                recorder.stop()?.delete()
+                                recordingState = VoiceRecordingState.IDLE
+                            }
+                            leaveNewCaptureWithoutSaving(context, uiState, onBack)
+                        },
+                    ),
+                    InputActionSpec(
+                        text = "继续录入",
+                        icon = Icons.Outlined.Mic,
+                        onClick = ::requestStartRecording,
+                    ),
+                    InputActionSpec(
+                        text = when {
+                            uiState.isSaving -> "保存中..."
+                            uiState.isTranscribingVoice -> "转写中..."
+                            else -> "完成解析"
+                        },
+                        icon = Icons.Outlined.Check,
+                        onClick = onSave,
+                        enabled = !uiState.isSaving && !uiState.isTranscribingVoice && uiState.content.isNotBlank(),
+                        primary = true,
+                    ),
+                ),
+            )
+        }
+    }
+}
 
-            PanelCard(modifier = Modifier.weight(1f)) {
-                PaperField(
-                    value = uiState.content,
-                    onValueChange = onContentChange,
-                    placeholder = "记点什么",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .testTag(CaptureContentFieldTestTag),
-                    minLines = 12,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    expandToContainer = true,
+@Composable
+internal fun ImageCaptureScreen(
+    uiState: NoteEditorUiState,
+    onBack: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndExit: () -> Unit,
+    onCaptureAction: (CapturePostAction) -> Unit,
+) {
+    val context = LocalContext.current
+    val model = remember(uiState.topic, uiState.content, uiState.tags, uiState.updatedAt) {
+        buildImageCaptureModel(
+            topic = uiState.topic,
+            content = uiState.content,
+            tags = uiState.tags,
+            updatedAt = uiState.updatedAt,
+        )
+    }
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedImagePath by rememberSaveable(uiState.content) { mutableStateOf(extractCaptureField(uiState.content, "图片")) }
+    val imageBitmap by rememberImageBitmap(selectedImagePath)
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching { copyPickedImageToPrivateStorage(context, uri) }
+            .onSuccess { file ->
+                selectedImagePath = file.absolutePath
+                onContentChange(
+                    ensureCaptureSections(
+                        replaceCaptureField(uiState.content, "图片", file.absolutePath),
+                        listOf("图像理解结果", "关键信息提取", "结构化识别", "OCR 文本(可选)"),
+                    ),
+                )
+                Toast.makeText(context, "图片已保存到本地", Toast.LENGTH_SHORT).show()
+            }
+            .onFailure {
+                Toast.makeText(context, "暂时无法读取这张图片", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    fun requestBack() {
+        if (uiState.hasUnsavedChanges) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
+
+    if (showExitDialog) {
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
+            },
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                leaveNewCaptureWithoutSaving(context, uiState, onBack)
+            },
+        )
+    }
+
+    ScreenBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EditorTopBar(
+                title = model.title,
+                onBack = ::requestBack,
+                actionIcon = Icons.Outlined.MoreVert,
+                actionContentDescription = "更多",
+                onAction = {},
+                actionAccent = TextSoft,
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ArticleSectionCard(title = "图片预览") {
+                    ImagePickerPanel(
+                        imageBitmap = imageBitmap,
+                        selectedImagePath = selectedImagePath,
+                        onPickImage = {
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                    )
+                }
+                ArticleSectionCard(title = "图像理解结果") {
+                    Text(
+                        text = "等待 Gemma 4 端侧图片理解。AI 会根据图片类型选择场景总结、文字提取、图表解释或对象识别。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ArticleSectionCard(title = "关键信息提取") {
+                    Text(
+                        text = "选择图片后，识别结果会写入这里；你也可以先手动记录图片里的关键信息。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ArticleSectionCard(title = "结构化识别") {
+                    RecognitionInfoGrid(
+                        items = listOf(
+                            "类型" to "待识别",
+                            "主体" to "待提取",
+                            "文字" to "待 OCR",
+                            "置信度" to "待解析",
+                        ),
+                    )
+                }
+                ArticleSectionCard(title = "OCR 文本(可选)") {
+                    PaperField(
+                        value = uiState.content,
+                        onValueChange = onContentChange,
+                        placeholder = model.sourcePlaceholder,
+                        minLines = 4,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            InputStickyActionBar(
+                actions = listOf(
+                    InputActionSpec(
+                        text = "重新拍摄",
+                        icon = Icons.Outlined.Image,
+                        onClick = {},
+                    ),
+                    InputActionSpec(
+                        text = "从相册导入",
+                        icon = Icons.Outlined.Add,
+                        onClick = {
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                    ),
+                    InputActionSpec(
+                        text = if (uiState.isSaving) "保存中..." else "继续解析",
+                        icon = Icons.Outlined.Check,
+                        onClick = onSave,
+                        enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                        primary = true,
+                    ),
+                ),
+            )
+        }
+    }
+}
+
+private enum class VoiceRecordingState {
+    IDLE,
+    RECORDING,
+    PAUSED,
+    SAVED,
+}
+
+internal fun voiceTranscriptPlaceholder(
+    hasRecording: Boolean,
+    recordingState: String,
+    isTranscribing: Boolean = false,
+): String = when (recordingState) {
+    VoiceRecordingState.RECORDING.name -> "录音中，结束后会保存音频。"
+    VoiceRecordingState.PAUSED.name -> "录音已暂停，结束后会保存音频。"
+    else -> if (isTranscribing) {
+        "正在转写…"
+    } else if (hasRecording) {
+        "转写暂未完成，可先手动补充内容。"
+    } else {
+        "录音后，转写内容会显示在这里。"
+    }
+}
+
+internal fun voiceTranscriptStatus(
+    hasRecording: Boolean,
+    transcript: String,
+    isTranscribing: Boolean = false,
+    recognitionStatus: String = "",
+): String = when {
+    transcript.isNotBlank() -> "可编辑"
+    isTranscribing -> "转写中"
+    recognitionStatus.startsWith("转写失败") -> "失败"
+    hasRecording -> "待转写"
+    else -> "待录音"
+}
+
+internal fun voiceTranscriptHelperText(
+    recognitionStatus: String,
+    isTranscribing: Boolean,
+    transcript: String,
+): String? = when {
+    transcript.isNotBlank() -> null
+    isTranscribing -> "正在调用 Gemma 4 端侧转写"
+    recognitionStatus.startsWith("转写失败") -> voiceRecognitionStatusForDisplay(recognitionStatus)
+    recognitionStatus.isNotBlank() && recognitionStatus != "正在转写音频…" -> recognitionStatus
+    else -> null
+}
+
+internal fun voiceRecognitionStatusForDisplay(status: String): String =
+    if (status.contains("Gemma 4 模型已就绪")) {
+        "转写失败：旧版录音格式未被端侧音频输入识别；重新录音后会使用 16kHz WAV 转写"
+    } else {
+        status
+    }
+
+@Composable
+private fun VoiceRecorderPanel(
+    state: VoiceRecordingState,
+    elapsedSeconds: Int,
+    recordedPath: String?,
+    amplitudeLevel: Float,
+    waveformTick: Int,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RecordingWaveform(
+                active = state == VoiceRecordingState.RECORDING,
+                amplitudeLevel = amplitudeLevel,
+                tick = waveformTick,
+            )
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .size(58.dp)
+                    .background(AccentBlue.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Mic,
+                    contentDescription = null,
+                    tint = AccentBlue,
+                    modifier = Modifier.size(30.dp),
                 )
             }
+            RecordingWaveform(
+                active = state == VoiceRecordingState.RECORDING,
+                amplitudeLevel = amplitudeLevel,
+                tick = waveformTick + 4,
+            )
+        }
+        Text(
+            text = when (state) {
+                VoiceRecordingState.RECORDING -> "正在聆听中..."
+                VoiceRecordingState.PAUSED -> "录音已暂停"
+                VoiceRecordingState.SAVED -> "原始录音已保存"
+                VoiceRecordingState.IDLE -> "准备录音"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            when (state) {
+                VoiceRecordingState.IDLE,
+                VoiceRecordingState.SAVED,
+                -> GhostActionButton(
+                    text = if (state == VoiceRecordingState.SAVED) "重新录音" else "开始录音",
+                    onClick = onStart,
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Mic,
+                )
+                VoiceRecordingState.RECORDING -> {
+                    GhostActionButton(
+                        text = "暂停",
+                        onClick = onPause,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ActionButton(
+                        text = "结束录音",
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Check,
+                    )
+                }
+                VoiceRecordingState.PAUSED -> {
+                    GhostActionButton(
+                        text = "继续",
+                        onClick = onResume,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ActionButton(
+                        text = "结束录音",
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Check,
+                    )
+                }
+            }
+        }
+        if (!recordedPath.isNullOrBlank()) {
+            Text(
+                text = "本地文件：${File(recordedPath).name}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
 
+@Composable
+private fun RecordingWaveform(
+    active: Boolean,
+    amplitudeLevel: Float = 0f,
+    tick: Int = 0,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val level = if (active) amplitudeLevel.coerceIn(0f, 1f) else 0f
+        val quietProfile = listOf(16f, 18f, 20f, 22f, 24f, 22f, 20f, 18f, 16f)
+        val heights = if (active && level > 0.01f) {
+            List(9) { index ->
+                val pulse = ((index * 31 + tick * 23) % 100) / 100f
+                val dynamicHeight = quietProfile[index] + (pulse * 34f * level)
+                dynamicHeight.dp
+            }
+        } else {
+            quietProfile.map { it.dp }
+        }
+        heights.forEach { height ->
+            Box(
+                modifier = Modifier
+                    .width(6.dp)
+                    .height(height)
+                    .background(AccentBlue.copy(alpha = 0.45f), RoundedCornerShape(999.dp)),
+            )
+        }
+    }
+}
+
+internal fun normalizeVoiceAmplitude(rawLevel: Float): Float {
+    val noiseFloor = 0.04f
+    if (rawLevel <= noiseFloor) return 0f
+    val normalized = ((rawLevel - noiseFloor) / (1f - noiseFloor)).coerceIn(0f, 1f)
+    return kotlin.math.sqrt(normalized)
+}
+
+@Composable
+private fun ImagePickerPanel(
+    imageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    selectedImagePath: String?,
+    onPickImage: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "图片预览",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            color = AccentBlue.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+        ) {
+            if (imageBitmap != null) {
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = "图片预览",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(34.dp),
+                        )
+                        Text(
+                            text = "选择图片后在这里预览",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        ActionButton(
+            text = "选择图片",
+            onClick = onPickImage,
+            icon = Icons.Outlined.Image,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (!selectedImagePath.isNullOrBlank()) {
+            Text(
+                text = "本地文件：${File(selectedImagePath).name}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RelatedTopicSection(topics: List<String>) {
+    ArticleSectionCard(title = "相关主题") {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            topics.forEach { topic ->
+                AssistChip(text = topic, accent = AccentBlue)
+            }
+        }
+    }
+}
+
+private data class InputActionSpec(
+    val text: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+    val enabled: Boolean = true,
+    val primary: Boolean = false,
+)
+
+@Composable
+private fun InputStickyActionBar(actions: List<InputActionSpec>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = WhiteGlass.copy(alpha = 0.98f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            actions.forEach { action ->
+                if (action.primary) {
+                    ActionButton(
+                        text = action.text,
+                        onClick = action.onClick,
+                        enabled = action.enabled,
+                        modifier = Modifier.weight(1f),
+                        icon = action.icon,
+                    )
+                } else {
+                    GhostActionButton(
+                        text = action.text,
+                        onClick = action.onClick,
+                        enabled = action.enabled,
+                        modifier = Modifier.weight(1f),
+                        icon = action.icon,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContentReferenceActionRow(
+    onInsertToday: () -> Unit,
+    onLinkTask: () -> Unit,
+    onImportProject: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ArticleActionButton(
+            icon = Icons.Outlined.CalendarMonth,
+            text = "插入今天",
+            accent = Color(0xFF4C7EFF),
+            onClick = onInsertToday,
+            modifier = Modifier.weight(1f),
+        )
+        ArticleActionButton(
+            icon = Icons.Outlined.CheckCircle,
+            text = "链接任务",
+            accent = Color(0xFF8B6CFF),
+            onClick = onLinkTask,
+            modifier = Modifier.weight(1f),
+        )
+        ArticleActionButton(
+            icon = Icons.Outlined.Folder,
+            text = "导入项目",
+            accent = Color(0xFF3CBF7C),
+            onClick = onImportProject,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun RecognitionInfoGrid(
+    items: List<Pair<String, String>>,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowItems.forEach { (label, value) ->
+                    MetaRow(label, value, Modifier.weight(1f))
+                }
+                if (rowItems.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceRecognitionStatusStrip(items: List<Pair<String, String>>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
+    ) {
+        RecognitionInfoGrid(
+            items = items,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun CaptureStickyActionBar(
+    isSaving: Boolean,
+    canSave: Boolean,
+    primaryText: String,
+    secondaryText: String,
+    secondaryIcon: ImageVector,
+    onSecondary: () -> Unit,
+    onSave: () -> Unit,
+    onCaptureAction: (CapturePostAction) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = WhiteGlass.copy(alpha = 0.98f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 6.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ArticleActionButton(
+                    icon = Icons.Outlined.CalendarMonth,
+                    text = "插入今天",
+                    accent = Color(0xFF4C7EFF),
+                    onClick = { onCaptureAction(CapturePostAction.ADD_TO_TODAY) },
+                    modifier = Modifier.weight(1f),
+                )
+                ArticleActionButton(
+                    icon = Icons.Outlined.CheckCircle,
+                    text = "链接任务",
+                    accent = Color(0xFF8B6CFF),
+                    onClick = { onCaptureAction(CapturePostAction.CONVERT_TO_TASK) },
+                    modifier = Modifier.weight(1f),
+                )
+                ArticleActionButton(
+                    icon = Icons.Outlined.Folder,
+                    text = "导入项目",
+                    accent = Color(0xFF3CBF7C),
+                    onClick = { onCaptureAction(CapturePostAction.ADD_TO_PROJECT) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 GhostActionButton(
-                    text = "语音",
-                    onClick = onVoiceCapture,
+                    text = secondaryText,
+                    onClick = onSecondary,
                     modifier = Modifier.weight(1f),
+                    icon = secondaryIcon,
                 )
                 ActionButton(
-                    text = if (uiState.isSaving) "保存中..." else "保存",
+                    text = if (isSaving) "保存中..." else primaryText,
                     onClick = onSave,
-                    enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                    enabled = !isSaving && canSave,
                     modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.Save,
+                    icon = Icons.Outlined.Check,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun rememberImageBitmap(path: String?): androidx.compose.runtime.State<androidx.compose.ui.graphics.ImageBitmap?> =
+    produceState(initialValue = null, path) {
+        value = withContext(Dispatchers.IO) {
+            path
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?.let { file -> BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
+        }
+    }
+
+private fun copyPickedImageToPrivateStorage(
+    context: Context,
+    uri: Uri,
+): File {
+    val mimeType = context.contentResolver.getType(uri).orEmpty()
+    val extension = MimeTypeMap.getSingleton()
+        .getExtensionFromMimeType(mimeType)
+        ?.takeIf { it.isNotBlank() }
+        ?: "jpg"
+    val directory = File(context.filesDir, "captures/images").apply { mkdirs() }
+    val target = File(directory, "image-${System.currentTimeMillis()}.$extension")
+    context.contentResolver.openInputStream(uri).use { input ->
+        requireNotNull(input) { "Cannot open picked image" }
+        target.outputStream().use { output -> input.copyTo(output) }
+    }
+    return target
+}
+
+private fun leaveNewCaptureWithoutSaving(
+    context: Context,
+    uiState: NoteEditorUiState,
+    onBack: () -> Unit,
+) {
+    if (uiState.isNew) {
+        cleanupCaptureFilesForDiscard(context, uiState.content)
+    }
+    onBack()
+}
+
+private fun cleanupCaptureFilesForDiscard(
+    context: Context,
+    content: String,
+) {
+    capturePrivateFilesForDiscard(content, context.applicationContext.filesDir).forEach { file ->
+        runCatching {
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+    }
+}
+
+internal fun capturePrivateFilesForDiscard(
+    content: String,
+    appFilesDir: File,
+): List<File> {
+    val captureRoot = File(appFilesDir, "captures").canonicalFile
+    return listOf("原始录音", "图片")
+        .mapNotNull { label -> extractCaptureField(content, label).takeIf(String::isNotBlank) }
+        .distinct()
+        .map { path -> File(path).canonicalFile }
+        .filter { file -> file.isInsideDirectory(captureRoot) }
+}
+
+private fun File.isInsideDirectory(directory: File): Boolean {
+    var current: File? = this
+    while (current != null) {
+        if (current == directory) return true
+        current = current.parentFile
+    }
+    return false
+}
+
+private fun extractCaptureField(
+    content: String,
+    label: String,
+): String = content
+    .lineSequence()
+    .map { it.trim() }
+    .firstOrNull { it.startsWith("$label：") || it.startsWith("$label:") }
+    ?.substringAfter("：")
+    ?.substringAfter(":")
+    ?.trim()
+    .orEmpty()
+
+private fun replaceCaptureField(
+    content: String,
+    label: String,
+    value: String,
+): String {
+    val lines = content.lines().toMutableList()
+    val index = lines.indexOfFirst { line ->
+        val trimmed = line.trim()
+        trimmed.startsWith("$label：") || trimmed.startsWith("$label:")
+    }
+    val replacement = "$label：$value"
+    return if (index >= 0) {
+        lines[index] = replacement
+        lines.joinToString("\n").trimEnd()
+    } else {
+        listOf(content.trimEnd(), replacement)
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+    }
+}
+
+private fun mergeCaptureField(
+    editableContent: String,
+    label: String,
+    value: String,
+): String =
+    if (value.isBlank()) {
+        editableContent.trimEnd()
+    } else {
+        replaceCaptureField(editableContent, label, value)
+    }
+
+private fun contentWithoutCaptureFields(
+    content: String,
+    labels: Set<String>,
+): String = content
+    .lineSequence()
+    .filterNot { line ->
+        val trimmed = line.trim()
+        labels.any { label ->
+            trimmed.startsWith("$label：") || trimmed.startsWith("$label:")
+        }
+    }
+    .joinToString("\n")
+    .trim()
+
+private fun ensureCaptureSections(
+    content: String,
+    sectionLabels: List<String>,
+): String {
+    val existing = content.lines().map { it.substringBefore("：").substringBefore(":").trim() }.toSet()
+    val additions = sectionLabels
+        .filterNot { it in existing }
+        .map { "$it：" }
+    return (listOf(content.trimEnd()) + additions)
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
+}
+
+private fun formatRecordingDuration(seconds: Int): String {
+    val minutes = seconds / 60
+    val rest = seconds % 60
+    return "%02d:%02d".format(minutes, rest)
+}
+
+private fun formatVoicePlaybackTime(milliseconds: Int): String {
+    val totalSeconds = (milliseconds / 1000).coerceAtLeast(0)
+    return formatRecordingDuration(totalSeconds)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ParsedCaptureScreen(
+    uiState: NoteEditorUiState,
+    model: ParsedCaptureModel,
+    sourceIcon: ImageVector,
+    showImagePreview: Boolean,
+    onBack: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndExit: () -> Unit,
+) {
+    val context = LocalContext.current
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+
+    fun requestBack() {
+        if (uiState.hasUnsavedChanges) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
+
+    if (showExitDialog) {
+        UnsavedChangesExitDialog(
+            onDismiss = { showExitDialog = false },
+            onSaveAndExit = {
+                showExitDialog = false
+                onSaveAndExit()
+            },
+            onLeaveWithoutSaving = {
+                showExitDialog = false
+                leaveNewCaptureWithoutSaving(context, uiState, onBack)
+            },
+        )
+    }
+
+    ScreenBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EditorTopBar(
+                title = model.title,
+                onBack = ::requestBack,
+                actionIcon = Icons.Outlined.MoreVert,
+                actionContentDescription = "更多",
+                onAction = {},
+                actionAccent = TextSoft,
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ParsedSourceCard(
+                    model = model,
+                    sourceIcon = sourceIcon,
+                    showImagePreview = showImagePreview,
+                    value = uiState.content,
+                    onValueChange = onContentChange,
+                )
+                ArticleSectionCard(title = "AI 生成摘要") {
+                    Text(
+                        text = model.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ArticleSectionCard(title = "关键要点") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        model.keyPoints.forEach { point ->
+                            BulletText(text = point)
+                        }
+                    }
+                }
+                ArticleSectionCard(title = "相关主题") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        model.topics.forEach { topic ->
+                            AssistChip(text = topic, accent = AccentBlue)
+                        }
+                    }
+                }
+                ArticleSectionCard(title = "操作") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        ArticleActionButton(
+                            icon = Icons.Outlined.CalendarMonth,
+                            text = "插入今天",
+                            modifier = Modifier.weight(1f),
+                        )
+                        ArticleActionButton(
+                            icon = Icons.Outlined.CheckCircle,
+                            text = "链接任务",
+                            modifier = Modifier.weight(1f),
+                        )
+                        ArticleActionButton(
+                            icon = Icons.Outlined.Folder,
+                            text = "导入项目",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GhostActionButton(
+                        text = "存为草稿",
+                        onClick = {},
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.MoreHoriz,
+                    )
+                    ActionButton(
+                        text = if (uiState.isSaving) "保存中..." else model.saveLabel,
+                        onClick = onSave,
+                        enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Check,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParsedSourceCard(
+    model: ParsedCaptureModel,
+    sourceIcon: ImageVector,
+    showImagePreview: Boolean,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    ArticleSectionCard(title = model.sourceTitle) {
+        if (showImagePreview) {
+            ParsedImagePreview(model = model, sourceIcon = sourceIcon)
+        } else {
+            VoiceInputPreview(model = model, sourceIcon = sourceIcon)
+        }
+        Text(
+            text = model.sourceDetail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PaperField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = model.sourcePlaceholder,
+            minLines = 4,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun VoiceInputPreview(
+    model: ParsedCaptureModel,
+    sourceIcon: ImageVector,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = AccentBlue.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(AccentBlue.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = sourceIcon,
+                    contentDescription = null,
+                    tint = AccentBlue,
+                )
+            }
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf(16.dp, 30.dp, 22.dp, 38.dp, 26.dp, 18.dp, 34.dp, 20.dp).forEach { height ->
+                    Box(
+                        modifier = Modifier
+                            .width(5.dp)
+                            .height(height)
+                            .background(AccentBlue.copy(alpha = 0.45f), RoundedCornerShape(999.dp)),
+                    )
+                }
+            }
+            Text(
+                text = model.sourceLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = AccentBlue,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ParsedImagePreview(
+    model: ParsedCaptureModel,
+    sourceIcon: ImageVector,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(132.dp),
+        color = AccentBlue.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(WhiteGlass, RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = sourceIcon,
+                        contentDescription = null,
+                        tint = AccentBlue,
+                    )
+                }
+                Text(
+                    text = model.sourceLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AccentBlue,
+                )
+            }
+        }
+    }
+}
+
+private enum class EditorContentKind {
+    TEXT,
+    VOICE,
+    IMAGE,
+}
+
+private data class EditorContentReference(
+    val kind: EditorContentKind,
+    val title: String,
+    val bodyLabel: String,
+    val summaryLabel: String,
+    val pointsLabel: String,
+    val recordInfoLabel: String,
+)
+
+private fun editorContentReference(content: String): EditorContentReference {
+    val labels = content.lines().map { line -> line.substringBefore("：").substringBefore(":").trim() }.toSet()
+    return when {
+        "图片" in labels -> EditorContentReference(
+            kind = EditorContentKind.IMAGE,
+            title = "图片记录",
+            bodyLabel = "图片理解摘要（可编辑）",
+            summaryLabel = "关键信息（可编辑）",
+            pointsLabel = "视觉识别结果",
+            recordInfoLabel = "记录信息（可修改）",
+        )
+        "原始录音" in labels || "原始内容" in labels -> EditorContentReference(
+            kind = EditorContentKind.VOICE,
+            title = "语音记录",
+            bodyLabel = "语音转写（可编辑）",
+            summaryLabel = "AI 洞察",
+            pointsLabel = "相关主题",
+            recordInfoLabel = "记录信息",
+        )
+        else -> EditorContentReference(
+            kind = EditorContentKind.TEXT,
+            title = "文本记录",
+            bodyLabel = "正文",
+            summaryLabel = "AI 洞察",
+            pointsLabel = "",
+            recordInfoLabel = "记录信息",
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TextContentEditorMain(
+    uiState: NoteEditorUiState,
+    aiRunFeedback: String?,
+    previewingOriginal: Boolean,
+    contentBringIntoViewRequester: BringIntoViewRequester,
+    onTopicChange: (String) -> Unit,
+    onContentChange: (String) -> Unit,
+    onContentFocusChanged: (Boolean) -> Unit,
+    onGenerateTitle: () -> Unit,
+    onPolishContent: () -> Unit,
+    onTogglePolishPreview: () -> Unit,
+    onApplyPolishedContent: () -> Unit,
+    onDiscardPolishedContent: () -> Unit,
+) {
+    val bodyMinLines = remember(uiState.content) { textContentEditorMinLines(uiState.content) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        EditorFieldHeader(label = "标题") {
+            FieldIconAction(
+                icon = Icons.Outlined.Refresh,
+                contentDescription = if (uiState.isRefreshingTopic) "正在重新生成标题" else "重新生成标题",
+                onClick = onGenerateTitle,
+                enabled = !uiState.isRefreshingTopic && uiState.content.isNotBlank(),
+            )
+        }
+        PaperField(
+            value = uiState.topic,
+            onValueChange = onTopicChange,
+            placeholder = "产品体验分析与用户反馈思考",
+            singleLine = true,
+            textStyle = MaterialTheme.typography.titleSmall,
+        )
+
+        EditorFieldHeader(label = "正文") {
+            SubtleFieldAction(
+                text = if (uiState.isPolishingContent) "润色中" else "润色",
+                icon = Icons.Outlined.AutoFixHigh,
+                contentDescription = "润色正文",
+                onClick = onPolishContent,
+                enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
+            )
+        }
+        PaperField(
+            value = uiState.content,
+            onValueChange = onContentChange,
+            placeholder = "在这里写正文。",
+            modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
+            minLines = bodyMinLines,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            onFocusChanged = onContentFocusChanged,
+        )
+
+        aiRunFeedback?.let { feedback ->
+            Text(
+                text = feedback,
+                style = MaterialTheme.typography.labelSmall,
+                color = AccentBlue,
+            )
+        }
+
+        if (!uiState.polishedOriginalContent.isNullOrBlank() && !uiState.polishedCandidateContent.isNullOrBlank()) {
+            PolishPreviewCard(
+                showingOriginal = previewingOriginal,
+                original = uiState.polishedOriginalContent,
+                polished = uiState.polishedCandidateContent,
+                onTogglePreview = onTogglePolishPreview,
+                onApply = onApplyPolishedContent,
+                onDiscard = onDiscardPolishedContent,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditorFieldHeader(
+    label: String,
+    actions: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            actions()
+        }
+    }
+}
+
+@Composable
+private fun FieldIconAction(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+) {
+    Surface(
+        modifier = Modifier.size(44.dp),
+        color = Color.Transparent,
+        shape = CircleShape,
+        onClick = onClick,
+        enabled = enabled,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (enabled) AccentBlue else TextSoft,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubtleFieldAction(
+    text: String,
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+) {
+    Surface(
+        modifier = Modifier.heightIn(min = 44.dp),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        onClick = onClick,
+        enabled = enabled,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (enabled) AccentBlue.copy(alpha = 0.72f) else TextSoft,
+                modifier = Modifier.size(15.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (enabled) AccentBlue.copy(alpha = 0.72f) else TextSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReferenceInlineAction(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.24f)),
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = AccentBlue,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = AccentBlue,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MediaContentEditorMain(
+    uiState: NoteEditorUiState,
+    reference: EditorContentReference,
+    aiToolsExpanded: Boolean,
+    aiModeSummary: String,
+    aiRunFeedback: String?,
+    previewingOriginal: Boolean,
+    contentBringIntoViewRequester: BringIntoViewRequester,
+    onContentChange: (String) -> Unit,
+    onToggleAiTools: () -> Unit,
+    onContentFocusChanged: (Boolean) -> Unit,
+    onPolishContent: () -> Unit,
+    onRetriggerTopic: () -> Unit,
+    onRetriggerTag: () -> Unit,
+    onRetriggerFolder: () -> Unit,
+    onTogglePolishPreview: () -> Unit,
+    onApplyPolishedContent: () -> Unit,
+    onDiscardPolishedContent: () -> Unit,
+) {
+    val hiddenImagePath = extractCaptureField(uiState.content, "图片")
+    val contentFieldValue = when (reference.kind) {
+        EditorContentKind.IMAGE -> contentWithoutCaptureFields(
+            content = uiState.content,
+            labels = setOf("图片"),
+        )
+        EditorContentKind.TEXT,
+        EditorContentKind.VOICE -> uiState.content
+    }
+    val onContentFieldChange: (String) -> Unit = when (reference.kind) {
+        EditorContentKind.IMAGE -> { edited ->
+            onContentChange(mergeCaptureField(edited, "图片", hiddenImagePath))
+        }
+        EditorContentKind.TEXT,
+        EditorContentKind.VOICE -> onContentChange
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(
+            text = reference.bodyLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PaperField(
+            value = contentFieldValue,
+            onValueChange = onContentFieldChange,
+            placeholder = when (reference.kind) {
+                EditorContentKind.VOICE -> "语音转写、整理后的关键句，或你手动补充的原始内容。"
+                EditorContentKind.IMAGE -> "图片理解摘要、OCR 文本，或你对这张图的补充说明。"
+                EditorContentKind.TEXT -> "在这里写正文。"
+            },
+            modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
+            minLines = 5,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            onFocusChanged = onContentFocusChanged,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            ReferenceInlineAction(
+                text = if (aiToolsExpanded) "收起 AI 整理" else "AI 整理",
+                icon = Icons.Outlined.AutoFixHigh,
+                onClick = onToggleAiTools,
+            )
+        }
+
+        if (aiToolsExpanded) {
+            Surface(
+                color = WhiteGlass.copy(alpha = 0.94f),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, BorderSoft),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = aiModeSummary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    aiRunFeedback?.let { feedback ->
+                        Text(
+                            text = feedback,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AccentBlue,
+                        )
+                    }
+                    GridTwo {
+                        GhostActionButton(
+                            text = if (uiState.isPolishingContent) "整理正文中" else "整理正文",
+                            onClick = onPolishContent,
+                            enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!uiState.isNew) {
+                            GhostActionButton(
+                                text = if (uiState.isRefreshingTopic) "整理主题中" else "整理主题",
+                                onClick = onRetriggerTopic,
+                                enabled = !uiState.isRefreshingTopic,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Box(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    if (!uiState.isNew) {
+                        GridTwo {
+                            GhostActionButton(
+                                text = if (uiState.isRefreshingTags) "整理标签中" else "整理标签",
+                                onClick = onRetriggerTag,
+                                enabled = !uiState.isRefreshingTags,
+                                modifier = Modifier.weight(1f),
+                            )
+                            GhostActionButton(
+                                text = if (uiState.isRefreshingFolder) "整理分类中" else "整理分类",
+                                onClick = onRetriggerFolder,
+                                enabled = !uiState.isRefreshingFolder,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!uiState.polishedOriginalContent.isNullOrBlank() && !uiState.polishedCandidateContent.isNullOrBlank()) {
+            PolishPreviewCard(
+                showingOriginal = previewingOriginal,
+                original = uiState.polishedOriginalContent,
+                polished = uiState.polishedCandidateContent,
+                onTogglePreview = onTogglePolishPreview,
+                onApply = onApplyPolishedContent,
+                onDiscard = onDiscardPolishedContent,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContentReferenceDetailSections(
+    uiState: NoteEditorUiState,
+    reference: EditorContentReference,
+    onContentChange: (String) -> Unit,
+    onCaptureTypeSelect: (String) -> Unit,
+) {
+    when (reference.kind) {
+        EditorContentKind.TEXT -> TextContentReferenceSections(
+            uiState = uiState,
+            onCaptureTypeSelect = onCaptureTypeSelect,
+        )
+        EditorContentKind.VOICE -> VoiceContentReferenceSections(
+            uiState = uiState,
+        )
+        EditorContentKind.IMAGE -> ImageContentReferenceSections(
+            uiState = uiState,
+            reference = reference,
+            onContentChange = onContentChange,
+        )
+    }
+}
+
+@Composable
+private fun MediaContentPrimarySection(
+    reference: EditorContentReference,
+    content: String,
+) {
+    when (reference.kind) {
+        EditorContentKind.VOICE -> VoiceAudioReferenceSection(
+            audioPath = extractCaptureField(content, VoiceAudioFieldLabel),
+        )
+        EditorContentKind.IMAGE -> ImagePreviewReferenceSection(
+            imagePath = extractCaptureField(content, "图片"),
+        )
+        EditorContentKind.TEXT -> Unit
+    }
+}
+
+@Composable
+private fun TextContentReferenceSections(
+    uiState: NoteEditorUiState,
+    onCaptureTypeSelect: (String) -> Unit,
+) {
+    TextRecordTypeSection(
+        uiState = uiState,
+        onCaptureTypeSelect = onCaptureTypeSelect,
+    )
+    RelatedTopicSection(textContentRelatedTopics(uiState.tags))
+    if (!uiState.isNew) {
+        TextAiInsightSection(uiState = uiState, title = "AI 洞察")
+    }
+    ArticleSectionCard(title = "附件") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AttachmentButton(
+                icon = Icons.Outlined.Image,
+                text = "添加图片",
+                modifier = Modifier.weight(1f),
+            )
+            AttachmentButton(
+                icon = Icons.Outlined.Link,
+                text = "添加链接",
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TextRecordTypeSection(
+    uiState: NoteEditorUiState,
+    onCaptureTypeSelect: (String) -> Unit,
+) {
+    val selected = remember(uiState.tags, uiState.status, uiState.content, uiState.topic) {
+        inferCaptureType(uiState)
+    }
+    ArticleSectionCard(title = "记录类型") {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CaptureType.entries.forEach { type ->
+                CaptureTypeChip(
+                    type = type,
+                    selected = type == selected,
+                    onClick = { onCaptureTypeSelect(type.label) },
+                )
+            }
+        }
+    }
+}
+
+private fun textContentRelatedTopics(tags: List<String>): List<String> =
+    tags.filterNot { it in TextCaptureTypeLabels }
+        .ifEmpty { listOf("文本") }
+
+@Composable
+private fun TextAiInsightSection(
+    uiState: NoteEditorUiState,
+    title: String,
+) {
+    ArticleSectionCard(title = title) {
+        val hasInsight = uiState.aiSummary.isNotBlank() || uiState.aiKeyPoints.isNotEmpty()
+        if (hasInsight) {
+            uiState.aiSummary.takeIf { it.isNotBlank() }?.let { summary ->
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (uiState.aiKeyPoints.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.aiKeyPoints.forEach { point -> BulletText(text = point) }
+                }
+            }
+        } else {
+            AiInsightPendingRow(text = "正在整理这条记录")
+        }
+    }
+}
+
+@Composable
+private fun AiInsightPendingRow(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(AccentBlue.copy(alpha = 0.10f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AutoFixHigh,
+                contentDescription = null,
+                tint = AccentBlue,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun VoiceContentEditorMain(
+    uiState: NoteEditorUiState,
+    contentBringIntoViewRequester: BringIntoViewRequester,
+    onTopicChange: (String) -> Unit,
+    onContentChange: (String) -> Unit,
+    onContentFocusChanged: (Boolean) -> Unit,
+) {
+    val transcript = remember(uiState.content) { voiceTranscriptFromContent(uiState.content) }
+    val recognitionStatus = remember(uiState.content) { voiceRecognitionStatusFromContent(uiState.content) }
+    val titleValue = remember(uiState.topic, uiState.topicSource, transcript) {
+        voiceTitleForDisplay(
+            topic = uiState.topic,
+            topicSource = uiState.topicSource,
+            transcript = transcript,
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        EditorFieldHeader(label = "标题") {}
+        PaperField(
+            value = titleValue,
+            onValueChange = onTopicChange,
+            placeholder = if (uiState.isTranscribingVoice) {
+                "正在根据语音生成标题"
+            } else {
+                "转写完成后自动生成标题"
+            },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.titleSmall,
+        )
+        ArticleSectionCard(
+            title = "语音转写（可编辑）",
+            titleTrailing = {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = null,
+                    tint = TextSoft,
+                    modifier = Modifier.size(16.dp),
+                )
+            },
+        ) {
+            PaperField(
+                value = transcript,
+                onValueChange = { edited ->
+                    onContentChange(
+                        replaceCaptureField(
+                            content = uiState.content,
+                            label = VoiceTranscriptFieldLabel,
+                            value = edited,
+                        ),
+                    )
+            },
+            placeholder = if (uiState.isTranscribingVoice) {
+                "正在转写…"
+            } else if (extractCaptureField(uiState.content, VoiceAudioFieldLabel).isBlank()) {
+                "录音后，转写内容会显示在这里。"
+            } else {
+                "转写暂未完成，可先手动补充内容。"
+            },
+                modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
+                minLines = voiceTranscriptEditorMinLines(transcript),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                onFocusChanged = onContentFocusChanged,
+            )
+            voiceTranscriptHelperText(
+                recognitionStatus = recognitionStatus,
+                isTranscribing = uiState.isTranscribingVoice,
+                transcript = transcript,
+            )?.let { helperText ->
+                Text(
+                    text = helperText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (helperText.startsWith("转写失败")) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceAudioReferenceSection(audioPath: String) {
+    val normalizedPath = audioPath.trim()
+    val audioFile = remember(normalizedPath) {
+        normalizedPath
+            .takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+    }
+    var player by remember(normalizedPath) { mutableStateOf<MediaPlayer?>(null) }
+    var isPlaying by remember(normalizedPath) { mutableStateOf(false) }
+    var positionMs by remember(normalizedPath) { mutableStateOf(0) }
+    var durationMs by remember(normalizedPath) { mutableStateOf(0) }
+    var playbackError by remember(normalizedPath) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(normalizedPath) {
+        positionMs = 0
+        durationMs = 0
+        isPlaying = false
+        playbackError = null
+        val preparedPlayer = audioFile?.let { file ->
+            runCatching {
+                MediaPlayer().apply {
+                    setDataSource(file.absolutePath)
+                    prepare()
+                    durationMs = duration.coerceAtLeast(0)
+                    setOnCompletionListener {
+                        isPlaying = false
+                        positionMs = durationMs
+                    }
+                }
+            }.onFailure {
+                playbackError = "录音文件暂时无法打开"
+            }.getOrNull()
+        }
+        player = preparedPlayer
+        onDispose {
+            runCatching {
+                if (preparedPlayer?.isPlaying == true) {
+                    preparedPlayer.stop()
+                }
+            }
+            preparedPlayer?.release()
+        }
+    }
+
+    LaunchedEffect(isPlaying, player) {
+        val activePlayer = player ?: return@LaunchedEffect
+        while (isPlaying && isActive) {
+            runCatching {
+                positionMs = activePlayer.currentPosition.coerceAtLeast(0)
+            }.onFailure {
+                isPlaying = false
+                playbackError = "播放状态暂时无法读取"
+            }
+            delay(250)
+        }
+    }
+
+    val canPlay = player != null
+    val progress = if (durationMs > 0) {
+        (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
+    ArticleSectionCard(
+        title = "语音暂存音频（可回放）",
+        titleTrailing = {
+            Text(
+                text = formatVoicePlaybackTime(durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+            )
+        },
+    ) {
+        VoicePlaybackWaveform(active = isPlaying, tick = positionMs / 250)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(38.dp),
+                color = if (canPlay) AccentBlue else AccentBlue.copy(alpha = 0.18f),
+                shape = CircleShape,
+                enabled = canPlay,
+                onClick = {
+                    val activePlayer = player
+                    if (activePlayer != null) {
+                        runCatching {
+                            if (activePlayer.isPlaying) {
+                                activePlayer.pause()
+                                isPlaying = false
+                            } else {
+                                activePlayer.start()
+                                isPlaying = true
+                            }
+                        }.onFailure {
+                            isPlaying = false
+                            playbackError = "录音文件暂时无法播放"
+                        }
+                    }
+                },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        contentDescription = if (isPlaying) "暂停音频" else "播放音频",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Text(
+                text = if (canPlay) {
+                    if (isPlaying) "暂停音频" else "播放音频"
+                } else {
+                    "暂无音频"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (canPlay) AccentBlue else TextSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(3.dp)
+                    .background(BorderSoft, RoundedCornerShape(999.dp)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .height(3.dp)
+                        .background(AccentBlue, RoundedCornerShape(999.dp)),
+                )
+            }
+            Text(
+                text = "${formatVoicePlaybackTime(positionMs)} / ${formatVoicePlaybackTime(durationMs)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+            Surface(
+                color = AccentBlue.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.18f)),
+            ) {
+                Text(
+                    text = "1x",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentBlue,
+                )
+            }
+        }
+        playbackError?.let { error ->
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoicePlaybackWaveform(
+    active: Boolean,
+    tick: Int,
+) {
+    val baseHeights = listOf(7, 12, 20, 28, 16, 9, 22, 14)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(40) { index ->
+            val base = baseHeights[index % baseHeights.size]
+            val pulse = if (active) ((index * 17 + tick * 13) % 9) - 4 else 0
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height((base + pulse).coerceIn(5, 32).dp)
+                    .background(AccentBlue.copy(alpha = 0.82f), RoundedCornerShape(999.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoiceContentReferenceSections(
+    uiState: NoteEditorUiState,
+) {
+    if (!uiState.isNew) {
+        VoiceAiInsightSection(uiState = uiState)
+    }
+}
+
+@Composable
+private fun VoiceAiInsightSection(uiState: NoteEditorUiState) {
+    val transcript = remember(uiState.content) { voiceTranscriptFromContent(uiState.content) }
+    val recognitionStatus = remember(uiState.content) { voiceRecognitionStatusFromContent(uiState.content) }
+    ArticleSectionCard(title = "AI 洞察") {
+        val hasInsight = uiState.aiSummary.isNotBlank() || uiState.aiKeyPoints.isNotEmpty()
+        if (hasInsight) {
+            uiState.aiSummary.takeIf { it.isNotBlank() }?.let { summary ->
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (uiState.aiKeyPoints.isNotEmpty()) {
+                Text(
+                    text = "关键信息",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.aiKeyPoints.forEach { point -> BulletText(text = point) }
+                }
+            }
+        } else {
+            AiInsightPendingRow(
+                text = voiceAiInsightPendingText(
+                    transcript = transcript,
+                    recognitionStatus = recognitionStatus,
+                    isTranscribing = uiState.isTranscribingVoice,
+                ),
+            )
+        }
+    }
+}
+
+internal fun voiceTitleForDisplay(
+    topic: String,
+    topicSource: TopicSource,
+    transcript: String,
+): String =
+    if (transcript.isBlank() && topicSource != TopicSource.MANUAL) {
+        ""
+    } else {
+        topic
+    }
+
+internal fun voiceAiInsightPendingText(
+    transcript: String,
+    recognitionStatus: String,
+    isTranscribing: Boolean,
+): String = when {
+    transcript.isNotBlank() -> "正在整理转写内容"
+    isTranscribing -> "转写完成后会自动整理关键信息"
+    recognitionStatus.startsWith("转写失败") -> "当前没有转写内容，暂不生成 AI 洞察"
+    else -> "转写完成后会自动整理关键信息"
+}
+
+@Composable
+private fun ImagePreviewReferenceSection(
+    imagePath: String,
+) {
+    val imageBitmap by rememberImageBitmap(imagePath)
+    ArticleSectionCard(title = "图片预览") {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            color = AccentBlue.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.16f)),
+        ) {
+            if (imageBitmap != null) {
+                Image(
+                    bitmap = imageBitmap!!,
+                    contentDescription = "图片预览",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Text(
+                            text = "原图本地保留，可继续补充识别内容",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        if (imagePath.isNotBlank()) {
+            Text(
+                text = File(imagePath).name,
+                modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImageContentReferenceSections(
+    uiState: NoteEditorUiState,
+    reference: EditorContentReference,
+    onContentChange: (String) -> Unit,
+) {
+    val imagePath = extractCaptureField(uiState.content, "图片")
+    val imageBody = contentWithoutCaptureFields(
+        content = uiState.content,
+        labels = setOf("图片"),
+    )
+    ArticleSectionCard(title = reference.summaryLabel) {
+        PaperField(
+            value = imageBody,
+            onValueChange = { edited ->
+                onContentChange(mergeCaptureField(edited, "图片", imagePath))
+            },
+            placeholder = "编辑图片理解摘要和需要保留的关键信息。",
+            minLines = 3,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    ArticleSectionCard(title = reference.pointsLabel) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (imagePath.isNotBlank()) {
+                BulletText(text = "原图文件：${File(imagePath).name}")
+            }
+            RecognitionInfoGrid(
+                items = listOf(
+                    "类型" to "待识别",
+                    "主体" to "待提取",
+                    "文字" to "待 OCR",
+                    "置信度" to "待解析",
+                ),
+            )
+        }
+    }
+    ArticleSectionCard(title = "OCR 全文（可选）") {
+        Text(
+            text = imageBody.ifBlank { "暂无 OCR 文本。" },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun AssistChip(
+    text: String,
+    accent: Color,
+) {
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AttachmentButton(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = WhiteGlass,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = TextSoft,
+                modifier = Modifier.size(19.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArticleSourceCard(model: ArticleCaptureModel) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = WhiteGlass,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(AccentBlue.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Article,
+                    contentDescription = null,
+                    tint = AccentBlue,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = model.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = model.host,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (model.url.isNotBlank()) {
+                    Text(
+                        text = model.url,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentBlue,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = "今天",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSoft,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArticleSectionCard(
+    title: String,
+    titleTrailing: @Composable (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            titleTrailing?.invoke()
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = WhiteGlass,
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, BorderSoft),
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun BulletText(text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .padding(top = 7.dp)
+                .size(5.dp)
+                .background(AccentBlue, CircleShape),
+        )
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ArticleActionButton(
+    icon: ImageVector,
+    text: String,
+    accent: Color = AccentBlue,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .heightIn(min = 64.dp)
+            .clickable(onClick = onClick),
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArticleSourceInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    ArticleSectionCard(title = "来源内容") {
+        PaperField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = "粘贴文章链接，或补充你收藏它的原因。",
+            minLines = 3,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -553,13 +3654,17 @@ private fun EditorTopBar(
     title: String,
     subtitle: String? = null,
     onBack: () -> Unit,
+    actionIcon: ImageVector? = null,
+    actionContentDescription: String? = null,
+    onAction: (() -> Unit)? = null,
+    actionAccent: Color = AccentBlue,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconPillButton(
+        EditorBarIconButton(
             icon = Icons.AutoMirrored.Outlined.ArrowBack,
             contentDescription = "返回",
             onClick = onBack,
@@ -570,7 +3675,7 @@ private fun EditorTopBar(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(
@@ -579,6 +3684,38 @@ private fun EditorTopBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        if (actionIcon != null && actionContentDescription != null && onAction != null) {
+            EditorBarIconButton(
+                icon = actionIcon,
+                contentDescription = actionContentDescription,
+                onClick = onAction,
+                accent = actionAccent,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditorBarIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    accent: Color = AccentBlue,
+) {
+    Surface(
+        modifier = Modifier.size(38.dp),
+        color = Color.Transparent,
+        shape = CircleShape,
+        onClick = onClick,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = accent,
+                modifier = Modifier.size(25.dp),
+            )
         }
     }
 }
@@ -621,17 +3758,16 @@ private fun FullEditorScreen(
     onTopicChange: (String) -> Unit,
     onFolderChange: (String?) -> Unit,
     onAddTag: (String) -> Unit,
-    onRemoveTag: (String) -> Unit,
     onStatusChange: (NoteStatus) -> Unit,
-    onHorizonChange: (NoteHorizon) -> Unit,
-    onKnowledgeTrustChange: (KnowledgeTrust) -> Unit,
     onArchiveChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
-    onVoiceCapture: () -> Unit,
     onPolishContent: () -> Unit,
+    onGenerateTitle: () -> Unit,
+    onCaptureTypeSelect: (String) -> Unit,
     onApplyPolishedContent: () -> Unit,
     onDiscardPolishedContent: () -> Unit,
+    onEnsureVoiceTranscription: () -> Unit,
     onRetriggerFolder: () -> Unit,
     onRetriggerTopic: () -> Unit,
     onRetriggerTag: () -> Unit,
@@ -665,18 +3801,15 @@ private fun FullEditorScreen(
     }
 
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
-    var pendingTag by rememberSaveable(uiState.noteId) { mutableStateOf("") }
     var previewingOriginal by rememberSaveable(
         uiState.polishedOriginalContent,
         uiState.polishedCandidateContent,
     ) { mutableStateOf(false) }
-    var isEditingContent by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(uiState.isNew) }
     var aiToolsExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
-    var metadataExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(!uiState.isNew) }
-    var extraInfoExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
-    var recordInfoExpanded by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
+    var metadataExpanded by rememberSaveable(uiState.noteId, uiState.isNew) { mutableStateOf(false) }
     var knowledgeRecallRequestVersion by rememberSaveable(uiState.noteId) { mutableStateOf(0) }
     var aiRunFeedback by rememberSaveable(uiState.noteId) { mutableStateOf<String?>(null) }
+    var titlePolishWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     var polishWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     var topicWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
     var tagsWasRunning by rememberSaveable(uiState.noteId) { mutableStateOf(false) }
@@ -696,6 +3829,18 @@ private fun FullEditorScreen(
             mode = onDeviceSettings.executionMode,
             onDeviceReady = onDeviceSettings.isReady,
         )
+    }
+    val contentReference = remember(uiState.content) { editorContentReference(uiState.content) }
+    LaunchedEffect(contentReference.kind, uiState.content, uiState.isTranscribingVoice) {
+        if (
+            contentReference.kind == EditorContentKind.VOICE &&
+            shouldAttemptVoiceTranscription(
+                content = uiState.content,
+                isTranscribingVoice = uiState.isTranscribingVoice,
+            )
+        ) {
+            onEnsureVoiceTranscription()
+        }
     }
 
     fun requestBack() {
@@ -729,7 +3874,7 @@ private fun FullEditorScreen(
             isLoading = uiState.isLoading,
             noteId = uiState.noteId,
             metadataExpanded = metadataExpanded,
-            extraInfoExpanded = extraInfoExpanded,
+            extraInfoExpanded = metadataExpanded,
         ),
         uiState = uiState,
         noteRepository = noteRepository,
@@ -768,6 +3913,16 @@ private fun FullEditorScreen(
         if (isContentFieldFocused) {
             delay(160)
             contentBringIntoViewRequester.bringIntoView()
+        }
+    }
+
+    LaunchedEffect(uiState.isPolishingTitle) {
+        if (uiState.isPolishingTitle) {
+            titlePolishWasRunning = true
+        } else if (titlePolishWasRunning) {
+            titlePolishWasRunning = false
+            aiRunFeedback = readLatestEditorAiRunFeedback(context, AiTaskType.POLISH_TITLE)
+                ?: "本次润色标题按当前策略运行，但没有记录到最终 provider。"
         }
     }
 
@@ -821,9 +3976,12 @@ private fun FullEditorScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             EditorTopBar(
-                title = "编辑记录",
-                subtitle = "先改正文，再决定要不要交给 AI 整理。",
+                title = contentReference.title,
                 onBack = ::requestBack,
+                actionIcon = Icons.Outlined.Check,
+                actionContentDescription = "保存记录",
+                onAction = onSave,
+                actionAccent = AccentBlue,
             )
 
             Column(
@@ -833,678 +3991,105 @@ private fun FullEditorScreen(
                     .padding(bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                PanelCard {
-                    SectionHeader(title = "编辑")
-
-                    Text("主题", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    PaperField(
-                        value = uiState.topic,
-                        onValueChange = onTopicChange,
-                        placeholder = "一个短一点、能快速认出的主题",
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.titleLarge,
-                    )
-                    Text(
-                        text = topicSourceLabel(uiState.topicSource),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    Text("内容", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = if (isEditingContent) "原文编辑" else "Markdown 预览",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (isEditingContent) {
-                                Text(
-                                    text = "也可以直接用语音转成正文",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
-                                )
-                            }
-                        }
-                        if (isEditingContent) {
-                            GhostActionButton(
-                                text = "语音输入",
-                                onClick = onVoiceCapture,
-                            )
-                        }
-                        GhostActionButton(
-                            text = if (isEditingContent) "完成预览" else "编辑正文",
-                            onClick = {
-                                isEditingContent = !isEditingContent
-                                if (!isEditingContent) {
-                                    isContentFieldFocused = false
-                                }
-                            },
-                            icon = if (isEditingContent) Icons.Outlined.Visibility else Icons.Outlined.Edit,
-                        )
-                    }
-                    if (isEditingContent) {
-                        PaperField(
-                            value = uiState.content,
-                            onValueChange = onContentChange,
-                            placeholder = "比如一个想法、要试的事、要观察的问题",
-                            modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
-                            minLines = if (uiState.isNew) 10 else 7,
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            onFocusChanged = { isContentFieldFocused = it },
-                        )
-                    } else {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isEditingContent = true },
-                            color = WhiteGlass.copy(alpha = 0.92f),
-                            shape = MaterialTheme.shapes.medium,
-                        ) {
-                            if (uiState.content.isBlank()) {
-                                Text(
-                                    text = "点一下开始写内容",
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                MarkdownText(
-                                    markdown = uiState.content,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                                )
-                            }
-                        }
-                    }
-                    GhostActionButton(
-                        text = if (aiToolsExpanded) "收起 AI 整理" else "AI 整理",
-                        onClick = { aiToolsExpanded = !aiToolsExpanded },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        text = "主题、标签和分类会自动补上，需要时再让 AI 帮你整理。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (aiToolsExpanded) {
-                        Surface(
-                            color = WhiteGlass.copy(alpha = 0.9f),
-                            shape = MaterialTheme.shapes.medium,
-                            border = BorderStroke(1.dp, BorderSoft),
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Text(
-                                    text = "整理这条记录",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = aiModeSummary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                aiRunFeedback?.let { feedback ->
-                                    Text(
-                                        text = feedback,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = AccentBlue,
-                                    )
-                                }
-                                GridTwo {
-                                    GhostActionButton(
-                                        text = if (uiState.isPolishingContent) "整理正文中" else "整理正文",
-                                        onClick = onPolishContent,
-                                        enabled = !uiState.isPolishingContent && uiState.content.isNotBlank(),
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    if (!uiState.isNew) {
-                                        GhostActionButton(
-                                            text = if (uiState.isRefreshingTopic) "整理主题中" else "整理主题",
-                                            onClick = onRetriggerTopic,
-                                            enabled = !uiState.isRefreshingTopic,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    } else {
-                                        Box(modifier = Modifier.weight(1f))
-                                    }
-                                }
-                                if (!uiState.isNew) {
-                                    GridTwo {
-                                        GhostActionButton(
-                                            text = if (uiState.isRefreshingTags) "整理标签中" else "整理标签",
-                                            onClick = onRetriggerTag,
-                                            enabled = !uiState.isRefreshingTags,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        GhostActionButton(
-                                            text = if (uiState.isRefreshingFolder) "整理分类中" else "整理分类",
-                                            onClick = onRetriggerFolder,
-                                            enabled = !uiState.isRefreshingFolder,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!uiState.polishedOriginalContent.isNullOrBlank() && !uiState.polishedCandidateContent.isNullOrBlank()) {
-                        PolishPreviewCard(
-                            showingOriginal = previewingOriginal,
-                            original = uiState.polishedOriginalContent,
-                            polished = uiState.polishedCandidateContent,
-                            onTogglePreview = { previewingOriginal = !previewingOriginal },
-                            onApply = {
+                when (contentReference.kind) {
+                    EditorContentKind.TEXT -> {
+                        TextContentEditorMain(
+                            uiState = uiState,
+                            aiRunFeedback = aiRunFeedback,
+                            previewingOriginal = previewingOriginal,
+                            contentBringIntoViewRequester = contentBringIntoViewRequester,
+                            onTopicChange = onTopicChange,
+                            onContentChange = onContentChange,
+                            onContentFocusChanged = { isContentFieldFocused = it },
+                            onGenerateTitle = onGenerateTitle,
+                            onPolishContent = onPolishContent,
+                            onTogglePolishPreview = { previewingOriginal = !previewingOriginal },
+                            onApplyPolishedContent = {
                                 previewingOriginal = false
                                 onApplyPolishedContent()
                             },
-                            onDiscard = {
+                            onDiscardPolishedContent = {
                                 previewingOriginal = false
                                 onDiscardPolishedContent()
                             },
                         )
                     }
-
+                    EditorContentKind.VOICE -> {
+                        MediaContentPrimarySection(
+                            reference = contentReference,
+                            content = uiState.content,
+                        )
+                        VoiceContentEditorMain(
+                            uiState = uiState,
+                            contentBringIntoViewRequester = contentBringIntoViewRequester,
+                            onTopicChange = onTopicChange,
+                            onContentChange = onContentChange,
+                            onContentFocusChanged = { isContentFieldFocused = it },
+                        )
+                    }
+                    EditorContentKind.IMAGE -> {
+                        MediaContentPrimarySection(
+                            reference = contentReference,
+                            content = uiState.content,
+                        )
+                        MediaContentEditorMain(
+                            uiState = uiState,
+                            reference = contentReference,
+                            aiToolsExpanded = aiToolsExpanded,
+                            aiModeSummary = aiModeSummary,
+                            aiRunFeedback = aiRunFeedback,
+                            previewingOriginal = previewingOriginal,
+                            contentBringIntoViewRequester = contentBringIntoViewRequester,
+                            onContentChange = onContentChange,
+                            onToggleAiTools = { aiToolsExpanded = !aiToolsExpanded },
+                            onContentFocusChanged = { isContentFieldFocused = it },
+                            onPolishContent = onPolishContent,
+                            onRetriggerTopic = onRetriggerTopic,
+                            onRetriggerTag = onRetriggerTag,
+                            onRetriggerFolder = onRetriggerFolder,
+                            onTogglePolishPreview = { previewingOriginal = !previewingOriginal },
+                            onApplyPolishedContent = {
+                                previewingOriginal = false
+                                onApplyPolishedContent()
+                            },
+                            onDiscardPolishedContent = {
+                                previewingOriginal = false
+                                onDiscardPolishedContent()
+                            },
+                        )
+                    }
                 }
 
-                ActionButton(
-                    text = when {
-                        uiState.isSaving -> "保存中..."
-                        uiState.isNew -> "先存下这颗火花"
-                        else -> "保存记录"
-                    },
-                    onClick = onSave,
-                    enabled = !uiState.isSaving && uiState.content.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Outlined.Save,
+                ContentReferenceDetailSections(
+                    uiState = uiState,
+                    reference = contentReference,
+                    onContentChange = onContentChange,
+                    onCaptureTypeSelect = onCaptureTypeSelect,
                 )
 
-                PanelCard {
-                    SectionHeader(
-                        title = "补充信息",
-                        headline = if (uiState.isNew && !metadataExpanded) {
-                            "默认先轻记"
-                        } else {
-                            "${uiState.status.label} · ${uiState.horizon.label}"
-                        },
-                    )
+                ContentReferenceActionRow(
+                    onInsertToday = { onAddTag("今天") },
+                    onLinkTask = {
+                        onStatusChange(NoteStatus.IN_PROGRESS)
+                        onAddTag("任务")
+                    },
+                    onImportProject = {
+                        onFolderChange("project")
+                        onAddTag("项目")
+                    },
+                )
 
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { metadataExpanded = !metadataExpanded },
-                        color = WhiteGlass.copy(alpha = 0.9f),
-                        shape = MaterialTheme.shapes.medium,
-                        border = BorderStroke(1.dp, BorderSoft),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    text = if (uiState.isNew) "先快速记，再补结构" else "状态、研究判断和分类",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = if (uiState.isNew && !metadataExpanded) {
-                                        "默认保持 ${uiState.status.label} · ${uiState.horizon.label} · ${uiState.knowledgeTrust.label}。需要时再展开。"
-                                    } else {
-                                        "需要时再补状态、证据强度、时间尺度和分类。"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                text = if (metadataExpanded) "收起" else "展开",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AccentBlue,
-                            )
-                        }
-                    }
-
-                    if (metadataExpanded) {
-                        Text("进展状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            NoteStatus.entries.forEach { status ->
-                                FilterChip(
-                                    selected = uiState.status == status,
-                                    onClick = { onStatusChange(status) },
-                                    label = { Text(status.label) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
-                                        selectedLabelColor = noteStatusAccent(status),
-                                    ),
-                                )
-                            }
-                        }
-
-                        Text("研究状态", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            KnowledgeTrust.entries.forEach { knowledgeTrust ->
-                                val accent = knowledgeTrustColor(knowledgeTrust)
-                                FilterChip(
-                                    selected = uiState.knowledgeTrust == knowledgeTrust,
-                                    onClick = { onKnowledgeTrustChange(knowledgeTrust) },
-                                    label = { Text(knowledgeTrust.label) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = accent.copy(alpha = 0.14f),
-                                        selectedLabelColor = accent,
-                                    ),
-                                )
-                            }
-                        }
-                        Text(
-                            text = "只有这条记录承载研究判断时再标记，系统会优先采用你的判断，而不是只靠内容猜测。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        Text("时间尺度", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            NoteHorizon.entries.forEach { horizon ->
-                                val accent = horizonColor(horizon)
-                                FilterChip(
-                                    selected = uiState.horizon == horizon,
-                                    onClick = { onHorizonChange(horizon) },
-                                    label = { Text("${horizon.label} · ${horizon.windowLabel}") },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = accent.copy(alpha = 0.14f),
-                                        selectedLabelColor = accent,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { extraInfoExpanded = !extraInfoExpanded },
-                        color = WhiteGlass.copy(alpha = 0.9f),
-                        shape = MaterialTheme.shapes.medium,
-                        border = BorderStroke(1.dp, BorderSoft),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    text = "分类与标签",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = buildSupplementSummary(
-                                        folderKey = uiState.folderKey,
-                                        tagCount = uiState.tags.size,
-                                        isNew = uiState.isNew,
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                text = if (extraInfoExpanded) "收起" else "展开",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AccentBlue,
-                            )
-                        }
-                    }
-
-                    if (metadataExpanded && extraInfoExpanded) {
-                        Text(
-                            text = "先判断这条记录是短期推进、中期验证，还是长期经营；分类和标签按需要再补，不必一开始就填满。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        insights.suggestedThread?.let { suggestedThread ->
-                            Text("方向提示", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Surface(
-                                color = WhiteGlass.copy(alpha = 0.9f),
-                                shape = MaterialTheme.shapes.medium,
-                                border = BorderStroke(1.dp, BorderSoft),
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text(
-                                        text = "这条记录更像是在「${suggestedThread.title}」这条主线里。",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    if (suggestedThread.focusLine.isNotBlank()) {
-                                        Text(
-                                            text = suggestedThread.focusLine,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = AccentBlue,
-                                        )
-                                    }
-                                    if (uiState.hasUnsavedChanges) {
-                                        Text(
-                                            text = "保存后可直接打开这条方向。",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSoft,
-                                        )
-                                    } else {
-                                        GhostActionButton(
-                                            text = "打开方向",
-                                            onClick = { onOpenSuggestedThread(suggestedThread.key) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Text("旧知识召回", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Surface(
-                            color = WhiteGlass.copy(alpha = 0.9f),
-                            shape = MaterialTheme.shapes.medium,
-                            border = BorderStroke(1.dp, BorderSoft),
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = "这块改成手动触发，避免一展开就悄悄拉起本地模型。",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                GhostActionButton(
-                                    text = if (knowledgeRecallUiState.isLoading) "召回中..." else "召回旧知识",
-                                    onClick = { knowledgeRecallRequestVersion += 1 },
-                                    enabled = !knowledgeRecallUiState.isLoading &&
-                                        (insights.relatedNotes.isNotEmpty() || insights.suggestedThread != null),
-                                )
-                                if (
-                                    !knowledgeRecallUiState.isLoading &&
-                                    knowledgeRecallUiState.result == null &&
-                                    insights.relatedNotes.isEmpty() &&
-                                    insights.suggestedThread == null
-                                ) {
-                                    Text(
-                                        text = "当前还没有足够上下文可召回，先补一点正文或标签。",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSoft,
-                                    )
-                                }
-                                knowledgeRecallUiState.result?.let { recall ->
-                                    Text(
-                                        text = recall.line,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    val providerLine = if (recall.usedOnDevice) {
-                                        "本次召回由端侧完成。"
-                                    } else {
-                                        "本次没有命中可用端侧结果，已回退到规则说明。"
-                                    }
-                                    Text(
-                                        text = providerLine,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (recall.usedOnDevice) AccentBlue else TextSoft,
-                                    )
-                                    recall.support.takeIf { it.isNotBlank() }?.let { support ->
-                                        Text(
-                                            text = support,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (recall.usedOnDevice) AccentBlue else TextSoft,
-                                        )
-                                    }
-                                    if (!uiState.hasUnsavedChanges && recall.anchorNoteId != null) {
-                                        GhostActionButton(
-                                            text = recall.anchorLabel.ifBlank { "打开相关记录" },
-                                            onClick = { onOpenRelatedNote(recall.anchorNoteId) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Text("文件夹", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            FilterChip(
-                                selected = uiState.folderKey == null,
-                                onClick = { onFolderChange(null) },
-                                label = { Text("未分类") },
-                            )
-                            MindFolderCatalog.all.forEach { folder ->
-                                val accent = folderColor(folder.key)
-                                FilterChip(
-                                    selected = uiState.folderKey == folder.key,
-                                    onClick = { onFolderChange(folder.key) },
-                                    label = { Text(folder.name) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = accent.copy(alpha = 0.14f),
-                                        selectedLabelColor = accent,
-                                    ),
-                                )
-                            }
-                        }
-                        Text(
-                            text = folderSourceLabel(uiState.folderSource),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        if (!uiState.isNew) {
-                            Text("标签", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                text = tagSourceLabel(uiState.tagSource, uiState.tags.size),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (uiState.tags.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    uiState.tags.forEach { tag ->
-                                        EditableTagChip(
-                                            tag = tag,
-                                            onRemove = { onRemoveTag(tag) },
-                                        )
-                                    }
-                                }
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                PaperField(
-                                    value = pendingTag,
-                                    onValueChange = { pendingTag = it },
-                                    placeholder = if (uiState.tags.size >= 3) "最多 3 个标签" else "添加一个标签",
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodyLarge,
-                                )
-                                GhostActionButton(
-                                    text = "添加",
-                                    onClick = {
-                                        onAddTag(pendingTag)
-                                        pendingTag = ""
-                                    },
-                                    enabled = pendingTag.isNotBlank() && uiState.tags.size < 3,
-                                    modifier = Modifier.weight(0.42f),
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "保存后会自动补主题和标签。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
+                CompactRecordInfoSection(
+                    uiState = uiState,
+                    reference = contentReference,
+                    expanded = metadataExpanded,
+                    onToggleExpanded = { metadataExpanded = !metadataExpanded },
+                    onFolderChange = onFolderChange,
+                    onStatusChange = onStatusChange,
+                    onArchiveChange = onArchiveChange,
+                )
 
                 if (!uiState.isNew) {
-                    PanelCard {
-                        SectionHeader(
-                            title = "记录信息",
-                            headline = uiState.updatedAt?.let(TimeFormatter::compact).orEmpty(),
-                        )
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { recordInfoExpanded = !recordInfoExpanded },
-                            color = WhiteGlass.copy(alpha = 0.9f),
-                            shape = MaterialTheme.shapes.medium,
-                            border = BorderStroke(1.dp, BorderSoft),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Text("归档与时间", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        text = if (uiState.isArchived) {
-                                            "已从首页隐藏 · ${uiState.statusHistory.size} 条状态变化"
-                                        } else {
-                                            "仍显示在首页 · ${uiState.statusHistory.size} 条状态变化"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Text(
-                                    text = if (recordInfoExpanded) "收起" else "展开",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = AccentBlue,
-                                )
-                            }
-                        }
-                        if (recordInfoExpanded) {
-                            Surface(
-                                color = WhiteGlass.copy(alpha = 0.9f),
-                                shape = MaterialTheme.shapes.medium,
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column {
-                                        Text("归档", style = MaterialTheme.typography.titleSmall)
-                                        Text(
-                                            text = if (uiState.isArchived) "已从首页隐藏" else "仍显示在首页",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Switch(
-                                        checked = uiState.isArchived,
-                                        onCheckedChange = onArchiveChange,
-                                    )
-                                }
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            ) {
-                                MetaRow("创建于", uiState.createdAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
-                                MetaRow("更新于", uiState.updatedAt?.let(TimeFormatter::compact).orEmpty(), Modifier.weight(1f))
-                            }
-                            uiState.latestDoneAt?.let { MetaRow("完成于", TimeFormatter.compact(it)) }
-                            if (uiState.statusHistory.isNotEmpty()) {
-                                Text(
-                                    text = "最近变化",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                uiState.statusHistory.take(3).forEach { entry ->
-                                    Surface(
-                                        color = WhiteGlass.copy(alpha = 0.92f),
-                                        shape = MaterialTheme.shapes.medium,
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Text(
-                                                text = TimeFormatter.full(entry.changedAt),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                            Text(
-                                                text = "${entry.fromStatus?.label ?: "初始"} -> ${entry.toStatus.label}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                Text(
-                                    text = "还没有状态变化。",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-
                     if (insights.relatedNotes.isNotEmpty()) {
                         PanelCard {
                             SectionHeader(title = "相关记录", headline = "${insights.relatedNotes.size} 条")
@@ -1552,6 +4137,228 @@ private fun FullEditorScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CompactRecordInfoSection(
+    uiState: NoteEditorUiState,
+    reference: EditorContentReference,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onFolderChange: (String?) -> Unit,
+    onStatusChange: (NoteStatus) -> Unit,
+    onArchiveChange: (Boolean) -> Unit,
+) {
+    PanelCard {
+        SectionHeader(
+            title = reference.recordInfoLabel,
+            headline = compactRecordInfoHeadline(uiState),
+        )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpanded() },
+            color = WhiteGlass.copy(alpha = 0.9f),
+            shape = MaterialTheme.shapes.medium,
+            border = BorderStroke(1.dp, BorderSoft),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "记录概览",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = if (expanded) "收起" else "展开",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AccentBlue,
+                    )
+                }
+                CompactRecordInfoLine("状态", "${uiState.status.label} · ${uiState.horizon.label}")
+                CompactRecordInfoLine(
+                    label = "分类",
+                    value = compactRecordInfoFolderSummary(uiState),
+                )
+                if (!uiState.isNew) {
+                    CompactRecordInfoLine(
+                        label = "时间",
+                        value = uiState.updatedAt?.let { "更新 ${TimeFormatter.compact(it)}" }.orEmpty(),
+                    )
+                    CompactRecordInfoLine(
+                        label = "归档",
+                        value = if (uiState.isArchived) "已从首页隐藏" else "仍显示在首页",
+                    )
+                }
+            }
+        }
+
+        if (expanded) {
+            Text(
+                text = "快速调整",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                NoteStatus.entries.forEach { status ->
+                    FilterChip(
+                        selected = uiState.status == status,
+                        onClick = { onStatusChange(status) },
+                        label = { Text(status.label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = noteStatusAccent(status).copy(alpha = 0.14f),
+                            selectedLabelColor = noteStatusAccent(status),
+                        ),
+                    )
+                }
+            }
+
+            Text(
+                text = "分类",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = uiState.folderKey == null,
+                    onClick = { onFolderChange(null) },
+                    label = { Text("未分类") },
+                )
+                MindFolderCatalog.all.forEach { folder ->
+                    val accent = folderColor(folder.key)
+                    FilterChip(
+                        selected = uiState.folderKey == folder.key,
+                        onClick = { onFolderChange(folder.key) },
+                        label = { Text(folder.name) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accent.copy(alpha = 0.14f),
+                            selectedLabelColor = accent,
+                        ),
+                    )
+                }
+            }
+
+            if (!uiState.isNew) {
+                CompactRecordInfoLine("标签", compactRecordInfoTags(uiState.tags))
+                CompactRecordInfoLine("时间", compactRecordInfoTime(uiState))
+                RecordVisibilityRow(
+                    isArchived = uiState.isArchived,
+                    onArchiveChange = onArchiveChange,
+                )
+            } else {
+                Text(
+                    text = "保存后会自动补主题和标签。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordVisibilityRow(
+    isArchived: Boolean,
+    onArchiveChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "首页显示",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = if (isArchived) "当前已隐藏" else "当前可见",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = !isArchived,
+            onCheckedChange = { visible -> onArchiveChange(!visible) },
+        )
+    }
+}
+
+private fun compactRecordInfoTags(tags: List<String>): String =
+    tags.takeIf { it.isNotEmpty() }
+        ?.joinToString("、")
+        ?: "暂无标签"
+
+private fun compactRecordInfoTime(uiState: NoteEditorUiState): String {
+    val updated = uiState.updatedAt?.let(TimeFormatter::compact)
+    val created = uiState.createdAt?.let(TimeFormatter::compact)
+    return when {
+        updated != null && created != null -> "更新 $updated · 创建 $created"
+        updated != null -> "更新 $updated"
+        created != null -> "创建 $created"
+        else -> "未记录"
+    }
+}
+
+@Composable
+private fun CompactRecordInfoLine(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.width(46.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSoft,
+        )
+        Text(
+            text = value.ifBlank { "未记录" },
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun compactRecordInfoHeadline(uiState: NoteEditorUiState): String {
+    val time = uiState.updatedAt?.let(TimeFormatter::compact)
+    return listOfNotNull(
+        "${uiState.status.label} · ${uiState.horizon.label}",
+        time,
+    ).joinToString(" · ")
+}
+
+private fun compactRecordInfoFolderSummary(uiState: NoteEditorUiState): String =
+    buildSupplementSummary(
+        folderKey = uiState.folderKey,
+        tagCount = uiState.tags.size,
+        isNew = uiState.isNew,
+    ).removePrefix("文件夹：")
+
 @Composable
 private fun PaperField(
     value: String,
@@ -1560,6 +4367,7 @@ private fun PaperField(
     modifier: Modifier = Modifier,
     singleLine: Boolean = false,
     minLines: Int = 1,
+    maxLines: Int = Int.MAX_VALUE,
     textStyle: TextStyle = MaterialTheme.typography.bodyLarge,
     onFocusChanged: (Boolean) -> Unit = {},
     expandToContainer: Boolean = false,
@@ -1585,6 +4393,7 @@ private fun PaperField(
                 .onFocusChanged { onFocusChanged(it.isFocused) },
             singleLine = singleLine,
             minLines = minLines,
+            maxLines = maxLines,
             textStyle = textStyle,
             placeholder = {
                 Text(

@@ -6,18 +6,33 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,12 +91,19 @@ import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.KnowledgeMaintenanceSeedContext
 import com.mindflow.app.ui.navigation.buildKnowledgeMaintenanceCaptureSeed
 import com.mindflow.app.ui.theme.AccentBlue
+import com.mindflow.app.ui.theme.AccentTeal
 import com.mindflow.app.ui.theme.BorderSoft
+import com.mindflow.app.ui.theme.MintWash
+import com.mindflow.app.ui.theme.PanelBlue
 import com.mindflow.app.ui.theme.TextMain
 import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.delay
+
+internal val TodayDiscoveryTitleSlotHeight = 32.dp
+internal const val TodayFocusReasonDetailMaxLines = 2
+internal val TodayFocusReasonIconSize = 30.dp
 
 @Composable
 fun FlowRoute(
@@ -90,6 +113,8 @@ fun FlowRoute(
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenTodayDiscovery: () -> Unit,
+    onOpenTodayTask: (String) -> Unit,
     onOpenReviewChat: (String) -> Unit,
     onOpenLatestSavedReviewChat: (Long) -> Unit,
     onOpenReviewChatHistory: () -> Unit,
@@ -108,6 +133,8 @@ fun FlowRoute(
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
         onCreateCapture = onCreateCapture,
+        onOpenTodayDiscovery = onOpenTodayDiscovery,
+        onOpenTodayTask = onOpenTodayTask,
         onOpenReviewChat = onOpenReviewChat,
         onOpenLatestSavedReviewChat = onOpenLatestSavedReviewChat,
         onOpenReviewChatHistory = onOpenReviewChatHistory,
@@ -139,6 +166,8 @@ private fun FlowScreen(
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
+    onOpenTodayDiscovery: () -> Unit,
+    onOpenTodayTask: (String) -> Unit,
     onOpenReviewChat: (String) -> Unit,
     onOpenLatestSavedReviewChat: (Long) -> Unit,
     onOpenReviewChatHistory: () -> Unit,
@@ -154,9 +183,15 @@ private fun FlowScreen(
     }
     val subtitle = remember(page) {
         when (page) {
-            FlowPage.TODAY -> "只看今天该接住的事。"
-            FlowPage.REVIEW -> "从旧积累里翻出真正有用的。"
+            FlowPage.TODAY -> "你的智能行动中枢"
+            FlowPage.REVIEW -> "与你的记忆对话，回顾与进步"
         }
+    }
+    val todayModel = remember(uiState, latestSavedConversationSummary, surface) {
+        uiState.toTodayDesignModel(
+            latestSavedConversationSummary = latestSavedConversationSummary,
+            surface = surface,
+        )
     }
 
     ScreenBackground {
@@ -175,19 +210,14 @@ private fun FlowScreen(
                     end = ScreenHorizontalPadding,
                     bottom = BottomBarClearance,
                 ),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = screenTitle,
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                if (page == FlowPage.TODAY) {
+                    item {
+                        FlowPageHeader(
+                            title = screenTitle,
+                            subtitle = subtitle,
+                            showSpark = true,
                         )
                     }
                 }
@@ -195,45 +225,44 @@ private fun FlowScreen(
                 when (page) {
                     FlowPage.TODAY -> {
                         item {
-                            TodayOverviewCard(
-                                todayCount = uiState.todayCount,
-                                continueNote = uiState.continueNote,
-                                candidate = uiState.mainlineCandidate,
-                                nextActionText = uiState.nextActionText,
-                                onCreateCapture = onCreateCapture,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
+                            TodayHeroCard(model = todayModel)
+                        }
+                        item {
+                            TodayFocusCard(
+                                focus = todayModel.focus,
+                                reason = todayModel.reason,
+                                onOpenFocus = {
+                                    openTodayTarget(
+                                        focusNoteId = todayModel.focus.focusNoteId,
+                                        noteId = todayModel.focus.noteId,
+                                        threadKey = todayModel.focus.threadKey,
+                                        onOpenNote = onOpenNote,
+                                        onOpenThread = onOpenThread,
+                                        onFallback = { onCreateCapture(CaptureSeed()) },
+                                    )
+                                },
                             )
                         }
                         item {
-                            RecentAbsorptionCard(
-                                snapshot = maintainerSnapshot,
-                                todayCount = uiState.todayCount,
-                                direction = surface.sparkDirection,
-                                provenance = surface.sparkProvenance,
-                                highlighted = true,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
+                            TodayDiscoverySection(
+                                cards = todayModel.discoveryCards,
+                                actionLabel = todayModel.discoveryActionLabel,
+                                onOpenDiscovery = onOpenTodayDiscovery,
+                            )
+                        }
+                        item {
+                            TodayTrackingSection(
+                                rows = todayModel.trackingRows,
+                                actionLabel = todayModel.trackingActionLabel,
+                                onOpenTodayTask = onOpenTodayTask,
                                 onCreateCapture = onCreateCapture,
                             )
                         }
                         item {
-                            MainlineFocusCard(
-                                note = uiState.continueNote,
-                                candidate = uiState.mainlineCandidate,
-                                direction = surface.threadDirection,
-                                provenance = surface.threadProvenance,
-                                snapshot = maintainerSnapshot,
-                                nextActionText = uiState.nextActionText,
-                                compression = uiState.knowledgeCompression,
-                                reconnectBridge = uiState.staleBridge,
-                                reconnectStep = uiState.staleNextStep,
-                                compact = true,
-                                highlighted = false,
-                                onRefresh = onRefreshMainline,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
-                                onCreateCapture = onCreateCapture,
+                            TodayReviewHintCard(
+                                review = todayModel.review,
+                                onOpenSaved = onOpenLatestSavedReviewChat,
+                                onOpenReviewChatHistory = onOpenReviewChatHistory,
                             )
                         }
                     }
@@ -242,50 +271,588 @@ private fun FlowScreen(
                             ReviewChatEntryCard(
                                 latestSavedSummary = latestSavedConversationSummary,
                                 onOpenChat = { onOpenReviewChat("") },
+                                onOpenPrompt = onOpenReviewChat,
                                 onOpenHistory = onOpenReviewChatHistory,
                                 onOpenSaved = onOpenLatestSavedReviewChat,
+                                modifier = Modifier.fillParentMaxHeight(0.78f),
                             )
-                        }
-                        item {
-                            SettledKnowledgeCard(
-                                direction = surface.assetDirection,
-                                provenance = surface.assetProvenance,
-                                compression = uiState.knowledgeCompression,
-                                feedback = uiState.settledFeedback,
-                                highlighted = true,
-                                onFeedback = onMarkSettledFeedback,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
-                            )
-                        }
-                        item {
-                            FeedGapCard(
-                                snapshot = maintainerSnapshot,
-                                direction = surface.gapDirection,
-                                directions = uiState.followedDirections,
-                                primaryThreadKey = surface.assetDirection?.thread?.key,
-                                highlighted = true,
-                                onOpenThread = onOpenThread,
-                                onOpenNote = onOpenNote,
-                                onCreateCapture = onCreateCapture,
-                            )
-                        }
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                            ) {
-                                GhostActionButton(
-                                    text = "刷新本地知识层",
-                                    onClick = onRefreshLocalKnowledgeBrain,
-                                )
-                            }
                         }
                     }
                 }
 
             }
         }
+    }
+}
+
+@Composable
+private fun FlowPageHeader(
+    title: String,
+    subtitle: String,
+    showSpark: Boolean,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+            )
+        }
+        when {
+            action != null -> action()
+            showSpark -> {
+                TodayIconBubble(
+                    icon = Icons.Outlined.AutoAwesome,
+                    tint = AccentBlue,
+                    background = PanelBlue,
+                    size = 38.dp,
+                    iconSize = 19.dp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewHeaderActions(
+    onOpenHistory: () -> Unit,
+    onOpenChat: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ReviewHeaderIconButton(
+            icon = Icons.Outlined.History,
+            contentDescription = "查看聊天历史",
+            onClick = onOpenHistory,
+        )
+        ReviewHeaderIconButton(
+            icon = Icons.Outlined.Add,
+            contentDescription = "开始新对话",
+            onClick = onOpenChat,
+        )
+    }
+}
+
+@Composable
+private fun ReviewHeaderIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 1.dp,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = AccentBlue,
+            modifier = Modifier
+                .padding(10.dp)
+                .size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun TodayHeroCard(
+    model: TodayDesignModel,
+) {
+    Surface(
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = model.heroTitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = model.heroSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TodayOrbitMark()
+        }
+    }
+}
+
+@Composable
+private fun TodayOrbitMark() {
+    Box(
+        modifier = Modifier.size(48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 48.dp, height = 18.dp)
+                .background(
+                    AccentTeal.copy(alpha = 0.16f),
+                    RoundedCornerShape(999.dp),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .size(width = 38.dp, height = 9.dp)
+                .background(
+                    Color(0xFFFFC34D).copy(alpha = 0.22f),
+                    RoundedCornerShape(999.dp),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(PanelBlue, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .background(AccentBlue.copy(alpha = 0.88f), CircleShape),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 7.dp, end = 7.dp)
+                    .size(7.dp)
+                    .background(WhiteGlass.copy(alpha = 0.82f), CircleShape),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 7.dp, bottom = 7.dp)
+                .size(7.dp)
+                .background(Color(0xFFFFC34D).copy(alpha = 0.86f), CircleShape),
+        )
+    }
+}
+
+@Composable
+private fun TodayFocusCard(
+    focus: TodayFocusModel,
+    reason: TodayReasonModel,
+    onOpenFocus: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenFocus),
+        color = WhiteGlass.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TodaySectionTitle(
+                title = "今日焦点",
+                action = "查看全部",
+                onAction = onOpenFocus,
+            )
+            Text(
+                text = focus.title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = focus.summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TodayProgressLine(
+                    progress = focus.progress,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = focus.progressLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
+                    maxLines = 1,
+                )
+            }
+            TodayReasonBox(
+                reason = reason,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodayReasonBox(
+    reason: TodayReasonModel,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MintWash.copy(alpha = 0.48f),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, AccentTeal.copy(alpha = 0.1f)),
+    ) {
+        val explanation = "${reason.sourceLine.removePrefix("推荐来源：")}，${reason.actionLine.removePrefix("建议动作：")}"
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = reason.title,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = explanation,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
+                    maxLines = TodayFocusReasonDetailMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            TodayIconBubble(
+                icon = Icons.Outlined.Psychology,
+                tint = AccentTeal,
+                background = WhiteGlass,
+                size = TodayFocusReasonIconSize,
+                iconSize = 15.dp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodayDiscoverySection(
+    cards: List<TodayDiscoveryCardModel>,
+    actionLabel: String,
+    onOpenDiscovery: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TodaySectionTitle(
+            title = "自动发现",
+            action = actionLabel,
+            onAction = onOpenDiscovery,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            cards.take(3).forEach { card ->
+                TodayDiscoveryMiniCard(
+                    card = card,
+                    onClick = onOpenDiscovery,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayDiscoveryMiniCard(
+    card: TodayDiscoveryCardModel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .height(124.dp)
+            .clickable(onClick = onClick),
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            TodayIconBubble(
+                icon = Icons.AutoMirrored.Outlined.Article,
+                tint = AccentBlue,
+                background = PanelBlue,
+                size = 24.dp,
+                iconSize = 13.dp,
+            )
+            Text(
+                text = card.title,
+                modifier = Modifier.height(TodayDiscoveryTitleSlotHeight),
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = TextMain,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = card.source,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = card.confidence,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = AccentBlue,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodayTrackingSection(
+    rows: List<TodayTrackingRowModel>,
+    actionLabel: String,
+    onOpenTodayTask: (String) -> Unit,
+    onCreateCapture: (CaptureSeed) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TodaySectionTitle(
+            title = "正在跟踪",
+            action = actionLabel,
+            onAction = null,
+        )
+        rows.take(2).forEach { row ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        row.threadKey
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(onOpenTodayTask)
+                            ?: onCreateCapture(CaptureSeed())
+                    },
+                color = WhiteGlass.copy(alpha = 0.94f),
+                shape = CardShape,
+                border = BorderStroke(1.dp, BorderSoft),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = row.title,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = TextMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = row.subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = row.progressLabel,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = AccentBlue,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = row.destinationLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayReviewHintCard(
+    review: TodayReviewModel,
+    onOpenSaved: (Long) -> Unit,
+    onOpenReviewChatHistory: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                review.savedSessionId?.let(onOpenSaved)
+                    ?: onOpenReviewChatHistory()
+            },
+        color = WhiteGlass.copy(alpha = 0.94f),
+        shape = CardShape,
+        border = BorderStroke(1.dp, BorderSoft),
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TodayIconBubble(
+                icon = Icons.Outlined.History,
+                tint = AccentBlue,
+                background = PanelBlue,
+                size = 32.dp,
+                iconSize = 16.dp,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = review.title,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMain,
+                    maxLines = 1,
+                )
+                Text(
+                    text = review.description,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSoft,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodaySectionTitle(
+    title: String,
+    action: String,
+    onAction: (() -> Unit)?,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = TextMain,
+            maxLines = 1,
+        )
+        Text(
+            text = if (onAction == null) action else "$action ›",
+            style = MaterialTheme.typography.labelLarge,
+            color = if (onAction == null) TextSoft else AccentBlue,
+            maxLines = 1,
+            modifier = if (onAction == null) Modifier else Modifier.clickable(onClick = onAction),
+        )
+    }
+}
+
+@Composable
+private fun TodayProgressLine(
+    progress: Float,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .height(5.dp)
+            .background(BorderSoft.copy(alpha = 0.72f), RoundedCornerShape(999.dp)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .height(5.dp)
+                .background(AccentBlue, RoundedCornerShape(999.dp)),
+        )
+    }
+}
+
+@Composable
+private fun TodayIconBubble(
+    icon: ImageVector,
+    tint: Color,
+    background: Color,
+    size: androidx.compose.ui.unit.Dp,
+    iconSize: androidx.compose.ui.unit.Dp,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(background, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+private fun openTodayTarget(
+    focusNoteId: Long?,
+    noteId: Long?,
+    threadKey: String?,
+    onOpenNote: (Long) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onFallback: () -> Unit,
+) {
+    when {
+        focusNoteId != null -> onOpenNote(focusNoteId)
+        noteId != null -> onOpenNote(noteId)
+        !threadKey.isNullOrBlank() -> onOpenThread(threadKey)
+        else -> onFallback()
     }
 }
 
