@@ -24,6 +24,7 @@ import com.mindflow.app.data.model.NoteTagCodec
 import com.mindflow.app.data.model.SearchFilters
 import com.mindflow.app.data.model.TagRefreshResult
 import com.mindflow.app.data.model.TagSource
+import com.mindflow.app.data.model.TagSuggestion
 import com.mindflow.app.data.model.TopicRefreshResult
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.topic.FolderClassifier
@@ -31,6 +32,8 @@ import com.mindflow.app.data.topic.NoteInsightPlanner
 import com.mindflow.app.data.topic.NoteInsightResult
 import com.mindflow.app.data.topic.noteInsightSourceContent
 import com.mindflow.app.data.topic.shouldAutoGenerateVoiceInsight
+import com.mindflow.app.data.model.ReminderSettings
+import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.topic.TagExtractor
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.ui.navigation.MindFlowDestinations
@@ -57,6 +60,7 @@ class MarkdownNoteRepository(
     private val folderClassifier: FolderClassifier,
     private val tagExtractor: TagExtractor,
     private val noteInsightPlanner: NoteInsightPlanner,
+    private val reminderSettingsRepository: ReminderSettingsRepository? = null,
     private val markdownExporter: MarkdownExporter,
     private val markdownImportParser: MarkdownImportParser,
     private val cloudNoteDocumentCodec: CloudNoteDocumentCodec,
@@ -139,6 +143,7 @@ class MarkdownNoteRepository(
         aiInsightUpdatedAt: Long,
     ): Long {
         val normalizedContent = content.trim()
+        val automationSettings = currentAutomationSettings()
         val topicContent = topicExtractionContent(normalizedContent)
         val now = System.currentTimeMillis()
         val fallbackTopic = topicExtractor.extractRule(topicContent)
@@ -151,7 +156,11 @@ class MarkdownNoteRepository(
         } else {
             folderClassifier.classifyRule(normalizedContent)
         }
-        val fallbackTags = tagExtractor.extractRule(normalizedContent)
+        val fallbackTags = if (automationSettings.autoTaskRecognitionEnabled) {
+            tagExtractor.extractRule(normalizedContent)
+        } else {
+            TagSuggestion(emptyList(), TagSource.RULE)
+        }
         val normalizedManualTags = NoteTagCodec.normalize(tags)
 
         val document = storageMutex.withLock {
@@ -191,6 +200,7 @@ class MarkdownNoteRepository(
         }
 
         applicationScope.launch {
+            val settings = currentAutomationSettings()
             val topicResult = if (topicManuallyEdited) {
                 TopicRefreshResult()
             } else {
@@ -201,7 +211,7 @@ class MarkdownNoteRepository(
             } else {
                 refreshFolderIfPossible(document.note.id, updateTimestamp = false)
             }
-            val tagResult = if (tagsManuallyEdited) {
+            val tagResult = if (tagsManuallyEdited || !settings.autoTaskRecognitionEnabled) {
                 TagRefreshResult()
             } else {
                 refreshTagsIfPossible(document.note.id, updateTimestamp = false)
@@ -209,7 +219,7 @@ class MarkdownNoteRepository(
             topicResult.notice?.let(::emitSystemNotice)
             folderResult.notice?.let(::emitSystemNotice)
             tagResult.notice?.let(::emitSystemNotice)
-            if (shouldAutoGenerateVoiceInsight(normalizedContent)) {
+            if (shouldAutoGenerateInsight(normalizedContent, settings)) {
                 ensureAiInsight(document.note.id)
             }
             onNoteMutated(document.note.id)
@@ -233,6 +243,7 @@ class MarkdownNoteRepository(
         topicManuallyEdited: Boolean,
         tagsManuallyEdited: Boolean,
     ) {
+        val automationSettings = currentAutomationSettings()
         val updated = storageMutex.withLock {
             val existing = storeState.value[noteId] ?: return
             val normalizedContent = content.trim()
@@ -296,11 +307,11 @@ class MarkdownNoteRepository(
                 contentChanged = contentChanged,
                 shouldRefreshFolder = contentChanged && nextFolderSource != FolderSource.MANUAL,
                 shouldRefreshTopic = contentChanged && nextSource != TopicSource.MANUAL,
-                shouldRefreshVoiceInsight = contentChanged && shouldAutoGenerateVoiceInsight(normalizedContent),
+                shouldRefreshInsight = contentChanged && shouldAutoGenerateInsight(normalizedContent, automationSettings),
             )
         }
 
-        if (updated.shouldRefreshTopic || updated.shouldRefreshFolder || updated.shouldRefreshVoiceInsight) {
+        if (updated.shouldRefreshTopic || updated.shouldRefreshFolder || updated.shouldRefreshInsight) {
             applicationScope.launch {
                 if (updated.shouldRefreshTopic) {
                     refreshTopicIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
@@ -308,7 +319,7 @@ class MarkdownNoteRepository(
                 if (updated.shouldRefreshFolder) {
                     refreshFolderIfPossible(noteId, updateTimestamp = false).notice?.let(::emitSystemNotice)
                 }
-                if (updated.shouldRefreshVoiceInsight) {
+                if (updated.shouldRefreshInsight) {
                     ensureAiInsight(noteId)
                 }
                 onNoteMutated(noteId)
@@ -767,6 +778,13 @@ class MarkdownNoteRepository(
         QuickCaptureWidgetProvider.refreshAll(appContext)
     }
 
+    private suspend fun currentAutomationSettings(): ReminderSettings =
+        reminderSettingsRepository?.getCurrent() ?: ReminderSettings()
+
+    private fun shouldAutoGenerateInsight(content: String, settings: ReminderSettings): Boolean =
+        shouldAutoGenerateVoiceInsight(content) ||
+            (settings.articleAutoSummaryEnabled && shouldAutoGenerateArticleInsight(content))
+
     private fun ImportedNote.toNoteEntity(noteId: Long): NoteEntity =
         NoteEntity(
             id = noteId,
@@ -862,7 +880,7 @@ class MarkdownNoteRepository(
         val contentChanged: Boolean,
         val shouldRefreshFolder: Boolean,
         val shouldRefreshTopic: Boolean,
-        val shouldRefreshVoiceInsight: Boolean,
+        val shouldRefreshInsight: Boolean,
     )
 
     private companion object {
@@ -877,3 +895,21 @@ internal fun shouldApplyAiRefreshResult(
     latestSourceIsManual: Boolean,
     force: Boolean,
 ): Boolean = extractedFromContent == latestContent && (force || !latestSourceIsManual)
+
+internal fun shouldAutoGenerateArticleInsight(content: String): Boolean {
+    val normalized = content.trim()
+    if (normalized.isBlank()) return false
+    if (ARTICLE_URL_PATTERN.containsMatchIn(normalized)) return true
+    if (normalized.length >= ARTICLE_AUTO_SUMMARY_MIN_CHARS) return true
+    return normalized.lineSequence()
+        .map { it.trim() }
+        .any { line ->
+            line.startsWith("原文链接：") ||
+                line.startsWith("原文链接:") ||
+                line.startsWith("链接：") ||
+                line.startsWith("链接:")
+        }
+}
+
+private const val ARTICLE_AUTO_SUMMARY_MIN_CHARS = 600
+private val ARTICLE_URL_PATTERN = Regex("""https?://\S+""")

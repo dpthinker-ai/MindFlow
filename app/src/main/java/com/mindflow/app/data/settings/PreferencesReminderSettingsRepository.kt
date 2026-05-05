@@ -28,6 +28,8 @@ class PreferencesReminderSettingsRepository(
         }
         .map { preferences ->
             ReminderSettings(
+                autoTaskRecognitionEnabled = preferences[AUTO_TASK_RECOGNITION_ENABLED] ?: true,
+                articleAutoSummaryEnabled = preferences[ARTICLE_AUTO_SUMMARY_ENABLED] ?: true,
                 morningBriefEnabled = preferences[MORNING_BRIEF_ENABLED] ?: false,
                 eveningReviewEnabled = preferences[EVENING_REVIEW_ENABLED] ?: false,
                 morningHour = preferences[MORNING_HOUR] ?: ReminderSettings.DEFAULT_MORNING_HOUR,
@@ -41,6 +43,8 @@ class PreferencesReminderSettingsRepository(
 
     override suspend fun save(settings: ReminderSettings) {
         context.reminderSettingsDataStore.edit { preferences ->
+            preferences[AUTO_TASK_RECOGNITION_ENABLED] = settings.autoTaskRecognitionEnabled
+            preferences[ARTICLE_AUTO_SUMMARY_ENABLED] = settings.articleAutoSummaryEnabled
             preferences[MORNING_BRIEF_ENABLED] = settings.morningBriefEnabled
             preferences[EVENING_REVIEW_ENABLED] = settings.eveningReviewEnabled
             preferences[MORNING_HOUR] = settings.morningHour
@@ -57,6 +61,8 @@ class PreferencesReminderSettingsRepository(
     }
 
     private companion object {
+        val AUTO_TASK_RECOGNITION_ENABLED = booleanPreferencesKey("auto_task_recognition_enabled")
+        val ARTICLE_AUTO_SUMMARY_ENABLED = booleanPreferencesKey("article_auto_summary_enabled")
         val MORNING_BRIEF_ENABLED = booleanPreferencesKey("morning_brief_enabled")
         val EVENING_REVIEW_ENABLED = booleanPreferencesKey("evening_review_enabled")
         val MORNING_HOUR = intPreferencesKey("morning_hour")

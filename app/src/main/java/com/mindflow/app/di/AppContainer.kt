@@ -246,6 +246,7 @@ class AppContainer(context: Context) {
         folderClassifier = folderClassifier,
         tagExtractor = tagExtractor,
         noteInsightPlanner = noteInsightPlanner,
+        reminderSettingsRepository = reminderSettingsRepository,
         markdownExporter = MarkdownExporter(),
         markdownImportParser = MarkdownImportParser(),
         cloudNoteDocumentCodec = cloudNoteDocumentCodec,

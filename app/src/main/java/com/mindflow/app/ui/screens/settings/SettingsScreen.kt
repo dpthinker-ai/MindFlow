@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Hub
@@ -256,13 +254,13 @@ fun SettingsRoute(
         onCloudPasswordChange = viewModel::onCloudPasswordChange,
         onCloudRemoteDirChange = viewModel::onCloudRemoteDirChange,
         onCloudAutoBackupChange = viewModel::onCloudAutoBackupChange,
-        onMorningBriefEnabledChange = viewModel::onMorningBriefEnabledChange,
+        onAutoTaskRecognitionEnabledChange = viewModel::onAutoTaskRecognitionEnabledChange,
+        onArticleAutoSummaryEnabledChange = viewModel::onArticleAutoSummaryEnabledChange,
         onEveningReviewEnabledChange = viewModel::onEveningReviewEnabledChange,
         onTimeBankCurrentAgeChange = viewModel::onTimeBankCurrentAgeChange,
         onTimeBankExpectedLifespanChange = viewModel::onTimeBankExpectedLifespanChange,
         onTimeBankActiveDaysPerWeekChange = viewModel::onTimeBankActiveDaysPerWeekChange,
         onSaveCloud = viewModel::saveCloud,
-        onSaveReminder = viewModel::saveReminder,
         onSaveTimeBank = viewModel::saveTimeBank,
         onRefreshDirectionWiki = viewModel::refreshDirectionWiki,
         onClearCloud = viewModel::clearCloud,
@@ -315,13 +313,13 @@ private fun SettingsScreen(
     onCloudPasswordChange: (String) -> Unit,
     onCloudRemoteDirChange: (String) -> Unit,
     onCloudAutoBackupChange: (Boolean) -> Unit,
-    onMorningBriefEnabledChange: (Boolean) -> Unit,
+    onAutoTaskRecognitionEnabledChange: (Boolean) -> Unit,
+    onArticleAutoSummaryEnabledChange: (Boolean) -> Unit,
     onEveningReviewEnabledChange: (Boolean) -> Unit,
     onTimeBankCurrentAgeChange: (String) -> Unit,
     onTimeBankExpectedLifespanChange: (String) -> Unit,
     onTimeBankActiveDaysPerWeekChange: (String) -> Unit,
     onSaveCloud: () -> Unit,
-    onSaveReminder: () -> Unit,
     onSaveTimeBank: () -> Unit,
     onRefreshDirectionWiki: () -> Unit,
     onClearCloud: () -> Unit,
@@ -363,15 +361,12 @@ private fun SettingsScreen(
             SettingsDestination.HOME -> SettingsHomeScreen(
                 uiState = uiState,
                 onOpenCloud = { destination = SettingsDestination.CLOUD },
-                onOpenAi = { destination = SettingsDestination.AI },
                 onOpenLocalModel = { destination = SettingsDestination.LOCAL_MODEL },
                 onOpenReminder = { destination = SettingsDestination.REMINDER },
                 onOpenTimeBank = { destination = SettingsDestination.TIME_BANK },
                 onOpenDirectionWiki = { destination = SettingsDestination.DIRECTION_WIKI },
                 onOpenAppearance = { destination = SettingsDestination.APPEARANCE },
                 onOpenAbout = { destination = SettingsDestination.ABOUT },
-                onExport = onExport,
-                onImport = onImport,
             )
             SettingsDestination.CLOUD -> CloudBackupScreen(
                 uiState = uiState,
@@ -385,6 +380,8 @@ private fun SettingsScreen(
                 onClearCloud = onClearCloud,
                 onBackupToCloud = onBackupToCloud,
                 onRestoreRequest = onRestoreRequest,
+                onExport = onExport,
+                onImport = onImport,
             )
             SettingsDestination.AI -> AiSettingsScreen(
                 uiState = uiState,
@@ -401,20 +398,25 @@ private fun SettingsScreen(
             SettingsDestination.LOCAL_MODEL -> LocalModelSettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
+                onOpenCloudAi = { destination = SettingsDestination.AI },
                 onLocalModelDownloadUrlChange = onLocalModelDownloadUrlChange,
                 onAiExecutionModeChange = onAiExecutionModeChange,
+                onAutoTaskRecognitionEnabledChange = onAutoTaskRecognitionEnabledChange,
+                onArticleAutoSummaryEnabledChange = onArticleAutoSummaryEnabledChange,
+                onEveningReviewEnabledChange = onEveningReviewEnabledChange,
                 onSaveLocalModel = onSaveLocalModel,
                 onTestLocalModel = onTestLocalModel,
                 onDownloadLocalModel = onDownloadLocalModel,
                 onDeleteLocalModel = onDeleteLocalModel,
                 onRefreshLocalKnowledge = onRefreshLocalKnowledge,
+                onRequestNotificationPermission = onRequestNotificationPermission,
             )
             SettingsDestination.REMINDER -> ReminderSettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
-                onMorningBriefEnabledChange = onMorningBriefEnabledChange,
+                onAutoTaskRecognitionEnabledChange = onAutoTaskRecognitionEnabledChange,
+                onArticleAutoSummaryEnabledChange = onArticleAutoSummaryEnabledChange,
                 onEveningReviewEnabledChange = onEveningReviewEnabledChange,
-                onSaveReminder = onSaveReminder,
                 onRequestNotificationPermission = onRequestNotificationPermission,
             )
             SettingsDestination.TIME_BANK -> TimeBankSettingsScreen(
@@ -444,15 +446,12 @@ private fun SettingsScreen(
 private fun SettingsHomeScreen(
     uiState: SettingsUiState,
     onOpenCloud: () -> Unit,
-    onOpenAi: () -> Unit,
     onOpenLocalModel: () -> Unit,
     onOpenReminder: () -> Unit,
     onOpenTimeBank: () -> Unit,
     onOpenDirectionWiki: () -> Unit,
     onOpenAppearance: () -> Unit,
     onOpenAbout: () -> Unit,
-    onExport: () -> Unit,
-    onImport: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -494,30 +493,17 @@ private fun SettingsHomeScreen(
                         icon = Icons.Outlined.AutoAwesome,
                         iconColor = AccentBlue,
                         title = "AI 模型与自动化",
-                        summary = buildLocalModelSummary(uiState),
-                        status = buildLocalModelHeadline(uiState),
+                        summary = buildAiAutomationSummary(uiState),
+                        status = null,
                         onClick = onOpenLocalModel,
-                    )
-                    SettingsDivider()
-                    SettingsMenuRow(
-                        icon = Icons.Outlined.SettingsSuggest,
-                        iconColor = AccentLavender,
-                        title = "云端 AI",
-                        summary = if (uiState.isConfigured) uiState.model.ifBlank { "已配置" } else "未配置 API Key",
-                        status = if (uiState.isConfigured && uiState.aiEnabled) "可用" else "未启用",
-                        onClick = onOpenAi,
                     )
                     SettingsDivider()
                     SettingsMenuRow(
                         icon = Icons.Outlined.Bolt,
                         iconColor = AccentSuccess,
                         title = "自动化",
-                        summary = when {
-                            uiState.morningBriefEnabled && uiState.eveningReviewEnabled -> "晨间聚焦、晚间回看已开启"
-                            uiState.morningBriefEnabled || uiState.eveningReviewEnabled -> "部分提醒已开启"
-                            else -> "任务识别、提醒与自动处理规则"
-                        },
-                        status = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else null,
+                        summary = buildAutomationSummary(uiState),
+                        status = null,
                         onClick = onOpenReminder,
                     )
                     SettingsDivider()
@@ -548,7 +534,7 @@ private fun SettingsHomeScreen(
                         } else {
                             "图谱视图、关系与显示设置"
                         },
-                        status = if (uiState.directionWikiLastRefreshedAt > 0L) TimeFormatter.compact(uiState.directionWikiLastRefreshedAt) else null,
+                        status = null,
                         onClick = onOpenDirectionWiki,
                     )
                     SettingsDivider()
@@ -557,7 +543,7 @@ private fun SettingsHomeScreen(
                         iconColor = Accent,
                         title = "时间银行",
                         summary = "还可主动投入 ${uiState.timeBankPreview.remainingActiveDays} 天",
-                        status = "可用时间",
+                        status = null,
                         onClick = onOpenTimeBank,
                     )
                     SettingsDivider()
@@ -566,7 +552,7 @@ private fun SettingsHomeScreen(
                         iconColor = AccentBlue,
                         title = "外观",
                         summary = "主题、颜色与显示偏好",
-                        status = "浅色",
+                        status = null,
                         onClick = onOpenAppearance,
                     )
                     SettingsDivider()
@@ -579,14 +565,6 @@ private fun SettingsHomeScreen(
                         onClick = onOpenAbout,
                     )
                 }
-            }
-
-            item {
-                SettingsExportImportCard(
-                    uiState = uiState,
-                    onExport = onExport,
-                    onImport = onImport,
-                )
             }
         }
     }
@@ -741,15 +719,22 @@ private fun SettingsDataRow(
     summary: String,
     status: String?,
     accent: Color,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
         color = WhiteGlass.copy(alpha = 0.92f),
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.5f)),
     ) {
-        Row(
-            modifier = Modifier
+        val rowModifier = if (onClick != null) {
+            Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onClick)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+        Row(
+            modifier = rowModifier
                 .padding(horizontal = 12.dp, vertical = 11.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -787,65 +772,77 @@ private fun SettingsDataRow(
                     maxLines = 1,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SettingsExportImportCard(
-    uiState: SettingsUiState,
-    onExport: () -> Unit,
-    onImport: () -> Unit,
-) {
-    Surface(
-        color = WhiteGlass.copy(alpha = 0.95f),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.72f)),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SectionHeader(title = "本地备份", headline = "Markdown")
-            GridTwo {
-                ActionButton(
-                    text = if (uiState.isExporting) "导出中..." else "导出",
-                    onClick = onExport,
-                    enabled = !uiState.isExporting,
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.FileDownload,
-                )
-                GhostActionButton(
-                    text = if (uiState.isImporting) "导入中..." else "导入",
-                    onClick = onImport,
-                    modifier = Modifier.weight(1f),
-                    enabled = !uiState.isImporting,
-                    icon = Icons.Outlined.RestorePage,
+            if (onClick != null) {
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = TextSoft.copy(alpha = 0.68f),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
     }
 }
 
-private fun buildLocalModelSummary(uiState: SettingsUiState): String =
-    when (uiState.localModelStatus) {
-        OnDeviceModelStatus.READY -> "${uiState.localModelLabel} · ${formatFileSize(uiState.localModelDownloadedBytes)}"
-        OnDeviceModelStatus.DOWNLOADING -> "模型下载中"
-        OnDeviceModelStatus.ERROR -> uiState.localModelLastMessage.ifBlank {
-            if (uiState.localModelDownloadedBytes > 0L) "下载中断，可继续" else "模型准备失败"
+@Composable
+private fun SettingsModeCard(
+    title: String,
+    summary: String,
+    selected: Boolean,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier,
+        onClick = onClick,
+        color = if (selected) accent.copy(alpha = 0.11f) else WhiteGlass.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.62f) else PanelBlue.copy(alpha = 0.5f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        OnDeviceModelStatus.NOT_DOWNLOADED -> "模型选择、运行位置与任务建议"
     }
+}
 
-private fun buildLocalModelHeadline(uiState: SettingsUiState): String =
-    when {
-        uiState.localModelStatus != OnDeviceModelStatus.READY -> "未就绪"
-        uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC -> "本地优先"
-        uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY -> "仅本地"
-        else -> "云端"
+private fun buildAiAutomationSummary(uiState: SettingsUiState): String {
+    val model = if (uiState.localModelStatus == OnDeviceModelStatus.READY) "本地已就绪" else "模型未就绪"
+    val cloud = if (uiState.isConfigured && uiState.aiEnabled) "云端可用" else "云端未启用"
+    return "$model，$cloud"
+}
+
+private fun buildAutomationSummary(uiState: SettingsUiState): String {
+    val enabledCount = buildAutomationEnabledCount(uiState)
+    return if (enabledCount > 0) {
+        "$enabledCount 项规则已开启"
+    } else {
+        "任务识别、回看与文章摘要"
     }
+}
+
+private fun buildAutomationEnabledCount(uiState: SettingsUiState): Int =
+    listOf(
+        uiState.autoTaskRecognitionEnabled,
+        uiState.eveningReviewEnabled,
+        uiState.articleAutoSummaryEnabled,
+    ).count { it }
 
 private fun buildPrivacyDataSummary(uiState: SettingsUiState): String =
     when {
@@ -956,13 +953,18 @@ private fun AboutSettingsScreen(
 private fun LocalModelSettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
+    onOpenCloudAi: () -> Unit,
     onLocalModelDownloadUrlChange: (String) -> Unit,
     onAiExecutionModeChange: (AiExecutionMode) -> Unit,
+    onAutoTaskRecognitionEnabledChange: (Boolean) -> Unit,
+    onArticleAutoSummaryEnabledChange: (Boolean) -> Unit,
+    onEveningReviewEnabledChange: (Boolean) -> Unit,
     onSaveLocalModel: () -> Unit,
     onTestLocalModel: () -> Unit,
     onDownloadLocalModel: () -> Unit,
     onDeleteLocalModel: () -> Unit,
     onRefreshLocalKnowledge: () -> Unit,
+    onRequestNotificationPermission: ((() -> Unit) -> Unit),
 ) {
     val statusHeadline = when (uiState.localModelStatus) {
         OnDeviceModelStatus.READY -> "已就绪"
@@ -977,28 +979,61 @@ private fun LocalModelSettingsScreen(
     ) {
         item {
             PanelCard {
-                SectionHeader(title = "当前模型", headline = statusHeadline)
-                Text(
-                    text = when {
-                        uiState.localModelStatus == OnDeviceModelStatus.READY -> "${uiState.localModelLabel} 已准备好，可用于本地摘要、标题、转写和图谱整理。"
-                        uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到本地，断开后可以继续。"
-                        uiState.localModelStatus == OnDeviceModelStatus.ERROR && uiState.localModelDownloadedBytes > 0L -> uiState.localModelLastMessage.ifBlank { "下载已中断，当前进度已保留，可以继续下载。" }
-                        uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
-                        else -> "下载 Gemma 4 后，优先在设备本地完成 AI 处理。"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(AccentBlue.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.AutoAwesome,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "当前模型",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSoft,
+                            )
+                            SettingsStatusChip(text = statusHeadline, accent = AccentBlue)
+                        }
+                        Text(
+                            text = uiState.localModelLabel.ifBlank { "Gemma 4" },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = when {
+                                uiState.localModelStatus == OnDeviceModelStatus.READY -> "端侧摘要、标题、转写和图谱整理优先使用本地模型。"
+                                uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到本地，断开后可以继续。"
+                                uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
+                                else -> "下载模型后，默认在设备本地完成 AI 处理。"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSoft,
+                        )
+                    }
+                }
                 val effectiveTargetBytes = uiState.localModelDownloadTargetBytes
                     .takeIf { it > 0L }
                     ?: OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES
-                if (uiState.localModelDownloadedBytes > 0L) {
-                    Text(
-                        text = "已下载 ${formatFileSize(uiState.localModelDownloadedBytes)} / ${formatFileSize(effectiveTargetBytes)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
-                    )
-                }
                 if (
                     effectiveTargetBytes > 0L &&
                     (uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING || uiState.localModelDownloadedBytes > 0L) &&
@@ -1008,172 +1043,174 @@ private fun LocalModelSettingsScreen(
                         .coerceIn(0f, 1f)
                     LinearProgressIndicator(
                         progress = { progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        text = "${formatPercentage(progress)} · 下载中断后可继续下载",
+                        text = "${formatPercentage(progress)} · ${formatFileSize(uiState.localModelDownloadedBytes)} / ${formatFileSize(effectiveTargetBytes)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSoft,
-                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                Text(
-                    text = "模型约 ${formatFileSize(OnDeviceModelSettings.DEFAULT_MODEL_SIZE_BYTES)}，建议至少预留 5GB 可用空间。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
-                )
             }
         }
 
         item {
             SettingsSection(
                 title = "模型运行位置",
-                description = "默认本地优先。云端只在你显式选择相关能力时使用。",
+                description = "默认本地优先。云端只在你明确切换或进入云端能力时使用。",
             ) {
-                Surface(
-                    color = WhiteGlass.copy(alpha = 0.92f),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("运行位置", style = MaterialTheme.typography.titleSmall)
+                GridTwo {
+                    SettingsModeCard(
+                        title = "本地运行",
+                        summary = if (uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY) {
+                            "仅使用设备模型"
+                        } else {
+                            "默认本地优先"
+                        },
+                        selected = uiState.aiExecutionMode != AiExecutionMode.CLOUD_ONLY,
+                        accent = AccentBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onAiExecutionModeChange(AiExecutionMode.AUTOMATIC) },
+                    )
+                    SettingsModeCard(
+                        title = "云端运行",
+                        summary = if (uiState.isConfigured && uiState.aiEnabled) "已配置，可显式使用" else "未启用",
+                        selected = uiState.aiExecutionMode == AiExecutionMode.CLOUD_ONLY,
+                        accent = AccentLavender,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onAiExecutionModeChange(AiExecutionMode.CLOUD_ONLY) },
+                    )
+                }
+                SettingsDataRow(
+                    icon = Icons.Outlined.SettingsSuggest,
+                    title = "云端 AI 配置",
+                    summary = if (uiState.isConfigured) uiState.model.ifBlank { "已配置模型" } else "API Key、模型与连接验证",
+                    status = if (uiState.isConfigured && uiState.aiEnabled) "可用" else "未启用",
+                    accent = AccentLavender,
+                    onClick = onOpenCloudAi,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "自动化设置",
+                description = "让 AI 在保存后自动整理，但保持低频、可控，不打断记录。",
+            ) {
+                ReminderSwitchRow(
+                    title = "自动任务识别",
+                    description = "保存后识别待推进事项，并进入今日任务候选。",
+                    checked = uiState.autoTaskRecognitionEnabled,
+                    onCheckedChange = onAutoTaskRecognitionEnabledChange,
+                )
+                ReminderSwitchRow(
+                    title = "每日回看提醒",
+                    description = "21:30 提醒你收拢当天记录与待推进线索。",
+                    checked = uiState.eveningReviewEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            onRequestNotificationPermission { onEveningReviewEnabledChange(true) }
+                        } else {
+                            onEveningReviewEnabledChange(false)
+                        }
+                    },
+                )
+                ReminderSwitchRow(
+                    title = "文章自动摘要",
+                    description = "链接与长文保存后自动整理摘要和关键要点。",
+                    checked = uiState.articleAutoSummaryEnabled,
+                    onCheckedChange = onArticleAutoSummaryEnabledChange,
+                )
+            }
+        }
+
+        item {
+            var showAdvanced by rememberSaveable { mutableStateOf(false) }
+            SettingsSection(
+                title = "高级设置",
+                description = "诊断、模型下载和知识层维护放在这里，避免干扰常用设置。",
+            ) {
+                GhostActionButton(
+                    text = if (showAdvanced) "收起高级项" else "展开高级项",
+                    onClick = { showAdvanced = !showAdvanced },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Outlined.Tune,
+                )
+                if (showAdvanced) {
+                    GhostActionButton(
+                        text = when {
+                            uiState.isDownloadingLocalModel -> "下载中..."
+                            uiState.localModelDownloadedBytes > 0L && uiState.localModelStatus != OnDeviceModelStatus.READY -> "继续下载"
+                            else -> "下载模型"
+                        },
+                        onClick = onDownloadLocalModel,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isDownloadingLocalModel,
+                        icon = Icons.Outlined.FileDownload,
+                    )
+                    GhostActionButton(
+                        text = if (uiState.isTestingLocalModel) "测试中..." else "测试本地模型",
+                        onClick = onTestLocalModel,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isTestingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
+                    )
+                    val hasMaintenanceProgress = uiState.isRefreshingLocalKnowledge ||
+                        uiState.localMaintenanceProgress > 0f ||
+                        uiState.localMaintenanceStep.isNotBlank()
+                    if (hasMaintenanceProgress) {
+                        LinearProgressIndicator(
+                            progress = {
+                                uiState.localMaintenanceProgress.takeIf { it > 0f } ?: 0.06f
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = uiState.localMaintenanceStep.ifBlank {
+                                "正在用本地模型维护本地知识层。"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSoft,
+                        )
+                    }
+                    uiState.localMaintenanceLastSucceededAt
+                        .takeIf { it > 0L }
+                        ?.let { succeededAt ->
                             Text(
-                                text = "本地优先更安全；仅本地和云端模式用于排查或明确切换。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            GridTwo {
-                                FilterChip(
-                                    selected = uiState.aiExecutionMode == AiExecutionMode.AUTOMATIC,
-                                    onClick = { onAiExecutionModeChange(AiExecutionMode.AUTOMATIC) },
-                                    label = { Text("本地优先") },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                )
-                                FilterChip(
-                                    selected = uiState.aiExecutionMode == AiExecutionMode.ON_DEVICE_ONLY,
-                                    onClick = { onAiExecutionModeChange(AiExecutionMode.ON_DEVICE_ONLY) },
-                                    label = { Text("仅本地") },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                )
-                            }
-                            FilterChip(
-                                selected = uiState.aiExecutionMode == AiExecutionMode.CLOUD_ONLY,
-                                onClick = { onAiExecutionModeChange(AiExecutionMode.CLOUD_ONLY) },
-                                label = { Text("云端") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                ),
+                                text = "最近成功维护 ${TimeFormatter.compact(succeededAt)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSoft,
                             )
                         }
-                    }
-                }
-                GhostActionButton(
-                    text = when {
-                        uiState.isDownloadingLocalModel -> "下载中..."
-                        uiState.localModelDownloadedBytes > 0L && uiState.localModelStatus != OnDeviceModelStatus.READY -> "继续下载"
-                        else -> "下载模型"
-                    },
-                    onClick = onDownloadLocalModel,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isDownloadingLocalModel,
-                    icon = Icons.Outlined.FileDownload,
-                )
-                GhostActionButton(
-                    text = if (uiState.isTestingLocalModel) "测试中..." else "测试本地模型",
-                    onClick = onTestLocalModel,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isTestingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
-                )
-                val hasMaintenanceProgress = uiState.isRefreshingLocalKnowledge ||
-                    uiState.localMaintenanceProgress > 0f ||
-                    uiState.localMaintenanceStep.isNotBlank()
-                if (hasMaintenanceProgress) {
-                    LinearProgressIndicator(
-                        progress = {
-                            uiState.localMaintenanceProgress.takeIf { it > 0f } ?: 0.06f
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 2.dp),
+                    uiState.localMaintenanceLastError
+                        .takeIf { it.isNotBlank() }
+                        ?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    GhostActionButton(
+                        text = if (uiState.isRefreshingLocalKnowledge) "维护中..." else "立即维护知识层",
+                        onClick = onRefreshLocalKnowledge,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isRefreshingLocalKnowledge && uiState.localModelStatus == OnDeviceModelStatus.READY,
+                        icon = Icons.Outlined.Timelapse,
                     )
-                    Text(
-                        text = uiState.localMaintenanceStep.ifBlank {
-                            "正在用本地模型维护本地知识层，会读取最近材料、方向页、结论页和日志。"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                    ActionButton(
+                        text = if (uiState.isSavingLocalModel) "保存中..." else "保存本地模型设置",
+                        onClick = onSaveLocalModel,
+                        enabled = !uiState.isSavingLocalModel,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Outlined.Save,
+                    )
+                    GhostActionButton(
+                        text = if (uiState.isDeletingLocalModel) "删除中..." else "删除本地模型",
+                        onClick = onDeleteLocalModel,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isDeletingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
                     )
                 }
-                uiState.localMaintenanceLastStartedAt
-                    .takeIf { it > 0L }
-                    ?.let { startedAt ->
-                        Text(
-                            text = "最近开始维护 ${TimeFormatter.compact(startedAt)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
-                        )
-                    }
-                uiState.localMaintenanceLastSucceededAt
-                    .takeIf { it > 0L }
-                    ?.let { succeededAt ->
-                        Text(
-                            text = "最近成功维护 ${TimeFormatter.compact(succeededAt)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
-                        )
-                    }
-                uiState.localMaintenanceLastError
-                    .takeIf { it.isNotBlank() }
-                    ?.let { error ->
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                GhostActionButton(
-                    text = if (uiState.isRefreshingLocalKnowledge) "维护中..." else "立即维护知识层",
-                    onClick = onRefreshLocalKnowledge,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isRefreshingLocalKnowledge && uiState.localModelStatus == OnDeviceModelStatus.READY,
-                    icon = Icons.Outlined.Timelapse,
-                )
-                ActionButton(
-                    text = if (uiState.isSavingLocalModel) "保存中..." else "保存本地模型设置",
-                    onClick = onSaveLocalModel,
-                    enabled = !uiState.isSavingLocalModel,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Outlined.Save,
-                )
-                Text(
-                    text = "高级设置",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
-                )
-                GhostActionButton(
-                    text = if (uiState.isDeletingLocalModel) "删除中..." else "删除本地模型",
-                    onClick = onDeleteLocalModel,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isDeletingLocalModel && uiState.localModelStatus == OnDeviceModelStatus.READY,
-                )
             }
         }
     }
@@ -1247,9 +1284,9 @@ private fun TimeBankSettingsScreen(
 private fun ReminderSettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
-    onMorningBriefEnabledChange: (Boolean) -> Unit,
+    onAutoTaskRecognitionEnabledChange: (Boolean) -> Unit,
+    onArticleAutoSummaryEnabledChange: (Boolean) -> Unit,
     onEveningReviewEnabledChange: (Boolean) -> Unit,
-    onSaveReminder: () -> Unit,
     onRequestNotificationPermission: ((() -> Unit) -> Unit),
 ) {
     DetailScreenFrame(
@@ -1259,9 +1296,9 @@ private fun ReminderSettingsScreen(
     ) {
         item {
             PanelCard {
-                SectionHeader(title = "提醒节奏", headline = if (uiState.morningBriefEnabled || uiState.eveningReviewEnabled) "已开启" else "未开启")
+                SectionHeader(title = "自动化状态", headline = "${buildAutomationEnabledCount(uiState)} 项开启")
                 Text(
-                    text = "晨间在 08:30 帮你进入今日聚焦，晚间在 21:30 帮你做一次轻量回看。先用固定时间，后面再开放自定义。",
+                    text = "任务识别、每日回看和文章摘要统一在这里控制。提醒保持低频，整理动作默认后台完成。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1270,24 +1307,18 @@ private fun ReminderSettingsScreen(
 
         item {
             SettingsSection(
-                title = "提醒开关",
-                description = "提醒频率保持很低，只在真正值得推进、重连或回看时唤起你。",
+                title = "自动化开关",
+                description = "只保留会影响实际处理节奏的开关，避免设置项失控。",
             ) {
                 ReminderSwitchRow(
-                    title = "晨间聚焦",
-                    description = "08:30 推送一条今日聚焦、下一步和方向提醒",
-                    checked = uiState.morningBriefEnabled,
-                    onCheckedChange = { enabled ->
-                        if (enabled) {
-                            onRequestNotificationPermission { onMorningBriefEnabledChange(true) }
-                        } else {
-                            onMorningBriefEnabledChange(false)
-                        }
-                    },
+                    title = "自动任务识别",
+                    description = "保存后识别待推进事项，并进入今日任务候选。",
+                    checked = uiState.autoTaskRecognitionEnabled,
+                    onCheckedChange = onAutoTaskRecognitionEnabledChange,
                 )
                 ReminderSwitchRow(
-                    title = "晚间回看",
-                    description = "21:30 提醒你收拢当天记录并留下一条回看",
+                    title = "每日回看提醒",
+                    description = "21:30 提醒你收拢当天记录与待推进线索。",
                     checked = uiState.eveningReviewEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled) {
@@ -1297,12 +1328,11 @@ private fun ReminderSettingsScreen(
                         }
                     },
                 )
-                ActionButton(
-                    text = if (uiState.isSavingReminder) "保存中..." else "保存提醒设置",
-                    onClick = onSaveReminder,
-                    enabled = !uiState.isSavingReminder,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Outlined.Save,
+                ReminderSwitchRow(
+                    title = "文章自动摘要",
+                    description = "链接与长文保存后自动整理摘要和关键要点。",
+                    checked = uiState.articleAutoSummaryEnabled,
+                    onCheckedChange = onArticleAutoSummaryEnabledChange,
                 )
             }
         }
@@ -1360,7 +1390,10 @@ private fun CloudBackupScreen(
     onClearCloud: () -> Unit,
     onBackupToCloud: () -> Unit,
     onRestoreRequest: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
 ) {
+    var showSyncConfig by rememberSaveable { mutableStateOf(false) }
     DetailScreenFrame(
         title = "隐私与数据",
         subtitle = "本地优先、备份与同步",
@@ -1415,7 +1448,7 @@ private fun CloudBackupScreen(
         item {
             SettingsSection(
                 title = "备份与同步",
-                description = "自动备份默认低频执行；手动备份和恢复需要你主动确认。",
+                description = "导出和同步都需要你明确触发；自动备份默认低频执行。",
             ) {
                 SettingsDataRow(
                     icon = Icons.Outlined.Sync,
@@ -1426,10 +1459,11 @@ private fun CloudBackupScreen(
                 )
                 SettingsDataRow(
                     icon = Icons.Outlined.FolderOpen,
-                    title = "备份目录",
-                    summary = uiState.cloudRemoteDir.ifBlank { CloudBackupSettings.DEFAULT_REMOTE_DIR },
-                    status = null,
+                    title = "同步配置",
+                    summary = if (showSyncConfig) "收起 WebDAV 配置" else uiState.cloudRemoteDir.ifBlank { CloudBackupSettings.DEFAULT_REMOTE_DIR },
+                    status = if (showSyncConfig) "编辑中" else null,
                     accent = AccentBlue,
+                    onClick = { showSyncConfig = !showSyncConfig },
                 )
                 SettingsDataRow(
                     icon = Icons.Outlined.Storage,
@@ -1438,85 +1472,99 @@ private fun CloudBackupScreen(
                     status = null,
                     accent = AccentLavender,
                 )
-                SettingsField(
-                    value = uiState.cloudBaseUrl,
-                    onValueChange = onCloudBaseUrlChange,
-                    label = "WebDAV 地址",
-                    secret = false,
-                )
-                SettingsField(
-                    value = uiState.cloudUsername,
-                    onValueChange = onCloudUsernameChange,
-                    label = "用户名",
-                    secret = false,
-                )
-                SettingsField(
-                    value = uiState.cloudPassword,
-                    onValueChange = onCloudPasswordChange,
-                    label = "应用密码",
-                    secret = true,
-                )
-                SettingsField(
-                    value = uiState.cloudRemoteDir,
-                    onValueChange = onCloudRemoteDirChange,
-                    label = "远端目录",
-                    secret = false,
-                )
-                Surface(
-                    color = WhiteGlass.copy(alpha = 0.92f),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "自动备份",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "退到后台时静默同步，每天最多一次",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = uiState.cloudAutoBackupEnabled,
-                            onCheckedChange = onCloudAutoBackupChange,
-                        )
-                    }
+                if (showSyncConfig) {
+                    SettingsField(
+                        value = uiState.cloudBaseUrl,
+                        onValueChange = onCloudBaseUrlChange,
+                        label = "WebDAV 地址",
+                        secret = false,
+                    )
+                    SettingsField(
+                        value = uiState.cloudUsername,
+                        onValueChange = onCloudUsernameChange,
+                        label = "用户名",
+                        secret = false,
+                    )
+                    SettingsField(
+                        value = uiState.cloudPassword,
+                        onValueChange = onCloudPasswordChange,
+                        label = "应用密码",
+                        secret = true,
+                    )
+                    SettingsField(
+                        value = uiState.cloudRemoteDir,
+                        onValueChange = onCloudRemoteDirChange,
+                        label = "远端目录",
+                        secret = false,
+                    )
+                    ReminderSwitchRow(
+                        title = "自动备份",
+                        description = "退到后台时静默同步，每天最多一次。",
+                        checked = uiState.cloudAutoBackupEnabled,
+                        onCheckedChange = onCloudAutoBackupChange,
+                    )
+                    ActionButton(
+                        text = if (uiState.isSavingCloud) "保存中..." else "保存同步配置",
+                        onClick = onSaveCloud,
+                        enabled = !uiState.isSavingCloud,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Outlined.Save,
+                    )
+                    GhostActionButton(
+                        text = "清空同步配置",
+                        onClick = onClearCloud,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-                ActionButton(
-                    text = if (uiState.isSavingCloud) "保存中..." else "保存云备份配置",
-                    onClick = onSaveCloud,
-                    enabled = !uiState.isSavingCloud,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Outlined.Save,
-                )
-                GhostActionButton(
-                    text = "清空云配置",
-                    onClick = onClearCloud,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
 
         item {
             PanelCard {
-                SectionHeader(title = "云端操作")
-                ActionButton(
+                SectionHeader(title = "导入与导出")
+                GridTwo {
+                    ActionButton(
+                        text = if (uiState.isExporting) "导出中..." else "导出 Markdown",
+                        onClick = onExport,
+                        enabled = !uiState.isExporting,
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.FileDownload,
+                    )
+                    GhostActionButton(
+                        text = if (uiState.isImporting) "导入中..." else "导入",
+                        onClick = onImport,
+                        modifier = Modifier.weight(1f),
+                        enabled = !uiState.isImporting,
+                        icon = Icons.Outlined.RestorePage,
+                    )
+                }
+            }
+        }
+
+        item {
+            PanelCard {
+                SectionHeader(title = "存储使用", headline = formatFileSize(uiState.localModelDownloadedBytes))
+                Text(
+                    text = "当前主要占用来自本地模型。记录、附件和导出文件仍保留在本机。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSoft,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "云端操作",
+                description = "手动备份与恢复需要主动触发；恢复会先二次确认。",
+            ) {
+                GhostActionButton(
                     text = if (uiState.isBackingUpCloud) "备份中..." else "立即备份到云",
                     onClick = onBackupToCloud,
                     enabled = !uiState.isBackingUpCloud,
                     modifier = Modifier.fillMaxWidth(),
                     icon = Icons.Outlined.CloudUpload,
                 )
-                ActionButton(
+                GhostActionButton(
                     text = if (uiState.isRestoringCloud) "恢复中..." else "从云端恢复",
                     onClick = onRestoreRequest,
                     enabled = !uiState.isRestoringCloud,

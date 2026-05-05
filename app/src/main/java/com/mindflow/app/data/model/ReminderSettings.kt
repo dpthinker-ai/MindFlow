@@ -1,6 +1,8 @@
 package com.mindflow.app.data.model
 
 data class ReminderSettings(
+    val autoTaskRecognitionEnabled: Boolean = true,
+    val articleAutoSummaryEnabled: Boolean = true,
     val morningBriefEnabled: Boolean = false,
     val eveningReviewEnabled: Boolean = false,
     val morningHour: Int = DEFAULT_MORNING_HOUR,
@@ -9,7 +11,10 @@ data class ReminderSettings(
     val eveningMinute: Int = DEFAULT_EVENING_MINUTE,
 ) {
     val hasAnyEnabled: Boolean
-        get() = morningBriefEnabled || eveningReviewEnabled
+        get() = autoTaskRecognitionEnabled ||
+            articleAutoSummaryEnabled ||
+            morningBriefEnabled ||
+            eveningReviewEnabled
 
     companion object {
         const val DEFAULT_MORNING_HOUR = 8

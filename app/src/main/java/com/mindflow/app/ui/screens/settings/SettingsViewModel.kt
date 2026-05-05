@@ -73,7 +73,8 @@ data class SettingsUiState(
     val cloudIsConfigured: Boolean = false,
     val cloudLastBackupAt: Long = 0L,
     val cloudLastBackupError: String = "",
-    val morningBriefEnabled: Boolean = false,
+    val autoTaskRecognitionEnabled: Boolean = true,
+    val articleAutoSummaryEnabled: Boolean = true,
     val eveningReviewEnabled: Boolean = false,
     val timeBankCurrentAge: String = TimeBankSettings().currentAge.toString(),
     val timeBankExpectedLifespan: String = TimeBankSettings().expectedLifespan.toString(),
@@ -84,7 +85,6 @@ data class SettingsUiState(
     val isSavingAi: Boolean = false,
     val isSavingLocalModel: Boolean = false,
     val isSavingCloud: Boolean = false,
-    val isSavingReminder: Boolean = false,
     val isSavingTimeBank: Boolean = false,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
@@ -217,7 +217,8 @@ class SettingsViewModel(
             reminderSettingsRepository.settings.collectLatest { settings ->
                 _uiState.update {
                     it.copy(
-                        morningBriefEnabled = settings.morningBriefEnabled,
+                        autoTaskRecognitionEnabled = settings.autoTaskRecognitionEnabled,
+                        articleAutoSummaryEnabled = settings.articleAutoSummaryEnabled,
                         eveningReviewEnabled = settings.eveningReviewEnabled,
                     )
                 }
@@ -331,12 +332,16 @@ class SettingsViewModel(
         _uiState.update { it.copy(cloudAutoBackupEnabled = value) }
     }
 
-    fun onMorningBriefEnabledChange(value: Boolean) {
-        _uiState.update { it.copy(morningBriefEnabled = value) }
+    fun onAutoTaskRecognitionEnabledChange(value: Boolean) {
+        updateReminderSettings { it.copy(autoTaskRecognitionEnabled = value) }
+    }
+
+    fun onArticleAutoSummaryEnabledChange(value: Boolean) {
+        updateReminderSettings { it.copy(articleAutoSummaryEnabled = value) }
     }
 
     fun onEveningReviewEnabledChange(value: Boolean) {
-        _uiState.update { it.copy(eveningReviewEnabled = value) }
+        updateReminderSettings { it.copy(eveningReviewEnabled = value) }
     }
 
     fun onTimeBankCurrentAgeChange(value: String) {
@@ -533,22 +538,19 @@ class SettingsViewModel(
         }
     }
 
-    fun saveReminder() {
-        val state = _uiState.value
-        val settings = ReminderSettings(
-            morningBriefEnabled = state.morningBriefEnabled,
-            eveningReviewEnabled = state.eveningReviewEnabled,
-        )
+    private fun updateReminderSettings(transform: (ReminderSettings) -> ReminderSettings) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isSavingReminder = true) }
+            val current = reminderSettingsRepository.getCurrent()
+            val settings = transform(current)
+            _uiState.update {
+                it.copy(
+                    autoTaskRecognitionEnabled = settings.autoTaskRecognitionEnabled,
+                    articleAutoSummaryEnabled = settings.articleAutoSummaryEnabled,
+                    eveningReviewEnabled = settings.eveningReviewEnabled,
+                )
+            }
             reminderSettingsRepository.save(settings)
             reminderScheduler.syncNow(settings)
-            _uiState.update { it.copy(isSavingReminder = false) }
-            _events.emit(
-                SettingsEvent.Message(
-                    if (settings.hasAnyEnabled) "AI 提醒已保存，晨间聚焦和晚间回看会按时提示你" else "已关闭 AI 提醒"
-                )
-            )
         }
     }
 

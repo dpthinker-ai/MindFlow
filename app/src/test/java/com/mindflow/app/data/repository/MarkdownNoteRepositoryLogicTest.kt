@@ -39,4 +39,15 @@ class MarkdownNoteRepositoryLogicTest {
             ),
         ).isTrue()
     }
+
+    @Test
+    fun `article insight auto generation accepts links and long captures`() {
+        assertThat(shouldAutoGenerateArticleInsight("链接：https://example.com/post/123")).isTrue()
+        assertThat(shouldAutoGenerateArticleInsight("长文正文".repeat(180))).isTrue()
+    }
+
+    @Test
+    fun `article insight auto generation ignores short plain notes`() {
+        assertThat(shouldAutoGenerateArticleInsight("今天想到一个很短的捕捉。")).isFalse()
+    }
 }

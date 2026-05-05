@@ -92,7 +92,8 @@ class ReminderWorker(
         container.dailyBriefPlanner.refreshIfNeeded(notes)
         val brief = container.dailyBriefPlanner.state.first()
 
-        val nextActionText = if (continueNote != null) {
+        val automationSettings = container.reminderSettingsRepository.getCurrent()
+        val nextActionText = if (continueNote != null && automationSettings.autoTaskRecognitionEnabled) {
             container.nextActionPlanner.refreshIfNeeded(continueNote)
             val nextActionState = container.nextActionPlanner.state.first()
             if (
