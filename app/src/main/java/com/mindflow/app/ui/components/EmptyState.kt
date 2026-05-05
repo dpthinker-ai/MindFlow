@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.mindflow.app.ui.theme.Accent
 
 @Composable
 fun EmptyState(
@@ -30,7 +29,7 @@ fun EmptyState(
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = null,
-                tint = Accent,
+                tint = MaterialTheme.colorScheme.primary,
             )
             Text(text = title, style = MaterialTheme.typography.titleLarge)
             Text(

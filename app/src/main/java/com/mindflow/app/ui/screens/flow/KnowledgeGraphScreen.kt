@@ -51,10 +51,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -93,18 +96,14 @@ import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.theme.Accent
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.ui.theme.AccentLavender
 import com.mindflow.app.ui.theme.AccentTeal
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.PanelSoft
 import com.mindflow.app.util.TimeFormatter
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import kotlin.math.absoluteValue
@@ -120,6 +119,8 @@ internal fun graphNodeTestTag(nodeId: String): String =
     "graph-node-" + nodeId.replace(Regex("[^A-Za-z0-9_-]"), "_")
 
 internal fun heatmapDayTestTag(date: LocalDate): String = "heatmap-day-$date"
+internal fun heatmapPhaseTestTag(slot: GraphActivitySlot): String =
+    "heatmap-slot-${slot.date}-${slot.phase.name.lowercase()}"
 internal fun graphActivityTimestampTestTag(noteId: Long): String = "graph-activity-timestamp-$noteId"
 
 private const val ConceptGraphBatchSize = 5
@@ -343,18 +344,18 @@ internal fun KnowledgeGraphScreen(
                 }
 
                 item {
-                    KnowledgeGraphOverviewCard(
-                        overview = graphOverview,
-                        graphNodes = graphNodes,
-                        activeNoteCount = notes.count { !it.isArchived },
-                    )
-                }
-
-                item {
                     RecordsHeatmapPanel(
                         notes = notes,
                         graphNodes = graphNodes,
                         onOpenNote = onOpenNote,
+                    )
+                }
+
+                item {
+                    KnowledgeGraphOverviewCard(
+                        overview = graphOverview,
+                        graphNodes = graphNodes,
+                        activeNoteCount = notes.count { !it.isArchived },
                     )
                 }
             }
@@ -367,6 +368,12 @@ private enum class GraphStructureFilter(val label: String) {
     HUB("中心"),
     LINKED("连接"),
     ISOLATED("孤立"),
+}
+
+private enum class GraphTopicTab(val label: String) {
+    GRAPH("图谱"),
+    STATS("统计"),
+    RECORDS("记录"),
 }
 
 @Composable
@@ -389,16 +396,20 @@ private fun KnowledgeGraphHeader(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "知识图谱概览",
+                text = "知识连接，价值沉淀",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Surface(
             onClick = onToggleSearch,
-            color = if (searchExpanded) Accent.copy(alpha = 0.12f) else WhiteGlass.copy(alpha = 0.88f),
+            color = if (searchExpanded) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.54f)
+            },
             shape = CircleShape,
-            border = BorderStroke(1.dp, BorderSoft),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)),
         ) {
             Box(
                 modifier = Modifier.size(42.dp),
@@ -407,7 +418,7 @@ private fun KnowledgeGraphHeader(
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = "搜索图谱",
-                    tint = Accent,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -462,8 +473,8 @@ private fun GraphSearchFilterCard(
             },
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-                unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
             ),
         )
         Row(
@@ -489,8 +500,8 @@ private fun GraphSearchFilterCard(
                         null
                     },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Accent.copy(alpha = 0.16f),
-                        selectedLabelColor = Accent,
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary,
                     ),
                 )
             }
@@ -499,7 +510,7 @@ private fun GraphSearchFilterCard(
             Text(
                 text = "没有匹配的概念。",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             FlowRow(
@@ -535,21 +546,35 @@ private fun KnowledgeGraphOverviewCard(
     val nodeById = remember(graphNodes) { graphNodes.associateBy { it.id } }
     PanelCard {
         SectionHeader(
-            title = "整体结构趋势",
-            headline = if (graphNodes.isNotEmpty()) "${graphNodes.size} 个概念" else "还没有稳定概念",
+            title = "结构洞察",
+            headline = "推荐整理",
         )
         GridTwo {
             MetricTile(
-                label = "中心概念",
+                label = "中心主题",
                 value = hubCount.toString(),
                 modifier = Modifier.weight(1f),
-                accent = Accent,
+                accent = MaterialTheme.colorScheme.primary,
             )
             MetricTile(
-                label = "孤立概念",
+                label = "待连接",
                 value = isolatedCount.toString(),
                 modifier = Modifier.weight(1f),
                 accent = AccentLavender,
+            )
+        }
+        GridTwo {
+            MetricTile(
+                label = "稳定连接",
+                value = overview.edges.size.toString(),
+                modifier = Modifier.weight(1f),
+                accent = MaterialTheme.colorScheme.secondary,
+            )
+            MetricTile(
+                label = "记录沉淀",
+                value = activeNoteCount.toString(),
+                modifier = Modifier.weight(1f),
+                accent = MaterialTheme.colorScheme.onSurface,
             )
         }
         if (overview.verdictLine.isNotBlank()) {
@@ -569,9 +594,9 @@ private fun KnowledgeGraphOverviewCard(
         }
         HotTopicsStrip(graphNodes = graphNodes)
         Text(
-            text = "$activeNoteCount 条活跃记录参与图谱沉淀",
+            text = "主题、连接和热度会随记录增长自动更新。",
             style = MaterialTheme.typography.bodySmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -589,7 +614,7 @@ private fun HotTopicsStrip(graphNodes: List<GraphNodeUi>) {
         ) {
             graphNodes.take(4).forEachIndexed { index, node ->
                 Surface(
-                    color = WhiteGlass.copy(alpha = 0.9f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, node.accent.copy(alpha = 0.18f)),
                 ) {
@@ -607,14 +632,14 @@ private fun HotTopicsStrip(graphNodes: List<GraphNodeUi>) {
                         Text(
                             text = node.label,
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = "${node.noteCount.coerceAtLeast(1)} 记录",
                             style = MaterialTheme.typography.labelMedium,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -629,9 +654,9 @@ private fun GraphRecommendationCard(
     summary: String,
 ) {
     Surface(
-        color = Accent.copy(alpha = 0.06f),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Accent.copy(alpha = 0.22f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
     ) {
         Row(
             modifier = Modifier
@@ -644,13 +669,13 @@ private fun GraphRecommendationCard(
                 modifier = Modifier
                     .size(34.dp)
                     .clip(CircleShape)
-                    .background(Accent.copy(alpha = 0.12f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.MoreHoriz,
                     contentDescription = null,
-                    tint = Accent,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
             Column(
@@ -660,24 +685,540 @@ private fun GraphRecommendationCard(
                 Text(
                     text = "推荐关联",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun GraphHeatSummary(
+    monthRecordCount: Int,
+    monthActiveDayCount: Int,
+    weekRecordCount: Int,
+    activeTopicCount: Int,
+    longestStreakDays: Int,
+    trendBuckets: List<Int>,
+    hotTopics: List<GraphHotTopicUi>,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)),
+        shadowElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.88f),
+                                ),
+                            ),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "↗",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "记录趋势",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "$monthActiveDayCount 个活跃日 · $activeTopicCount 个主题被点亮",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = "$monthRecordCount",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "近 30 天热度曲线",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "${trendBuckets.sum()} 次",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                GraphTrendCurve(buckets = trendBuckets)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GraphHeatMetricPill(
+                    label = "本周",
+                    value = "${weekRecordCount}条",
+                    accent = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                GraphHeatMetricPill(
+                    label = "连续",
+                    value = "${longestStreakDays}天",
+                    accent = AccentLavender,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            GraphHotTopicsList(hotTopics = hotTopics)
+        }
+    }
+}
+
+@Composable
+private fun GraphHeatMetricPill(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.56f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = accent,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphHotTopicsList(
+    hotTopics: List<GraphHotTopicUi>,
+) {
+    if (hotTopics.isEmpty()) return
+    val peak = hotTopics.maxOf { it.recentRecordCount }.coerceAtLeast(1)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "热门主题",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "${hotTopics.size} 个热门主题",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        hotTopics.forEachIndexed { index, topic ->
+            GraphHotTopicRow(
+                topic = topic,
+                progress = topic.recentRecordCount.toFloat() / peak.toFloat(),
+                accent = if (index % 2 == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphHotTopicRow(
+    topic: GraphHotTopicUi,
+    progress: Float,
+    accent: Color,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.54f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(accent),
+                )
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = topic.label,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Surface(
+                    color = accent.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+                ) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        text = "↑ ${topic.trendPercent}%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = accent,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0.08f, 1f))
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accent.copy(alpha = 0.74f)),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraphTrendCurve(
+    buckets: List<Int>,
+) {
+    val values = if (buckets.isEmpty()) listOf(0) else buckets
+    val peak = values.maxOrNull()?.coerceAtLeast(1) ?: 1
+    val guideLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)
+    val pointHaloColor = MaterialTheme.colorScheme.surface
+    val lineColor = MaterialTheme.colorScheme.primary
+    val accentPointColor = MaterialTheme.colorScheme.secondary
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(108.dp),
+    ) {
+        val left = 4f
+        val right = size.width - 4f
+        val top = 10f
+        val bottom = size.height - 18f
+        repeat(3) { index ->
+            val y = top + ((bottom - top) * (index + 1) / 4f)
+            drawLine(
+                color = guideLineColor,
+                start = Offset(left, y),
+                end = Offset(right, y),
+                strokeWidth = 1f,
+            )
+        }
+        val points = values.mapIndexed { index, value ->
+            val x = if (values.size == 1) {
+                (left + right) / 2f
+            } else {
+                left + ((right - left) * index / (values.lastIndex).toFloat())
+            }
+            val y = bottom - ((bottom - top) * (value.coerceAtLeast(0).toFloat() / peak.toFloat()))
+            Offset(x, y)
+        }
+        val linePath = buildSmoothGraphPath(points)
+        val areaPath = buildSmoothGraphPath(points).apply {
+            lineTo(points.last().x, bottom)
+            lineTo(points.first().x, bottom)
+            close()
+        }
+        drawPath(
+            path = areaPath,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    lineColor.copy(alpha = 0.18f),
+                    accentPointColor.copy(alpha = 0.04f),
+                    Color.Transparent,
+                ),
+                startY = top,
+                endY = bottom,
+            ),
+        )
+        drawPath(
+            path = linePath,
+            color = lineColor.copy(alpha = 0.84f),
+            style = Stroke(width = 4.5f, cap = StrokeCap.Round),
+        )
+        points.forEachIndexed { index, point ->
+            if (index == points.lastIndex || values[index] == peak) {
+                drawCircle(
+                    color = pointHaloColor,
+                    radius = 6.5f,
+                    center = point,
+                )
+                drawCircle(
+                    color = if (index == points.lastIndex) accentPointColor else lineColor,
+                    radius = 4.2f,
+                    center = point,
+                )
+            }
+        }
+    }
+}
+
+private fun buildSmoothGraphPath(points: List<Offset>): Path {
+    val path = Path()
+    if (points.isEmpty()) return path
+    path.moveTo(points.first().x, points.first().y)
+    points.zipWithNext().forEach { (previous, current) ->
+        val midX = (previous.x + current.x) / 2f
+        path.cubicTo(
+            midX,
+            previous.y,
+            midX,
+            current.y,
+            current.x,
+            current.y,
+        )
+    }
+    return path
+}
+
+@Composable
+private fun GraphMonthSwitcher(
+    selectedMonth: YearMonth,
+    canGoPrevious: Boolean,
+    canGoNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f)),
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                enabled = canGoPrevious,
+                onClick = onPrevious,
+            ) {
+                Text("上月")
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "${selectedMonth.year}年${selectedMonth.monthValue}月",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "记录日历",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            TextButton(
+                enabled = canGoNext,
+                onClick = onNext,
+            ) {
+                Text("下月")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthHeatCalendar(
+    month: YearMonth,
+    activityBySlot: Map<GraphActivitySlot, Int>,
+    peakSlotCount: Int,
+    selectedSlot: GraphActivitySlot?,
+    onSelectSlot: (GraphActivitySlot) -> Unit,
+) {
+    val dates = remember(month) { buildGraphMonthCalendarDates(month) }
+    val weekdayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
+    val phases = remember { GraphActivityPhase.values().toList() }
+    val dayGap = 2.dp
+    val phaseGap = 1.dp
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        val matrixWidth = maxWidth
+        val phaseCellSize = (matrixWidth - dayGap * 6 - phaseGap * 14) / 21
+        val dayGroupWidth = phaseCellSize * 3 + phaseGap * 2
+        Column(
+            modifier = Modifier.width(matrixWidth),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(dayGap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                weekdayLabels.forEach { label ->
+                    Box(
+                        modifier = Modifier.width(dayGroupWidth),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            dates.chunked(7).forEach { week ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(dayGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    week.forEach { date ->
+                        Row(
+                            modifier = Modifier.width(dayGroupWidth),
+                            horizontalArrangement = Arrangement.spacedBy(phaseGap),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            phases.forEach { phase ->
+                                val slot = GraphActivitySlot(date = date, phase = phase)
+                                MonthHeatPhaseCell(
+                                    slot = slot,
+                                    inMonth = YearMonth.from(date) == month,
+                                    count = activityBySlot[slot] ?: 0,
+                                    peakCount = peakSlotCount,
+                                    selected = selectedSlot == slot,
+                                    onClick = { onSelectSlot(slot) },
+                                    modifier = Modifier.size(phaseCellSize),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthHeatPhaseCell(
+    slot: GraphActivitySlot,
+    inMonth: Boolean,
+    count: Int,
+    peakCount: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier.size(14.dp),
+) {
+    val tone = if (inMonth) activityTone(count, peakCount) else null
+    val cellShape = RoundedCornerShape(0.dp)
+    val stateBorder = when {
+        selected -> Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f), cellShape)
+        tone != null -> Modifier.border(0.6.dp, tone.border, cellShape)
+        else -> Modifier
+    }
+    val containerColor = when {
+        !inMonth -> Color.Transparent
+        else -> tone?.base ?: Color.Transparent
+    }
+
+    Box(
+        modifier = modifier
+            .testTag(heatmapPhaseTestTag(slot))
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${slot.date.monthValue}月${slot.date.dayOfMonth}日 ${slot.phase.label}"
+                stateDescription = when {
+                    !inMonth -> "非本月"
+                    selected -> "已选中，$count 条记录"
+                    count > 0 -> "$count 条记录"
+                    else -> "无记录"
+                }
+                this.selected = selected
+            }
+            .then(if (inMonth) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(cellShape)
+                .background(containerColor)
+                .then(stateBorder),
+        )
     }
 }
 
@@ -700,137 +1241,199 @@ private fun RecordsHeatmapPanel(
             .eachCount()
             .toSortedMap()
     }
-    val availableYears = remember(activityByDate, today) {
-        (activityByDate.keys.map { it.year } + today.year).distinct().sortedDescending()
+    val activityBySlot = remember(activeNotes, zoneId) {
+        buildGraphActivityBySlot(activeNotes, zoneId)
     }
-    val defaultSelectedYear = remember(availableYears, today) {
-        if (today.year in availableYears) today.year else availableYears.firstOrNull() ?: today.year
+    val currentMonth = remember(today) { YearMonth.from(today) }
+    val availableMonths = remember(activityByDate, currentMonth) {
+        (activityByDate.keys.map(YearMonth::from) + currentMonth)
+            .distinct()
+            .sorted()
     }
-    var selectedYear by rememberSaveable { mutableIntStateOf(defaultSelectedYear) }
+    val minMonth = remember(availableMonths, currentMonth) {
+        availableMonths.firstOrNull() ?: currentMonth
+    }
+    val maxMonth = remember(availableMonths, currentMonth) {
+        val latest = availableMonths.lastOrNull() ?: currentMonth
+        if (latest.isAfter(currentMonth)) latest else currentMonth
+    }
+    val defaultSelectedMonth = remember(availableMonths, currentMonth) {
+        if (currentMonth in availableMonths) currentMonth else availableMonths.lastOrNull() ?: currentMonth
+    }
+    var selectedMonthKey by rememberSaveable { mutableStateOf(defaultSelectedMonth.toString()) }
+    val selectedMonth = remember(selectedMonthKey) { YearMonth.parse(selectedMonthKey) }
+    val currentPhase = remember(zoneId) { graphActivityPhaseForHour(LocalTime.now(zoneId).hour) }
     var selectedDateKey by rememberSaveable { mutableStateOf<String?>(today.toString()) }
+    var selectedPhaseKey by rememberSaveable { mutableStateOf(currentPhase.name) }
     val selectedDate = selectedDateKey?.let(LocalDate::parse)
-    val selectedDateNotes = remember(activeNotes, selectedDate, zoneId) {
-        if (selectedDate == null) {
+    val selectedPhase = remember(selectedPhaseKey, currentPhase) {
+        runCatching { GraphActivityPhase.valueOf(selectedPhaseKey) }.getOrDefault(currentPhase)
+    }
+    val selectedSlot = remember(selectedDate, selectedPhase) {
+        selectedDate?.let { date -> GraphActivitySlot(date = date, phase = selectedPhase) }
+    }
+    val selectedSlotNotes = remember(activeNotes, selectedSlot, zoneId) {
+        if (selectedSlot == null) {
             emptyList()
         } else {
             activeNotes
                 .filter { note ->
-                    Instant.ofEpochMilli(note.updatedAt.coerceAtLeast(note.createdAt))
-                        .atZone(zoneId)
-                        .toLocalDate() == selectedDate
+                    graphActivitySlotForNote(note, zoneId) == selectedSlot
                 }
                 .sortedByDescending { it.updatedAt }
         }
     }
-    val activatedNodes = remember(selectedDateNotes, graphNodes) {
+    val activatedNodes = remember(selectedSlotNotes, graphNodes) {
         buildActivatedGraphNodes(
-            notes = selectedDateNotes,
+            notes = selectedSlotNotes,
             graphNodes = graphNodes,
         )
     }
 
-    LaunchedEffect(availableYears, defaultSelectedYear) {
-        if (selectedYear !in availableYears) {
-            selectedYear = defaultSelectedYear
+    LaunchedEffect(minMonth, maxMonth, defaultSelectedMonth) {
+        when {
+            selectedMonth.isBefore(minMonth) || selectedMonth.isAfter(maxMonth) -> {
+                selectedMonthKey = defaultSelectedMonth.toString()
+            }
         }
     }
-    LaunchedEffect(selectedYear, selectedDateKey, today) {
+    LaunchedEffect(selectedMonthKey, selectedDateKey, today) {
         val date = selectedDateKey?.let(LocalDate::parse)
-        if (date != null && date.year != selectedYear) {
+        if (date != null && YearMonth.from(date) != selectedMonth) {
             selectedDateKey = null
-        } else if (selectedYear == today.year && date == null) {
+        } else if (selectedMonth == currentMonth && date == null) {
             selectedDateKey = today.toString()
+            selectedPhaseKey = currentPhase.name
         }
     }
-    val selectedYearActivity = remember(activityByDate, selectedYear) {
-        activityByDate.filterKeys { it.year == selectedYear }
+    val selectedMonthActivity = remember(activityByDate, selectedMonth) {
+        activityByDate.filterKeys { YearMonth.from(it) == selectedMonth }
+    }
+    val selectedMonthSlotActivity = remember(activityBySlot, selectedMonth) {
+        activityBySlot.filterKeys { slot -> YearMonth.from(slot.date) == selectedMonth }
+    }
+    val weekStart = remember(today) {
+        today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    }
+    val weekRecordCount = remember(activityByDate, weekStart, today) {
+        countGraphActivityBetween(
+            activityByDate = activityByDate,
+            startDate = weekStart,
+            endDate = today,
+        )
+    }
+    val longestStreakDays = remember(activityByDate) {
+        longestGraphActivityStreak(activityByDate)
+    }
+    val trendBuckets = remember(activityByDate, today) {
+        buildGraphTrendBuckets(
+            activityByDate = activityByDate,
+            endDate = today,
+            days = 30,
+            bucketCount = 12,
+        )
+    }
+    val activeTopicCount = remember(graphNodes) {
+        graphNodes.count { node -> node.noteCount > 0 || node.relationCount > 0 }
+    }
+    val hotTopics = remember(activeNotes, graphNodes, zoneId, today) {
+        buildGraphHotTopics(
+            notes = activeNotes,
+            graphNodes = graphNodes,
+            zoneId = zoneId,
+            today = today,
+            limit = 3,
+        )
+    }
+    val monthRecordCount = remember(selectedMonthActivity) {
+        selectedMonthActivity.values.sum()
+    }
+    val monthActiveDayCount = remember(selectedMonthActivity) {
+        selectedMonthActivity.count { it.value > 0 }
     }
 
     PanelCard {
         SectionHeader(
             title = "记录热度",
-            headline = "${selectedYear} · ${selectedYearActivity.values.sum()} 次变动",
+            headline = "${selectedMonth.monthValue}月 $monthRecordCount 条",
         )
-        if (availableYears.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                availableYears.forEach { year ->
-                    FilterChip(
-                        selected = selectedYear == year,
-                        onClick = {
-                            selectedYear = year
-                            if (selectedDate?.year != year) {
-                                selectedDateKey = null
-                            }
-                        },
-                        label = { Text(year.toString(), maxLines = 1) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Accent.copy(alpha = 0.16f),
-                            selectedLabelColor = Accent,
-                        ),
-                    )
-                }
-            }
-        }
+        GraphHeatSummary(
+            monthRecordCount = monthRecordCount,
+            monthActiveDayCount = monthActiveDayCount,
+            weekRecordCount = weekRecordCount,
+            activeTopicCount = activeTopicCount,
+            longestStreakDays = longestStreakDays,
+            trendBuckets = trendBuckets,
+            hotTopics = hotTopics,
+        )
+        GraphMonthSwitcher(
+            selectedMonth = selectedMonth,
+            canGoPrevious = selectedMonth.isAfter(minMonth),
+            canGoNext = selectedMonth.isBefore(maxMonth),
+            onPrevious = { selectedMonthKey = selectedMonth.minusMonths(1).toString() },
+            onNext = { selectedMonthKey = selectedMonth.plusMonths(1).toString() },
+        )
         Surface(
-            color = WhiteGlass.copy(alpha = 0.92f),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, BorderSoft),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.64f)),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ContributionHeatmap(
-                    year = selectedYear,
-                    activityByDate = activityByDate,
-                    peakCount = selectedYearActivity.values.maxOrNull() ?: 0,
-                    selectedDate = selectedDate,
-                    onSelectDate = { date -> selectedDateKey = date.toString() },
+                MonthHeatCalendar(
+                    month = selectedMonth,
+                    activityBySlot = activityBySlot,
+                    peakSlotCount = selectedMonthSlotActivity.values.maxOrNull() ?: 0,
+                    selectedSlot = selectedSlot,
+                    onSelectSlot = { slot ->
+                        selectedDateKey = slot.date.toString()
+                        selectedPhaseKey = slot.phase.name
+                    },
                 )
                 Text(
-                    text = if (selectedDate != null) {
-                        "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · ${selectedDateNotes.size} 条记录有变动"
-                    } else {
-                        "点某一天，看看它把哪些知识点点亮了。"
-                    },
+                    text = buildGraphSelectedSlotHeadline(
+                        slot = selectedSlot,
+                        recordCount = selectedSlotNotes.size,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (selectedDate != null) {
-                    if (activatedNodes.isEmpty()) {
-                        Text(
-                            text = "这一天有记录变化，但还没有点亮稳定知识点。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
-                        )
-                    } else {
-                        ActivatedThreadStrip(nodes = activatedNodes)
-                    }
+                if (selectedSlot != null && shouldShowUnmappedGraphActivityHint(
+                        recordCount = selectedSlotNotes.size,
+                        activatedNodeCount = activatedNodes.size,
+                    )
+                ) {
+                    Text(
+                        text = "这个时段有记录变化，但还没有点亮稳定主题。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (activatedNodes.isNotEmpty()) {
+                    ActivatedThreadStrip(nodes = activatedNodes)
                 }
-                if (selectedDate != null) {
-                    if (selectedDateNotes.isEmpty()) {
+                if (selectedSlot != null) {
+                    if (selectedSlotNotes.isEmpty()) {
                         Text(
-                            text = "这一天没有记录变动。",
+                            text = "这个时段没有记录变动。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        selectedDateNotes.take(4).forEach { note ->
+                        selectedSlotNotes.take(4).forEach { note ->
                             GraphActivityNoteCard(
                                 note = note,
                                 onOpenNote = onOpenNote,
                             )
                         }
-                        if (selectedDateNotes.size > 4) {
+                        if (selectedSlotNotes.size > 4) {
                             Text(
-                                text = "还有 ${selectedDateNotes.size - 4} 条，先打开其中一条继续看。",
+                                text = "还有 ${selectedSlotNotes.size - 4} 条，先打开其中一条继续看。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -853,6 +1456,7 @@ private fun KnowledgeGraphPanel(
     var previousCenterNodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var neighborExpansionCount by rememberSaveable(activeCenterNodeId) { mutableIntStateOf(0) }
     var switchableExpansionCount by rememberSaveable(activeCenterNodeId) { mutableIntStateOf(0) }
+    var selectedTopicTab by rememberSaveable(activeCenterNodeId) { mutableStateOf(GraphTopicTab.GRAPH) }
 
     val viewport = remember(
         snapshot,
@@ -875,11 +1479,6 @@ private fun KnowledgeGraphPanel(
     }
     val centerNode = viewport.centerNode
     val graph = snapshot.conceptGraph
-    val headline = if (graph.edges.isEmpty()) {
-        "记录先沉淀，连接会慢慢长出来。"
-    } else {
-        "看看最近哪些想法已经开始彼此勾连。"
-    }
     val relationFromPreviousCenter = remember(graph, previousCenterNodeId, centerNode?.conceptId) {
         buildConceptGraphCenterRelation(
             graph = graph,
@@ -925,14 +1524,18 @@ private fun KnowledgeGraphPanel(
 
     PanelCard {
         SectionHeader(
-            title = "知识图谱",
-            headline = centerNode?.label ?: headline,
+            title = "信息图谱",
+            headline = if (graph.nodes.isNotEmpty()) {
+                "${graph.nodes.size} 个主题 · ${graph.edges.size} 条连接"
+            } else {
+                "继续记录"
+            },
         )
         if (centerNode == null) {
             Text(
                 text = "记录继续积累，这里会慢慢长出最近思路之间的连接。",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             return@PanelCard
         }
@@ -941,22 +1544,162 @@ private fun KnowledgeGraphPanel(
             viewport = viewport,
             onSelectNode = ::selectCenter,
         )
-        ConceptGraphInfoCard(
-            centerNode = centerNode,
-            relationFromPreviousCenter = relationFromPreviousCenter,
-            visibleNeighborCount = viewport.neighbors.size,
-            visibleSuggestedNeighborCount = viewport.suggestedNeighbors.size,
-            hiddenNeighborCount = viewport.hiddenNeighborCount,
-            visibleSwitchableCount = viewport.switchableNodes.size,
-            hiddenSwitchableCount = viewport.hiddenSwitchableNodeCount,
+        GraphTopicTabs(
+            selectedTab = selectedTopicTab,
+            onSelectTab = { selectedTopicTab = it },
         )
-        GraphRelatedRecordsCard(
-            records = relatedNotes,
+        when (selectedTopicTab) {
+            GraphTopicTab.GRAPH -> ConceptGraphInfoCard(
+                centerNode = centerNode,
+                relationFromPreviousCenter = relationFromPreviousCenter,
+                visibleNeighborCount = viewport.neighbors.size,
+                visibleSuggestedNeighborCount = viewport.suggestedNeighbors.size,
+                hiddenNeighborCount = viewport.hiddenNeighborCount,
+                visibleSwitchableCount = viewport.switchableNodes.size,
+                hiddenSwitchableCount = viewport.hiddenSwitchableNodeCount,
+            )
+            GraphTopicTab.STATS -> GraphTopicStatsCard(
+                visibleNeighborCount = viewport.neighbors.size,
+                visibleSuggestedNeighborCount = viewport.suggestedNeighbors.size,
+                hiddenNeighborCount = viewport.hiddenNeighborCount,
+                relatedRecordCount = relatedNotes.size,
+            )
+            GraphTopicTab.RECORDS -> GraphRelatedRecordsCard(
+                records = relatedNotes,
+                onOpenNote = onOpenNote,
+                emptyText = "这个主题还没有匹配到具体记录。",
+            )
+        }
+        GraphTopicActionCard(
+            centerNode = centerNode,
+            relatedNotes = relatedNotes,
             onOpenNote = onOpenNote,
         )
         if (viewport.neighbors.isEmpty() && viewport.hiddenSwitchableNodeCount > 0) {
             TextButton(onClick = { switchableExpansionCount += 1 }) {
-                Text("再展开 ${viewport.hiddenSwitchableNodeCount} 个相关知识点")
+                Text("再展开 ${viewport.hiddenSwitchableNodeCount} 个相关主题")
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraphTopicTabs(
+    selectedTab: GraphTopicTab,
+    onSelectTab: (GraphTopicTab) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        GraphTopicTab.entries.forEach { tab ->
+            FilterChip(
+                modifier = Modifier.weight(1f),
+                selected = selectedTab == tab,
+                onClick = { onSelectTab(tab) },
+                label = {
+                    Text(
+                        text = tab.label,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                },
+                    colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    selectedLabelColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphTopicStatsCard(
+    visibleNeighborCount: Int,
+    visibleSuggestedNeighborCount: Int,
+    hiddenNeighborCount: Int,
+    relatedRecordCount: Int,
+) {
+    val relationCount = visibleNeighborCount + visibleSuggestedNeighborCount + hiddenNeighborCount
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GridTwo {
+                MetricTile(
+                    label = "关联主题",
+                    value = relationCount.toString(),
+                    modifier = Modifier.weight(1f),
+                    accent = MaterialTheme.colorScheme.primary,
+                )
+                MetricTile(
+                    label = "相关记录",
+                    value = relatedRecordCount.toString(),
+                    modifier = Modifier.weight(1f),
+                    accent = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Text(
+                text = when {
+                    relationCount >= 4 -> "这个主题已经形成清晰连接，可以继续提炼结构。"
+                    relationCount > 0 -> "这个主题有初步关系，适合补一两条关键记录。"
+                    else -> "这个主题暂时偏独立，继续记录后会更容易连接。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphTopicActionCard(
+    centerNode: ConceptGraphNode,
+    relatedNotes: List<NoteEntity>,
+    onOpenNote: (Long) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "是否整理为项目结构？",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${centerNode.label} 已经有可追踪线索，先从相关记录提炼项目骨架。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(
+                enabled = relatedNotes.isNotEmpty(),
+                onClick = { relatedNotes.firstOrNull()?.id?.let(onOpenNote) },
+            ) {
+                Text(if (relatedNotes.isNotEmpty()) "立即整理" else "待补记录")
             }
         }
     }
@@ -966,12 +1709,13 @@ private fun KnowledgeGraphPanel(
 private fun GraphRelatedRecordsCard(
     records: List<NoteEntity>,
     onOpenNote: (Long) -> Unit,
+    emptyText: String? = null,
 ) {
-    if (records.isEmpty()) return
+    if (records.isEmpty() && emptyText == null) return
     Surface(
-        color = WhiteGlass.copy(alpha = 0.76f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Column(
             modifier = Modifier
@@ -980,45 +1724,53 @@ private fun GraphRelatedRecordsCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(title = "相关记录", headline = "${records.size} 条")
-            records.take(3).forEach { note ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenNote(note.id) },
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
+            if (records.isEmpty()) {
+                Text(
+                    text = emptyText.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                records.take(3).forEach { note ->
+                    Row(
                         modifier = Modifier
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(AccentTeal.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
+                            .fillMaxWidth()
+                            .clickable { onOpenNote(note.id) },
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
+                                .size(30.dp)
                                 .clip(CircleShape)
-                                .background(AccentTeal),
-                        )
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = note.topic.ifBlank { "未命名记录" },
-                            style = MaterialTheme.typography.titleSmall,
-                            color = TextMain,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = TimeFormatter.compact(note.updatedAt.coerceAtLeast(note.createdAt)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
-                            maxLines = 1,
-                        )
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondary),
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = note.topic.ifBlank { "未命名记录" },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = TimeFormatter.compact(note.updatedAt.coerceAtLeast(note.createdAt)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -1104,14 +1856,14 @@ private fun ConceptGraphViewportCanvas(
                 Text(
                     text = "思路连接暂时没有加载出来。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 val reasonLine = renderError?.trim().orEmpty()
                 if (reasonLine.isNotBlank()) {
                     Text(
                         text = reasonLine,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 TextButton(
@@ -1164,11 +1916,11 @@ private fun buildConceptGraphNextHint(
             "这条思路先长到这里。直接点图里的相关想法继续展开，图下还能再展开 $hiddenSwitchableCount 个。"
         visibleNeighborCount == 0 && visibleSwitchableCount > 0 ->
             "这条思路先长到这里。直接点图里的相关想法继续往下看。"
-        visibleNeighborCount == 0 -> "这个知识点当前先长到这里。"
+        visibleNeighborCount == 0 -> "这个主题当前先长到这里。"
         hiddenNeighborCount > 0 && visibleSuggestedNeighborCount > 0 ->
-            "直接点图里的节点继续展开。更淡的点表示下一层关联。"
-        hiddenNeighborCount > 0 -> "直接点图里的节点继续展开。"
-        else -> "直接点图里的节点继续展开。"
+            "点图里的主题继续展开。颜色更浅的是下一层线索。"
+        hiddenNeighborCount > 0 -> "点图里的主题继续展开。"
+        else -> "点图里的主题继续展开。"
     }
 
 @Composable
@@ -1186,11 +1938,11 @@ private fun ConceptGraphInfoCard(
             .fillMaxWidth()
             .testTag(KnowledgeGraphInfoPanelTag)
             .semantics(mergeDescendants = true) {
-                contentDescription = "知识点详情 ${centerNode.label}"
+                contentDescription = "主题详情 ${centerNode.label}"
             },
-        color = WhiteGlass.copy(alpha = 0.58f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.52f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1199,7 +1951,7 @@ private fun ConceptGraphInfoCard(
             Text(
                 text = centerNode.label,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = buildConceptGraphSummaryLine(
@@ -1207,7 +1959,7 @@ private fun ConceptGraphInfoCard(
                     relationFromPreviousCenter = relationFromPreviousCenter,
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = buildConceptGraphNextHint(
@@ -1218,7 +1970,7 @@ private fun ConceptGraphInfoCard(
                     hiddenSwitchableCount = hiddenSwitchableCount,
                 ),
                 style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1244,8 +1996,8 @@ private fun ConceptGraphDotNode(
     val containerModifier = modifier
         .testTag(graphNodeTestTag(node.conceptId))
         .semantics(mergeDescendants = true) {
-            contentDescription = "知识点 ${node.label}"
-            stateDescription = if (selected) "中心节点" else "直接关联知识点"
+            contentDescription = "主题 ${node.label}"
+            stateDescription = if (selected) "中心主题" else "直接关联主题"
             this.selected = selected
             role = Role.Button
         }
@@ -1257,7 +2009,7 @@ private fun ConceptGraphDotNode(
     } else {
         MaterialTheme.typography.labelSmall
     }
-    val textColor = if (selected) TextMain else TextSoft
+    val textColor = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
 
     val dotContent: @Composable () -> Unit = {
         Box(
@@ -1272,7 +2024,7 @@ private fun ConceptGraphDotNode(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.96f)),
+                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.92f)),
                 )
             }
         }
@@ -1401,7 +2153,7 @@ private fun SwitchableConceptChip(
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.labelMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1422,9 +2174,9 @@ private fun GraphActivityNoteCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenNote(note.id) },
-        color = WhiteGlass.copy(alpha = 0.78f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -1433,7 +2185,7 @@ private fun GraphActivityNoteCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { result ->
@@ -1445,7 +2197,7 @@ private fun GraphActivityNoteCard(
                     .testTag(graphActivityTimestampTestTag(note.id)),
                 text = TimeFormatter.compact(note.updatedAt),
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
@@ -1453,14 +2205,14 @@ private fun GraphActivityNoteCard(
             Text(
                 text = preview,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = if (titleLineCount >= 2) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${note.status.label} · ${note.horizon.label}",
                 style = MaterialTheme.typography.labelSmall,
-                color = Accent.copy(alpha = 0.84f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.84f),
             )
         }
     }
@@ -1496,7 +2248,7 @@ private fun ActivatedThreadStrip(
                     Text(
                         text = node.label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                     )
                 }
@@ -1515,7 +2267,7 @@ private fun EmptyConceptGraphPanel() {
         Text(
             text = "还没有可展示的知识点。继续积累记录后，这里会从一个中心知识点开始展开关系。",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -1561,13 +2313,13 @@ private fun ConceptGraphPanel(
                 Text(
                     text = "这个知识点还没有连接起来。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Text(
                     text = "一跳关联",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -1595,7 +2347,7 @@ private fun ConceptGraphPanel(
                         "切换到其他知识簇"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -1655,7 +2407,7 @@ private fun CenterConceptNodeCard(
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1680,7 +2432,7 @@ private fun NeighborConceptNodeCard(
                 role = Role.Button
             }
             .clickable(onClick = onClick),
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
         shape = CardShape,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.25f)),
     ) {
@@ -1704,7 +2456,7 @@ private fun NeighborConceptNodeCard(
             Text(
                 text = neighbor.node.label,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1712,7 +2464,7 @@ private fun NeighborConceptNodeCard(
                 Text(
                     text = neighbor.node.summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1738,7 +2490,7 @@ private fun SwitchableConceptNodeCard(
                 role = Role.Button
             }
             .clickable(onClick = onClick),
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
         shape = CardShape,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.25f)),
     ) {
@@ -1762,7 +2514,7 @@ private fun SwitchableConceptNodeCard(
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1770,7 +2522,7 @@ private fun SwitchableConceptNodeCard(
                 Text(
                     text = node.summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1834,17 +2586,20 @@ private fun KnowledgeGraphCanvas(
                 heightPx = heightPx,
             )
         }
+        val backboneEdgeColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+        val mutedBackboneEdgeColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
+        val focusEdgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
 
         Canvas(modifier = Modifier.fillMaxSize()) {
             displayEdges.forEach { edge ->
                 val from = positionById[edge.fromId] ?: return@forEach
                 val to = positionById[edge.toId] ?: return@forEach
                 val edgeColor = when (edge.emphasis) {
-                    GraphEdgeEmphasis.FOCUS -> Accent.copy(alpha = 0.38f)
+                    GraphEdgeEmphasis.FOCUS -> focusEdgeColor
                     GraphEdgeEmphasis.BACKBONE -> if (selectedNodeId == null) {
-                        BorderSoft.copy(alpha = 0.72f)
+                        backboneEdgeColor
                     } else {
-                        BorderSoft.copy(alpha = 0.22f)
+                        mutedBackboneEdgeColor
                     }
                 }
                 drawLine(
@@ -1927,10 +2682,10 @@ private fun GraphNodeBubble(
             .clickable(onClick = onClick),
         color = when {
             selected -> node.accent.copy(alpha = 0.16f)
-            !emphasized -> WhiteGlass.copy(alpha = 0.48f)
-            node.structureStatus == GraphStructureStatus.HUB -> WhiteGlass.copy(alpha = 0.96f)
-            node.structureStatus == GraphStructureStatus.ISOLATED -> WhiteGlass.copy(alpha = 0.72f)
-            else -> WhiteGlass.copy(alpha = 0.92f)
+            !emphasized -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+            node.structureStatus == GraphStructureStatus.HUB -> MaterialTheme.colorScheme.surface
+            node.structureStatus == GraphStructureStatus.ISOLATED -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
         },
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(
@@ -1962,7 +2717,7 @@ private fun GraphNodeBubble(
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (emphasized || selected) TextMain else TextSoft,
+                color = if (emphasized || selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1977,16 +2732,16 @@ private fun GraphEdgeLabelBubble(
 ) {
     Surface(
         modifier = modifier,
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, Accent.copy(alpha = 0.22f)),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+        shadowElevation = 0.dp,
     ) {
         Text(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -2006,9 +2761,9 @@ private fun GraphInfoCard(
                 contentDescription = "知识点信息 ${node.label}"
                 stateDescription = "结构状态 ${node.structureStatus.label}"
             },
-        color = WhiteGlass.copy(alpha = 0.68f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -2023,12 +2778,12 @@ private fun GraphInfoCard(
                     Text(
                         text = node.label,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = graphStructureLine(node),
                         style = MaterialTheme.typography.labelMedium,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Surface(
@@ -2047,7 +2802,7 @@ private fun GraphInfoCard(
             Text(
                 text = node.summaryLine,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2055,14 +2810,14 @@ private fun GraphInfoCard(
                 Text(
                     text = "这条知识点暂时还比较独立。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "直接关系",
                         style = MaterialTheme.typography.labelMedium,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     relations.take(3).forEach { relation ->
                         GraphRelationRow(relation = relation)
@@ -2078,9 +2833,9 @@ private fun GraphRelationRow(
     relation: GraphRelationUi,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.58f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.56f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.54f)),
     ) {
         Column(
             modifier = Modifier
@@ -2102,13 +2857,13 @@ private fun GraphRelationRow(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         text = relation.label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Text(
                     text = relation.relatedNode.label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2116,7 +2871,7 @@ private fun GraphRelationRow(
             Text(
                 text = relation.reasonLine,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2230,7 +2985,7 @@ internal fun buildConceptGraphVisualState(
 
     return GraphOverviewUi(
         headline = buildString {
-            append("${nodes.size} 个知识点")
+            append("${nodes.size} 个主题")
             if (edges.isNotEmpty()) append(" · ${edges.size} 条连接")
         },
         verdictLine = buildGraphVerdict(
@@ -2868,7 +3623,7 @@ private fun ContributionCell(
     onClick: () -> Unit,
 ) {
     val tone = if (visible) activityTone(count, peakCount) else null
-    val selectedAccent = Color(0xFF3B82F6)
+    val selectedAccent = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .size(16.dp)
@@ -2931,49 +3686,53 @@ private fun ContributionCell(
     }
 }
 
+@Composable
 private fun activityTone(
     count: Int,
     peakCount: Int,
 ): HeatTone {
+    val heat = MaterialTheme.colorScheme.primary
+    val softSurface = MaterialTheme.colorScheme.surfaceVariant
+    val softBorder = MaterialTheme.colorScheme.outlineVariant
     if (count <= 0 || peakCount <= 0) {
         return HeatTone(
-            base = Color(0xFFF0F7FF),
-            glowInner = Color(0xFFF9FCFF),
-            glowOuter = Color(0x00FFFFFF),
-            border = Color(0xFFD8EAFD),
+            base = softSurface.copy(alpha = 0.46f),
+            glowInner = softSurface.copy(alpha = 0.26f),
+            glowOuter = Color.Transparent,
+            border = softBorder.copy(alpha = 0.46f),
         )
     }
     val progress = (count.toFloat() / peakCount.toFloat()).coerceIn(0f, 1f)
     return when {
         progress <= 0.2f -> HeatTone(
-            base = Color(0xFFDDEEFF),
-            glowInner = Color(0xFFF4FAFF),
-            glowOuter = Color(0x6679C6FF),
-            border = Color(0xFFC5E2FF),
+            base = heat.copy(alpha = 0.22f),
+            glowInner = heat.copy(alpha = 0.08f),
+            glowOuter = Color.Transparent,
+            border = heat.copy(alpha = 0.24f),
         )
         progress <= 0.4f -> HeatTone(
-            base = Color(0xFFB8DCFF),
-            glowInner = Color(0xFFE7F4FF),
-            glowOuter = Color(0x888AD6FF),
-            border = Color(0xFFA1CCFF),
+            base = heat.copy(alpha = 0.34f),
+            glowInner = heat.copy(alpha = 0.12f),
+            glowOuter = heat.copy(alpha = 0.03f),
+            border = heat.copy(alpha = 0.30f),
         )
         progress <= 0.65f -> HeatTone(
-            base = Color(0xFF84C4FF),
-            glowInner = Color(0xFFCFEAFF),
-            glowOuter = Color(0xB39EE4FF),
-            border = Color(0xFF69B2FF),
+            base = heat.copy(alpha = 0.50f),
+            glowInner = heat.copy(alpha = 0.16f),
+            glowOuter = heat.copy(alpha = 0.05f),
+            border = heat.copy(alpha = 0.38f),
         )
         progress <= 0.85f -> HeatTone(
-            base = Color(0xFF4FA7FF),
-            glowInner = Color(0xFFADE0FF),
-            glowOuter = Color(0xE0A9ECFF),
-            border = Color(0xFF3794F3),
+            base = heat.copy(alpha = 0.68f),
+            glowInner = heat.copy(alpha = 0.20f),
+            glowOuter = heat.copy(alpha = 0.08f),
+            border = heat.copy(alpha = 0.46f),
         )
         else -> HeatTone(
-            base = Color(0xFF2E8FFF),
-            glowInner = Color(0xFF8BD7FF),
-            glowOuter = Color(0xFFBDF5FF),
-            border = Color(0xFF1F7DEB),
+            base = heat.copy(alpha = 0.86f),
+            glowInner = heat.copy(alpha = 0.24f),
+            glowOuter = heat.copy(alpha = 0.12f),
+            border = heat.copy(alpha = 0.56f),
         )
     }
 }

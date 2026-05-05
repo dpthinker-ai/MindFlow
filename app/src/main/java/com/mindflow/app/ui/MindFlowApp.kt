@@ -63,6 +63,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
@@ -74,7 +75,9 @@ import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.topic.ArticleContentExtractor
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.ImageUnderstandingPlanner
 import com.mindflow.app.data.topic.NoteInsightPlanner
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
@@ -100,10 +103,6 @@ import com.mindflow.app.ui.screens.settings.SettingsRoute
 import com.mindflow.app.ui.screens.thread.ThreadRoute
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.Panel
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
 
 private data class TopLevelDestination(
     val route: String,
@@ -121,6 +120,7 @@ fun MindFlowApp(
     reminderSettingsRepository: ReminderSettingsRepository,
     timeBankSettingsRepository: TimeBankSettingsRepository,
     threadPreferencesRepository: ThreadPreferencesRepository,
+    appearanceSettingsRepository: AppearanceSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     onDeviceModelManager: OnDeviceModelManager,
     reminderScheduler: ReminderScheduler,
@@ -139,6 +139,8 @@ fun MindFlowApp(
     topicExtractor: TopicExtractor,
     noteInsightPlanner: NoteInsightPlanner,
     voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
+    articleContentExtractor: ArticleContentExtractor,
+    imageUnderstandingPlanner: ImageUnderstandingPlanner,
     onDeviceAiClient: OnDeviceAiClient,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     localKnowledgeMaintenancePlanner: LocalKnowledgeMaintenancePlanner,
@@ -435,6 +437,7 @@ fun MindFlowApp(
                     onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
+                    appearanceSettingsRepository = appearanceSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,
@@ -457,6 +460,8 @@ fun MindFlowApp(
                     topicExtractor = topicExtractor,
                     noteInsightPlanner = noteInsightPlanner,
                     voiceTranscriptionPlanner = voiceTranscriptionPlanner,
+                    articleContentExtractor = articleContentExtractor,
+                    imageUnderstandingPlanner = imageUnderstandingPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = null,
                     captureSessionKey = seedId,
@@ -524,6 +529,8 @@ fun MindFlowApp(
                     topicExtractor = topicExtractor,
                     noteInsightPlanner = noteInsightPlanner,
                     voiceTranscriptionPlanner = voiceTranscriptionPlanner,
+                    articleContentExtractor = articleContentExtractor,
+                    imageUnderstandingPlanner = imageUnderstandingPlanner,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     noteId = noteId,
                     captureSessionKey = null,
@@ -548,10 +555,10 @@ fun MindFlowApp(
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 8.dp),
-                color = Panel,
+                color = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, BorderSoft),
-                shadowElevation = 2.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)),
+                shadowElevation = 0.dp,
             ) {
                 Row(
                     modifier = Modifier
@@ -569,8 +576,8 @@ fun MindFlowApp(
                                     if (active) {
                                         Brush.horizontalGradient(
                                             listOf(
-                                                AccentBlue.copy(alpha = 0.10f),
-                                                AccentBlue.copy(alpha = 0.10f),
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
                                             ),
                                         )
                                     } else {
@@ -596,13 +603,17 @@ fun MindFlowApp(
                                         imageVector = destination.icon,
                                         contentDescription = destination.label,
                                         modifier = Modifier.size(23.dp),
-                                        tint = if (active) Accent else TextSoft,
+                                        tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Spacer(modifier = Modifier.size(2.dp))
                                     Text(
                                         text = destination.label,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (active) Accent else TextSoft.copy(alpha = 0.72f),
+                                        color = if (active) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                        },
                                         maxLines = 1,
                                     )
                                 }

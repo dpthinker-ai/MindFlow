@@ -23,6 +23,8 @@ class ParsedCaptureScreenTest {
                     ),
                     onBack = {},
                     onContentChange = {},
+                    onEnsureVoiceInsight = {},
+                    onEnsureVoiceTranscription = {},
                     onSave = {},
                     onSaveAndExit = {},
                     onCaptureAction = {},
@@ -31,11 +33,9 @@ class ParsedCaptureScreenTest {
         }
 
         composeRule.onNodeWithText("语音输入").assertExists()
-        composeRule.onNodeWithText("原始内容（转写）").assertExists()
+        composeRule.onNodeWithText("原始内容信息").assertExists()
         composeRule.onNodeWithText("开始录音").assertExists()
-        composeRule.onNodeWithText("AI 快速提取").assertExists()
-        composeRule.onNodeWithText("关键信息").assertExists()
-        composeRule.onNodeWithText("识别信息").assertExists()
+        composeRule.onNodeWithText("AI 洞察").assertExists()
         composeRule.onNodeWithText("语音转写（可编辑）").assertExists()
         composeRule.onNodeWithText("删除").assertExists()
         composeRule.onNodeWithText("继续录入").assertExists()
@@ -55,6 +55,7 @@ class ParsedCaptureScreenTest {
                     ),
                     onBack = {},
                     onContentChange = {},
+                    onEnsureImageUnderstanding = {},
                     onSave = {},
                     onSaveAndExit = {},
                     onCaptureAction = {},

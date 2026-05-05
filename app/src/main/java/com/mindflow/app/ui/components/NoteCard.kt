@@ -23,6 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.Icon
@@ -45,11 +48,6 @@ import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.markdown.SimpleMarkdown
-import com.mindflow.app.ui.theme.AccentSuccess
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import kotlin.math.roundToInt
 
@@ -87,7 +85,7 @@ fun NoteCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = note.topic.ifBlank { "未命名想法" },
+                        text = note.compactRecordTitleText(),
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -108,7 +106,7 @@ fun NoteCard(
                             Text(
                                 text = "已归档",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -132,7 +130,7 @@ fun NoteCard(
                                     imageVector = Icons.Outlined.Share,
                                     contentDescription = "分享",
                                     modifier = Modifier.size(18.dp),
-                                    tint = TextSoft,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -186,15 +184,16 @@ private fun CompactNoteCard(
     modifier: Modifier = Modifier,
 ) {
     val accent = noteStatusAccent(note.status)
+    val kind = note.inferRecordKind()
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = PanelShape,
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
     ) {
         Row(
@@ -211,8 +210,8 @@ private fun CompactNoteCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.EditNote,
-                        contentDescription = null,
+                        imageVector = kind.compactIcon(),
+                        contentDescription = kind.contentDescription(),
                         modifier = Modifier.size(17.dp),
                         tint = accent,
                     )
@@ -229,23 +228,23 @@ private fun CompactNoteCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = note.topic.ifBlank { "未命名想法" },
+                        text = note.compactRecordTitleText(),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleSmall,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = TimeFormatter.compact(note.updatedAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                 }
 
                 Text(
-                    text = note.compactPreviewText(),
+                    text = note.compactRecordPreviewText(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -287,7 +286,7 @@ private fun CompactNoteCard(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = "分享",
                             modifier = Modifier.size(18.dp),
-                            tint = TextSoft,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -304,22 +303,31 @@ private fun CompactBadge(
     Surface(
         color = accent?.copy(alpha = 0.1f) ?: Color.Transparent,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, accent?.copy(alpha = 0.16f) ?: BorderSoft),
+        border = BorderStroke(1.dp, accent?.copy(alpha = 0.16f) ?: MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = accent ?: TextSoft,
+            color = accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-private fun NoteEntity.compactPreviewText(): String {
-    val plainText = SimpleMarkdown.toPlainText(content).replace("\n", " ").trim()
-    return plainText.ifBlank { "没有正文" }
+private fun RecordKind.compactIcon() = when (this) {
+    RecordKind.VOICE -> Icons.Outlined.Mic
+    RecordKind.IMAGE -> Icons.Outlined.Image
+    RecordKind.LINK -> Icons.Outlined.Link
+    RecordKind.TEXT -> Icons.Outlined.EditNote
+}
+
+private fun RecordKind.contentDescription(): String = when (this) {
+    RecordKind.VOICE -> "语音记录"
+    RecordKind.IMAGE -> "图片记录"
+    RecordKind.LINK -> "链接记录"
+    RecordKind.TEXT -> "文本记录"
 }
 
 @Composable
@@ -329,13 +337,13 @@ private fun OverflowTagBadge(
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
             text = "+$extraCount",
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
     }
@@ -367,13 +375,13 @@ private fun NoteHorizonBadge(
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
             text = label,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
     }
@@ -386,7 +394,7 @@ private fun NoteTagBadge(
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
             text = "#$tag",
@@ -487,7 +495,7 @@ private fun ArchiveAction(
 ) {
     Surface(
         modifier = modifier,
-        color = AccentSuccess,
+        color = MaterialTheme.colorScheme.secondary,
         shape = PanelShape,
         onClick = onArchive,
     ) {
@@ -499,12 +507,12 @@ private fun ArchiveAction(
             Icon(
                 imageVector = if (archived) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
                 contentDescription = if (archived) "取消归档" else "归档",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onSecondary,
             )
             Text(
                 text = if (archived) "取消归档" else "归档",
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSecondary,
                 maxLines = 1,
             )
         }
@@ -518,7 +526,7 @@ private fun DeleteAction(
 ) {
     Surface(
         modifier = modifier,
-        color = Color(0xFFE5484D),
+        color = MaterialTheme.colorScheme.error,
         shape = PanelShape,
         onClick = onDelete,
     ) {
@@ -530,12 +538,12 @@ private fun DeleteAction(
             Icon(
                 imageVector = Icons.Outlined.DeleteOutline,
                 contentDescription = "删除",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onError,
             )
             Text(
                 text = "删除",
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onError,
                 maxLines = 1,
             )
         }

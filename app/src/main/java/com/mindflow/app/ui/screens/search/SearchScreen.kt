@@ -73,12 +73,6 @@ import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.MindFlowDestinations
-import com.mindflow.app.ui.theme.Accent
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -267,7 +261,7 @@ private fun SearchScreen(
                         Text(
                             text = "先决定这次要做什么，再从现有记录里找到合适入口。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -281,12 +275,12 @@ private fun SearchScreen(
                         Text(
                             text = uiState.selectedAction.description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             text = uiState.focusLine,
                             style = MaterialTheme.typography.bodySmall,
-                            color = AccentBlue,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -298,8 +292,8 @@ private fun SearchScreen(
                                     onClick = { onSelectAction(action) },
                                     label = { Text(action.label, maxLines = 1) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                        selectedLabelColor = AccentBlue,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.primary,
                                     ),
                                 )
                             }
@@ -365,20 +359,20 @@ private fun SearchScreen(
                                 Text(
                                     text = "${visibleResults.size} 条匹配 · $filterSummary",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             IconPillButton(
                                 icon = if (legacySearchExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.Search,
                                 contentDescription = if (legacySearchExpanded) "收起搜索" else "展开搜索",
                                 onClick = onToggleLegacySearch,
-                                accent = AccentBlue,
+                                accent = MaterialTheme.colorScheme.primary,
                             )
                         }
                         Text(
                             text = "需要精确回看旧记录、按状态筛选或整理未分类内容时，再展开这里。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
                         if (legacySearchExpanded) {
@@ -391,8 +385,8 @@ private fun SearchScreen(
                                 placeholder = { Text("搜主题或正文") },
                                 shape = MaterialTheme.shapes.medium,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = WhiteGlass,
-                                    unfocusedContainerColor = WhiteGlass,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                                 ),
                             )
 
@@ -405,8 +399,8 @@ private fun SearchScreen(
                                     onClick = { onStatusChange(null) },
                                     label = { Text("全部状态", maxLines = 1) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Accent.copy(alpha = 0.14f),
-                                        selectedLabelColor = Accent,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.primary,
                                     ),
                                 )
                                 NoteStatus.entries.forEach { status ->
@@ -434,8 +428,8 @@ private fun SearchScreen(
                                     onClick = { onTagChange(null) },
                                     label = { Text("全部标签", maxLines = 1) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                        selectedLabelColor = AccentBlue,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.primary,
                                     ),
                                 )
                                 visibleTags.forEach { tag ->
@@ -444,8 +438,8 @@ private fun SearchScreen(
                                         onClick = { onTagChange(tag) },
                                         label = { Text(tag, maxLines = 1) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Accent.copy(alpha = 0.14f),
-                                            selectedLabelColor = Accent,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary,
                                         ),
                                     )
                                 }
@@ -454,7 +448,7 @@ private fun SearchScreen(
                                 Text(
                                     text = if (showAllTags) "收起标签" else "更多标签",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = AccentBlue,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.clickable { showAllTags = !showAllTags },
                                 )
                             }
@@ -470,15 +464,15 @@ private fun SearchScreen(
                                         onClick = { onTimeRangeChange(timeRange) },
                                         label = { Text(timeRange.label, maxLines = 1) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                            selectedLabelColor = AccentBlue,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary,
                                         ),
                                     )
                                 }
                             }
 
                             Surface(
-                                color = WhiteGlass.copy(alpha = 0.9f),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                                 shape = MaterialTheme.shapes.medium,
                             ) {
                                 Row(
@@ -523,14 +517,14 @@ private fun SearchScreen(
                                             "${uiState.folderCounts.values.count { it > 0 }} 类"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = TextSoft,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 IconPillButton(
                                     icon = if (foldersExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.FolderOpen,
                                     contentDescription = if (foldersExpanded) "收起文件夹" else "展开文件夹",
                                     onClick = { foldersExpanded = !foldersExpanded },
-                                    accent = AccentBlue,
+                                    accent = MaterialTheme.colorScheme.primary,
                                 )
                             }
 
@@ -541,7 +535,7 @@ private fun SearchScreen(
                                     "按文件夹筛选记录；未分类内容可手动整理。"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
 
                             if (foldersExpanded) {
@@ -554,8 +548,8 @@ private fun SearchScreen(
                                         onClick = { onFolderChange(null) },
                                         label = { Text("全部文件夹", maxLines = 1) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = AccentBlue.copy(alpha = 0.14f),
-                                            selectedLabelColor = AccentBlue,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary,
                                         ),
                                     )
                                     uiState.availableFolders.forEach { folder ->
@@ -576,8 +570,8 @@ private fun SearchScreen(
                                         onClick = { onFolderChange(MindFlowDestinations.UNCATEGORIZED_FOLDER) },
                                         label = { Text("未分类 ${uiState.uncategorizedCount}", maxLines = 1) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Accent.copy(alpha = 0.14f),
-                                            selectedLabelColor = Accent,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary,
                                         ),
                                     )
                                 }
@@ -648,9 +642,9 @@ private fun QuerySuggestionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen),
-        color = WhiteGlass.copy(alpha = 0.86f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
         shape = MaterialTheme.shapes.medium,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
             modifier = Modifier
@@ -661,19 +655,19 @@ private fun QuerySuggestionCard(
             Text(
                 text = suggestion.support,
                 style = MaterialTheme.typography.labelLarge,
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 text = suggestion.title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = suggestion.detail,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )

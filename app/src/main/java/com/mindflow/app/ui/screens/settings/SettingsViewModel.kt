@@ -12,6 +12,8 @@ import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
+import com.mindflow.app.data.model.AppThemeMode
+import com.mindflow.app.data.model.AppearanceSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
 import com.mindflow.app.data.model.OnDeviceModelSettings
@@ -21,6 +23,7 @@ import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
@@ -76,6 +79,7 @@ data class SettingsUiState(
     val autoTaskRecognitionEnabled: Boolean = true,
     val articleAutoSummaryEnabled: Boolean = true,
     val eveningReviewEnabled: Boolean = false,
+    val themeMode: AppThemeMode = AppThemeMode.LIGHT,
     val timeBankCurrentAge: String = TimeBankSettings().currentAge.toString(),
     val timeBankExpectedLifespan: String = TimeBankSettings().expectedLifespan.toString(),
     val timeBankActiveDaysPerWeek: String = TimeBankSettings().activeDaysPerWeek.toString(),
@@ -139,6 +143,7 @@ class SettingsViewModel(
     private val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     private val reminderSettingsRepository: ReminderSettingsRepository,
     private val timeBankSettingsRepository: TimeBankSettingsRepository,
+    private val appearanceSettingsRepository: AppearanceSettingsRepository,
     private val cloudBackupCoordinator: CloudBackupCoordinator,
     private val onDeviceModelManager: OnDeviceModelManager,
     private val reminderScheduler: ReminderScheduler,
@@ -232,6 +237,13 @@ class SettingsViewModel(
                         timeBankExpectedLifespan = settings.expectedLifespan.toString(),
                         timeBankActiveDaysPerWeek = settings.activeDaysPerWeek.toString(),
                     )
+                }
+            }
+        }
+        viewModelScope.launch {
+            appearanceSettingsRepository.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(themeMode = settings.themeMode)
                 }
             }
         }
@@ -342,6 +354,13 @@ class SettingsViewModel(
 
     fun onEveningReviewEnabledChange(value: Boolean) {
         updateReminderSettings { it.copy(eveningReviewEnabled = value) }
+    }
+
+    fun onThemeModeChange(value: AppThemeMode) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(themeMode = value) }
+            appearanceSettingsRepository.save(AppearanceSettings(themeMode = value))
+        }
     }
 
     fun onTimeBankCurrentAgeChange(value: String) {
@@ -618,6 +637,7 @@ class SettingsViewModel(
             onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
             reminderSettingsRepository: ReminderSettingsRepository,
             timeBankSettingsRepository: TimeBankSettingsRepository,
+            appearanceSettingsRepository: AppearanceSettingsRepository,
             cloudBackupCoordinator: CloudBackupCoordinator,
             onDeviceModelManager: OnDeviceModelManager,
             reminderScheduler: ReminderScheduler,
@@ -634,6 +654,7 @@ class SettingsViewModel(
                     onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
+                    appearanceSettingsRepository = appearanceSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,

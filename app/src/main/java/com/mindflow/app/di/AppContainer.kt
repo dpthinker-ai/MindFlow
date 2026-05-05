@@ -37,13 +37,17 @@ import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.reviewchat.ReviewChatOnDeviceRequest
 import com.mindflow.app.data.reviewchat.RoomReviewChatSavedConversationRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
+import com.mindflow.app.data.settings.PreferencesAppearanceSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesOnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesReminderSettingsRepository
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.ArticleContentExtractor
+import com.mindflow.app.data.topic.ImageUnderstandingPlanner
 import com.mindflow.app.data.topic.NoteInsightPlanner
 import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
@@ -133,6 +137,11 @@ class AppContainer(context: Context) {
             context = context.applicationContext,
         )
 
+    val appearanceSettingsRepository: AppearanceSettingsRepository =
+        PreferencesAppearanceSettingsRepository(
+            context = context.applicationContext,
+        )
+
     private val cloudBackupIndexRepository = PreferencesCloudBackupIndexRepository(
         context = context.applicationContext,
     )
@@ -196,6 +205,12 @@ class AppContainer(context: Context) {
     )
 
     val voiceTranscriptionPlanner = VoiceTranscriptionPlanner(
+        aiTaskRouter = aiTaskRouter,
+    )
+
+    val articleContentExtractor = ArticleContentExtractor()
+
+    val imageUnderstandingPlanner = ImageUnderstandingPlanner(
         aiTaskRouter = aiTaskRouter,
     )
 

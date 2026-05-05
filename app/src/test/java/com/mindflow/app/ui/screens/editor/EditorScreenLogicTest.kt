@@ -11,6 +11,8 @@ import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
+import com.mindflow.app.data.topic.ExtractedArticleContent
+import com.mindflow.app.data.topic.ImageUnderstandingResult
 import com.mindflow.app.ui.navigation.CaptureMode
 import java.io.File
 import org.junit.Test
@@ -307,6 +309,70 @@ class EditorScreenLogicTest {
     }
 
     @Test
+    fun articleExtractionFields_areMergedIntoEditableContent() {
+        val content = articleContentWithExtraction(
+            content = "链接：https://example.com/post\n补充说明：稍后复盘",
+            article = ExtractedArticleContent(
+                url = "https://example.com/post",
+                title = "链接页重构",
+                host = "example.com",
+                body = "正文提取后应该直接显示给用户。",
+                excerpt = "摘要",
+            ),
+        )
+
+        assertThat(articleUrlFromContent(content)).isEqualTo("https://example.com/post")
+        assertThat(articleTitleFromContent(content)).isEqualTo("链接页重构")
+        assertThat(articleBodyFromContent(content)).contains("直接显示")
+        assertThat(articleStatusFromContent(content)).contains("example.com")
+    }
+
+    @Test
+    fun articleExtractionFields_preserveMultilineBody() {
+        val content = articleContentWithExtraction(
+            content = "链接：https://example.com/post\n补充说明：稍后复盘",
+            article = ExtractedArticleContent(
+                url = "https://example.com/post",
+                title = "多段正文",
+                host = "example.com",
+                body = "第一段正文\n第二段正文\n第三段正文",
+            ),
+        )
+
+        assertThat(articleBodyFromContent(content)).isEqualTo("第一段正文\n第二段正文\n第三段正文")
+        assertThat(articleStatusFromContent(content)).isEqualTo("已从 example.com 提取正文")
+    }
+
+    @Test
+    fun normalizeExternalLinkUrl_acceptsOnlyHttpLinks() {
+        assertThat(normalizeExternalLinkUrl(" https://example.com/post。 ")).isEqualTo("https://example.com/post")
+        assertThat(normalizeExternalLinkUrl("http://example.com/a?b=1")).isEqualTo("http://example.com/a?b=1")
+        assertThat(normalizeExternalLinkUrl("mindflow://record/1")).isNull()
+        assertThat(normalizeExternalLinkUrl("不是链接")).isNull()
+    }
+
+    @Test
+    fun imageUnderstandingFields_areMergedIntoEditableContent() {
+        val content = imageContentWithUnderstanding(
+            content = "图片：/data/user/0/com.mindflow.app/files/captures/images/one.jpg",
+            result = ImageUnderstandingResult.Success(
+                summary = "白板上有三个产品优化步骤",
+                imageType = "whiteboard",
+                extractedText = "输入 -> 解析 -> 洞察",
+                objects = listOf("白板", "流程图"),
+                confidence = 0.86f,
+                provider = AiProvider.ON_DEVICE,
+                latencyMs = 320L,
+            ),
+        )
+
+        assertThat(imageSummaryFromContent(content)).contains("产品优化")
+        assertThat(imageKeyInfoFromContent(content)).containsExactly("白板", "流程图").inOrder()
+        assertThat(imageOcrFromContent(content)).contains("输入")
+        assertThat(content).contains("Gemma 4 已完成图片理解")
+    }
+
+    @Test
     fun shouldAttemptVoiceTranscription_requiresAudioAndSkipsFailedStatus() {
         val pending = """
             原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-2.m4a
@@ -482,7 +548,7 @@ class EditorScreenLogicTest {
             "图片记录",
             "图片预览",
             "图片理解摘要（可编辑）",
-            "关键信息（可编辑）",
+            "AI 洞察",
             "视觉识别结果",
             "OCR 全文（可选）",
             "记录信息（可修改）",

@@ -90,14 +90,6 @@ import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.KnowledgeMaintenanceSeedContext
 import com.mindflow.app.ui.navigation.buildKnowledgeMaintenanceCaptureSeed
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.AccentTeal
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.MintWash
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.delay
 
@@ -306,7 +298,7 @@ private fun FlowPageHeader(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         when {
@@ -314,8 +306,8 @@ private fun FlowPageHeader(
             showSpark -> {
                 TodayIconBubble(
                     icon = Icons.Outlined.AutoAwesome,
-                    tint = AccentBlue,
-                    background = PanelBlue,
+                    tint = MaterialTheme.colorScheme.primary,
+                    background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                     size = 38.dp,
                     iconSize = 19.dp,
                 )
@@ -351,15 +343,15 @@ private fun ReviewHeaderIconButton(
 ) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = AccentBlue,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .padding(10.dp)
                 .size(20.dp),
@@ -372,9 +364,9 @@ private fun TodayHeroCard(
     model: TodayDesignModel,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 0.dp,
     ) {
         Row(
@@ -390,14 +382,14 @@ private fun TodayHeroCard(
                 Text(
                     text = model.heroTitle,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = model.heroSubtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -417,7 +409,7 @@ private fun TodayOrbitMark() {
             modifier = Modifier
                 .size(width = 48.dp, height = 18.dp)
                 .background(
-                    AccentTeal.copy(alpha = 0.16f),
+                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
                     RoundedCornerShape(999.dp),
                 ),
         )
@@ -432,20 +424,20 @@ private fun TodayOrbitMark() {
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(PanelBlue, CircleShape),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(26.dp)
-                    .background(AccentBlue.copy(alpha = 0.88f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.88f), CircleShape),
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 7.dp, end = 7.dp)
                     .size(7.dp)
-                    .background(WhiteGlass.copy(alpha = 0.82f), CircleShape),
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), CircleShape),
             )
         }
         Box(
@@ -468,9 +460,9 @@ private fun TodayFocusCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpenFocus),
-        color = WhiteGlass.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 0.dp,
     ) {
         Column(
@@ -485,14 +477,14 @@ private fun TodayFocusCard(
             Text(
                 text = focus.title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = focus.summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -508,7 +500,7 @@ private fun TodayFocusCard(
                 Text(
                     text = focus.progressLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
@@ -525,9 +517,9 @@ private fun TodayReasonBox(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MintWash.copy(alpha = 0.48f),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f),
         shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, AccentTeal.copy(alpha = 0.1f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)),
     ) {
         val explanation = "${reason.sourceLine.removePrefix("推荐来源：")}，${reason.actionLine.removePrefix("建议动作：")}"
         Row(
@@ -541,14 +533,14 @@ private fun TodayReasonBox(
                 Text(
                     text = reason.title,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = explanation,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = TodayFocusReasonDetailMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -556,8 +548,8 @@ private fun TodayReasonBox(
             Spacer(Modifier.width(8.dp))
             TodayIconBubble(
                 icon = Icons.Outlined.Psychology,
-                tint = AccentTeal,
-                background = WhiteGlass,
+                tint = MaterialTheme.colorScheme.secondary,
+                background = MaterialTheme.colorScheme.surface,
                 size = TodayFocusReasonIconSize,
                 iconSize = 15.dp,
             )
@@ -602,9 +594,9 @@ private fun TodayDiscoveryMiniCard(
         modifier = modifier
             .height(124.dp)
             .clickable(onClick = onClick),
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 0.dp,
     ) {
         Column(
@@ -613,8 +605,8 @@ private fun TodayDiscoveryMiniCard(
         ) {
             TodayIconBubble(
                 icon = Icons.AutoMirrored.Outlined.Article,
-                tint = AccentBlue,
-                background = PanelBlue,
+                tint = MaterialTheme.colorScheme.primary,
+                background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                 size = 24.dp,
                 iconSize = 13.dp,
             )
@@ -622,21 +614,21 @@ private fun TodayDiscoveryMiniCard(
                 text = card.title,
                 modifier = Modifier.height(TodayDiscoveryTitleSlotHeight),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = card.source,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = card.confidence,
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -667,9 +659,9 @@ private fun TodayTrackingSection(
                             ?.let(onOpenTodayTask)
                             ?: onCreateCapture(CaptureSeed())
                     },
-                color = WhiteGlass.copy(alpha = 0.94f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                 shape = CardShape,
-                border = BorderStroke(1.dp, BorderSoft),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -683,14 +675,14 @@ private fun TodayTrackingSection(
                         Text(
                             text = row.title,
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = row.subtitle,
                             style = MaterialTheme.typography.labelMedium,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -702,13 +694,13 @@ private fun TodayTrackingSection(
                         Text(
                             text = row.progressLabel,
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = AccentBlue,
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                         )
                         Text(
                             text = row.destinationLabel,
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -732,9 +724,9 @@ private fun TodayReviewHintCard(
                 review.savedSessionId?.let(onOpenSaved)
                     ?: onOpenReviewChatHistory()
             },
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 0.dp,
     ) {
         Row(
@@ -744,8 +736,8 @@ private fun TodayReviewHintCard(
         ) {
             TodayIconBubble(
                 icon = Icons.Outlined.History,
-                tint = AccentBlue,
-                background = PanelBlue,
+                tint = MaterialTheme.colorScheme.primary,
+                background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                 size = 32.dp,
                 iconSize = 16.dp,
             )
@@ -756,13 +748,13 @@ private fun TodayReviewHintCard(
                 Text(
                     text = review.title,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                 )
                 Text(
                     text = review.description,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -785,13 +777,13 @@ private fun TodaySectionTitle(
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
         )
         Text(
             text = if (onAction == null) action else "$action ›",
             style = MaterialTheme.typography.labelLarge,
-            color = if (onAction == null) TextSoft else AccentBlue,
+            color = if (onAction == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
             maxLines = 1,
             modifier = if (onAction == null) Modifier else Modifier.clickable(onClick = onAction),
         )
@@ -806,13 +798,13 @@ private fun TodayProgressLine(
     Box(
         modifier = modifier
             .height(5.dp)
-            .background(BorderSoft.copy(alpha = 0.72f), RoundedCornerShape(999.dp)),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.64f), RoundedCornerShape(999.dp)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(5.dp)
-                .background(AccentBlue, RoundedCornerShape(999.dp)),
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(999.dp)),
         )
     }
 }
@@ -935,11 +927,11 @@ private fun RecentAbsorptionCard(
         else -> "今天还没有内容"
     }
     Surface(
-        color = WhiteGlass.copy(alpha = 0.9f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         shape = PanelShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -966,7 +958,7 @@ private fun RecentAbsorptionCard(
                 Text(
                     text = card.line,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -983,7 +975,7 @@ private fun RecentAbsorptionCard(
                 Text(
                     text = if (directionCount > 0) "旧积累还在，但今天要先记下一条新的。" else "先记下一条，今天这页才会开始长出来。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             ActionButton(
@@ -1042,11 +1034,11 @@ private fun MainlineFocusCard(
     val resolvedWhyNow = compression.whyNow.ifBlank { whyNowLine.orEmpty() }
     val hasRecurringContext = candidate != null || note != null || anchoredJudgement?.hasContent == true
     Surface(
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = PanelShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) accent.copy(alpha = 0.45f) else BorderSoft,
+            if (highlighted) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -1105,7 +1097,7 @@ private fun MainlineFocusCard(
                     } else {
                         MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
                     },
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = if (compact) 3 else 4,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1181,11 +1173,11 @@ private fun SettledKnowledgeCard(
     val resolvedSettledLine = compression.settledLine.ifBlank { settledLine.orEmpty() }
     val resolvedSupportLine = compression.settledSupport.ifBlank { supportLine.orEmpty() }
     Surface(
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = PanelShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) AccentBlue.copy(alpha = 0.38f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -1202,7 +1194,7 @@ private fun SettledKnowledgeCard(
                 Text(
                     text = "当一条线反复被验证、被用上，这里才会开始留下真正值得回看的东西。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 AnchorLine(
@@ -1216,7 +1208,7 @@ private fun SettledKnowledgeCard(
                     Text(
                         text = text,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1306,11 +1298,11 @@ private fun FeedGapCard(
             .take(3)
     }
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = PanelShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) AccentBlue.copy(alpha = 0.34f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.34f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -1327,7 +1319,7 @@ private fun FeedGapCard(
                 Text(
                     text = "当旧积累之间开始互相支撑或互相冲突时，这里才会出现真正值得翻出来再看的点。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 val anchorText = card.anchorLabel.takeIf { it.isNotBlank() } ?: direction?.thread?.title
@@ -1344,7 +1336,7 @@ private fun FeedGapCard(
                 Text(
                     text = line,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1395,16 +1387,16 @@ private fun ReviewFollowupsBlock(
         Text(
             text = "另外值得翻的",
             style = MaterialTheme.typography.labelLarge,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         directions.forEach { direction ->
             val summaryLine = direction.reviewReasonLine()
                 .takeIf { it.isNotBlank() }
                 ?: direction.reviewPeekLine()
             Surface(
-                color = WhiteGlass.copy(alpha = 0.78f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                 shape = CardShape,
-                border = BorderStroke(1.dp, BorderSoft),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
@@ -1420,7 +1412,7 @@ private fun ReviewFollowupsBlock(
                     Text(
                         text = direction.thread.title,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1428,7 +1420,7 @@ private fun ReviewFollowupsBlock(
                         Text(
                             text = line,
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -1447,7 +1439,7 @@ private fun AnchorLine(
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = AccentBlue,
+        color = MaterialTheme.colorScheme.primary,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.clickable(onClick = onClick),
@@ -1500,7 +1492,7 @@ private fun KnowledgeTrailCard(
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         followedDirections.take(2).forEach { summary ->
@@ -1524,7 +1516,7 @@ private fun KnowledgeTrailCard(
             Text(
                 text = "还有 $remainingCount 条方向或线索可以继续看",
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -1639,11 +1631,11 @@ private fun ConnectionCard(
     onCreateCapture: (CaptureSeed) -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -1656,7 +1648,7 @@ private fun ConnectionCard(
                 Text(
                     text = "正在经营的方向",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 followedDirections.forEach { summary ->
                     FollowedDirectionRow(
@@ -1692,13 +1684,13 @@ private fun ConnectionCard(
                     Text(
                         text = "还有 ${threads.size - 1} 条线索可以继续串起来",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else if (suggestions.size > 1) {
                     Text(
                         text = "还有 ${suggestions.size - 1} 条延展想法",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1706,7 +1698,7 @@ private fun ConnectionCard(
                 Text(
                     text = "记录再多一点，这里就会帮你把反复出现的方向串起来。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1722,9 +1714,9 @@ private fun FollowedDirectionRow(
 ) {
     Surface(
         modifier = Modifier.clickable { onOpenThread(summary.thread.key) },
-        color = WhiteGlass.copy(alpha = 0.78f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
     ) {
         Column(
             modifier = Modifier
@@ -1753,7 +1745,7 @@ private fun FollowedDirectionRow(
             Text(
                 text = summary.thread.title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 InsightChip(text = summary.stage.label, tone = InsightTone.Primary)
@@ -1764,7 +1756,7 @@ private fun FollowedDirectionRow(
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1780,7 +1772,7 @@ private fun FollowedDirectionRow(
                             Text(
                                 text = text,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextMain,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -1838,7 +1830,7 @@ private fun FollowedDirectionRow(
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2090,9 +2082,9 @@ private fun ThreadRow(
 ) {
     Surface(
         modifier = Modifier.clickable { onOpenThread(thread.key) },
-        color = WhiteGlass.copy(alpha = 0.78f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
     ) {
         Column(
             modifier = Modifier
@@ -2103,7 +2095,7 @@ private fun ThreadRow(
             Text(
                 text = "${thread.title} · ${thread.noteCount} 条",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             if (showFocus && thread.focusLine.isNotBlank()) {
                 Text(
@@ -2117,7 +2109,7 @@ private fun ThreadRow(
             Text(
                 text = thread.summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2133,11 +2125,11 @@ private fun WeeklyReviewCard(
     highlighted: Boolean,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Column(
@@ -2149,14 +2141,14 @@ private fun WeeklyReviewCard(
             Text(
                 text = "本周判断",
                 style = MaterialTheme.typography.labelLarge,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
             if (statsLine.isNotBlank()) {
                 Text(
                     text = statsLine,
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
@@ -2167,7 +2159,7 @@ private fun WeeklyReviewCard(
                 Text(
                     text = "这一周的线索还不够多，再记几条更具体的内容会更有价值。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 items.forEach { item ->
@@ -2175,12 +2167,12 @@ private fun WeeklyReviewCard(
                         Text(
                             text = item.label,
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             text = item.text,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -2202,11 +2194,11 @@ private fun TodayNoteCard(
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) accent.copy(alpha = 0.45f) else BorderSoft,
+            if (highlighted) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant,
         ),
         modifier = modifier.then(
             if (note != null) {
@@ -2232,13 +2224,13 @@ private fun TodayNoteCard(
                 Text(
                     text = emptyText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Text(
                     text = note.topic.ifBlank { "未命名记录" },
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2250,7 +2242,7 @@ private fun TodayNoteCard(
                         Text(
                             text = nextActionText,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2259,7 +2251,7 @@ private fun TodayNoteCard(
                 Text(
                     text = note.content.asTodayPreview(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2280,9 +2272,9 @@ private fun ExplorationPromptCard(
     source: DailyBriefSource,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
             modifier = Modifier
@@ -2293,7 +2285,7 @@ private fun ExplorationPromptCard(
             Text(
                 text = "今天值得想",
                 style = MaterialTheme.typography.labelLarge,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
             if (source == DailyBriefSource.AI) {
@@ -2303,14 +2295,14 @@ private fun ExplorationPromptCard(
                 Text(
                     text = "继续记录更具体的想法，AI 会从中提炼出更有启发性的探索方向。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 prompts.take(2).forEach { prompt ->
                     Text(
                         text = "• $prompt",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -2329,11 +2321,11 @@ private fun GentleReconnectCard(
     onOpenNote: (Long) -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
         border = BorderStroke(
             1.dp,
-            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else BorderSoft,
+            if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f) else MaterialTheme.colorScheme.outlineVariant,
         ),
         modifier = Modifier.clickable { onOpenNote(note.id) },
     ) {
@@ -2346,7 +2338,7 @@ private fun GentleReconnectCard(
             Text(
                 text = "重新接上",
                 style = MaterialTheme.typography.labelLarge,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (source == DailyBriefSource.AI) {
                 InsightChip(text = "AI 提醒")
@@ -2354,27 +2346,27 @@ private fun GentleReconnectCard(
             Text(
                 text = note.topic.ifBlank { "未命名记录" },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${note.horizon.label} · ${note.status.label}",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else TextSoft,
+                color = if (source == DailyBriefSource.AI) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (reason.isNotBlank()) {
                 Text(
                     text = reason,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (bridge.isNotBlank()) {
                 Text(
                     text = bridge,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (nextStep.isNotBlank()) {
@@ -2385,14 +2377,14 @@ private fun GentleReconnectCard(
                     Text(
                         text = nextStep,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
             Text(
                 text = TimeFormatter.compact(note.updatedAt),
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

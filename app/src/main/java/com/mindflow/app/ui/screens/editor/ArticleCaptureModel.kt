@@ -117,7 +117,7 @@ internal fun imageContentReferenceLabels(): List<String> = listOf(
     "图片记录",
     "图片预览",
     "图片理解摘要（可编辑）",
-    "关键信息（可编辑）",
+    "AI 洞察",
     "视觉识别结果",
     "OCR 全文（可选）",
     "记录信息（可修改）",
@@ -132,23 +132,19 @@ internal fun buildArticleCaptureModel(
     tags: List<String>,
     updatedAt: Long?,
 ): ArticleCaptureModel {
-    val url = extractFirstUrl(content)
+    val url = articleUrlFromContent(content)
     val host = runCatching { URI(url).host.orEmpty().removePrefix("www.") }
         .getOrDefault("")
         .ifBlank { "待识别来源" }
-    val noteLine = content
-        .lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.startsWith("补充说明：") || it.startsWith("补充说明:") }
-        ?.substringAfter("：")
-        ?.substringAfter(":")
-        ?.trim()
-        .orEmpty()
+    val articleTitle = articleTitleFromContent(content)
+    val noteLine = extractNoteLine(content)
+    val body = articleBodyFromContent(content)
     val displayTitle = when {
+        articleTitle.isNotBlank() -> articleTitle
         noteLine.isNotBlank() -> noteLine
         topic.isNotBlank() && topic != "文章收藏" -> topic
         host != "待识别来源" -> host
-        else -> "待解析文章"
+        else -> "粘贴链接后提取正文"
     }
     val topics = (tags + listOf("文章"))
         .map { it.trim() }
@@ -161,10 +157,10 @@ internal fun buildArticleCaptureModel(
         title = displayTitle,
         host = host,
         url = url,
-        summary = "本地已识别来源与收藏说明，保存后可继续接入网页正文解析、摘要和主题沉淀。",
+        summary = body.ifBlank { "粘贴链接后可提取正文，并统一生成 AI 洞察。" },
         keyPoints = listOf(
-            "来源链接已提取，可作为后续查看原文和去重的依据。",
-            "收藏说明会先进入记录正文，避免解析失败时丢失上下文。",
+            "来源链接已提取，点按链接后由系统选择合适应用打开。",
+            if (body.isBlank()) "正文提取前可以先补充收藏原因。" else "网页正文已进入记录正文区，可直接编辑。",
             "$localTimeHint，并可在回看中继续整理为任务或项目线索。",
         ),
         topics = topics,
@@ -203,14 +199,7 @@ internal fun buildImageCaptureModel(
     tags: List<String>,
     updatedAt: Long?,
 ): ParsedCaptureModel {
-    val imageLine = content
-        .lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.startsWith("图片：") || it.startsWith("图片:") }
-        ?.substringAfter("：")
-        ?.substringAfter(":")
-        ?.trim()
-        .orEmpty()
+    val imageLine = imagePathFromContent(content)
     val localTimeHint = if (updatedAt != null) "图片记录时间已保留" else "保存后记录图片输入时间"
 
     return ParsedCaptureModel(
@@ -236,9 +225,14 @@ private fun firstMeaningfulLine(content: String): String =
 private fun extractNoteLine(content: String): String = content
     .lineSequence()
     .map { it.trim() }
-    .firstOrNull { it.startsWith("补充说明：") || it.startsWith("补充说明:") }
-    ?.substringAfter("：")
-    ?.substringAfter(":")
+    .mapNotNull { line ->
+        when {
+            line.startsWith("补充说明：") -> line.removePrefix("补充说明：")
+            line.startsWith("补充说明:") -> line.removePrefix("补充说明:")
+            else -> null
+        }
+    }
+    .firstOrNull()
     ?.trim()
     .orEmpty()
 

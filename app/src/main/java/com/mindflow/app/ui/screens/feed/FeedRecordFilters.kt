@@ -2,6 +2,8 @@ package com.mindflow.app.ui.screens.feed
 
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.ui.components.RecordKind
+import com.mindflow.app.ui.components.inferRecordKind
 
 enum class FeedQuickFilter(val label: String) {
     ALL("全部"),
@@ -29,26 +31,8 @@ internal fun NoteEntity.matchesFeedSearch(query: String): Boolean {
 
 internal fun NoteEntity.matchesFeedQuickFilter(filter: FeedQuickFilter): Boolean = when (filter) {
     FeedQuickFilter.ALL -> true
-    FeedQuickFilter.IDEA -> status == NoteStatus.IDEA && !looksLikeLink() && !looksLikeVoice()
-    FeedQuickFilter.LINK -> looksLikeLink()
+    FeedQuickFilter.IDEA -> status == NoteStatus.IDEA && inferRecordKind() == RecordKind.TEXT
+    FeedQuickFilter.LINK -> inferRecordKind() == RecordKind.LINK
     FeedQuickFilter.TASK -> status == NoteStatus.IN_PROGRESS || status == NoteStatus.DONE
-    FeedQuickFilter.VOICE -> looksLikeVoice()
-}
-
-private fun NoteEntity.looksLikeLink(): Boolean {
-    val haystack = "$topic\n$content\n${tags.joinToString(" ")}".lowercase()
-    return "http://" in haystack ||
-        "https://" in haystack ||
-        "链接" in haystack ||
-        "文章" in haystack ||
-        "阅读" in haystack ||
-        "收藏" in haystack
-}
-
-private fun NoteEntity.looksLikeVoice(): Boolean {
-    val haystack = "$topic\n$content\n${tags.joinToString(" ")}".lowercase()
-    return "语音" in haystack ||
-        "录音" in haystack ||
-        "转写" in haystack ||
-        "voice" in haystack
+    FeedQuickFilter.VOICE -> inferRecordKind() == RecordKind.VOICE
 }

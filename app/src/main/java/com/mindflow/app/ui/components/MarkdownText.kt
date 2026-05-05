@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -33,9 +34,6 @@ import com.mindflow.app.markdown.MarkdownOrderedList
 import com.mindflow.app.markdown.MarkdownParagraph
 import com.mindflow.app.markdown.MarkdownQuote
 import com.mindflow.app.markdown.SimpleMarkdown
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 
 @Composable
 fun MarkdownText(
@@ -72,7 +70,7 @@ private fun MarkdownBlockView(
     when (block) {
         is MarkdownHeading -> {
             Text(
-                text = block.toAnnotatedString(),
+                text = block.toAnnotatedString(linkColor = MaterialTheme.colorScheme.primary),
                 modifier = modifier,
                 style = when (block.level) {
                     1 -> MaterialTheme.typography.titleLarge
@@ -84,7 +82,10 @@ private fun MarkdownBlockView(
         }
         is MarkdownParagraph -> {
             Text(
-                text = block.toAnnotatedString(),
+                text = block.toAnnotatedString(
+                    linkColor = MaterialTheme.colorScheme.primary,
+                    codeBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                ),
                 modifier = modifier,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -157,7 +158,7 @@ private fun MarkdownBlockView(
                         .padding(top = 2.dp)
                         .width(4.dp)
                         .heightIn(min = 24.dp)
-                        .background(AccentBlue.copy(alpha = 0.22f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)),
                 )
                 Column(
                     modifier = Modifier.weight(1f),
@@ -172,9 +173,9 @@ private fun MarkdownBlockView(
         is MarkdownCodeBlock -> {
             Surface(
                 modifier = modifier.fillMaxWidth(),
-                color = WhiteGlass.copy(alpha = 0.94f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                 shape = MaterialTheme.shapes.medium,
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
                 Text(
                     text = block.text.trim(),
@@ -195,7 +196,7 @@ private fun MarkdownBlockView(
     }
 }
 
-private fun MarkdownHeading.toAnnotatedString() = buildAnnotatedString {
+private fun MarkdownHeading.toAnnotatedString(linkColor: Color) = buildAnnotatedString {
     inlines.forEach { segment ->
         if (segment.bold) {
             pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
@@ -207,7 +208,7 @@ private fun MarkdownHeading.toAnnotatedString() = buildAnnotatedString {
             pushStyle(SpanStyle(fontFamily = FontFamily.Monospace))
         }
         if (!segment.linkDestination.isNullOrBlank()) {
-            pushStyle(SpanStyle(color = AccentBlue, textDecoration = TextDecoration.Underline))
+            pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
         }
         append(segment.text)
         repeat(
@@ -217,7 +218,10 @@ private fun MarkdownHeading.toAnnotatedString() = buildAnnotatedString {
     }
 }
 
-private fun MarkdownParagraph.toAnnotatedString() = buildAnnotatedString {
+private fun MarkdownParagraph.toAnnotatedString(
+    linkColor: Color,
+    codeBackground: Color,
+) = buildAnnotatedString {
     inlines.forEach { segment ->
         if (segment.bold) {
             pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
@@ -229,12 +233,12 @@ private fun MarkdownParagraph.toAnnotatedString() = buildAnnotatedString {
             pushStyle(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
-                    background = WhiteGlass,
+                    background = codeBackground,
                 )
             )
         }
         if (!segment.linkDestination.isNullOrBlank()) {
-            pushStyle(SpanStyle(color = AccentBlue, textDecoration = TextDecoration.Underline))
+            pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
         }
         append(segment.text)
         repeat(

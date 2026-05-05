@@ -57,7 +57,6 @@ import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.TextSoft
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -287,7 +286,7 @@ private fun FolderScreen(
                                 Text(
                                     text = "${visibleNotes.size} 条记录 · 按同类内容整理浏览",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }

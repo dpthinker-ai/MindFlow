@@ -108,9 +108,14 @@ private fun extractInsightField(
 ): String = content
     .lineSequence()
     .map { it.trim() }
-    .firstOrNull { it.startsWith("$label：") || it.startsWith("$label:") }
-    ?.substringAfter("：")
-    ?.substringAfter(":")
+    .mapNotNull { line ->
+        when {
+            line.startsWith("$label：") -> line.removePrefix("$label：")
+            line.startsWith("$label:") -> line.removePrefix("$label:")
+            else -> null
+        }
+    }
+    .firstOrNull()
     ?.trim()
     .orEmpty()
 

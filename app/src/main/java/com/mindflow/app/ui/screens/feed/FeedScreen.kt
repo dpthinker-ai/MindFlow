@@ -46,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -73,11 +74,6 @@ import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.AccentTeal
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -336,15 +332,15 @@ private fun FloatingCreateButton(
     Surface(
         modifier = modifier.size(56.dp),
         shape = CircleShape,
-        color = AccentBlue,
-        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.primary,
+        shadowElevation = 0.dp,
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.Outlined.Add,
                 contentDescription = "新建记录",
-                tint = WhiteGlass,
+                tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(30.dp),
             )
         }
@@ -362,9 +358,9 @@ private fun RecordSearchBar(
             .fillMaxWidth()
             .height(RecordSearchMinHeight)
             .testTag(MindFlowUiTestTags.RECORD_SEARCH),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp),
@@ -374,7 +370,7 @@ private fun RecordSearchBar(
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
             BasicTextField(
@@ -383,7 +379,7 @@ private fun RecordSearchBar(
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.merge(
-                    TextStyle(color = TextMain),
+                    TextStyle(color = MaterialTheme.colorScheme.onSurface),
                 ),
                 decorationBox = { innerTextField ->
                     Box(
@@ -394,7 +390,7 @@ private fun RecordSearchBar(
                             Text(
                                 text = RecordSearchPlaceholder,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -422,11 +418,11 @@ private fun RecordFilterChips(
         FeedQuickFilter.entries.forEach { filter ->
             val selected = filter == selectedFilter
             Surface(
-                color = if (selected) Accent.copy(alpha = 0.12f) else WhiteGlass,
+                color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(999.dp),
                 border = BorderStroke(
                     width = 1.dp,
-                    color = if (selected) Accent.copy(alpha = 0.24f) else BorderSoft,
+                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.34f) else MaterialTheme.colorScheme.outlineVariant,
                 ),
                 onClick = { onSelected(filter) },
             ) {
@@ -434,7 +430,7 @@ private fun RecordFilterChips(
                     text = filter.label,
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = RecordFilterChipVerticalPadding),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) Accent else TextSoft,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -451,10 +447,10 @@ private fun QuickCaptureCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(MindFlowUiTestTags.RECORD_QUICK_INPUT),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = PanelShape,
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = RecordQuickCaptureVerticalPadding),
@@ -470,13 +466,13 @@ private fun QuickCaptureCard(
                 Box(
                     modifier = Modifier
                         .size(30.dp)
-                        .background(Accent.copy(alpha = 0.12f), RoundedCornerShape(999.dp)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(999.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.EditNote,
                         contentDescription = null,
-                        tint = Accent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(17.dp),
                     )
                 }
@@ -484,7 +480,7 @@ private fun QuickCaptureCard(
                     text = "记录此刻的想法...",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -536,14 +532,14 @@ private fun QuickCaptureInlineAction(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = AccentTeal,
+            tint = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(17.dp),
         )
         Text(
             text = label,
             modifier = Modifier.padding(start = 7.dp),
         style = MaterialTheme.typography.labelMedium,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -555,7 +551,7 @@ private fun QuickCaptureDivider() {
     Box(
         modifier = Modifier
             .size(width = 1.dp, height = 20.dp)
-            .background(BorderSoft),
+            .background(MaterialTheme.colorScheme.outlineVariant),
     )
 }
 
@@ -572,9 +568,9 @@ private fun RecordStatusSummaryStrip(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(MindFlowUiTestTags.RECORD_STATUS_STRIP),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier
@@ -637,14 +633,14 @@ private fun RecordStatusSummaryItem(
         Text(
             text = formatCount(value),
             style = MaterialTheme.typography.labelLarge,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -656,7 +652,7 @@ private fun RecordStatusDivider() {
     Box(
         modifier = Modifier
             .size(width = 1.dp, height = 24.dp)
-            .background(BorderSoft),
+            .background(MaterialTheme.colorScheme.outlineVariant),
     )
 }
 
@@ -665,15 +661,15 @@ private fun TimeBankBadge(
     remainingActiveDays: Int,
 ) {
     Surface(
-        color = PanelBlue.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(999.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
             text = "${formatCount(remainingActiveDays)} 天",
             modifier = Modifier.padding(horizontal = 9.dp, vertical = RecordTimeBankBadgeVerticalPadding),
             style = MaterialTheme.typography.labelLarge,
-            color = AccentBlue,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

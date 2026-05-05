@@ -73,8 +73,6 @@ import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextSoft
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
@@ -514,7 +512,7 @@ private fun ThreadScreen(
                                 Text(
                                     text = "${uiState.totalCount} 条记录 · 持续推进这个方向",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             com.mindflow.app.ui.components.GhostActionButton(
@@ -586,13 +584,13 @@ private fun ThreadScreen(
                                     Surface(
                                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                                         shape = MaterialTheme.shapes.small,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.7f)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
                                     ) {
                                         Text(
                                             text = "${entry.label} · ${entry.stage.label}",
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = TextSoft,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
@@ -602,7 +600,7 @@ private fun ThreadScreen(
                             Text(
                                 text = uiState.rhythmLine,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Text(
@@ -614,7 +612,7 @@ private fun ThreadScreen(
                             Text(
                                 text = uiState.stageReason,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         uiState.wikiContinuityLine
@@ -623,7 +621,7 @@ private fun ThreadScreen(
                                 Text(
                                     text = it,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         if (uiState.threadBlocker.isNotBlank()) {
@@ -662,7 +660,7 @@ private fun ThreadScreen(
                                     Text(
                                         text = it,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = TextSoft,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             uiState.weeklyLines.forEach { line ->
@@ -838,7 +836,7 @@ private fun ThreadScreen(
                                     Text(
                                         text = line,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = TextSoft,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             if (uiState.researchOutsideAngle.isNotBlank()) {
@@ -869,7 +867,7 @@ private fun ThreadScreen(
                                 Text(
                                     text = "继续查",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -878,8 +876,8 @@ private fun ThreadScreen(
                                     uiState.researchQueries.forEachIndexed { index, query ->
                                         Surface(
                                             shape = com.mindflow.app.ui.components.CardShape,
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
-                                            color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
                                             modifier = Modifier.clickable { onOpenResearchQuery(query) },
                                         ) {
                                             Column(
@@ -889,7 +887,7 @@ private fun ThreadScreen(
                                                 Text(
                                                     text = if (index == 0) "中文检索" else "技术检索",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = TextSoft,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                                 Text(
                                                     text = query,
@@ -922,8 +920,8 @@ private fun ThreadScreen(
                                 uiState.researchClusters.forEach { cluster ->
                                     Surface(
                                         shape = com.mindflow.app.ui.components.CardShape,
-                                        color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -941,7 +939,7 @@ private fun ThreadScreen(
                                             Text(
                                                 text = cluster.summary,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = TextSoft,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                             cluster.validationStep
                                                 .takeIf { it.isNotBlank() }
@@ -999,8 +997,8 @@ private fun ThreadScreen(
                             uiState.researchNotes.forEach { note ->
                                 Surface(
                                     shape = com.mindflow.app.ui.components.CardShape,
-                                    color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                     modifier = Modifier.clickable { onOpenNote(note.id) },
                                 ) {
                                     Column(
@@ -1019,14 +1017,14 @@ private fun ThreadScreen(
                                         Text(
                                             text = note.content.replace("\n", " ").replace(Regex("\\s+"), " ").trim(),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = TextSoft,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                         Text(
                                             text = com.mindflow.app.util.TimeFormatter.compact(note.updatedAt),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = TextSoft,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
@@ -1056,14 +1054,14 @@ private fun ThreadScreen(
                                 Text(
                                     text = uiState.focusReason,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (uiState.executionWhyNow.isNotBlank()) {
                                 Text(
                                     text = "现在推进的原因",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.executionWhyNow,
@@ -1075,19 +1073,19 @@ private fun ThreadScreen(
                                 Text(
                                     text = "最近推进",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.executionLastProgressLine,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (uiState.threadNextStep.isNotBlank()) {
                                 Text(
                                     text = "先做这一步",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.threadNextStep,
@@ -1099,7 +1097,7 @@ private fun ThreadScreen(
                                 Text(
                                     text = "先验证",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.validationStep,
@@ -1111,24 +1109,24 @@ private fun ThreadScreen(
                                 Text(
                                     text = "下次检查",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.executionNextCheckInLine,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (uiState.validationReason.isNotBlank()) {
                                 Text(
                                     text = "现在验证的原因",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = uiState.validationReason,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSoft,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (uiState.postValidationAction.isNotBlank()) {
@@ -1178,8 +1176,8 @@ private fun ThreadScreen(
                             uiState.directionAssets.forEach { asset ->
                                 Surface(
                                     shape = com.mindflow.app.ui.components.CardShape,
-                                    color = com.mindflow.app.ui.theme.WhiteGlass.copy(alpha = 0.84f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, com.mindflow.app.ui.theme.BorderSoft),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                     modifier = Modifier.clickable { onOpenNote(asset.noteId) },
                                 ) {
                                     Column(
@@ -1197,7 +1195,7 @@ private fun ThreadScreen(
                                         Text(
                                             text = com.mindflow.app.util.TimeFormatter.compact(asset.updatedAt),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = TextSoft,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }

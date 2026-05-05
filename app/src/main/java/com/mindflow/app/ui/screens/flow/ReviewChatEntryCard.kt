@@ -31,12 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.PanelCard
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 
 internal fun reviewHomeReferenceSectionKeys(): List<String> =
@@ -109,12 +103,12 @@ private fun ReviewHomeHeader(
             Text(
                 text = "回看",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "与你的记忆对话，回顾与进步",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -140,15 +134,15 @@ private fun ReviewHeaderIconButton(
 ) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = AccentBlue,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .padding(10.dp)
                 .size(20.dp),
@@ -160,10 +154,10 @@ private fun ReviewHeaderIconButton(
 private fun ReviewSearchPrompt(onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -174,13 +168,13 @@ private fun ReviewSearchPrompt(onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
             Text(
                 text = "搜索回看记录或内容...",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
@@ -201,13 +195,13 @@ private fun ReviewSectionTitle(
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         if (action != null && onAction != null) {
             Text(
                 text = action,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clickable(onClick = onAction)
                     .padding(start = 8.dp),
@@ -236,10 +230,10 @@ private fun ReviewRecentConversationCard(
 
     Surface(
         onClick = { onOpenSaved(latestSavedSummary.sessionId) },
-        color = WhiteGlass.copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         shape = CardShape,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.9f)),
-        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)),
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         ReviewRecentConversationContent(
@@ -268,8 +262,8 @@ private fun ReviewRecentConversationContent(
     ) {
         ReviewRoundIcon(
             icon = Icons.Outlined.ChatBubbleOutline,
-            background = PanelBlue,
-            tint = AccentBlue,
+            background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+            tint = MaterialTheme.colorScheme.primary,
             size = 34,
             iconSize = 17,
         )
@@ -280,14 +274,14 @@ private fun ReviewRecentConversationContent(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = excerpt,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -295,7 +289,7 @@ private fun ReviewRecentConversationContent(
         Text(
             text = timeLabel,
             style = MaterialTheme.typography.labelSmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -307,9 +301,9 @@ private fun ReviewQuestionRow(
 ) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = CardShape,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft.copy(alpha = 0.9f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)),
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -320,15 +314,15 @@ private fun ReviewQuestionRow(
         ) {
             ReviewRoundIcon(
                 icon = Icons.Outlined.ChatBubbleOutline,
-                background = PanelBlue,
-                tint = AccentBlue,
+                background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                tint = MaterialTheme.colorScheme.primary,
                 size = 28,
                 iconSize = 15,
             )
             Text(
                 text = question,
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -341,10 +335,10 @@ private fun ReviewQuestionRow(
 private fun ReviewBottomAskBox(onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         shape = RoundedCornerShape(22.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -354,8 +348,8 @@ private fun ReviewBottomAskBox(onClick: () -> Unit) {
         ) {
             ReviewRoundIcon(
                 icon = Icons.Outlined.AutoAwesome,
-                background = PanelBlue,
-                tint = AccentBlue,
+                background = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                tint = MaterialTheme.colorScheme.primary,
                 size = 34,
                 iconSize = 18,
             )
@@ -366,18 +360,18 @@ private fun ReviewBottomAskBox(onClick: () -> Unit) {
                 Text(
                     text = "问问你的记忆，比如：",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = "我上周有哪些灵感复盘？",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Surface(
-                color = PanelBlue,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                 shape = CircleShape,
                 modifier = Modifier.size(34.dp),
             ) {
@@ -385,7 +379,7 @@ private fun ReviewBottomAskBox(onClick: () -> Unit) {
                     Text(
                         text = "↗",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = AccentBlue,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }

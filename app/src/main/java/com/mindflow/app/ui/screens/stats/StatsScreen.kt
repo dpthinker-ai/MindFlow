@@ -61,10 +61,7 @@ import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.ShareStyleDialog
 import com.mindflow.app.ui.components.SwipeRevealNoteCard
 import com.mindflow.app.ui.theme.Accent
-import com.mindflow.app.ui.theme.BorderSoft
 import com.mindflow.app.ui.theme.Panel
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -220,8 +217,8 @@ private fun StatsScreen(
                                         onClick = { selectedYear = year },
                                         label = { Text(year.toString(), maxLines = 1) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Accent.copy(alpha = 0.16f),
-                                            selectedLabelColor = Accent,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary,
                                         ),
                                     )
                                 }
@@ -229,9 +226,9 @@ private fun StatsScreen(
                         }
 
                         Surface(
-                            color = WhiteGlass.copy(alpha = 0.92f),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                             shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, BorderSoft),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         ) {
                             Column(
                                 modifier = Modifier
@@ -262,13 +259,13 @@ private fun StatsScreen(
                             Text(
                                 text = "点某一天，查看记录。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else if (visibleSelectedDateNotes.isEmpty()) {
                             Text(
                                 text = "这一天没有新记录。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
                             visibleSelectedDateNotes.forEach { note ->
@@ -353,7 +350,7 @@ private fun ContributionCell(
     onClick: () -> Unit,
 ) {
     val tone = if (visible) activityTone(count, peakCount) else null
-    val selectedAccent = Color(0xFF3B82F6)
+    val selectedAccent = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .size(16.dp)
@@ -406,49 +403,53 @@ private fun ContributionCell(
     }
 }
 
+@Composable
 private fun activityTone(
     count: Int,
     peakCount: Int,
 ): HeatTone {
+    val heat = MaterialTheme.colorScheme.primary
+    val softSurface = MaterialTheme.colorScheme.surfaceVariant
+    val softBorder = MaterialTheme.colorScheme.outlineVariant
     if (count <= 0 || peakCount <= 0) {
         return HeatTone(
-            base = Color(0xFFF0F7FF),
-            glowInner = Color(0xFFF9FCFF),
-            glowOuter = Color(0x00FFFFFF),
-            border = Color(0xFFD8EAFD),
+            base = softSurface.copy(alpha = 0.46f),
+            glowInner = softSurface.copy(alpha = 0.26f),
+            glowOuter = Color.Transparent,
+            border = softBorder.copy(alpha = 0.46f),
         )
     }
     val progress = (count.toFloat() / peakCount.toFloat()).coerceIn(0f, 1f)
     return when {
         progress <= 0.2f -> HeatTone(
-            base = Color(0xFFDDEEFF),
-            glowInner = Color(0xFFF4FAFF),
-            glowOuter = Color(0x6679C6FF),
-            border = Color(0xFFC5E2FF),
+            base = heat.copy(alpha = 0.22f),
+            glowInner = heat.copy(alpha = 0.08f),
+            glowOuter = Color.Transparent,
+            border = heat.copy(alpha = 0.24f),
         )
         progress <= 0.4f -> HeatTone(
-            base = Color(0xFFB8DCFF),
-            glowInner = Color(0xFFE7F4FF),
-            glowOuter = Color(0x888AD6FF),
-            border = Color(0xFFA1CCFF),
+            base = heat.copy(alpha = 0.34f),
+            glowInner = heat.copy(alpha = 0.12f),
+            glowOuter = heat.copy(alpha = 0.03f),
+            border = heat.copy(alpha = 0.30f),
         )
         progress <= 0.65f -> HeatTone(
-            base = Color(0xFF84C4FF),
-            glowInner = Color(0xFFCFEAFF),
-            glowOuter = Color(0xB39EE4FF),
-            border = Color(0xFF69B2FF),
+            base = heat.copy(alpha = 0.50f),
+            glowInner = heat.copy(alpha = 0.16f),
+            glowOuter = heat.copy(alpha = 0.05f),
+            border = heat.copy(alpha = 0.38f),
         )
         progress <= 0.85f -> HeatTone(
-            base = Color(0xFF4FA7FF),
-            glowInner = Color(0xFFADE0FF),
-            glowOuter = Color(0xE0A9ECFF),
-            border = Color(0xFF3794F3),
+            base = heat.copy(alpha = 0.68f),
+            glowInner = heat.copy(alpha = 0.20f),
+            glowOuter = heat.copy(alpha = 0.08f),
+            border = heat.copy(alpha = 0.46f),
         )
         else -> HeatTone(
-            base = Color(0xFF2E8FFF),
-            glowInner = Color(0xFF8BD7FF),
-            glowOuter = Color(0xFFBDF5FF),
-            border = Color(0xFF1F7DEB),
+            base = heat.copy(alpha = 0.86f),
+            glowInner = heat.copy(alpha = 0.24f),
+            glowOuter = heat.copy(alpha = 0.12f),
+            border = heat.copy(alpha = 0.56f),
         )
     }
 }

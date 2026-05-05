@@ -16,9 +16,26 @@ class ArticleCaptureModelTest {
         assertThat(model.title).contains("设计系统价值")
         assertThat(model.host).isEqualTo("uxdesign.cc")
         assertThat(model.url).isEqualTo("https://uxdesign.cc/design-system-value")
-        assertThat(model.summary).contains("本地")
+        assertThat(model.summary).contains("提取正文")
         assertThat(model.keyPoints).hasSize(3)
+        assertThat(model.keyPoints.joinToString()).contains("点按链接")
+        assertThat(model.keyPoints.joinToString()).contains("系统选择")
+        assertThat(model.keyPoints.joinToString()).doesNotContain("打开原应用")
+        assertThat(model.keyPoints.joinToString()).doesNotContain("浏览器打开")
         assertThat(model.topics).contains("文章")
+    }
+
+    @Test
+    fun buildArticleCaptureModel_neverUsesRawPendingArticleTitle() {
+        val model = buildArticleCaptureModel(
+            topic = "文章收藏",
+            content = "链接：",
+            tags = listOf("文章"),
+            updatedAt = null,
+        )
+
+        assertThat(model.title).isEqualTo("粘贴链接后提取正文")
+        assertThat(model.title).doesNotContain("待解析文章")
     }
 
     @Test
@@ -33,7 +50,7 @@ class ArticleCaptureModelTest {
         assertThat(model.title).isEqualTo("语音输入")
         assertThat(model.sourceTitle).isEqualTo("原始内容信息")
         assertThat(model.sourceLabel).contains("继续录入")
-        assertThat(model.summary).contains("语音")
+        assertThat(model.summary).contains("转写")
         assertThat(model.keyPoints).hasSize(3)
         assertThat(model.topics).contains("语音")
     }

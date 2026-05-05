@@ -85,13 +85,6 @@ import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
 import com.mindflow.app.ui.components.SkillWebViewCardHost
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.AccentTeal
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.ui.navigation.CaptureMode
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.ReviewChatSeed
@@ -227,7 +220,7 @@ private fun ReviewChatScreen(
                         Text(
                             text = "回看",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -238,7 +231,7 @@ private fun ReviewChatScreen(
                                 "已自动保存"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -341,7 +334,7 @@ private fun ReviewChatScreen(
                             Text(
                                 text = message,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextMain,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             if (!uiState.isReadOnly) {
                                 GhostActionButton(
@@ -359,8 +352,8 @@ private fun ReviewChatScreen(
 
             if (!uiState.isReadOnly) {
                 Surface(
-                    color = WhiteGlass.copy(alpha = 0.96f),
-                    border = BorderStroke(1.dp, BorderSoft),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -471,7 +464,7 @@ private fun ReviewChatProgressPanel(
                 Text(
                     text = currentStep.title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
@@ -483,7 +476,7 @@ private fun ReviewChatProgressPanel(
                         }
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (expanded) 3 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -491,7 +484,7 @@ private fun ReviewChatProgressPanel(
             Text(
                 text = if (expanded) "收起" else "详情",
                 style = MaterialTheme.typography.labelMedium,
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -529,14 +522,14 @@ private fun ReviewChatProgressStepRow(
             Text(
                 text = step.title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
             )
             if (step.detail.isNotBlank()) {
                 Text(
                     text = step.detail,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -557,13 +550,13 @@ private fun ReviewChatProgressMarker(
             CircularProgressIndicator(
                 modifier = Modifier.size(markerSize),
                 strokeWidth = if (compact) 1.5.dp else 2.dp,
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
             )
         } else {
             val color = when (state) {
-                ReviewChatProgressStepState.DONE -> AccentBlue
+                ReviewChatProgressStepState.DONE -> MaterialTheme.colorScheme.primary
                 ReviewChatProgressStepState.FAILED -> MaterialTheme.colorScheme.error
-                ReviewChatProgressStepState.RUNNING -> AccentBlue
+                ReviewChatProgressStepState.RUNNING -> MaterialTheme.colorScheme.primary
             }
             Box(
                 modifier = Modifier
@@ -603,14 +596,14 @@ private fun ReviewChatMessageBubble(
     ) {
         if (isUser) {
             Surface(
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 shape = RoundedCornerShape(
                     topStart = 18.dp,
                     topEnd = 18.dp,
                     bottomStart = 18.dp,
                     bottomEnd = 6.dp,
                 ),
-                shadowElevation = 2.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
                     .combinedClickable(
@@ -622,7 +615,7 @@ private fun ReviewChatMessageBubble(
                     text = message.content,
                     modifier = Modifier.padding(horizontal = 15.dp, vertical = 12.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         } else {
@@ -645,10 +638,10 @@ private fun ReviewChatMessageBubble(
                             onClick = {},
                             onLongClick = { onRequestCopy(copyPayload) },
                         ),
-                    color = WhiteGlass.copy(alpha = 0.97f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                     shape = RoundedCornerShape(18.dp),
-                    border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.8f)),
-                    shadowElevation = 2.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+                    shadowElevation = 0.dp,
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -710,7 +703,7 @@ private fun ReviewChatAnswerCompanion(
             Text(
                 text = "来源参考",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -747,7 +740,7 @@ private fun ReviewChatAnswerCompanion(
             Text(
                 text = "快速操作",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -762,7 +755,7 @@ private fun ReviewChatAnswerCompanion(
                 ReviewChatQuickAction(
                     text = "转成任务",
                     icon = Icons.Outlined.TaskAlt,
-                    tint = AccentTeal,
+                    tint = MaterialTheme.colorScheme.secondary,
                     onClick = { onCreateCapture(reviewChatAnswerToTaskCaptureSeed(message)) },
                     modifier = Modifier.weight(1f),
                 )
@@ -793,9 +786,9 @@ private fun ReviewChatSourceCard(
         onClick = {
             if (source.noteId > 0) onOpenRecord(source.noteId)
         },
-        color = WhiteGlass.copy(alpha = 0.9f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier,
     ) {
         Column(
@@ -806,14 +799,14 @@ private fun ReviewChatSourceCard(
             Text(
                 text = source.title.ifBlank { "相关记录" },
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = if (source.noteId > 0) "点击打开原始记录" else "基于本地记录和回看上下文整理",
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -825,15 +818,21 @@ private fun ReviewChatSourceCard(
 private fun ReviewChatQuickAction(
     text: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    tint: androidx.compose.ui.graphics.Color = AccentBlue,
+    tint: androidx.compose.ui.graphics.Color? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val effectiveTint = tint ?: MaterialTheme.colorScheme.primary
+    val effectiveContainer = if (tint == MaterialTheme.colorScheme.secondary) {
+        MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    }
     Surface(
         onClick = onClick,
-        color = if (tint == AccentTeal) AccentTeal.copy(alpha = 0.08f) else PanelBlue,
+        color = effectiveContainer,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
+        border = BorderStroke(1.dp, effectiveTint.copy(alpha = 0.22f)),
         modifier = modifier,
     ) {
         Column(
@@ -844,13 +843,13 @@ private fun ReviewChatQuickAction(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = tint,
+                tint = effectiveTint,
                 modifier = Modifier.size(16.dp),
             )
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -883,7 +882,7 @@ private fun ReviewChatStructuredAnswerContent(
                         text = "${section.title}：",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     section.body.forEach { paragraph ->
                         MarkdownText(markdown = paragraph)
@@ -909,7 +908,7 @@ private fun ReviewChatStructuredBulletRow(
         Text(
             text = "•",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Box(
             modifier = Modifier.weight(1f),
@@ -996,14 +995,14 @@ private fun ReviewChatCopyMenuDialog(
             Text(
                 text = message.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         },
         text = {
             Text(
                 text = "长内容默认不露出复制按钮。长按消息后，在这里选“复制全文”或“选择文本”。",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         confirmButton = {
@@ -1033,7 +1032,7 @@ private fun ReviewChatSelectTextDialog(
             Text(
                 text = "选择文本",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         },
         text = {
@@ -1046,7 +1045,7 @@ private fun ReviewChatSelectTextDialog(
                     Text(
                         text = message.content,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }

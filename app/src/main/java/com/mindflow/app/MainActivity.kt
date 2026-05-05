@@ -13,7 +13,9 @@ import com.mindflow.app.data.review.WeeklyReviewPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.topic.AiServiceClient
+import com.mindflow.app.data.topic.ArticleContentExtractor
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.ImageUnderstandingPlanner
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
@@ -23,9 +25,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mindflow.app.data.model.AppThemeMode
+import com.mindflow.app.data.model.AppearanceSettings
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
@@ -65,6 +74,7 @@ class MainActivity : ComponentActivity() {
         val reminderSettingsRepository: ReminderSettingsRepository = appContainer.reminderSettingsRepository
         val timeBankSettingsRepository: TimeBankSettingsRepository = appContainer.timeBankSettingsRepository
         val threadPreferencesRepository: ThreadPreferencesRepository = appContainer.threadPreferencesRepository
+        val appearanceSettingsRepository: AppearanceSettingsRepository = appContainer.appearanceSettingsRepository
         val cloudBackupCoordinator: CloudBackupCoordinator = appContainer.cloudBackupCoordinator
         val onDeviceModelManager: OnDeviceModelManager = appContainer.onDeviceModelManager
         val reminderScheduler: ReminderScheduler = appContainer.reminderScheduler
@@ -82,6 +92,8 @@ class MainActivity : ComponentActivity() {
         val topicExtractor: TopicExtractor = appContainer.topicExtractor
         val noteInsightPlanner = appContainer.noteInsightPlanner
         val voiceTranscriptionPlanner: VoiceTranscriptionPlanner = appContainer.voiceTranscriptionPlanner
+        val articleContentExtractor: ArticleContentExtractor = appContainer.articleContentExtractor
+        val imageUnderstandingPlanner: ImageUnderstandingPlanner = appContainer.imageUnderstandingPlanner
         val onDeviceAiClient: OnDeviceAiClient = appContainer.onDeviceAiClient
         val editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner = appContainer.editorKnowledgeRecallPlanner
         val localKnowledgeMaintenancePlanner = appContainer.localKnowledgeMaintenancePlanner
@@ -90,7 +102,36 @@ class MainActivity : ComponentActivity() {
         val reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository =
             appContainer.reviewChatSavedConversationRepository
         setContent {
-            MindFlowTheme {
+            val appearanceSettings by appearanceSettingsRepository.settings.collectAsStateWithLifecycle(
+                initialValue = AppearanceSettings(),
+            )
+            val systemDarkTheme = isSystemInDarkTheme()
+            val darkTheme = when (appearanceSettings.themeMode) {
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+                AppThemeMode.SYSTEM -> systemDarkTheme
+            }
+            SideEffect {
+                enableEdgeToEdge(
+                    statusBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            scrim = AndroidColor.TRANSPARENT,
+                            darkScrim = AndroidColor.TRANSPARENT,
+                        )
+                    },
+                    navigationBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            scrim = AndroidColor.TRANSPARENT,
+                            darkScrim = AndroidColor.TRANSPARENT,
+                        )
+                    },
+                )
+            }
+            MindFlowTheme(darkTheme = darkTheme) {
                 MindFlowApp(
                     noteRepository = repository,
                     aiSettingsRepository = aiSettingsRepository,
@@ -99,6 +140,7 @@ class MainActivity : ComponentActivity() {
                     reminderSettingsRepository = reminderSettingsRepository,
                     timeBankSettingsRepository = timeBankSettingsRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
+                    appearanceSettingsRepository = appearanceSettingsRepository,
                     cloudBackupCoordinator = cloudBackupCoordinator,
                     onDeviceModelManager = onDeviceModelManager,
                     reminderScheduler = reminderScheduler,
@@ -117,6 +159,8 @@ class MainActivity : ComponentActivity() {
                     topicExtractor = topicExtractor,
                     noteInsightPlanner = noteInsightPlanner,
                     voiceTranscriptionPlanner = voiceTranscriptionPlanner,
+                    articleContentExtractor = articleContentExtractor,
+                    imageUnderstandingPlanner = imageUnderstandingPlanner,
                     onDeviceAiClient = onDeviceAiClient,
                     editorKnowledgeRecallPlanner = editorKnowledgeRecallPlanner,
                     localKnowledgeMaintenancePlanner = localKnowledgeMaintenancePlanner,

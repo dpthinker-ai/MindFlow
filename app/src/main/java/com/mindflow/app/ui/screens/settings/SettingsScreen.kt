@@ -87,6 +87,7 @@ import com.mindflow.app.data.localmodel.OnDeviceAiClient
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenancePlanner
 import com.mindflow.app.data.localmodel.OnDeviceModelManager
 import com.mindflow.app.data.model.AiProviderPreset
+import com.mindflow.app.data.model.AppThemeMode
 import com.mindflow.app.data.model.AiSettings
 import com.mindflow.app.data.model.CloudBackupSettings
 import com.mindflow.app.data.model.ExportPayload
@@ -95,6 +96,7 @@ import com.mindflow.app.data.model.OnDeviceModelStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
@@ -118,10 +120,6 @@ import com.mindflow.app.ui.theme.AccentLavender
 import com.mindflow.app.ui.theme.AccentSuccess
 import com.mindflow.app.ui.theme.AccentTeal
 import com.mindflow.app.ui.theme.AccentWarn
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.PanelSoft
-import com.mindflow.app.ui.theme.WhiteGlass
-import com.mindflow.app.ui.theme.TextSoft
 import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 
@@ -145,6 +143,7 @@ fun SettingsRoute(
     onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
     timeBankSettingsRepository: TimeBankSettingsRepository,
+    appearanceSettingsRepository: AppearanceSettingsRepository,
     cloudBackupCoordinator: CloudBackupCoordinator,
     onDeviceModelManager: OnDeviceModelManager,
     reminderScheduler: ReminderScheduler,
@@ -161,6 +160,7 @@ fun SettingsRoute(
             onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
             reminderSettingsRepository = reminderSettingsRepository,
             timeBankSettingsRepository = timeBankSettingsRepository,
+            appearanceSettingsRepository = appearanceSettingsRepository,
             cloudBackupCoordinator = cloudBackupCoordinator,
             onDeviceModelManager = onDeviceModelManager,
             reminderScheduler = reminderScheduler,
@@ -257,6 +257,7 @@ fun SettingsRoute(
         onAutoTaskRecognitionEnabledChange = viewModel::onAutoTaskRecognitionEnabledChange,
         onArticleAutoSummaryEnabledChange = viewModel::onArticleAutoSummaryEnabledChange,
         onEveningReviewEnabledChange = viewModel::onEveningReviewEnabledChange,
+        onThemeModeChange = viewModel::onThemeModeChange,
         onTimeBankCurrentAgeChange = viewModel::onTimeBankCurrentAgeChange,
         onTimeBankExpectedLifespanChange = viewModel::onTimeBankExpectedLifespanChange,
         onTimeBankActiveDaysPerWeekChange = viewModel::onTimeBankActiveDaysPerWeekChange,
@@ -316,6 +317,7 @@ private fun SettingsScreen(
     onAutoTaskRecognitionEnabledChange: (Boolean) -> Unit,
     onArticleAutoSummaryEnabledChange: (Boolean) -> Unit,
     onEveningReviewEnabledChange: (Boolean) -> Unit,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     onTimeBankCurrentAgeChange: (String) -> Unit,
     onTimeBankExpectedLifespanChange: (String) -> Unit,
     onTimeBankActiveDaysPerWeekChange: (String) -> Unit,
@@ -433,7 +435,9 @@ private fun SettingsScreen(
                 onRefreshDirectionWiki = onRefreshDirectionWiki,
             )
             SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
+                onThemeModeChange = onThemeModeChange,
             )
             SettingsDestination.ABOUT -> AboutSettingsScreen(
                 onBack = { destination = SettingsDestination.HOME },
@@ -478,7 +482,7 @@ private fun SettingsHomeScreen(
                     Text(
                         text = "个性化配置，掌控你的 AI 思维系统",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -558,7 +562,7 @@ private fun SettingsHomeScreen(
                     SettingsDivider()
                     SettingsMenuRow(
                         icon = Icons.Outlined.Info,
-                        iconColor = TextSoft,
+                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         title = "关于",
                         summary = "版本信息、帮助与反馈",
                         status = null,
@@ -573,10 +577,10 @@ private fun SettingsHomeScreen(
 @Composable
 private fun SettingsProfileCard() {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.98f),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, PanelBlue),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier
@@ -589,7 +593,7 @@ private fun SettingsProfileCard() {
                 modifier = Modifier
                     .size(54.dp)
                     .clip(CircleShape)
-                    .background(PanelBlue),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -611,7 +615,7 @@ private fun SettingsProfileCard() {
                 Text(
                     text = "专注思考，持续进化",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -621,10 +625,10 @@ private fun SettingsProfileCard() {
 @Composable
 private fun SettingsMenuGroup(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.98f),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.72f)),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -640,7 +644,7 @@ private fun SettingsDivider() {
             .fillMaxWidth()
             .padding(start = 68.dp)
             .height(1.dp)
-            .background(PanelSoft),
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.54f)),
     )
 }
 
@@ -689,7 +693,7 @@ private fun SettingsMenuRow(
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -706,7 +710,7 @@ private fun SettingsMenuRow(
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
-            tint = TextSoft.copy(alpha = 0.68f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f),
             modifier = Modifier.size(18.dp),
         )
     }
@@ -722,9 +726,9 @@ private fun SettingsDataRow(
     onClick: (() -> Unit)? = null,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, PanelBlue.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         val rowModifier = if (onClick != null) {
             Modifier
@@ -759,7 +763,7 @@ private fun SettingsDataRow(
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -776,7 +780,7 @@ private fun SettingsDataRow(
                 Icon(
                     imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = null,
-                    tint = TextSoft.copy(alpha = 0.68f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f),
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -796,9 +800,12 @@ private fun SettingsModeCard(
     Surface(
         modifier = modifier,
         onClick = onClick,
-        color = if (selected) accent.copy(alpha = 0.11f) else WhiteGlass.copy(alpha = 0.92f),
+        color = if (selected) accent.copy(alpha = 0.11f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.62f) else PanelBlue.copy(alpha = 0.5f)),
+        border = BorderStroke(
+            1.dp,
+            if (selected) accent.copy(alpha = 0.62f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f),
+        ),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -814,7 +821,7 @@ private fun SettingsModeCard(
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -860,19 +867,19 @@ private fun DirectionWikiSettingsScreen(
 ) {
     DetailScreenFrame(
         title = "图谱",
-        subtitle = "图谱视图、关系与显示设置",
+        subtitle = "主题关系、热度与结构整理",
         onBack = onBack,
     ) {
         item {
             PanelCard {
                 SectionHeader(
-                    title = "当前结构",
-                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 个方向" else "尚未生成",
+                    title = "图谱整理",
+                    headline = if (uiState.directionWikiDirectionCount > 0) "${uiState.directionWikiDirectionCount} 个主题方向" else "等待生成",
                 )
                 Text(
-                    text = "图谱用于展示概念之间的关系、中心节点、孤立节点和近期增长。",
+                    text = "图谱会在本地整理主题关系、记录热度和近期增长，帮助你判断哪些主题已经成形、哪些还需要补连接。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 uiState.directionWikiLastRefreshedAt
                     .takeIf { it > 0L }
@@ -880,22 +887,16 @@ private fun DirectionWikiSettingsScreen(
                         Text(
                             text = "最近更新 ${TimeFormatter.compact(updatedAt)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                uiState.directionWikiRootPath
-                    .takeIf { it.isNotBlank() }
-                    ?.let { path ->
-                        Text(
-                            text = path,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                Text(
+                    text = "整理过程保留在本机，不在这里暴露后台目录。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 ActionButton(
-                    text = if (uiState.isRefreshingDirectionWiki) "更新中..." else "更新图谱结构",
+                    text = if (uiState.isRefreshingDirectionWiki) "整理中..." else "重新整理图谱",
                     onClick = onRefreshDirectionWiki,
                     enabled = !uiState.isRefreshingDirectionWiki,
                     modifier = Modifier.fillMaxWidth(),
@@ -907,7 +908,9 @@ private fun DirectionWikiSettingsScreen(
 
 @Composable
 private fun AppearanceSettingsScreen(
+    uiState: SettingsUiState,
     onBack: () -> Unit,
+    onThemeModeChange: (AppThemeMode) -> Unit,
 ) {
     DetailScreenFrame(
         title = "外观",
@@ -916,16 +919,54 @@ private fun AppearanceSettingsScreen(
     ) {
         item {
             PanelCard {
-                SectionHeader(title = "当前主题", headline = "浅色")
+                SectionHeader(title = "当前主题", headline = themeModeLabel(uiState.themeMode))
                 Text(
-                    text = "当前先跟随参考设计保持清爽浅色风格。深色模式、紧凑密度和字号偏好后续可以在这里统一管理。",
+                    text = "主题会立即应用到主界面、图谱和底部导航。浅色保持参考图的清爽扁平风格，深色降低夜间阅读负担。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+        item {
+            SettingsSection(
+                title = "主题模式",
+                description = "只保留最常用的三种选择，避免设置项膨胀。",
+            ) {
+                SettingsModeCard(
+                    title = "浅色",
+                    summary = "白底、低阴影、轻边框",
+                    selected = uiState.themeMode == AppThemeMode.LIGHT,
+                    accent = AccentBlue,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onThemeModeChange(AppThemeMode.LIGHT) },
+                )
+                SettingsModeCard(
+                    title = "深色",
+                    summary = "暗底、柔和分隔、减少夜间眩光",
+                    selected = uiState.themeMode == AppThemeMode.DARK,
+                    accent = AccentLavender,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onThemeModeChange(AppThemeMode.DARK) },
+                )
+                SettingsModeCard(
+                    title = "跟随系统",
+                    summary = "随手机系统自动切换",
+                    selected = uiState.themeMode == AppThemeMode.SYSTEM,
+                    accent = AccentTeal,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onThemeModeChange(AppThemeMode.SYSTEM) },
+                )
+            }
+        }
     }
 }
+
+private fun themeModeLabel(mode: AppThemeMode): String =
+    when (mode) {
+        AppThemeMode.LIGHT -> "浅色"
+        AppThemeMode.DARK -> "深色"
+        AppThemeMode.SYSTEM -> "跟随系统"
+    }
 
 @Composable
 private fun AboutSettingsScreen(
@@ -1010,7 +1051,7 @@ private fun LocalModelSettingsScreen(
                             Text(
                                 text = "当前模型",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             SettingsStatusChip(text = statusHeadline, accent = AccentBlue)
                         }
@@ -1027,7 +1068,7 @@ private fun LocalModelSettingsScreen(
                                 else -> "下载模型后，默认在设备本地完成 AI 处理。"
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -1048,7 +1089,7 @@ private fun LocalModelSettingsScreen(
                     Text(
                         text = "${formatPercentage(progress)} · ${formatFileSize(uiState.localModelDownloadedBytes)} / ${formatFileSize(effectiveTargetBytes)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1169,7 +1210,7 @@ private fun LocalModelSettingsScreen(
                                 "正在用本地模型维护本地知识层。"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     uiState.localMaintenanceLastSucceededAt
@@ -1178,7 +1219,7 @@ private fun LocalModelSettingsScreen(
                             Text(
                                 text = "最近成功维护 ${TimeFormatter.compact(succeededAt)}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     uiState.localMaintenanceLastError
@@ -1347,7 +1388,7 @@ private fun ReminderSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(
@@ -1431,7 +1472,7 @@ private fun CloudBackupScreen(
                         Text(
                             text = "数据始终保留在你手中；同步与导出由你明确触发。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -1547,7 +1588,7 @@ private fun CloudBackupScreen(
                 Text(
                     text = "当前主要占用来自本地模型。记录、附件和导出文件仍保留在本机。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1639,7 +1680,7 @@ private fun AiSettingsScreen(
                     onSelect = onAiProviderPresetChange,
                 )
                 Surface(
-                    color = WhiteGlass.copy(alpha = 0.92f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Row(
@@ -1728,7 +1769,7 @@ private fun ProviderPresetSelector(
                     label = { Text(preset.label) },
                     modifier = Modifier.weight(1f),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                         selectedLabelColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
@@ -1740,7 +1781,7 @@ private fun ProviderPresetSelector(
             label = { Text(AiProviderPreset.CUSTOM.label) },
             modifier = Modifier.fillMaxWidth(),
             colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = AccentBlue.copy(alpha = 0.16f),
+                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                 selectedLabelColor = MaterialTheme.colorScheme.onSurface,
             ),
         )
@@ -1780,6 +1821,7 @@ private fun DetailScreenFrame(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = subtitle,
@@ -1813,7 +1855,7 @@ private fun SettingsEntryCard(
 ) {
     Surface(
         onClick = onClick,
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.large,
     ) {
         Row(
@@ -1912,7 +1954,7 @@ private fun SettingsField(
     enabled: Boolean = true,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
         shape = MaterialTheme.shapes.medium,
     ) {
         OutlinedTextField(
@@ -1925,8 +1967,8 @@ private fun SettingsField(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-                unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
             ),
         )
     }

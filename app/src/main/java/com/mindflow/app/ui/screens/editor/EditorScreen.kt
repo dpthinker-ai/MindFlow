@@ -1,7 +1,10 @@
 package com.mindflow.app.ui.screens.editor
 
 import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
@@ -58,7 +61,6 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
@@ -95,6 +97,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
@@ -120,6 +123,8 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallPlanner
 import com.mindflow.app.data.localmodel.EditorKnowledgeRecallResult
 import com.mindflow.app.data.topic.ContentPolishPlanner
+import com.mindflow.app.data.topic.ArticleContentExtractor
+import com.mindflow.app.data.topic.ImageUnderstandingPlanner
 import com.mindflow.app.data.topic.NoteInsightPlanner
 import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
@@ -133,9 +138,6 @@ import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.SectionHeader
 import com.mindflow.app.ui.components.noteStatusAccent
 import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -313,6 +315,8 @@ fun EditorRoute(
     topicExtractor: TopicExtractor,
     noteInsightPlanner: NoteInsightPlanner,
     voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
+    articleContentExtractor: ArticleContentExtractor,
+    imageUnderstandingPlanner: ImageUnderstandingPlanner,
     editorKnowledgeRecallPlanner: EditorKnowledgeRecallPlanner,
     noteId: Long?,
     captureSessionKey: Long? = null,
@@ -340,6 +344,8 @@ fun EditorRoute(
             topicExtractor = topicExtractor,
             noteInsightPlanner = noteInsightPlanner,
             voiceTranscriptionPlanner = voiceTranscriptionPlanner,
+            articleContentExtractor = articleContentExtractor,
+            imageUnderstandingPlanner = imageUnderstandingPlanner,
             noteId = noteId,
             initialContent = initialContent,
             initialTopic = initialTopic,
@@ -398,6 +404,7 @@ fun EditorRoute(
             uiState = uiState,
             onBack = onBack,
             onContentChange = viewModel::onContentChange,
+            onEnsureArticleExtraction = viewModel::ensureArticleExtraction,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
             onCaptureAction = viewModel::saveWithCaptureAction,
@@ -407,6 +414,7 @@ fun EditorRoute(
             uiState = uiState,
             onBack = onBack,
             onContentChange = viewModel::onContentChange,
+            onEnsureImageUnderstanding = viewModel::ensureImageUnderstanding,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
             onCaptureAction = viewModel::saveWithCaptureAction,
@@ -441,6 +449,7 @@ fun EditorRoute(
             onApplyPolishedContent = viewModel::applyPolishedContent,
             onDiscardPolishedContent = viewModel::discardPolishedContent,
             onEnsureVoiceTranscription = { viewModel.ensureVoiceTranscription() },
+            onEnsureArticleExtraction = { viewModel.ensureArticleExtraction() },
             onRetriggerFolder = viewModel::retriggerFolderClassification,
             onRetriggerTopic = viewModel::retriggerTopicExtraction,
             onRetriggerTag = viewModel::retriggerTagExtraction,
@@ -646,9 +655,9 @@ private fun CaptureWritingCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(height),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 0.dp,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -671,7 +680,7 @@ private fun CaptureWritingCard(
                     .align(Alignment.BottomEnd)
                     .padding(end = 18.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -697,10 +706,10 @@ private fun CaptureSuggestionRow(
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = WhiteGlass,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, BorderSoft),
-            shadowElevation = 1.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 0.dp,
         ) {
             Row(
                 modifier = Modifier.padding(start = 14.dp, top = 11.dp, end = 6.dp, bottom = 11.dp),
@@ -711,7 +720,7 @@ private fun CaptureSuggestionRow(
                     text = suggestedCaptureTitle(uiState),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isHint) TextSoft else MaterialTheme.colorScheme.onSurface,
+                    color = if (isHint) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -774,9 +783,9 @@ private fun CaptureTagSection(uiState: NoteEditorUiState) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             tags.take(3).forEach { tag ->
-                AssistChip(text = tag, accent = if (tag in uiState.tags) AccentBlue else TextSoft)
+                AssistChip(text = tag, accent = if (tag in uiState.tags) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            AssistChip(text = "保存后整理", accent = TextSoft)
+            AssistChip(text = "保存后整理", accent = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -815,9 +824,9 @@ private fun AttachmentHint(
 ) {
     Surface(
         modifier = modifier.height(46.dp),
-        color = WhiteGlass.copy(alpha = 0.78f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier
@@ -829,7 +838,7 @@ private fun AttachmentHint(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(19.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -879,7 +888,7 @@ private fun CaptureTypeChip(
                 Icon(
                     imageVector = type.icon,
                     contentDescription = null,
-                    tint = if (selected) AccentBlue else TextSoft,
+                    tint = if (selected) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
@@ -933,6 +942,7 @@ internal fun ArticleCaptureScreen(
     uiState: NoteEditorUiState,
     onBack: () -> Unit,
     onContentChange: (String) -> Unit,
+    onEnsureArticleExtraction: (String) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
     onCaptureAction: (CapturePostAction) -> Unit,
@@ -947,6 +957,10 @@ internal fun ArticleCaptureScreen(
             updatedAt = uiState.updatedAt,
         )
     }
+    val urlValue = remember(uiState.content) { articleUrlFromContent(uiState.content) }
+    val articleBody = remember(uiState.content) { articleBodyFromContent(uiState.content) }
+    val noteValue = remember(uiState.content) { extractCaptureField(uiState.content, ArticleNoteFieldLabel) }
+    val extractStatus = remember(uiState.content) { articleStatusFromContent(uiState.content) }
 
     fun requestBack() {
         if (uiState.hasUnsavedChanges) {
@@ -984,12 +998,12 @@ internal fun ArticleCaptureScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             EditorTopBar(
-                title = "文章收藏解析",
+                title = "链接输入",
                 onBack = ::requestBack,
                 actionIcon = Icons.Outlined.MoreVert,
                 actionContentDescription = "更多",
                 onAction = {},
-                actionAccent = TextSoft,
+                actionAccent = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Column(
@@ -1000,18 +1014,78 @@ internal fun ArticleCaptureScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 ArticleSourceCard(model = model)
-                ArticleSectionCard(title = "AI 生成摘要") {
-                    Text(
-                        text = model.summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ArticleSectionCard(title = "链接") {
+                    PaperField(
+                        value = urlValue,
+                        onValueChange = { value ->
+                            onContentChange(replaceCaptureField(uiState.content, ArticleUrlFieldLabel, value))
+                        },
+                        placeholder = "粘贴网页链接",
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ActionButton(
+                            text = if (uiState.isExtractingArticle) "提取中..." else "解析正文",
+                            onClick = { onEnsureArticleExtraction(urlValue) },
+                            enabled = !uiState.isExtractingArticle && urlValue.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.AutoFixHigh,
+                        )
+                    }
+                    if (extractStatus.isNotBlank()) {
+                        Text(
+                            text = extractStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (extractStatus.startsWith("提取失败")) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                ArticleSectionCard(title = "正文内容") {
+                    PaperField(
+                        value = articleBody,
+                        onValueChange = { value ->
+                            onContentChange(replaceCaptureField(uiState.content, ArticleBodyFieldLabel, value))
+                        },
+                        placeholder = if (uiState.isExtractingArticle) {
+                            "正在提取网页正文…"
+                        } else {
+                            "解析后正文会显示在这里，也可以手动粘贴正文。"
+                        },
+                        minLines = 7,
+                        maxLines = 16,
+                        textStyle = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                ArticleSectionCard(title = "关键要点") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        model.keyPoints.forEach { point ->
-                            BulletText(text = point)
+                ArticleSectionCard(title = "AI 洞察") {
+                    val hasInsight = uiState.aiSummary.isNotBlank() || uiState.aiKeyPoints.isNotEmpty()
+                    if (hasInsight) {
+                        uiState.aiSummary.takeIf { it.isNotBlank() }?.let { summary ->
+                            Text(
+                                text = summary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            uiState.aiKeyPoints.forEach { point -> BulletText(text = point) }
+                        }
+                    } else {
+                        AiInsightPendingRow(
+                            text = if (articleBody.isBlank()) {
+                                "正文提取后自动生成洞察"
+                            } else {
+                                "保存后继续整理为 AI 洞察"
+                            },
+                        )
                     }
                 }
                 ArticleSectionCard(title = "相关主题") {
@@ -1024,18 +1098,25 @@ internal fun ArticleCaptureScreen(
                         }
                     }
                 }
-                ArticleSourceInput(
-                    value = uiState.content,
-                    onValueChange = onContentChange,
-                )
+                ArticleSectionCard(title = "补充说明") {
+                    PaperField(
+                        value = noteValue,
+                        onValueChange = { value ->
+                            onContentChange(replaceCaptureField(uiState.content, ArticleNoteFieldLabel, value))
+                        },
+                        placeholder = "为什么保存这篇内容，或下一步想怎么用。",
+                        minLines = 3,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             CaptureStickyActionBar(
                 isSaving = uiState.isSaving,
                 canSave = uiState.content.isNotBlank(),
-                primaryText = "保存收藏",
-                secondaryText = "查看原文",
-                secondaryIcon = Icons.Outlined.OpenInNew,
-                onSecondary = {},
+                primaryText = "保存链接",
+                secondaryText = if (uiState.isExtractingArticle) "提取中..." else "解析正文",
+                secondaryIcon = Icons.Outlined.AutoFixHigh,
+                onSecondary = { onEnsureArticleExtraction(urlValue) },
                 onSave = onSave,
                 onCaptureAction = onCaptureAction,
             )
@@ -1224,7 +1305,7 @@ internal fun VoiceCaptureScreen(
                 actionIcon = Icons.Outlined.MoreVert,
                 actionContentDescription = "更多",
                 onAction = {},
-                actionAccent = TextSoft,
+                actionAccent = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Column(
                 modifier = Modifier
@@ -1264,7 +1345,7 @@ internal fun VoiceCaptureScreen(
                         Text(
                             text = formatRecordingDuration(elapsedSeconds),
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     PaperField(
@@ -1375,6 +1456,7 @@ internal fun ImageCaptureScreen(
     uiState: NoteEditorUiState,
     onBack: () -> Unit,
     onContentChange: (String) -> Unit,
+    onEnsureImageUnderstanding: (String) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
     onCaptureAction: (CapturePostAction) -> Unit,
@@ -1391,6 +1473,10 @@ internal fun ImageCaptureScreen(
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
     var selectedImagePath by rememberSaveable(uiState.content) { mutableStateOf(extractCaptureField(uiState.content, "图片")) }
     val imageBitmap by rememberImageBitmap(selectedImagePath)
+    val imageSummary = remember(uiState.content) { imageSummaryFromContent(uiState.content) }
+    val imageKeyInfo = remember(uiState.content) { imageKeyInfoFromContent(uiState.content) }
+    val imageOcr = remember(uiState.content) { imageOcrFromContent(uiState.content) }
+    val imageRecognitionStatus = remember(uiState.content) { extractCaptureField(uiState.content, ImageRecognitionFieldLabel) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
     ) { uri: Uri? ->
@@ -1400,10 +1486,17 @@ internal fun ImageCaptureScreen(
                 selectedImagePath = file.absolutePath
                 onContentChange(
                     ensureCaptureSections(
-                        replaceCaptureField(uiState.content, "图片", file.absolutePath),
-                        listOf("图像理解结果", "关键信息提取", "结构化识别", "OCR 文本(可选)"),
+                        replaceCaptureField(uiState.content, ImagePathFieldLabel, file.absolutePath),
+                        listOf(
+                            ImageSummaryFieldLabel,
+                            ImageKeyInfoFieldLabel,
+                            ImageObjectsFieldLabel,
+                            ImageOcrFieldLabel,
+                            ImageRecognitionFieldLabel,
+                        ),
                     ),
                 )
+                onEnsureImageUnderstanding(file.absolutePath)
                 Toast.makeText(context, "图片已保存到本地", Toast.LENGTH_SHORT).show()
             }
             .onFailure {
@@ -1452,7 +1545,7 @@ internal fun ImageCaptureScreen(
                 actionIcon = Icons.Outlined.MoreVert,
                 actionContentDescription = "更多",
                 onAction = {},
-                actionAccent = TextSoft,
+                actionAccent = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Column(
                 modifier = Modifier
@@ -1473,33 +1566,69 @@ internal fun ImageCaptureScreen(
                     )
                 }
                 ArticleSectionCard(title = "图像理解结果") {
-                    Text(
-                        text = "等待 Gemma 4 端侧图片理解。AI 会根据图片类型选择场景总结、文字提取、图表解释或对象识别。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    PaperField(
+                        value = imageSummary,
+                        onValueChange = { value ->
+                            onContentChange(replaceCaptureField(uiState.content, ImageSummaryFieldLabel, value))
+                        },
+                        placeholder = if (uiState.isUnderstandingImage) {
+                            "正在理解图片…"
+                        } else {
+                            "图片理解摘要会显示在这里，也可以手动补充。"
+                        },
+                        minLines = 4,
+                        maxLines = 8,
+                        textStyle = MaterialTheme.typography.bodyMedium,
                     )
+                    if (imageRecognitionStatus.isNotBlank()) {
+                        Text(
+                            text = imageRecognitionStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (imageRecognitionStatus.startsWith("识别失败")) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
                 ArticleSectionCard(title = "关键信息提取") {
-                    Text(
-                        text = "选择图片后，识别结果会写入这里；你也可以先手动记录图片里的关键信息。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (imageKeyInfo.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            imageKeyInfo.forEach { point -> BulletText(text = point) }
+                        }
+                    } else {
+                        AiInsightPendingRow(
+                            text = if (selectedImagePath.isNullOrBlank()) {
+                                "选择图片后自动提取关键信息"
+                            } else {
+                                "等待图片理解结果"
+                            },
+                        )
+                    }
                 }
                 ArticleSectionCard(title = "结构化识别") {
+                    val objectSummary = extractCaptureField(uiState.content, ImageObjectsFieldLabel)
                     RecognitionInfoGrid(
                         items = listOf(
-                            "类型" to "待识别",
-                            "主体" to "待提取",
-                            "文字" to "待 OCR",
-                            "置信度" to "待解析",
+                            "类型" to objectSummary.ifBlank { "待识别" },
+                            "主体" to imageKeyInfo.firstOrNull().orEmpty().ifBlank { "待提取" },
+                            "文字" to if (imageOcr.isBlank()) "待 OCR" else "已提取",
+                            "状态" to when {
+                                uiState.isUnderstandingImage -> "识别中"
+                                imageSummary.isNotBlank() || imageOcr.isNotBlank() -> "已完成"
+                                selectedImagePath.isNullOrBlank() -> "待导入"
+                                else -> "待解析"
+                            },
                         ),
                     )
                 }
                 ArticleSectionCard(title = "OCR 文本(可选)") {
                     PaperField(
-                        value = uiState.content,
-                        onValueChange = onContentChange,
+                        value = imageOcr,
+                        onValueChange = { value ->
+                            onContentChange(replaceCaptureField(uiState.content, ImageOcrFieldLabel, value))
+                        },
                         placeholder = model.sourcePlaceholder,
                         minLines = 4,
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -1511,7 +1640,11 @@ internal fun ImageCaptureScreen(
                     InputActionSpec(
                         text = "重新拍摄",
                         icon = Icons.Outlined.Image,
-                        onClick = {},
+                        onClick = {
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
                     ),
                     InputActionSpec(
                         text = "从相册导入",
@@ -1526,7 +1659,7 @@ internal fun ImageCaptureScreen(
                         text = if (uiState.isSaving) "保存中..." else "继续解析",
                         icon = Icons.Outlined.Check,
                         onClick = onSave,
-                        enabled = !uiState.isSaving && uiState.content.isNotBlank(),
+                        enabled = !uiState.isSaving && !uiState.isUnderstandingImage && uiState.content.isNotBlank(),
                         primary = true,
                     ),
                 ),
@@ -1838,10 +1971,10 @@ private data class InputActionSpec(
 private fun InputStickyActionBar(actions: List<InputActionSpec>) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = WhiteGlass.copy(alpha = 0.98f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.padding(8.dp),
@@ -1936,7 +2069,7 @@ private fun VoiceRecognitionStatusStrip(items: List<Pair<String, String>>) {
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.72f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
     ) {
         RecognitionInfoGrid(
             items = items,
@@ -1958,10 +2091,10 @@ private fun CaptureStickyActionBar(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = WhiteGlass.copy(alpha = 0.98f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
@@ -2097,9 +2230,14 @@ private fun extractCaptureField(
 ): String = content
     .lineSequence()
     .map { it.trim() }
-    .firstOrNull { it.startsWith("$label：") || it.startsWith("$label:") }
-    ?.substringAfter("：")
-    ?.substringAfter(":")
+    .mapNotNull { line ->
+        when {
+            line.startsWith("$label：") -> line.removePrefix("$label：")
+            line.startsWith("$label:") -> line.removePrefix("$label:")
+            else -> null
+        }
+    }
+    .firstOrNull()
     ?.trim()
     .orEmpty()
 
@@ -2229,7 +2367,7 @@ private fun ParsedCaptureScreen(
                 actionIcon = Icons.Outlined.MoreVert,
                 actionContentDescription = "更多",
                 onAction = {},
-                actionAccent = TextSoft,
+                actionAccent = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Column(
@@ -2420,7 +2558,7 @@ private fun ParsedImagePreview(
                 Box(
                     modifier = Modifier
                         .size(46.dp)
-                        .background(WhiteGlass, RoundedCornerShape(14.dp)),
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -2443,6 +2581,7 @@ private enum class EditorContentKind {
     TEXT,
     VOICE,
     IMAGE,
+    LINK,
 }
 
 private data class EditorContentReference(
@@ -2457,11 +2596,19 @@ private data class EditorContentReference(
 private fun editorContentReference(content: String): EditorContentReference {
     val labels = content.lines().map { line -> line.substringBefore("：").substringBefore(":").trim() }.toSet()
     return when {
+        "链接" in labels || "原文链接" in labels || Regex("""https?://\S+""").containsMatchIn(content) -> EditorContentReference(
+            kind = EditorContentKind.LINK,
+            title = "链接记录",
+            bodyLabel = "正文内容",
+            summaryLabel = "AI 洞察",
+            pointsLabel = "",
+            recordInfoLabel = "记录信息",
+        )
         "图片" in labels -> EditorContentReference(
             kind = EditorContentKind.IMAGE,
             title = "图片记录",
             bodyLabel = "图片理解摘要（可编辑）",
-            summaryLabel = "关键信息（可编辑）",
+            summaryLabel = "AI 洞察",
             pointsLabel = "视觉识别结果",
             recordInfoLabel = "记录信息（可修改）",
         )
@@ -2604,7 +2751,7 @@ private fun FieldIconAction(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (enabled) AccentBlue else TextSoft,
+                tint = if (enabled) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -2634,13 +2781,13 @@ private fun SubtleFieldAction(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (enabled) AccentBlue.copy(alpha = 0.72f) else TextSoft,
+                tint = if (enabled) AccentBlue.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(15.dp),
             )
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (enabled) AccentBlue.copy(alpha = 0.72f) else TextSoft,
+                color = if (enabled) AccentBlue.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2707,12 +2854,16 @@ private fun MediaContentEditorMain(
             content = uiState.content,
             labels = setOf("图片"),
         )
+        EditorContentKind.LINK -> articleBodyFromContent(uiState.content)
         EditorContentKind.TEXT,
         EditorContentKind.VOICE -> uiState.content
     }
     val onContentFieldChange: (String) -> Unit = when (reference.kind) {
         EditorContentKind.IMAGE -> { edited ->
             onContentChange(mergeCaptureField(edited, "图片", hiddenImagePath))
+        }
+        EditorContentKind.LINK -> { edited ->
+            onContentChange(replaceCaptureField(uiState.content, ArticleBodyFieldLabel, edited))
         }
         EditorContentKind.TEXT,
         EditorContentKind.VOICE -> onContentChange
@@ -2729,6 +2880,7 @@ private fun MediaContentEditorMain(
             placeholder = when (reference.kind) {
                 EditorContentKind.VOICE -> "语音转写、整理后的关键句，或你手动补充的原始内容。"
                 EditorContentKind.IMAGE -> "图片理解摘要、OCR 文本，或你对这张图的补充说明。"
+                EditorContentKind.LINK -> "网页正文、摘录，或你手动粘贴的原文。"
                 EditorContentKind.TEXT -> "在这里写正文。"
             },
             modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
@@ -2750,9 +2902,9 @@ private fun MediaContentEditorMain(
 
         if (aiToolsExpanded) {
             Surface(
-                color = WhiteGlass.copy(alpha = 0.94f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                 shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, BorderSoft),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
                 Column(
                     modifier = Modifier
@@ -2843,6 +2995,7 @@ private fun ContentReferenceDetailSections(
             reference = reference,
             onContentChange = onContentChange,
         )
+        EditorContentKind.LINK -> LinkContentReferenceSections(uiState = uiState)
     }
 }
 
@@ -2858,6 +3011,7 @@ private fun MediaContentPrimarySection(
         EditorContentKind.IMAGE -> ImagePreviewReferenceSection(
             imagePath = extractCaptureField(content, "图片"),
         )
+        EditorContentKind.LINK -> Unit
         EditorContentKind.TEXT -> Unit
     }
 }
@@ -3015,7 +3169,7 @@ private fun VoiceContentEditorMain(
                 Icon(
                     imageVector = Icons.Outlined.Edit,
                     contentDescription = null,
-                    tint = TextSoft,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
             },
@@ -3134,7 +3288,7 @@ private fun VoiceAudioReferenceSection(audioPath: String) {
             Text(
                 text = formatVoicePlaybackTime(durationMs),
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     ) {
@@ -3183,7 +3337,7 @@ private fun VoiceAudioReferenceSection(audioPath: String) {
                     "暂无音频"
                 },
                 style = MaterialTheme.typography.labelMedium,
-                color = if (canPlay) AccentBlue else TextSoft,
+                color = if (canPlay) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -3191,7 +3345,7 @@ private fun VoiceAudioReferenceSection(audioPath: String) {
                 modifier = Modifier
                     .weight(1f)
                     .height(3.dp)
-                    .background(BorderSoft, RoundedCornerShape(999.dp)),
+                    .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(999.dp)),
             ) {
                 Box(
                     modifier = Modifier
@@ -3229,6 +3383,72 @@ private fun VoiceAudioReferenceSection(audioPath: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LinkContentEditorMain(
+    uiState: NoteEditorUiState,
+    contentBringIntoViewRequester: BringIntoViewRequester,
+    onContentChange: (String) -> Unit,
+    onContentFocusChanged: (Boolean) -> Unit,
+    onEnsureArticleExtraction: () -> Unit,
+) {
+    val urlValue = remember(uiState.content) { articleUrlFromContent(uiState.content) }
+    val body = remember(uiState.content) { articleBodyFromContent(uiState.content) }
+    val status = remember(uiState.content) { articleStatusFromContent(uiState.content) }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        EditorFieldHeader(label = "链接") {
+            SubtleFieldAction(
+                text = if (uiState.isExtractingArticle) "提取中" else "解析",
+                icon = Icons.Outlined.AutoFixHigh,
+                contentDescription = "解析网页正文",
+                onClick = onEnsureArticleExtraction,
+                enabled = !uiState.isExtractingArticle && urlValue.isNotBlank(),
+            )
+        }
+        if (!uiState.isNew && normalizeExternalLinkUrl(urlValue) != null) {
+            OpenableLinkText(url = urlValue)
+        } else {
+            PaperField(
+                value = urlValue,
+                onValueChange = { value ->
+                    onContentChange(replaceCaptureField(uiState.content, ArticleUrlFieldLabel, value))
+                },
+                placeholder = "粘贴网页链接",
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        status.takeIf(String::isNotBlank)?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (message.startsWith("提取失败")) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        EditorFieldHeader(label = "正文内容") {}
+        PaperField(
+            value = body,
+            onValueChange = { edited ->
+                onContentChange(replaceCaptureField(uiState.content, ArticleBodyFieldLabel, edited))
+            },
+            placeholder = if (uiState.isExtractingArticle) {
+                "正在提取网页正文…"
+            } else {
+                "解析后正文会显示在这里，也可以手动粘贴正文。"
+            },
+            modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
+            minLines = 7,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            onFocusChanged = onContentFocusChanged,
+        )
+    }
+}
+
 @Composable
 private fun VoicePlaybackWaveform(
     active: Boolean,
@@ -3263,6 +3483,90 @@ private fun VoiceContentReferenceSections(
         VoiceAiInsightSection(uiState = uiState)
     }
 }
+
+@Composable
+private fun LinkContentReferenceSections(uiState: NoteEditorUiState) {
+    if (!uiState.isNew) {
+        TextAiInsightSection(uiState = uiState, title = "AI 洞察")
+    }
+}
+
+internal fun normalizeExternalLinkUrl(rawUrl: String): String? {
+    val candidate = rawUrl
+        .trim()
+        .trimEnd('，', '。', ',', '.', ')', '）', ']', '】', '>')
+    val schemeDivider = candidate.indexOf("://")
+    if (schemeDivider <= 0) return null
+    val scheme = candidate.substring(0, schemeDivider).lowercase()
+    return candidate.takeIf { scheme == "http" || scheme == "https" }
+}
+
+@Composable
+private fun OpenableLinkText(url: String) {
+    val context = LocalContext.current
+    val normalizedUrl = remember(url) { normalizeExternalLinkUrl(url) }
+    if (normalizedUrl == null) return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clickable { openExternalLink(context, normalizedUrl) }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = normalizedUrl,
+                style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.Underline),
+                color = AccentBlue,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun openExternalLink(
+    context: Context,
+    url: String,
+) {
+    val normalizedUrl = normalizeExternalLinkUrl(url)
+    if (normalizedUrl == null) {
+        Toast.makeText(context, "链接格式暂时无法打开", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val uri = Uri.parse(normalizedUrl)
+    val launched = startExternalActivity(context, externalLinkIntent(uri, context))
+    if (!launched) {
+        Toast.makeText(context, "没有找到可以打开这个链接的应用", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun externalLinkIntent(uri: Uri, context: Context): Intent =
+    Intent(Intent.ACTION_VIEW, uri)
+        .addCategory(Intent.CATEGORY_BROWSABLE)
+        .withLaunchFlags(context)
+
+private fun Intent.withLaunchFlags(context: Context): Intent = apply {
+    if (context !is Activity) {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+}
+
+private fun startExternalActivity(context: Context, intent: Intent): Boolean =
+    try {
+        context.startActivity(intent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    } catch (_: SecurityException) {
+        false
+    }
 
 @Composable
 private fun VoiceAiInsightSection(uiState: NoteEditorUiState) {
@@ -3384,39 +3688,34 @@ private fun ImageContentReferenceSections(
     onContentChange: (String) -> Unit,
 ) {
     val imagePath = extractCaptureField(uiState.content, "图片")
-    val imageBody = contentWithoutCaptureFields(
-        content = uiState.content,
-        labels = setOf("图片"),
-    )
-    ArticleSectionCard(title = reference.summaryLabel) {
-        PaperField(
-            value = imageBody,
-            onValueChange = { edited ->
-                onContentChange(mergeCaptureField(edited, "图片", imagePath))
-            },
-            placeholder = "编辑图片理解摘要和需要保留的关键信息。",
-            minLines = 3,
-            textStyle = MaterialTheme.typography.bodyMedium,
-        )
+    val imageSummary = imageSummaryFromContent(uiState.content)
+    val imageKeyInfo = imageKeyInfoFromContent(uiState.content)
+    val imageOcr = imageOcrFromContent(uiState.content)
+    if (!uiState.isNew) {
+        TextAiInsightSection(uiState = uiState, title = reference.summaryLabel)
     }
     ArticleSectionCard(title = reference.pointsLabel) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (imagePath.isNotBlank()) {
                 BulletText(text = "原图文件：${File(imagePath).name}")
             }
+            if (imageSummary.isNotBlank()) {
+                BulletText(text = imageSummary)
+            }
+            imageKeyInfo.forEach { point -> BulletText(text = point) }
             RecognitionInfoGrid(
                 items = listOf(
-                    "类型" to "待识别",
-                    "主体" to "待提取",
-                    "文字" to "待 OCR",
-                    "置信度" to "待解析",
+                    "类型" to extractCaptureField(uiState.content, ImageObjectsFieldLabel).ifBlank { "待识别" },
+                    "主体" to imageKeyInfo.firstOrNull().orEmpty().ifBlank { "待提取" },
+                    "文字" to if (imageOcr.isBlank()) "待 OCR" else "已提取",
+                    "状态" to extractCaptureField(uiState.content, ImageRecognitionFieldLabel).ifBlank { "待解析" },
                 ),
             )
         }
     }
     ArticleSectionCard(title = "OCR 全文（可选）") {
         Text(
-            text = imageBody.ifBlank { "暂无 OCR 文本。" },
+            text = imageOcr.ifBlank { "暂无 OCR 文本。" },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -3452,9 +3751,9 @@ private fun AttachmentButton(
 ) {
     Surface(
         modifier = modifier,
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -3464,7 +3763,7 @@ private fun AttachmentButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(19.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -3481,12 +3780,13 @@ private fun AttachmentButton(
 
 @Composable
 private fun ArticleSourceCard(model: ArticleCaptureModel) {
+    val context = LocalContext.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -3524,17 +3824,20 @@ private fun ArticleSourceCard(model: ArticleCaptureModel) {
                 )
                 if (model.url.isNotBlank()) {
                     Text(
-                        text = model.url,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AccentBlue,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    text = model.url,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable { openExternalLink(context, model.url) },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 }
                 Text(
                     text = "今天",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -3563,9 +3866,9 @@ private fun ArticleSectionCard(
         }
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = WhiteGlass,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, BorderSoft),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(
                 modifier = Modifier.padding(14.dp),
@@ -3676,6 +3979,7 @@ private fun EditorTopBar(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(
@@ -3768,6 +4072,7 @@ private fun FullEditorScreen(
     onApplyPolishedContent: () -> Unit,
     onDiscardPolishedContent: () -> Unit,
     onEnsureVoiceTranscription: () -> Unit,
+    onEnsureArticleExtraction: () -> Unit,
     onRetriggerFolder: () -> Unit,
     onRetriggerTopic: () -> Unit,
     onRetriggerTag: () -> Unit,
@@ -4058,6 +4363,15 @@ private fun FullEditorScreen(
                             },
                         )
                     }
+                    EditorContentKind.LINK -> {
+                        LinkContentEditorMain(
+                            uiState = uiState,
+                            contentBringIntoViewRequester = contentBringIntoViewRequester,
+                            onContentChange = onContentChange,
+                            onContentFocusChanged = { isContentFieldFocused = it },
+                            onEnsureArticleExtraction = onEnsureArticleExtraction,
+                        )
+                    }
                 }
 
                 ContentReferenceDetailSections(
@@ -4103,7 +4417,7 @@ private fun FullEditorScreen(
                                 }
                                 Surface(
                                     modifier = cardModifier,
-                                    color = WhiteGlass.copy(alpha = 0.9f),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                                     shape = MaterialTheme.shapes.medium,
                                 ) {
                                     Column(
@@ -4157,9 +4471,9 @@ private fun CompactRecordInfoSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onToggleExpanded() },
-            color = WhiteGlass.copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
             shape = MaterialTheme.shapes.medium,
-            border = BorderStroke(1.dp, BorderSoft),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(
                 modifier = Modifier
@@ -4331,7 +4645,7 @@ private fun CompactRecordInfoLine(
             text = label,
             modifier = Modifier.width(46.dp),
             style = MaterialTheme.typography.bodySmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value.ifBlank { "未记录" },
@@ -4374,7 +4688,7 @@ private fun PaperField(
 ) {
     Surface(
         modifier = modifier,
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shape = MaterialTheme.shapes.medium,
     ) {
         TextField(
@@ -4450,9 +4764,9 @@ private fun EditableTagChip(
     onRemove: () -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
@@ -4493,9 +4807,9 @@ private fun PolishPreviewCard(
     onDiscard: () -> Unit,
 ) {
     Surface(
-        color = WhiteGlass.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
             modifier = Modifier
@@ -4516,7 +4830,7 @@ private fun PolishPreviewCard(
                     Text(
                         text = if (showingOriginal) "当前查看原文，长按下方卡片切回润色稿" else "当前查看润色稿，长按下方卡片切换原文",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(

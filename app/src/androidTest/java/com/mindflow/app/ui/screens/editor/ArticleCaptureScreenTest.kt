@@ -23,6 +23,7 @@ class ArticleCaptureScreenTest {
                     ),
                     onBack = {},
                     onContentChange = {},
+                    onEnsureArticleExtraction = {},
                     onSave = {},
                     onSaveAndExit = {},
                     onCaptureAction = {},
@@ -30,13 +31,14 @@ class ArticleCaptureScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("文章收藏解析").assertExists()
-        composeRule.onNodeWithText("AI 生成摘要").assertExists()
-        composeRule.onNodeWithText("关键要点").assertExists()
+        composeRule.onNodeWithText("链接输入").assertExists()
+        composeRule.onNodeWithText("链接").assertExists()
+        composeRule.onNodeWithText("正文内容").assertExists()
+        composeRule.onNodeWithText("AI 洞察").assertExists()
         composeRule.onNodeWithText("相关主题").assertExists()
         composeRule.onNodeWithText("插入今天").assertExists()
         composeRule.onNodeWithText("链接任务").assertExists()
         composeRule.onNodeWithText("导入项目").assertExists()
-        composeRule.onNodeWithText("查看原文").assertExists()
+        composeRule.onNodeWithText("解析正文").assertExists()
     }
 }

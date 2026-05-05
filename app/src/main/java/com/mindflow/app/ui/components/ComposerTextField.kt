@@ -21,9 +21,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.mindflow.app.ui.theme.Accent
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -57,10 +54,10 @@ fun ComposerTextField(
 
     Surface(
         modifier = modifier,
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = CardShape,
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         TextField(
             value = value,
@@ -80,16 +77,16 @@ fun ComposerTextField(
                 Text(
                     text = placeholder,
                     style = textStyle,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = WhiteGlass,
-                unfocusedContainerColor = WhiteGlass,
-                disabledContainerColor = WhiteGlass,
-                focusedIndicatorColor = Accent.copy(alpha = 0.18f),
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f),
                 unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                 disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
             ),

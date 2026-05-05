@@ -58,12 +58,6 @@ import com.mindflow.app.ui.components.InsightTone
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import com.mindflow.app.util.TimeFormatter
 import java.time.Instant
 import java.time.LocalDate
@@ -161,12 +155,12 @@ private fun ReviewChatHistoryScreen(
                     Text(
                         text = "回看",
                         style = MaterialTheme.typography.headlineSmall,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = "按时间、主题和任务重新找回你的记忆。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -249,14 +243,14 @@ private fun ReviewChatHistoryScreen(
             title = {
                 Text(
                     text = "删除这段聊天？",
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                 )
             },
             text = {
                 Text(
                     text = "删除后无法从聊天历史中恢复：${summary.title}",
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -304,10 +298,10 @@ private fun ReviewHistoryFilterTabs(
                 Text(
                     text = tab.label,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) AccentBlue else TextSoft,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Surface(
-                    color = if (selected) AccentBlue else androidx.compose.ui.graphics.Color.Transparent,
+                    color = if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
                     shape = RoundedCornerShape(999.dp),
                     modifier = Modifier
                         .width(42.dp)
@@ -362,7 +356,7 @@ private fun ReviewHistoryTopicSummary(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Surface(
-                color = PanelBlue,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.size(52.dp),
             ) {
@@ -370,7 +364,7 @@ private fun ReviewHistoryTopicSummary(
                     Icon(
                         imageVector = Icons.Outlined.AddComment,
                         contentDescription = null,
-                        tint = AccentBlue,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -382,25 +376,25 @@ private fun ReviewHistoryTopicSummary(
                 Text(
                     text = "主题回看",
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "相关记录 ${summaries.sumOf { it.messageCount }.coerceAtLeast(summaries.size)} 条",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
                 text = "›",
                 style = MaterialTheme.typography.titleLarge,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
             text = summaries.firstOrNull()?.latestExcerpt?.ifBlank { null }
                 ?: "本月的回看会按主题聚合，帮助你找回旧问题、旧判断和未推进的行动。",
             style = MaterialTheme.typography.bodySmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -419,12 +413,12 @@ private fun ReviewHistoryResultHeader(group: String) {
         Text(
             text = "回看结果",
             style = MaterialTheme.typography.titleSmall,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = group,
             style = MaterialTheme.typography.labelLarge,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -444,14 +438,14 @@ private fun ReviewChatHistorySearchField(
         placeholder = {
             Text(
                 text = "搜索标题、摘要或聊天内容",
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         trailingIcon = if (query.isNotBlank()) {
@@ -467,10 +461,10 @@ private fun ReviewChatHistorySearchField(
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-            unfocusedContainerColor = WhiteGlass.copy(alpha = 0.92f),
-            focusedBorderColor = BorderSoft,
-            unfocusedBorderColor = BorderSoft,
+            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
         ),
     )
 }
@@ -491,13 +485,13 @@ private fun ReviewChatHistoryRow(
             modifier = Modifier.padding(top = 12.dp),
         ) {
             Surface(
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 shape = CircleShape,
                 modifier = Modifier.size(8.dp),
                 content = {},
             )
             Surface(
-                color = AccentBlue.copy(alpha = 0.22f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
                 modifier = Modifier
                     .width(2.dp)
                     .height(72.dp),
@@ -508,9 +502,9 @@ private fun ReviewChatHistoryRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onOpen),
-            color = WhiteGlass.copy(alpha = 0.94f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
             shape = CardShape,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSoft),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shadowElevation = 0.dp,
         ) {
             Column(
@@ -529,27 +523,27 @@ private fun ReviewChatHistoryRow(
                         Text(
                             text = summary.title.ifBlank { "未命名回看" },
                             style = MaterialTheme.typography.titleSmall,
-                            color = TextMain,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = "已总结为 ${summary.messageCount.coerceAtLeast(1)} 个要点",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSoft,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Text(
                         text = "›",
                         style = MaterialTheme.typography.titleMedium,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 summary.latestExcerpt.takeIf { it.isNotBlank() }?.let { excerpt ->
                     Text(
                         text = excerpt,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -562,7 +556,7 @@ private fun ReviewChatHistoryRow(
                     Text(
                         text = TimeFormatter.compact(summary.updatedAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = onDelete) {
                         Text(
@@ -582,7 +576,7 @@ private fun ReviewChatHistoryEmptyState(query: String) {
         Text(
             text = if (query.isBlank()) "还没有聊天历史" else "没有匹配的聊天",
             style = MaterialTheme.typography.titleSmall,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = if (query.isBlank()) {
@@ -591,7 +585,7 @@ private fun ReviewChatHistoryEmptyState(query: String) {
                 "换一个关键词试试，搜索会匹配标题、摘要和消息正文。"
             },
             style = MaterialTheme.typography.bodySmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

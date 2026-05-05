@@ -59,13 +59,7 @@ import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.theme.Accent
 import com.mindflow.app.ui.theme.AccentBlue
 import com.mindflow.app.ui.theme.AccentTeal
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.MintWash
 import com.mindflow.app.ui.theme.Panel
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 
 @Composable
 fun TodayDiscoveryRoute(
@@ -211,12 +205,12 @@ fun TodayTaskDetailRoute(
                             Text(
                                 text = "没有找到这条任务",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = TextMain,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 text = "返回今天页后重新选择一个正在跟踪的方向。",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSoft,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -297,14 +291,14 @@ private fun TodaySecondaryHeader(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -316,13 +310,13 @@ private fun TodaySecondaryHeader(
             Icon(
                 imageVector = trailingIcon,
                 contentDescription = trailingLabel,
-                tint = TextSoft,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
             Text(
                 text = trailingLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
@@ -366,16 +360,19 @@ private fun TodayFilterPill(
 ) {
     Surface(
         modifier = modifier.clickable(onClick = onClick),
-        color = if (selected) AccentBlue else WhiteGlass,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, if (selected) AccentBlue else BorderSoft),
-        shadowElevation = if (selected) 1.dp else 0.dp,
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        shadowElevation = 0.dp,
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) Color.White else TextSoft,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -404,7 +401,7 @@ private fun TodayDiscoveryCandidateCard(
                 Text(
                     text = card.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -415,7 +412,7 @@ private fun TodayDiscoveryCandidateCard(
                         else -> "待处理"
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isIgnored) TextSoft else AccentBlue,
+                    color = if (isIgnored) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                 )
             }
@@ -475,20 +472,20 @@ private fun TodayConfidenceBadge(confidence: String) {
         Text(
             text = confidence,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = AccentBlue,
+            color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
         )
         Box(
             modifier = Modifier
                 .width(78.dp)
                 .height(5.dp)
-                .background(BorderSoft.copy(alpha = 0.7f), RoundedCornerShape(999.dp)),
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.64f), RoundedCornerShape(999.dp)),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(confidence.confidenceFraction())
                     .height(5.dp)
-                    .background(AccentTeal, RoundedCornerShape(999.dp)),
+                    .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(999.dp)),
             )
         }
     }
@@ -502,20 +499,20 @@ private fun TodayInfoCell(
 ) {
     Column(
         modifier = modifier
-            .background(PanelBlue.copy(alpha = 0.42f), RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.42f), RoundedCornerShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
         Text(
             text = value,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -537,14 +534,14 @@ private fun TodayTaskHero(detail: TodayTaskDetailModel) {
                 Text(
                     text = detail.title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = detail.createdLine,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
@@ -558,7 +555,7 @@ private fun TodayTaskHero(detail: TodayTaskDetailModel) {
 private fun TodayStatusBubble(text: String) {
     Row(
         modifier = Modifier
-            .background(MintWash, RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.54f), RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -566,13 +563,13 @@ private fun TodayStatusBubble(text: String) {
         Icon(
             imageVector = Icons.Outlined.CheckCircle,
             contentDescription = null,
-            tint = AccentTeal,
+            tint = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(14.dp),
         )
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
         )
     }
@@ -603,9 +600,9 @@ private fun TodayTimelineRow(timeline: List<TodayTaskTimelineStep>) {
                             .height(2.dp)
                             .background(
                                 when {
-                                    nextStep.active -> AccentBlue
-                                    nextStep.completed -> AccentTeal
-                                    else -> BorderSoft
+                                    nextStep.active -> MaterialTheme.colorScheme.primary
+                                    nextStep.completed -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.outlineVariant
                                 }
                             ),
                     )
@@ -632,9 +629,9 @@ private fun TodayTimelineRow(timeline: List<TodayTaskTimelineStep>) {
                                 )
                                 .background(
                                     when {
-                                        step.active -> AccentBlue
-                                        step.completed -> AccentTeal
-                                        else -> BorderSoft
+                                        step.active -> MaterialTheme.colorScheme.primary
+                                        step.completed -> MaterialTheme.colorScheme.secondary
+                                        else -> MaterialTheme.colorScheme.outlineVariant
                                     },
                                     CircleShape,
                                 ),
@@ -657,13 +654,13 @@ private fun TodayTimelineRow(timeline: List<TodayTaskTimelineStep>) {
                 Text(
                     text = step.label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (step.active) TextMain else TextSoft,
+                    color = if (step.active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
                 Text(
                     text = step.detail,
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -703,12 +700,12 @@ private fun TodayTaskMaterials(materials: List<TodayTaskMaterialModel>) {
             Text(
                 text = "关联材料",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "查看全部 ›",
                 style = MaterialTheme.typography.labelMedium,
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
             )
         }
@@ -721,7 +718,7 @@ private fun TodayTaskMaterials(materials: List<TodayTaskMaterialModel>) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.Article,
                     contentDescription = null,
-                    tint = TextSoft,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
                 Column(
@@ -731,14 +728,14 @@ private fun TodayTaskMaterials(materials: List<TodayTaskMaterialModel>) {
                     Text(
                         text = material.title,
                         style = MaterialTheme.typography.labelLarge,
-                        color = TextMain,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = material.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSoft,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -746,7 +743,7 @@ private fun TodayTaskMaterials(materials: List<TodayTaskMaterialModel>) {
                 Text(
                     text = material.meta,
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
@@ -765,7 +762,7 @@ private fun TodayTaskNextSuggestion(nextSuggestion: String) {
             Icon(
                 imageVector = Icons.Outlined.Psychology,
                 contentDescription = null,
-                tint = AccentBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp),
             )
             Column(
@@ -775,12 +772,12 @@ private fun TodayTaskNextSuggestion(nextSuggestion: String) {
                 Text(
                     text = "下一步建议",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = nextSuggestion,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -801,18 +798,18 @@ private fun TodayTaskProgressCard(detail: TodayTaskDetailModel) {
                 Text(
                     text = "推进进度",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "整体进度",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
                 text = detail.progressLabel,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
             )
         }
@@ -821,9 +818,9 @@ private fun TodayTaskProgressCard(detail: TodayTaskDetailModel) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("已完成 13", style = MaterialTheme.typography.labelSmall, color = TextSoft)
-            Text("进行中 5", style = MaterialTheme.typography.labelSmall, color = TextSoft)
-            Text("待开始 2", style = MaterialTheme.typography.labelSmall, color = TextSoft)
+            Text("已完成 13", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("进行中 5", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("待开始 2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -834,7 +831,7 @@ private fun TodayTaskSplitPreview(detail: TodayTaskDetailModel) {
         Text(
             text = "拆分建议",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         listOf(
             "补一句最新进展，明确当前事实",
@@ -849,12 +846,12 @@ private fun TodayTaskSplitPreview(detail: TodayTaskDetailModel) {
                 Text(
                     text = "${index + 1}",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = AccentBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     text = if (index == 1) "围绕「${detail.title}」$step" else step,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextMain,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -877,8 +874,8 @@ private fun TodayTaskBottomActions(
             .padding(horizontal = ScreenHorizontalPadding, vertical = 8.dp),
         color = Panel,
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),

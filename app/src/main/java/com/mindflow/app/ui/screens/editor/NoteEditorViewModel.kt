@@ -15,6 +15,11 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.topic.ArticleContentExtractor
+import com.mindflow.app.data.topic.ArticleExtractionResult
+import com.mindflow.app.data.topic.ExtractedArticleContent
+import com.mindflow.app.data.topic.ImageUnderstandingPlanner
+import com.mindflow.app.data.topic.ImageUnderstandingResult
 import com.mindflow.app.data.topic.NoteInsightPlanner
 import com.mindflow.app.data.topic.NoteInsightResult
 import com.mindflow.app.data.topic.shouldAutoGenerateVoiceInsight
@@ -42,6 +47,8 @@ data class NoteEditorUiState(
     val isPolishingContent: Boolean = false,
     val isTranscribingVoice: Boolean = false,
     val isExtractingVoiceInfo: Boolean = false,
+    val isExtractingArticle: Boolean = false,
+    val isUnderstandingImage: Boolean = false,
     val content: String = "",
     val topic: String = "",
     val topicSource: TopicSource = TopicSource.RULE,
@@ -132,6 +139,40 @@ internal const val VoiceTranscriptFieldLabel = "语音转写（可编辑）"
 internal const val VoiceAiSummaryFieldLabel = "AI 快速提取"
 internal const val VoiceKeyInfoFieldLabel = "关键信息"
 internal const val VoiceRecognitionFieldLabel = "识别信息"
+internal const val ArticleUrlFieldLabel = "链接"
+internal const val ArticleTitleFieldLabel = "标题"
+internal const val ArticleBodyFieldLabel = "正文"
+internal const val ArticleNoteFieldLabel = "补充说明"
+internal const val ArticleExtractStatusFieldLabel = "解析信息"
+internal const val ImagePathFieldLabel = "图片"
+internal const val ImageSummaryFieldLabel = "图片理解摘要"
+internal const val ImageKeyInfoFieldLabel = "关键信息"
+internal const val ImageObjectsFieldLabel = "视觉识别"
+internal const val ImageOcrFieldLabel = "OCR 文本"
+internal const val ImageRecognitionFieldLabel = "识别信息"
+
+private val EditorCaptureFieldBoundaryLabels = setOf(
+    VoiceAudioFieldLabel,
+    VoiceTranscriptFieldLabel,
+    VoiceAiSummaryFieldLabel,
+    VoiceKeyInfoFieldLabel,
+    VoiceRecognitionFieldLabel,
+    ArticleUrlFieldLabel,
+    "原文链接",
+    ArticleTitleFieldLabel,
+    ArticleBodyFieldLabel,
+    ArticleNoteFieldLabel,
+    ArticleExtractStatusFieldLabel,
+    ImagePathFieldLabel,
+    ImageSummaryFieldLabel,
+    "图像理解结果",
+    ImageKeyInfoFieldLabel,
+    ImageObjectsFieldLabel,
+    ImageOcrFieldLabel,
+    "OCR 文本(可选)",
+    ImageRecognitionFieldLabel,
+    "原始内容",
+)
 
 internal fun voiceTranscriptFromContent(content: String): String =
     extractEditorCaptureField(content, VoiceTranscriptFieldLabel)
@@ -155,6 +196,38 @@ internal fun voiceAudioPathFromContent(content: String): String =
 
 internal fun voiceRecognitionStatusFromContent(content: String): String =
     extractEditorCaptureField(content, VoiceRecognitionFieldLabel)
+
+internal fun articleUrlFromContent(content: String): String =
+    extractEditorCaptureField(content, ArticleUrlFieldLabel)
+        .ifBlank { extractEditorCaptureField(content, "原文链接") }
+        .ifBlank { Regex("""https?://[^\s，。)）]+""").find(content)?.value?.trim().orEmpty() }
+
+internal fun articleBodyFromContent(content: String): String =
+    extractEditorCaptureField(content, ArticleBodyFieldLabel)
+        .ifBlank { extractEditorCaptureField(content, "原始内容") }
+
+internal fun articleTitleFromContent(content: String): String =
+    extractEditorCaptureField(content, ArticleTitleFieldLabel)
+
+internal fun articleStatusFromContent(content: String): String =
+    extractEditorCaptureField(content, ArticleExtractStatusFieldLabel)
+
+internal fun imagePathFromContent(content: String): String =
+    extractEditorCaptureField(content, ImagePathFieldLabel)
+
+internal fun imageSummaryFromContent(content: String): String =
+    extractEditorCaptureField(content, ImageSummaryFieldLabel)
+        .ifBlank { extractEditorCaptureField(content, "图像理解结果") }
+
+internal fun imageKeyInfoFromContent(content: String): List<String> =
+    extractEditorCaptureField(content, ImageKeyInfoFieldLabel)
+        .split("；", ";", "、", "\n")
+        .map { it.trim().trim('-', '•', '*', ' ') }
+        .filter { it.isNotBlank() }
+
+internal fun imageOcrFromContent(content: String): String =
+    extractEditorCaptureField(content, ImageOcrFieldLabel)
+        .ifBlank { extractEditorCaptureField(content, "OCR 文本(可选)") }
 
 internal fun shouldAttemptVoiceTranscription(
     content: String,
@@ -188,7 +261,14 @@ internal fun replaceEditorCaptureField(
     }
     val replacement = "$label：$value"
     return if (index >= 0) {
-        lines[index] = replacement
+        var endExclusive = index + 1
+        while (endExclusive < lines.size && !isEditorCaptureFieldBoundary(lines[endExclusive])) {
+            endExclusive += 1
+        }
+        repeat(endExclusive - index) {
+            lines.removeAt(index)
+        }
+        lines.addAll(index, replacement.lines())
         lines.joinToString("\n").trimEnd()
     } else {
         listOf(content.trimEnd(), replacement)
@@ -210,6 +290,35 @@ private fun voiceContentWithAiInfo(
     return next
 }
 
+internal fun articleContentWithExtraction(
+    content: String,
+    article: ExtractedArticleContent,
+): String {
+    var next = replaceEditorCaptureField(content, ArticleUrlFieldLabel, article.url)
+    next = replaceEditorCaptureField(next, ArticleTitleFieldLabel, article.title)
+    next = replaceEditorCaptureField(next, ArticleBodyFieldLabel, article.body)
+    next = replaceEditorCaptureField(
+        next,
+        ArticleExtractStatusFieldLabel,
+        "已从 ${article.host} 提取正文",
+    )
+    return next
+}
+
+internal fun imageContentWithUnderstanding(
+    content: String,
+    result: ImageUnderstandingResult.Success,
+): String {
+    var next = replaceEditorCaptureField(content, ImageSummaryFieldLabel, result.summary)
+    next = replaceEditorCaptureField(next, ImageKeyInfoFieldLabel, result.objects.joinToString("；"))
+    next = replaceEditorCaptureField(next, ImageObjectsFieldLabel, result.imageType.ifBlank { "已识别" })
+    if (result.extractedText.isNotBlank()) {
+        next = replaceEditorCaptureField(next, ImageOcrFieldLabel, result.extractedText)
+    }
+    next = replaceEditorCaptureField(next, ImageRecognitionFieldLabel, "Gemma 4 已完成图片理解")
+    return next
+}
+
 private fun ensureEditorCaptureSections(
     content: String,
     sectionLabels: List<String>,
@@ -226,14 +335,34 @@ private fun ensureEditorCaptureSections(
 private fun extractEditorCaptureField(
     content: String,
     label: String,
-): String = content
-    .lineSequence()
-    .map { it.trim() }
-    .firstOrNull { it.startsWith("$label：") || it.startsWith("$label:") }
-    ?.substringAfter("：")
-    ?.substringAfter(":")
-    ?.trim()
-    .orEmpty()
+): String {
+    val lines = content.lines()
+    val index = lines.indexOfFirst { line ->
+        val trimmed = line.trim()
+        trimmed.startsWith("$label：") || trimmed.startsWith("$label:")
+    }
+    if (index < 0) return ""
+    val firstLine = lines[index].trim()
+    val firstValue = when {
+        firstLine.startsWith("$label：") -> firstLine.removePrefix("$label：")
+        firstLine.startsWith("$label:") -> firstLine.removePrefix("$label:")
+        else -> ""
+    }
+    val valueLines = mutableListOf(firstValue)
+    var nextIndex = index + 1
+    while (nextIndex < lines.size && !isEditorCaptureFieldBoundary(lines[nextIndex])) {
+        valueLines += lines[nextIndex]
+        nextIndex += 1
+    }
+    return valueLines.joinToString("\n").trim()
+}
+
+private fun isEditorCaptureFieldBoundary(line: String): Boolean {
+    val trimmed = line.trim()
+    return EditorCaptureFieldBoundaryLabels.any { label ->
+        trimmed.startsWith("$label：") || trimmed.startsWith("$label:")
+    }
+}
 
 private fun contentWithoutEditorCaptureFields(
     content: String,
@@ -269,6 +398,8 @@ class NoteEditorViewModel(
     private val topicExtractor: TopicExtractor,
     private val noteInsightPlanner: NoteInsightPlanner,
     private val voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
+    private val articleContentExtractor: ArticleContentExtractor,
+    private val imageUnderstandingPlanner: ImageUnderstandingPlanner,
     private val noteId: Long?,
     private val initialContent: String,
     private val initialTopic: String,
@@ -590,6 +721,180 @@ class NoteEditorViewModel(
                                 "转写失败：${result.message}",
                             ),
                             isTranscribingVoice = false,
+                        )
+                    }
+                    _events.emit(NoteEditorEvent.Message(result.message))
+                }
+            }
+        }
+    }
+
+    fun ensureArticleExtraction(urlOverride: String = "") {
+        val state = _uiState.value
+        val url = urlOverride.trim().ifBlank { articleUrlFromContent(state.content) }
+        if (url.isBlank() || state.isExtractingArticle) {
+            viewModelScope.launch { _events.emit(NoteEditorEvent.Message("请先粘贴链接")) }
+            return
+        }
+
+        viewModelScope.launch {
+            updateDirtyState { current ->
+                val contentWithUrl = replaceEditorCaptureField(current.content, ArticleUrlFieldLabel, url)
+                val contentWithSections = ensureEditorCaptureSections(
+                    content = contentWithUrl,
+                    sectionLabels = listOf(
+                        ArticleTitleFieldLabel,
+                        ArticleBodyFieldLabel,
+                        ArticleExtractStatusFieldLabel,
+                    ),
+                )
+                current.copy(
+                    content = replaceEditorCaptureField(
+                        contentWithSections,
+                        ArticleExtractStatusFieldLabel,
+                        "正在提取网页正文…",
+                    ),
+                    isExtractingArticle = true,
+                )
+            }
+
+            when (val result = articleContentExtractor.extract(url)) {
+                is ArticleExtractionResult.Success -> {
+                    val article = result.article
+                    val topicResult = runCatching { topicExtractor.extract(article.body) }.getOrNull()
+                    val insightResult = runCatching { noteInsightPlanner.generate(article.body) }.getOrNull()
+                    updateDirtyState { current ->
+                        val generatedTitle = topicResult
+                            ?.suggestion
+                            ?.topic
+                            ?.let(::normalizeEditorTitle)
+                            .orEmpty()
+                        val insight = insightResult as? NoteInsightResult.Success
+                        current.copy(
+                            content = articleContentWithExtraction(current.content, article),
+                            topic = generatedTitle
+                                .ifBlank { article.title.take(48) }
+                                .ifBlank { current.topic },
+                            topicSource = if (generatedTitle.isNotBlank()) {
+                                topicResult?.suggestion?.source ?: current.topicSource
+                            } else {
+                                current.topicSource
+                            },
+                            topicEdited = current.topicEdited || generatedTitle.isNotBlank() || current.topic.isBlank(),
+                            tags = appendCaptureTag(current.tags, "文章"),
+                            tagsEdited = true,
+                            aiSummary = insight?.insight?.summary.orEmpty(),
+                            aiKeyPoints = insight?.insight?.keyPoints.orEmpty(),
+                            isExtractingArticle = false,
+                        )
+                    }
+                    _events.emit(NoteEditorEvent.Message("链接正文已提取"))
+                }
+                is ArticleExtractionResult.Failure -> {
+                    updateDirtyState { current ->
+                        val contentWithSections = ensureEditorCaptureSections(
+                            content = current.content,
+                            sectionLabels = listOf(ArticleExtractStatusFieldLabel),
+                        )
+                        current.copy(
+                            content = replaceEditorCaptureField(
+                                contentWithSections,
+                                ArticleExtractStatusFieldLabel,
+                                "提取失败：${result.message}",
+                            ),
+                            isExtractingArticle = false,
+                        )
+                    }
+                    _events.emit(NoteEditorEvent.Message(result.message))
+                }
+            }
+        }
+    }
+
+    fun ensureImageUnderstanding(imagePathOverride: String = "") {
+        val state = _uiState.value
+        val imagePath = imagePathOverride.trim().ifBlank { imagePathFromContent(state.content) }
+        if (imagePath.isBlank() || state.isUnderstandingImage) return
+
+        viewModelScope.launch {
+            updateDirtyState { current ->
+                val contentWithImage = if (imagePathOverride.isNotBlank()) {
+                    replaceEditorCaptureField(current.content, ImagePathFieldLabel, imagePath)
+                } else {
+                    current.content
+                }
+                val contentWithSections = ensureEditorCaptureSections(
+                    content = contentWithImage,
+                    sectionLabels = listOf(
+                        ImageSummaryFieldLabel,
+                        ImageKeyInfoFieldLabel,
+                        ImageObjectsFieldLabel,
+                        ImageOcrFieldLabel,
+                        ImageRecognitionFieldLabel,
+                    ),
+                )
+                current.copy(
+                    content = replaceEditorCaptureField(
+                        contentWithSections,
+                        ImageRecognitionFieldLabel,
+                        "正在理解图片…",
+                    ),
+                    isUnderstandingImage = true,
+                )
+            }
+
+            when (val result = imageUnderstandingPlanner.understand(
+                imagePath = imagePath,
+                userNote = contentWithoutEditorCaptureFields(
+                    content = _uiState.value.content,
+                    labels = setOf(
+                        ImagePathFieldLabel,
+                        ImageSummaryFieldLabel,
+                        ImageKeyInfoFieldLabel,
+                        ImageObjectsFieldLabel,
+                        ImageOcrFieldLabel,
+                        ImageRecognitionFieldLabel,
+                    ),
+                ),
+            )) {
+                is ImageUnderstandingResult.Success -> {
+                    val insightPoints = imageInsightKeyPoints(result)
+                    val topicResult = runCatching {
+                        topicExtractor.extract(listOf(result.summary, result.extractedText).joinToString("\n"))
+                    }.getOrNull()
+                    updateDirtyState { current ->
+                        val generatedTitle = topicResult
+                            ?.suggestion
+                            ?.topic
+                            ?.let(::normalizeEditorTitle)
+                            .orEmpty()
+                        current.copy(
+                            content = imageContentWithUnderstanding(current.content, result),
+                            topic = generatedTitle.ifBlank { current.topic.ifBlank { "图片记录" } },
+                            topicSource = if (generatedTitle.isBlank()) current.topicSource else topicResult?.suggestion?.source ?: current.topicSource,
+                            topicEdited = current.topicEdited || generatedTitle.isNotBlank(),
+                            tags = appendCaptureTag(current.tags, "图片"),
+                            tagsEdited = true,
+                            aiSummary = result.summary,
+                            aiKeyPoints = insightPoints,
+                            isUnderstandingImage = false,
+                        )
+                    }
+                    _events.emit(NoteEditorEvent.Message("图片理解已完成"))
+                }
+                is ImageUnderstandingResult.Failure -> {
+                    updateDirtyState { current ->
+                        val contentWithSections = ensureEditorCaptureSections(
+                            content = current.content,
+                            sectionLabels = listOf(ImageRecognitionFieldLabel),
+                        )
+                        current.copy(
+                            content = replaceEditorCaptureField(
+                                contentWithSections,
+                                ImageRecognitionFieldLabel,
+                                "识别失败：${result.message}",
+                            ),
+                            isUnderstandingImage = false,
                         )
                     }
                     _events.emit(NoteEditorEvent.Message(result.message))
@@ -985,6 +1290,17 @@ class NoteEditorViewModel(
         return "$providerLabel 已完成转写（${seconds}s）"
     }
 
+    private fun imageInsightKeyPoints(result: ImageUnderstandingResult.Success): List<String> =
+        buildList {
+            result.objects.forEach { add(it) }
+            if (result.extractedText.isNotBlank()) {
+                add("识别文字：${result.extractedText.take(72)}")
+            }
+            if (result.imageType.isNotBlank()) {
+                add("图片类型：${result.imageType}")
+            }
+        }.distinct().take(4)
+
 
 
 
@@ -995,6 +1311,8 @@ class NoteEditorViewModel(
             topicExtractor: TopicExtractor,
             noteInsightPlanner: NoteInsightPlanner,
             voiceTranscriptionPlanner: VoiceTranscriptionPlanner,
+            articleContentExtractor: ArticleContentExtractor,
+            imageUnderstandingPlanner: ImageUnderstandingPlanner,
             noteId: Long?,
             initialContent: String,
             initialTopic: String,
@@ -1009,6 +1327,8 @@ class NoteEditorViewModel(
                     topicExtractor = topicExtractor,
                     noteInsightPlanner = noteInsightPlanner,
                     voiceTranscriptionPlanner = voiceTranscriptionPlanner,
+                    articleContentExtractor = articleContentExtractor,
+                    imageUnderstandingPlanner = imageUnderstandingPlanner,
                     noteId = noteId,
                     initialContent = initialContent,
                     initialTopic = initialTopic,

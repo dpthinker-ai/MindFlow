@@ -22,11 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -35,16 +37,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.mindflow.app.ui.theme.Accent
-import com.mindflow.app.ui.theme.AccentBlue
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.Cream
-import com.mindflow.app.ui.theme.CreamMid
-import com.mindflow.app.ui.theme.MintWash
-import com.mindflow.app.ui.theme.PanelBlue
-import com.mindflow.app.ui.theme.TextMain
-import com.mindflow.app.ui.theme.TextSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 
 internal val PanelShape = RoundedCornerShape(18.dp)
 internal val CardShape = RoundedCornerShape(14.dp)
@@ -64,9 +56,12 @@ fun ScreenBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Cream),
-        content = content,
-    )
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+            content()
+        }
+    }
 }
 
 @Composable
@@ -75,10 +70,10 @@ fun PanelCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
-        color = WhiteGlass,
+        color = MaterialTheme.colorScheme.surface,
         shape = PanelShape,
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -98,16 +93,16 @@ fun InsightChip(
     tone: InsightTone = InsightTone.Primary,
 ) {
     val containerColor = when (tone) {
-        InsightTone.Primary -> PanelBlue
-        InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.86f)
+        InsightTone.Primary -> MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        InsightTone.Neutral -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
     }
     val borderColor = when (tone) {
-        InsightTone.Primary -> AccentBlue.copy(alpha = 0.18f)
-        InsightTone.Neutral -> BorderSoft.copy(alpha = 0.8f)
+        InsightTone.Primary -> MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+        InsightTone.Neutral -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
     }
     val contentColor = when (tone) {
-        InsightTone.Primary -> Accent
-        InsightTone.Neutral -> TextSoft
+        InsightTone.Primary -> MaterialTheme.colorScheme.primary
+        InsightTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
         modifier = modifier,
@@ -134,18 +129,18 @@ fun InsightBlock(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val containerColor = when (tone) {
-        InsightTone.Primary -> MintWash
-        InsightTone.Neutral -> WhiteGlass.copy(alpha = 0.8f)
+        InsightTone.Primary -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f)
+        InsightTone.Neutral -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
     }
     val borderColor = when (tone) {
-        InsightTone.Primary -> AccentBlue.copy(alpha = 0.16f)
-        InsightTone.Neutral -> BorderSoft.copy(alpha = 0.84f)
+        InsightTone.Primary -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+        InsightTone.Neutral -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)
     }
     Surface(
         color = containerColor,
         shape = CardShape,
         border = BorderStroke(1.dp, borderColor),
-        shadowElevation = if (tone == InsightTone.Primary) 2.dp else 0.dp,
+        shadowElevation = 0.dp,
         modifier = modifier,
     ) {
         Column(
@@ -182,14 +177,14 @@ fun InsightLine(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextSoft,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = text,
             style = if (emphasize) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-            color = TextMain,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
         )
@@ -219,14 +214,14 @@ fun ScreenHeader(
                 Text(
                     text = kicker,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -234,7 +229,7 @@ fun ScreenHeader(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -265,14 +260,14 @@ fun SectionHeader(
                 Text(
                     text = kicker,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSoft,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = TextMain,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -281,7 +276,7 @@ fun SectionHeader(
             Text(
                 text = headline,
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
@@ -304,13 +299,18 @@ fun MetricTile(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    accent: Color = TextMain,
+    accent: Color = Color.Unspecified,
 ) {
+    val effectiveAccent = if (accent == Color.Unspecified) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        accent
+    }
     Surface(
-        color = WhiteGlass.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f),
         shape = CardShape,
         modifier = modifier.heightIn(min = 56.dp),
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.64f)),
         shadowElevation = 0.dp,
     ) {
         Column(
@@ -320,14 +320,14 @@ fun MetricTile(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSoft,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = accent,
+                color = effectiveAccent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -338,21 +338,23 @@ fun MetricTile(
 @Composable
 fun NeonProgress(
     progress: Float,
-    startColor: Color = Accent,
-    endColor: Color = AccentBlue,
+    startColor: Color? = null,
+    endColor: Color? = null,
 ) {
+    val effectiveStartColor = startColor ?: MaterialTheme.colorScheme.primary
+    val effectiveEndColor = endColor ?: MaterialTheme.colorScheme.secondary
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(6.dp)
-            .background(Color(0x120F172A), RoundedCornerShape(999.dp)),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), RoundedCornerShape(999.dp)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(6.dp)
                 .background(
-                    Brush.horizontalGradient(listOf(startColor, endColor)),
+                    Brush.horizontalGradient(listOf(effectiveStartColor, effectiveEndColor)),
                     RoundedCornerShape(999.dp),
                 ),
         )
@@ -373,11 +375,11 @@ fun ActionButton(
         modifier = modifier.heightIn(min = 46.dp),
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Accent,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 1.dp,
+            defaultElevation = 0.dp,
             pressedElevation = 0.dp,
             disabledElevation = 0.dp,
         ),
@@ -404,10 +406,10 @@ fun GhostActionButton(
         enabled = enabled,
         modifier = modifier.heightIn(min = 46.dp),
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, Accent.copy(alpha = 0.24f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = WhiteGlass,
-            contentColor = Accent,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
     ) {
@@ -425,14 +427,15 @@ fun IconPillButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = AccentBlue,
+    accent: Color? = null,
 ) {
+    val effectiveAccent = accent ?: MaterialTheme.colorScheme.primary
     Surface(
         modifier = modifier,
-        color = PanelBlue,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSoft),
-        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
+        shadowElevation = 0.dp,
         onClick = onClick,
     ) {
         Box(
@@ -442,7 +445,7 @@ fun IconPillButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = accent,
+                tint = effectiveAccent,
             )
         }
     }

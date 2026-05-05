@@ -33,8 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
-import com.mindflow.app.ui.theme.BorderSoft
-import com.mindflow.app.ui.theme.WhiteGlass
 import kotlinx.coroutines.launch
 
 /**
@@ -53,9 +51,9 @@ fun SkillWebViewCardHost(
     val scope = rememberCoroutineScope()
 
     Surface(
-        color = WhiteGlass.copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, BorderSoft),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.fillMaxWidth(),
     ) {
         Box {
@@ -68,9 +66,9 @@ fun SkillWebViewCardHost(
             )
 
             Surface(
-                color = WhiteGlass.copy(alpha = 0.9f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                 shape = MaterialTheme.shapes.medium,
-                border = BorderStroke(1.dp, BorderSoft),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp),
