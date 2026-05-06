@@ -140,6 +140,7 @@ dependencies {
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

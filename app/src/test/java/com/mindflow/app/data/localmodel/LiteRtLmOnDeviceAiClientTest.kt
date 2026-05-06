@@ -35,6 +35,18 @@ class LiteRtLmOnDeviceAiClientTest {
     }
 
     @Test
+    fun buildTextEngineConfig_enablesVisionBackendForImageInput() {
+        val config = buildLiteRtLmTextEngineConfig(
+            modelPath = "/models/gemma-4-E4B-it.litertlm",
+            backend = Backend.GPU(),
+            visionBackend = Backend.GPU(),
+            maxNumTokens = 2048,
+        )
+
+        assertThat(config.visionBackend).isInstanceOf(Backend.GPU::class.java)
+    }
+
+    @Test
     fun textBackendCandidates_useOnlyCpuOnEmulator() {
         val candidates = liteRtLmTextBackendCandidates(
             deviceProfile = LocalInferenceDeviceProfile(
@@ -67,6 +79,34 @@ class LiteRtLmOnDeviceAiClientTest {
         )
 
         assertThat(candidates.map { it.first }).containsExactly("gpu", "npu", "cpu").inOrder()
+    }
+
+    @Test
+    fun imageBackendCandidates_useGalleryStyleVisionPathOnPhysicalDevice() {
+        val candidates = liteRtLmImageBackendCandidates(
+            deviceProfile = LocalInferenceDeviceProfile(
+                fingerprint = "HONOR/MEP-AN00/HNMEP:16/HONORMEP/6.0.0.1:user/release-keys",
+                model = "MEP-AN00",
+                manufacturer = "HONOR",
+                brand = "HONOR",
+                device = "HNMEP",
+                product = "MEP-AN00",
+                hardware = "qcom",
+            )
+        )
+
+        assertThat(candidates.map { it.name }).containsExactly("gpu", "cpu").inOrder()
+        assertThat(candidates.map { it.visionBackend::class.java })
+            .containsExactly(Backend.GPU::class.java, Backend.CPU::class.java)
+            .inOrder()
+    }
+
+    @Test
+    fun imageSampleSizeMatchesEdgeGalleryAskImageDecodePolicy() {
+        assertThat(calculateLiteRtLmImageSampleSize(width = 4000, height = 3000)).isEqualTo(4)
+        assertThat(calculateLiteRtLmImageSampleSize(width = 3000, height = 4000)).isEqualTo(4)
+        assertThat(calculateLiteRtLmImageSampleSize(width = 1600, height = 900)).isEqualTo(2)
+        assertThat(calculateLiteRtLmImageSampleSize(width = 1024, height = 768)).isEqualTo(1)
     }
 
     @Test

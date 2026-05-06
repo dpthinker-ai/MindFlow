@@ -68,10 +68,9 @@ object GemmaTaskPromptFactory {
 
     fun understandImage(imagePath: String, userNote: String): String = """
         你在做 MindFlow 本地端侧图片理解。
-        输入是用户保存在设备私有目录中的图片文件，不要上传，不要假设云端可用。
-        目标：根据图片类型选择场景总结、文字提取、图表解释或对象识别。
+        图片已作为图像输入提供，不要根据文件路径猜测内容，不要上传，不要假设云端可用。
+        目标：先观察图片中真实可见的内容，再根据图片类型选择场景总结、文字提取、图表解释或对象识别。
         只返回 JSON：{"summary":"...","imageType":"photo|document|whiteboard|chart|screenshot|other","extractedText":"...","objects":["..."],"confidence":0.0}
-        图片文件：$imagePath
         用户补充：$userNote
     """.trimIndent()
 

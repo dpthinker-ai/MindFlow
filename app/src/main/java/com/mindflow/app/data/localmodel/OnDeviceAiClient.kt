@@ -1,7 +1,11 @@
 package com.mindflow.app.data.localmodel
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.os.Build
+import androidx.exifinterface.media.ExifInterface
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -15,6 +19,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatOnDeviceTraceEvent
 import com.mindflow.app.data.topic.AiChatResult
 import com.mindflow.app.data.topic.AiConnectionResult
 import com.mindflow.app.data.topic.AiFailureReason
+import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -25,10 +30,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 internal const val LITERT_LM_DEFAULT_RUNTIME_MAX_TOKENS = 2048
 internal const val LITERT_LM_EMULATOR_RUNTIME_MAX_TOKENS = 512
 internal const val LITERT_LM_EMULATOR_UNSAFE_MODEL_BYTES = 2L * 1024L * 1024L * 1024L
+internal const val LITERT_LM_IMAGE_MAX_SIDE = 1024
 
 interface OnDeviceAiClient {
     suspend fun testModel(settings: OnDeviceModelSettings): AiConnectionResult
@@ -69,7 +77,14 @@ class LiteRtLmOnDeviceAiClient(
         val modelPath: String,
         val backendName: String,
         val audioEnabled: Boolean,
+        val imageEnabled: Boolean,
         val engine: Engine,
+    )
+
+    private data class LiteRtLmEngineBackend(
+        val name: String,
+        val backend: Backend,
+        val visionBackend: Backend? = null,
     )
 
     private val engineMutex = Mutex()
@@ -255,7 +270,11 @@ class LiteRtLmOnDeviceAiClient(
         settings: OnDeviceModelSettings,
         imagePath: String,
         userNote: String,
-    ): AiChatResult = mediaPipelineNotReady("图片理解")
+    ): AiChatResult = runImagePrompt(
+        settings = settings,
+        imagePath = imagePath,
+        prompt = GemmaTaskPromptFactory.understandImage(imagePath, userNote),
+    )
 
     override suspend fun extractConceptGraphConcepts(
         settings: OnDeviceModelSettings,
@@ -321,12 +340,6 @@ class LiteRtLmOnDeviceAiClient(
         }
     }
 
-    private fun mediaPipelineNotReady(feature: String): AiChatResult =
-        AiChatResult.Failure(
-            reason = AiFailureReason.OTHER,
-            message = "$feature 接口已定义，等待 Gemma 4 端侧媒体管线接入后启用",
-        )
-
     private suspend fun runAudioPrompt(
         settings: OnDeviceModelSettings,
         audioPath: String,
@@ -387,6 +400,94 @@ class LiteRtLmOnDeviceAiClient(
                     )
                 },
             )
+        }
+    }
+
+    private suspend fun runImagePrompt(
+        settings: OnDeviceModelSettings,
+        imagePath: String,
+        prompt: String,
+    ): AiChatResult = withContext(Dispatchers.IO) {
+        val modelPath = settings.localModelPath.takeIf { it.isNotBlank() && File(it).exists() }
+            ?: return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.CONFIG,
+                message = "本地模型还没准备好",
+            )
+        val imageFile = File(imagePath.trim())
+        if (!imageFile.exists() || !imageFile.isFile || imageFile.length() <= 0L) {
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.CONFIG,
+                message = "图片文件不存在，无法识别",
+            )
+        }
+        liteRtLmRuntimeSafetyFailureMessage(File(modelPath))?.let { message ->
+            return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.OTHER,
+                message = message,
+            )
+        }
+        val imageBytes = decodeImageAsPngBytes(imageFile)
+            ?: return@withContext AiChatResult.Failure(
+                reason = AiFailureReason.CONFIG,
+                message = "图片解码失败，请换一张常见格式图片重试",
+            )
+
+        engineMutex.withLock {
+            runCatching {
+                sendImagePrompt(
+                    modelPath = modelPath,
+                    imageBytes = imageBytes,
+                    prompt = prompt,
+                )
+            }.recoverCatching { error ->
+                if (!shouldRetryOnCpu(error)) throw error
+                invalidateEngine()
+                sendImagePrompt(
+                    modelPath = modelPath,
+                    imageBytes = imageBytes,
+                    prompt = prompt,
+                    forcedBackendName = "cpu",
+                )
+            }.fold(
+                onSuccess = { content ->
+                    if (content.isBlank()) {
+                        AiChatResult.Failure(
+                            reason = AiFailureReason.OTHER,
+                            message = "Gemma 4 没有返回可用图片理解内容",
+                        )
+                    } else {
+                        AiChatResult.Success(content = content)
+                    }
+                },
+                onFailure = { error ->
+                    AiChatResult.Failure(
+                        reason = AiFailureReason.OTHER,
+                        message = "端侧图片理解失败：${error.message ?: "请确认当前模型和运行时支持图片输入"}",
+                    )
+                },
+            )
+        }
+    }
+
+    private fun sendImagePrompt(
+        modelPath: String,
+        imageBytes: ByteArray,
+        prompt: String,
+        forcedBackendName: String? = null,
+    ): String {
+        val cachedEngine = acquireEngine(
+            modelPath = modelPath,
+            forcedBackendName = forcedBackendName,
+            imageEnabled = true,
+        )
+        return cachedEngine.engine.createConversation(defaultConversationConfig()).use { conversation ->
+            conversation.sendMessage(
+                Contents.of(
+                    Content.ImageBytes(imageBytes),
+                    Content.Text(prompt),
+                ),
+                emptyMap(),
+            ).toString().trim()
         }
     }
 
@@ -564,13 +665,15 @@ class LiteRtLmOnDeviceAiClient(
         modelPath: String,
         forcedBackendName: String? = null,
         audioEnabled: Boolean = false,
+        imageEnabled: Boolean = false,
         trace: ((ReviewChatOnDeviceTraceEvent) -> Unit)? = null,
     ): CachedEngine {
         cachedEngine
             ?.takeIf {
                 it.modelPath == modelPath &&
                     (forcedBackendName == null || it.backendName == forcedBackendName) &&
-                    (!audioEnabled || it.audioEnabled)
+                    (!audioEnabled || it.audioEnabled) &&
+                    (!imageEnabled || it.imageEnabled)
             }
             ?.let { cached ->
                 trace?.invoke(
@@ -587,11 +690,11 @@ class LiteRtLmOnDeviceAiClient(
         deleteLegacyLiteRtLmDiskCache(legacyDiskCacheDir)
 
         var lastError: Throwable? = null
-        for ((backendName, backend) in backendCandidates(forcedBackendName)) {
+        for (candidate in backendCandidates(forcedBackendName, imageEnabled)) {
             val startedAt = monotonicNow()
             trace?.invoke(
                 ReviewChatOnDeviceTraceEvent.ModelLoadStarted(
-                    backendName = backendName,
+                    backendName = candidate.name,
                     cached = false,
                 )
             )
@@ -599,7 +702,8 @@ class LiteRtLmOnDeviceAiClient(
                 val engine = Engine(
                     buildLiteRtLmTextEngineConfig(
                         modelPath = modelPath,
-                        backend = backend,
+                        backend = candidate.backend,
+                        visionBackend = candidate.visionBackend,
                         audioEnabled = audioEnabled,
                         maxNumTokens = liteRtLmRuntimeMaxTokens(),
                     )
@@ -607,14 +711,15 @@ class LiteRtLmOnDeviceAiClient(
                 engine.initialize()
                 val cached = CachedEngine(
                     modelPath = modelPath,
-                    backendName = backendName,
+                    backendName = candidate.name,
                     audioEnabled = audioEnabled,
+                    imageEnabled = imageEnabled,
                     engine = engine,
                 )
                 cachedEngine = cached
                 trace?.invoke(
                     ReviewChatOnDeviceTraceEvent.ModelLoadFinished(
-                        backendName = backendName,
+                        backendName = candidate.name,
                         durationMs = elapsedMs(startedAt),
                         cached = false,
                     )
@@ -624,7 +729,7 @@ class LiteRtLmOnDeviceAiClient(
                 lastError = error
                 trace?.invoke(
                     ReviewChatOnDeviceTraceEvent.ModelLoadFailed(
-                        backendName = backendName,
+                        backendName = candidate.name,
                         durationMs = elapsedMs(startedAt),
                         message = error.message ?: "初始化失败",
                     )
@@ -641,9 +746,25 @@ class LiteRtLmOnDeviceAiClient(
 
     private fun backendCandidates(
         forcedBackendName: String? = null,
-    ): List<Pair<String, Backend>> = liteRtLmTextBackendCandidates(forcedBackendName)
+        imageEnabled: Boolean = false,
+    ): List<LiteRtLmEngineBackend> =
+        if (imageEnabled) {
+            liteRtLmImageBackendCandidates(forcedBackendName).map { candidate ->
+                LiteRtLmEngineBackend(
+                    name = candidate.name,
+                    backend = candidate.backend,
+                    visionBackend = candidate.visionBackend,
+                )
+            }
+        } else {
+            liteRtLmTextBackendCandidates(forcedBackendName).map { (name, backend) ->
+                LiteRtLmEngineBackend(name = name, backend = backend)
+            }
+        }
 
-    private fun shouldRetryReviewChatOnCpu(error: Throwable): Boolean {
+    private fun shouldRetryReviewChatOnCpu(error: Throwable): Boolean = shouldRetryOnCpu(error)
+
+    private fun shouldRetryOnCpu(error: Throwable): Boolean {
         val message = error.message.orEmpty().lowercase()
         return listOf(
             "opencl",
@@ -692,14 +813,22 @@ class LiteRtLmOnDeviceAiClient(
 internal fun buildLiteRtLmTextEngineConfig(
     modelPath: String,
     backend: Backend,
+    visionBackend: Backend? = null,
     audioEnabled: Boolean = false,
     maxNumTokens: Int,
 ): EngineConfig = EngineConfig(
     modelPath = modelPath,
     backend = backend,
+    visionBackend = visionBackend,
     audioBackend = if (audioEnabled) Backend.CPU() else null,
     maxNumTokens = maxNumTokens,
     cacheDir = null,
+)
+
+internal data class LiteRtLmImageBackendCandidate(
+    val name: String,
+    val backend: Backend,
+    val visionBackend: Backend,
 )
 
 internal fun deleteLegacyLiteRtLmDiskCache(cacheDir: File): Boolean =
@@ -761,6 +890,107 @@ internal fun liteRtLmTextBackendCandidates(
         )
     }
     return if (forcedBackendName == null) candidates else candidates.filter { it.first == forcedBackendName }
+}
+
+internal fun liteRtLmImageBackendCandidates(
+    forcedBackendName: String? = null,
+    deviceProfile: LocalInferenceDeviceProfile = LocalInferenceDeviceProfile.current(),
+): List<LiteRtLmImageBackendCandidate> {
+    val candidates = if (deviceProfile.isEmulator()) {
+        listOf(
+            LiteRtLmImageBackendCandidate(
+                name = "cpu",
+                backend = Backend.CPU(1),
+                visionBackend = Backend.CPU(1),
+            )
+        )
+    } else {
+        listOf(
+            LiteRtLmImageBackendCandidate(
+                name = "gpu",
+                backend = Backend.GPU(),
+                visionBackend = Backend.GPU(),
+            ),
+            LiteRtLmImageBackendCandidate(
+                name = "cpu",
+                backend = Backend.CPU(),
+                visionBackend = Backend.CPU(),
+            ),
+        )
+    }
+    return if (forcedBackendName == null) candidates else candidates.filter { it.name == forcedBackendName }
+}
+
+internal fun calculateLiteRtLmImageSampleSize(
+    width: Int,
+    height: Int,
+    maxSide: Int = LITERT_LM_IMAGE_MAX_SIDE,
+): Int {
+    if (width <= 0 || height <= 0 || maxSide <= 0) return 1
+    var sampleSize = 1
+    if (height > maxSide || width > maxSide) {
+        val heightRatio = (height.toFloat() / maxSide.toFloat()).roundToInt()
+        val widthRatio = (width.toFloat() / maxSide.toFloat()).roundToInt()
+        sampleSize = max(heightRatio, widthRatio).coerceAtLeast(1)
+    }
+    return sampleSize
+}
+
+private fun decodeImageAsPngBytes(
+    imageFile: File,
+    maxSide: Int = LITERT_LM_IMAGE_MAX_SIDE,
+): ByteArray? {
+    val orientation = runCatching {
+        ExifInterface(imageFile.absolutePath).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL,
+        )
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeFile(imageFile.absolutePath, bounds)
+    val sampleSize = calculateLiteRtLmImageSampleSize(
+        width = bounds.outWidth,
+        height = bounds.outHeight,
+        maxSide = maxSide,
+    )
+    val bitmap = BitmapFactory.decodeFile(
+        imageFile.absolutePath,
+        BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        },
+    ) ?: return null
+    val normalized = bitmap.rotateForExifOrientation(orientation)
+    return ByteArrayOutputStream().use { output ->
+        val compressed = normalized.compress(Bitmap.CompressFormat.PNG, 100, output)
+        if (normalized !== bitmap) normalized.recycle()
+        bitmap.recycle()
+        if (!compressed) return null
+        output.toByteArray()
+    }
+}
+
+private fun Bitmap.rotateForExifOrientation(orientation: Int): Bitmap {
+    val matrix = Matrix()
+    when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1.0f, 1.0f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1.0f, -1.0f)
+        ExifInterface.ORIENTATION_TRANSPOSE -> {
+            matrix.postRotate(90f)
+            matrix.preScale(-1.0f, 1.0f)
+        }
+        ExifInterface.ORIENTATION_TRANSVERSE -> {
+            matrix.postRotate(270f)
+            matrix.preScale(-1.0f, 1.0f)
+        }
+        ExifInterface.ORIENTATION_NORMAL -> return this
+        else -> return this
+    }
+    return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
 }
 
 internal fun LocalInferenceDeviceProfile.isEmulator(): Boolean {

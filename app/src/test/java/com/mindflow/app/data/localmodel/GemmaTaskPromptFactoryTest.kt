@@ -50,7 +50,8 @@ class GemmaTaskPromptFactoryTest {
             imagePath = "/private/image.jpg",
             userNote = "会议白板",
         )
-        assertThat(imagePrompt).contains("图片文件")
+        assertThat(imagePrompt).contains("图片已作为图像输入提供")
+        assertThat(imagePrompt).doesNotContain("/private/image.jpg")
         assertThat(imagePrompt).contains("根据图片类型选择")
         assertThat(imagePrompt).contains("extractedText")
         assertThat(imagePrompt).contains("objects")
