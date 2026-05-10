@@ -66,13 +66,6 @@ interface OnDeviceAiClient {
 class LiteRtLmOnDeviceAiClient(
     private val context: Context,
 ) : OnDeviceAiClient {
-    private companion object {
-        // Gemma 4 E4B supports a much larger architectural context window.
-        // This value is the mobile runtime budget we hand to LiteRT for
-        // input + output tokens, not the model card maximum.
-        const val RUNTIME_MAX_TOKENS = LITERT_LM_DEFAULT_RUNTIME_MAX_TOKENS
-    }
-
     private data class CachedEngine(
         val modelPath: String,
         val backendName: String,
@@ -273,7 +266,7 @@ class LiteRtLmOnDeviceAiClient(
     ): AiChatResult = runImagePrompt(
         settings = settings,
         imagePath = imagePath,
-        prompt = GemmaTaskPromptFactory.understandImage(imagePath, userNote),
+        prompt = GemmaTaskPromptFactory.understandImage(userNote),
     )
 
     override suspend fun extractConceptGraphConcepts(

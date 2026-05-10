@@ -2,6 +2,8 @@ package com.mindflow.app.ui.screens.flow
 
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
+import com.mindflow.app.ui.components.compactRecordPreviewText
+import com.mindflow.app.ui.components.compactRecordTitleText
 
 data class TodayDesignModel(
     val heroTitle: String,
@@ -116,11 +118,22 @@ fun FlowUiState.toTodayDesignModel(
         review = TodayReviewModel(
             title = "今日回看",
             description = latestSavedConversationSummary
-                ?.let { "${it.title}：${it.latestExcerpt}".cleanTodayVisibleText().asTodayDesignPreview(72) }
+                ?.toTodayReviewDescription()
                 ?: "打开回看历史，手动选择一个问题再继续",
             savedSessionId = latestSavedConversationSummary?.sessionId,
         ),
     )
+}
+
+private fun SavedReviewChatSessionSummary.toTodayReviewDescription(): String {
+    val titleText = title.cleanTodayVisibleText()
+    val excerptText = latestExcerpt.cleanTodayVisibleText()
+    val combined = when {
+        titleText.isBlank() -> excerptText
+        excerptText.isBlank() || excerptText == titleText -> titleText
+        else -> "$titleText：$excerptText"
+    }
+    return combined.asTodayDesignPreview(72)
 }
 
 fun TodayDesignModel.taskDetailFor(threadKey: String): TodayTaskDetailModel? {
@@ -195,17 +208,19 @@ private fun FlowUiState.buildTodayFocusModel(
     val direction = surface.threadDirection
     val judgement = localMaintainerSnapshot.currentJudgement
     val candidateTitle = mainlineCandidate?.title?.trim()
+    val continueTitle = continueNote?.compactRecordTitleText()?.takeIf { it.isNotBlank() }
+    val continueSummary = continueNote?.compactRecordPreviewText()?.cleanTodayVisibleText()?.takeIf { it.isNotBlank() }
     val title = candidateTitle?.takeIf { it.isNotBlank() && !it.isBroadTodayBucket() }
         ?: direction?.todayDisplayTitle()?.takeIf { it.isNotBlank() }
         ?: candidateTitle?.takeIf { it.isNotBlank() }
-        ?: continueNote?.topic?.takeIf { it.isNotBlank() }
+        ?: continueTitle
         ?: judgement.anchorLabel.takeIf { it.isNotBlank() }
         ?: "等待新的可推进方向"
     val summary = mainlineCandidate?.summary?.takeIf { it.isNotBlank() }
         ?: direction?.summary?.takeIf { it.isNotBlank() }
         ?: knowledgeCompression.mainline.takeIf { it.isNotBlank() }
         ?: judgement.line.takeIf { it.isNotBlank() }
-        ?: continueNote?.content?.asTodayDesignPreview(88)
+        ?: continueSummary?.asTodayDesignPreview(88)
         ?: "继续记录，AI 会自动识别今天值得推进的方向。"
     val nextStep = nextActionText.takeIf { it.isNotBlank() }
         ?: mainlineCandidate?.nextStep?.takeIf { it.isNotBlank() }
@@ -411,9 +426,11 @@ private fun FollowedDirectionSummary.todayDisplayTitle(): String {
 
 private fun FollowedDirectionSummary.todaySourceLabel(): String {
     val threadTitle = thread.title.trim()
+    val sourceSummary = thread.summary.trim()
     return when {
         threadTitle.isBroadTodayBucket() -> "来自 $threadTitle"
-        thread.summary.isNotBlank() -> thread.summary.asTodayDesignPreview(28)
+        sourceSummary.isNotBlank() && !sourceSummary.looksLikeTodayCaptureMetadata() ->
+            sourceSummary.cleanTodayVisibleText().asTodayDesignPreview(28)
         else -> "来自相关记录"
     }
 }
@@ -451,4 +468,23 @@ private fun String.cleanTodayVisibleText(): String {
         .replace("[", "")
         .replace("]", "")
         .trim()
+}
+
+private fun String.looksLikeTodayCaptureMetadata(): Boolean {
+    val lower = lowercase()
+    return "/data/" in lower ||
+        "/storage/" in lower ||
+        "content://" in lower ||
+        "file://" in lower ||
+        "com.mindflow.app/files" in lower ||
+        ".m4a" in lower ||
+        ".wav" in lower ||
+        ".aac" in lower ||
+        ".jpg" in lower ||
+        ".jpeg" in lower ||
+        ".png" in lower ||
+        startsWith("原始录音：") ||
+        startsWith("原始录音:") ||
+        startsWith("图片：") ||
+        startsWith("图片:")
 }

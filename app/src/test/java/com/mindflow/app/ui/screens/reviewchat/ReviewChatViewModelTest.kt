@@ -109,6 +109,8 @@ class ReviewChatViewModelTest {
 
     @Test
     fun savedSeed_loadsSessionEditableWithoutCallingPlanner() = runTest(dispatcher) {
+        val rawTechnicalFailure =
+            "模拟器 CPU 内存不足，暂不在模拟器初始化 3GB+ Gemma 4 模型，避免 LiteRT native 崩溃；请在真机上测试本地模型，或换用更小的端侧模型。"
         val repository = FakeSavedConversationRepository().apply {
             seedSession(
                 SavedReviewChatSession(
@@ -124,7 +126,7 @@ class ReviewChatViewModelTest {
                         ),
                         ReviewChatMessage(
                             role = ReviewChatMessageRole.ASSISTANT,
-                            content = "核心判断是先收口再扩张。",
+                            content = rawTechnicalFailure,
                             provider = ReviewChatProvider.CLOUD,
                             createdAt = 1_100L,
                         ),
@@ -149,6 +151,8 @@ class ReviewChatViewModelTest {
         assertThat(state.isReadOnly).isFalse()
         assertThat(state.title).isEqualTo("上次回看")
         assertThat(state.messages).hasSize(2)
+        assertThat(state.messages.last().content).contains("端侧模型暂时没有完成回答")
+        assertThat(state.messages.last().content).doesNotContain("LiteRT")
     }
 
     @Test
@@ -435,6 +439,39 @@ class ReviewChatViewModelTest {
         assertThat(state.generationStatus).isEmpty()
         assertThat(state.messages.last().content).isEqualTo("端侧回答")
         assertThat(state.providerLine).isEqualTo("本次由端侧完成")
+    }
+
+    @Test
+    fun completeTurn_masksTechnicalOnDeviceFailureFromAssistantMessage() = runTest(dispatcher) {
+        val rawTechnicalFailure =
+            "模拟器 CPU 内存不足，暂不在模拟器初始化 3GB+ Gemma 4 模型，避免 LiteRT native 崩溃；请在真机上测试本地模型，或换用更小的端侧模型。"
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "我最近在关注什么？"),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Complete(
+                        ReviewChatTurnResult(
+                            answer = rawTechnicalFailure,
+                            provider = ReviewChatProvider.ON_DEVICE,
+                            fallbackOccurred = false,
+                            providerLine = "本次由端侧完成",
+                            sessionSummary = rawTechnicalFailure,
+                            titleSuggestion = "最近关注",
+                        )
+                    )
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.messages.last()
+        assertThat(assistant.content).contains("端侧模型暂时没有完成回答")
+        assertThat(assistant.content).doesNotContain("LiteRT")
+        assertThat(assistant.content).doesNotContain("native")
+        assertThat(assistant.content).doesNotContain("3GB")
+        assertThat(assistant.content).doesNotContain("CPU")
     }
 
     @Test

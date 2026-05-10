@@ -47,8 +47,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
@@ -859,7 +859,7 @@ private enum class CaptureType(
 ) {
     IDEA("想法", Icons.Outlined.AutoFixHigh),
     TASK("任务", Icons.Outlined.CheckCircle),
-    DOCUMENT("文档", Icons.Outlined.Article),
+    DOCUMENT("文档", Icons.AutoMirrored.Outlined.Article),
     SPARK("灵感", Icons.Outlined.Edit),
 }
 
@@ -3154,7 +3154,11 @@ private fun VoiceContentEditorMain(
         EditorFieldHeader(label = "标题") {}
         PaperField(
             value = titleValue,
-            onValueChange = onTopicChange,
+            onValueChange = { edited ->
+                if (edited != titleValue) {
+                    onTopicChange(edited)
+                }
+            },
             placeholder = if (uiState.isTranscribingVoice) {
                 "正在根据语音生成标题"
             } else {
@@ -3177,21 +3181,23 @@ private fun VoiceContentEditorMain(
             PaperField(
                 value = transcript,
                 onValueChange = { edited ->
-                    onContentChange(
-                        replaceCaptureField(
-                            content = uiState.content,
-                            label = VoiceTranscriptFieldLabel,
-                            value = edited,
-                        ),
+                    if (edited == transcript) return@PaperField
+                    val nextContent = replaceCaptureField(
+                        content = uiState.content,
+                        label = VoiceTranscriptFieldLabel,
+                        value = edited,
                     )
-            },
-            placeholder = if (uiState.isTranscribingVoice) {
-                "正在转写…"
-            } else if (extractCaptureField(uiState.content, VoiceAudioFieldLabel).isBlank()) {
-                "录音后，转写内容会显示在这里。"
-            } else {
-                "转写暂未完成，可先手动补充内容。"
-            },
+                    if (nextContent != uiState.content) {
+                        onContentChange(nextContent)
+                    }
+                },
+                placeholder = if (uiState.isTranscribingVoice) {
+                    "正在转写…"
+                } else if (extractCaptureField(uiState.content, VoiceAudioFieldLabel).isBlank()) {
+                    "录音后，转写内容会显示在这里。"
+                } else {
+                    "转写暂未完成，可先手动补充内容。"
+                },
                 modifier = Modifier.bringIntoViewRequester(contentBringIntoViewRequester),
                 minLines = voiceTranscriptEditorMinLines(transcript),
                 textStyle = MaterialTheme.typography.bodyMedium,
@@ -3608,12 +3614,29 @@ internal fun voiceTitleForDisplay(
     topic: String,
     topicSource: TopicSource,
     transcript: String,
-): String =
-    if (transcript.isBlank() && topicSource != TopicSource.MANUAL) {
+): String {
+    if (topic.isVoiceCaptureMetadataTitle()) return "语音记录"
+    return if (transcript.isBlank() && topicSource != TopicSource.MANUAL) {
         ""
     } else {
         topic
     }
+}
+
+internal fun String.isVoiceCaptureMetadataTitle(): Boolean {
+    val normalized = trim()
+    val lower = normalized.lowercase()
+    return normalized.startsWith("原始录音：") ||
+        normalized.startsWith("原始录音:") ||
+        "/data/" in lower ||
+        "/storage/" in lower ||
+        "content://" in lower ||
+        "file://" in lower ||
+        ".m4a" in lower ||
+        ".wav" in lower ||
+        ".aac" in lower ||
+        "com.mindflow.app/files" in lower
+}
 
 internal fun voiceAiInsightPendingText(
     transcript: String,
@@ -3799,7 +3822,7 @@ private fun ArticleSourceCard(model: ArticleCaptureModel) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Article,
+                    imageVector = Icons.AutoMirrored.Outlined.Article,
                     contentDescription = null,
                     tint = AccentBlue,
                 )
@@ -4139,7 +4162,8 @@ private fun FullEditorScreen(
     LaunchedEffect(contentReference.kind, uiState.content, uiState.isTranscribingVoice) {
         if (
             contentReference.kind == EditorContentKind.VOICE &&
-            shouldAttemptVoiceTranscription(
+            shouldAutoAttemptVoiceTranscription(
+                isNew = uiState.isNew,
                 content = uiState.content,
                 isTranscribingVoice = uiState.isTranscribingVoice,
             )

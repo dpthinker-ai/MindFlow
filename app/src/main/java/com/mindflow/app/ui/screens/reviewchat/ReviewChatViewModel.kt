@@ -126,7 +126,7 @@ class ReviewChatViewModel(
             _uiState.update {
                 it.copy(
                     title = restoredWorkingSessionTitle(session),
-                    messages = session.messages,
+                    messages = session.messages.toReviewChatDisplayMessages(),
                     draft = session.draft,
                     isReadOnly = false,
                     savedSessionId = session.sessionId,
@@ -151,7 +151,7 @@ class ReviewChatViewModel(
             _uiState.update {
                 it.copy(
                     title = session.title,
-                    messages = session.messages,
+                    messages = session.messages.toReviewChatDisplayMessages(),
                     isReadOnly = false,
                     savedSessionId = session.sessionId,
                     draft = session.draft,
@@ -250,6 +250,7 @@ class ReviewChatViewModel(
 
                         is ReviewChatTurnEvent.Complete -> {
                             val result = event.result
+                            val displayAnswer = result.answer.toReviewChatDisplayAnswer()
                             pendingQuestion = null
                             pendingPriorMessages = emptyList()
                             _uiState.update { state ->
@@ -259,7 +260,7 @@ class ReviewChatViewModel(
                                     },
                                     messages = state.messages + ReviewChatMessage(
                                         role = ReviewChatMessageRole.ASSISTANT,
-                                        content = result.answer,
+                                        content = displayAnswer,
                                         structuredAnswer = result.structuredAnswer,
                                         provider = result.provider,
                                         createdAt = System.currentTimeMillis(),
@@ -359,6 +360,25 @@ private fun buildReviewChatDisplayTitle(raw: String): String =
     raw.trim()
         .replace(Regex("\\s+"), " ")
         .take(18)
+
+private fun String.toReviewChatDisplayAnswer(): String {
+    val normalized = trim()
+    val lower = normalized.lowercase()
+    val looksLikeEmulatorCapacityFailure =
+        ("litert" in lower || "native" in lower || "3gb" in lower) &&
+            ("模拟器" in normalized || "CPU" in normalized || "内存不足" in normalized)
+    if (!looksLikeEmulatorCapacityFailure) return this
+    return "端侧模型暂时没有完成回答。你可以稍后重试，或在设置里切换到更轻量的端侧模型后再问。"
+}
+
+private fun List<ReviewChatMessage>.toReviewChatDisplayMessages(): List<ReviewChatMessage> =
+    map { message ->
+        if (message.role == ReviewChatMessageRole.ASSISTANT) {
+            message.copy(content = message.content.toReviewChatDisplayAnswer())
+        } else {
+            message
+        }
+    }
 
 private fun List<ReviewChatProgressStep>.recordStatus(
     event: ReviewChatTurnEvent.Status,

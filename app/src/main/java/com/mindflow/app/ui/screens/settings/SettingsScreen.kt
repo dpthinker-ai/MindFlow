@@ -831,8 +831,17 @@ private fun SettingsModeCard(
 
 private fun buildAiAutomationSummary(uiState: SettingsUiState): String {
     val model = if (uiState.localModelStatus == OnDeviceModelStatus.READY) "本地已就绪" else "模型未就绪"
-    val cloud = if (uiState.isConfigured && uiState.aiEnabled) "云端可用" else "云端未启用"
+    val cloud = if (uiState.isCloudAiUsable()) "云端可用" else "云端未启用"
     return "$model，$cloud"
+}
+
+internal fun SettingsUiState.isCloudAiUsable(): Boolean =
+    isConfigured && aiEnabled
+
+internal fun SettingsUiState.cloudAiSwitchDescription(): String = when {
+    !isConfigured -> "补全 API Key 并保存后，才能启用云端能力"
+    aiEnabled -> "会用于显式的云端升级、编辑整理和方向判断；不会静默上传本地维护任务"
+    else -> "关闭后只用本地模型和规则整理"
 }
 
 private fun buildAutomationSummary(uiState: SettingsUiState): String {
@@ -1637,8 +1646,8 @@ private fun AiSettingsScreen(
     )
     val isVerifiedForCurrentConfig = uiState.aiVerifiedFingerprint == currentFingerprint
     val verificationHeadline = when {
+        !uiState.isConfigured -> "未启用"
         !uiState.aiEnabled -> "已关闭"
-        !uiState.isConfigured -> "本地规则"
         isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess -> "已连通"
         isVerifiedForCurrentConfig && !uiState.aiLastVerifiedSuccess -> "检查失败"
         else -> "待验证"
@@ -1646,23 +1655,23 @@ private fun AiSettingsScreen(
 
     DetailScreenFrame(
         title = "云端 AI",
-        subtitle = if (uiState.aiEnabled) "显式云端升级、编辑整理与连接验证" else "当前只用本地模型",
+        subtitle = if (uiState.isCloudAiUsable()) "显式云端升级、编辑整理与连接验证" else "当前只用本地模型",
         onBack = onBack,
     ) {
         item {
             PanelCard {
                 SectionHeader(title = "当前状态", headline = verificationHeadline)
                 Text(
-                    text = if (!uiState.aiEnabled) {
-                        "AI 已关闭。"
+                    text = if (!uiState.isConfigured) {
+                        "补一个 ${uiState.aiProviderPreset.label} API Key 并保存后才能启用云端 AI。"
+                    } else if (!uiState.aiEnabled) {
+                        "云端 AI 已关闭。"
                     } else if (isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess) {
                         "最近验证 ${TimeFormatter.compact(uiState.aiLastVerifiedAt)}"
                     } else if (isVerifiedForCurrentConfig && uiState.aiLastVerificationMessage.isNotBlank()) {
                         uiState.aiLastVerificationMessage
-                    } else if (uiState.isConfigured) {
-                        "当前配置还没验证。"
                     } else {
-                        "补一个 ${uiState.aiProviderPreset.label} API Key 就能用。"
+                        "当前配置还没验证。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1693,14 +1702,15 @@ private fun AiSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("启用 AI", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = if (uiState.aiEnabled) "会用于显式的云端升级、编辑整理和方向判断；不会静默上传本地维护任务" else "关闭后只用本地模型和规则整理",
+                                text = uiState.cloudAiSwitchDescription(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(
-                            checked = uiState.aiEnabled,
+                            checked = uiState.isCloudAiUsable(),
                             onCheckedChange = onAiEnabledChange,
+                            enabled = uiState.isConfigured,
                         )
                     }
                 }

@@ -2,6 +2,7 @@ package com.mindflow.app
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 
 class EntryProxyActivity : Activity() {
@@ -28,6 +29,15 @@ class EntryProxyActivity : Activity() {
         }
         startActivity(targetIntent)
         finish()
-        overridePendingTransition(0, 0)
+        overrideCloseTransition()
+    }
+
+    private fun overrideCloseTransition() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 }

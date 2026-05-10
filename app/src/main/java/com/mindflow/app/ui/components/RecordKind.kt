@@ -43,7 +43,22 @@ fun NoteEntity.compactRecordPreviewText(): String {
         RecordKind.IMAGE -> captureField(content, "图片理解摘要")
             .ifBlank { captureField(content, "图像理解结果") }
             .ifBlank { captureField(content, "关键信息") }
-            .ifBlank { contentWithoutFields(content, setOf("图片", "识别信息")) }
+            .ifBlank {
+                contentWithoutFields(
+                    content,
+                    setOf(
+                        "图片",
+                        "识别信息",
+                        "补充说明",
+                        "图像理解结果",
+                        "关键信息",
+                        "关键信息提取",
+                        "结构化识别",
+                        "OCR 文本",
+                        "OCR 文本(可选)",
+                    ),
+                )
+            }
             .ifBlank { "图片已保存，等待理解" }
         RecordKind.LINK -> captureField(content, "正文")
             .ifBlank { captureField(content, "原始内容") }

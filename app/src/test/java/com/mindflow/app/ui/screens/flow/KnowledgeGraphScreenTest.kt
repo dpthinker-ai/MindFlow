@@ -17,6 +17,19 @@ import org.junit.Test
 
 class KnowledgeGraphScreenTest {
     @Test
+    fun `graph user labels use one product concept name`() {
+        assertThat(graphPanelTitle()).isEqualTo("概念图谱")
+        assertThat(emptyConceptGraphTitle()).isEqualTo("概念图谱")
+    }
+
+    @Test
+    fun `graph topic action copy matches actual open-record behavior`() {
+        assertThat(graphTopicActionTitle(hasRelatedNotes = true)).isEqualTo("从相关记录继续整理")
+        assertThat(graphTopicActionLabel(hasRelatedNotes = true)).isEqualTo("打开相关记录")
+        assertThat(graphTopicActionLabel(hasRelatedNotes = false)).isEqualTo("待补记录")
+    }
+
+    @Test
     fun `buildConceptGraphViewport uses snapshot default center`() {
         val snapshot = conceptSnapshot(
             defaultCenterNodeId = "learning",

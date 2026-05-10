@@ -3,6 +3,7 @@ package com.mindflow.app.ui.screens.flow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import com.mindflow.app.data.wiki.ConceptGraphNode
+import kotlin.math.sqrt
 
 internal data class WebGraphPayload(
     val version: Int = 1,
@@ -52,6 +53,48 @@ private val WebGraphCenterPosition = WebGraphPosition(
     xFraction = 0.5,
     yFraction = 0.5,
 )
+
+private const val GraphTapRadiusDp = 34f
+private const val EmphasizedGraphTapRadiusDp = 42f
+private const val ReturnGraphTapRadiusDp = 50f
+
+private fun webGraphTapRadiusDp(node: WebGraphNode): Float =
+    when {
+        node.isReturnNode -> ReturnGraphTapRadiusDp
+        node.emphasis >= 2 -> EmphasizedGraphTapRadiusDp
+        else -> GraphTapRadiusDp
+    }
+
+internal fun resolveWebGraphTapNodeId(
+    payload: WebGraphPayload,
+    tapX: Float,
+    tapY: Float,
+    viewportWidth: Float,
+    viewportHeight: Float,
+    density: Float,
+): String? {
+    if (viewportWidth <= 0f || viewportHeight <= 0f || payload.nodes.isEmpty()) return null
+    val densityScale = density.takeIf { it > 0f } ?: 1f
+    var bestNodeId: String? = null
+    var bestScore = Double.POSITIVE_INFINITY
+    var bestEmphasis = Int.MIN_VALUE
+    payload.nodes.forEach { node ->
+        val nodeX = (node.xFraction * viewportWidth).toFloat()
+        val nodeY = (node.yFraction * viewportHeight).toFloat()
+        val deltaX = nodeX - tapX
+        val deltaY = nodeY - tapY
+        val distance = sqrt(((deltaX * deltaX) + (deltaY * deltaY)).toDouble())
+        val radius = webGraphTapRadiusDp(node) * densityScale
+        if (distance > radius) return@forEach
+        val score = distance / radius
+        if (score < bestScore || (score == bestScore && node.emphasis > bestEmphasis)) {
+            bestNodeId = node.id
+            bestScore = score
+            bestEmphasis = node.emphasis
+        }
+    }
+    return bestNodeId
+}
 
 private fun Color.toWebHex(): String = String.format(
     "#%02X%02X%02X",

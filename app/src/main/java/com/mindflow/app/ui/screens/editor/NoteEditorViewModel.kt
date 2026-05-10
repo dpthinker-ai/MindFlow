@@ -243,6 +243,18 @@ internal fun shouldAttemptVoiceTranscription(
         !recognitionStatus.contains("无法转写")
 }
 
+internal fun shouldAutoAttemptVoiceTranscription(
+    isNew: Boolean,
+    content: String,
+    isTranscribingVoice: Boolean,
+    audioPathOverride: String = "",
+): Boolean =
+    isNew && shouldAttemptVoiceTranscription(
+        content = content,
+        isTranscribingVoice = isTranscribingVoice,
+        audioPathOverride = audioPathOverride,
+    )
+
 internal fun voiceKeyPointsFromContent(content: String): List<String> =
     extractEditorCaptureField(content, VoiceKeyInfoFieldLabel)
         .split("；", ";", "、")
@@ -392,6 +404,55 @@ private fun appendCaptureTag(
     }
 }
 
+internal data class EditorPersistedSnapshot(
+    val content: String = "",
+    val topic: String = "",
+    val folderKey: String? = null,
+    val tags: List<String> = emptyList(),
+    val status: NoteStatus = NoteStatus.IDEA,
+    val horizon: NoteHorizon = NoteHorizon.MEDIUM,
+    val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
+    val isArchived: Boolean = false,
+)
+
+internal fun NoteEntity.toEditorPersistedSnapshot(): EditorPersistedSnapshot =
+    EditorPersistedSnapshot(
+        content = content,
+        topic = topic,
+        folderKey = folderKey,
+        tags = tags,
+        status = status,
+        horizon = horizon,
+        knowledgeTrust = knowledgeTrust,
+        isArchived = isArchived,
+    )
+
+internal fun NoteEntity.withEditorDisplayFields(): NoteEntity =
+    if (content.hasVoiceCaptureAudio() && topic.isVoiceCaptureMetadataTitle()) {
+        copy(topic = "语音记录")
+    } else {
+        this
+    }
+
+private fun String.hasVoiceCaptureAudio(): Boolean =
+    lineSequence().any { line ->
+        val trimmed = line.trim()
+        trimmed.startsWith("$VoiceAudioFieldLabel：") || trimmed.startsWith("$VoiceAudioFieldLabel:")
+    }
+
+internal fun EditorPersistedSnapshot.hasUnsavedChanges(state: NoteEditorUiState): Boolean =
+    state.content != content ||
+        state.topic != topic ||
+        state.folderKey != folderKey ||
+        state.tags != tags ||
+        state.status != status ||
+        state.horizon != horizon ||
+        state.knowledgeTrust != knowledgeTrust ||
+        state.isArchived != isArchived ||
+        state.folderEdited ||
+        state.topicEdited ||
+        state.tagsEdited
+
 class NoteEditorViewModel(
     private val noteRepository: NoteRepository,
     private val contentPolishPlanner: ContentPolishPlanner,
@@ -407,18 +468,7 @@ class NoteEditorViewModel(
     private val initialTags: List<String>,
     private val initialKnowledgeTrust: KnowledgeTrust,
 ) : ViewModel() {
-    private data class PersistedSnapshot(
-        val content: String = "",
-        val topic: String = "",
-        val folderKey: String? = null,
-        val tags: List<String> = emptyList(),
-        val status: NoteStatus = NoteStatus.IDEA,
-        val horizon: NoteHorizon = NoteHorizon.MEDIUM,
-        val knowledgeTrust: KnowledgeTrust = KnowledgeTrust.NONE,
-        val isArchived: Boolean = false,
-    )
-
-    private var persistedSnapshot = PersistedSnapshot()
+    private var persistedSnapshot = EditorPersistedSnapshot()
 
     private val _uiState = MutableStateFlow(
         NoteEditorUiState(
@@ -457,6 +507,7 @@ class NoteEditorViewModel(
     }
 
     fun onContentChange(value: String) {
+        if (value == _uiState.value.content) return
         updateDirtyState {
             it.copy(
                 content = value,
@@ -469,6 +520,7 @@ class NoteEditorViewModel(
     }
 
     fun onTopicChange(value: String) {
+        if (value == _uiState.value.topic) return
         updateDirtyState { it.copy(topic = value, topicEdited = true) }
     }
 
@@ -1017,13 +1069,14 @@ class NoteEditorViewModel(
                     topicManuallyEdited = state.topicEdited,
                     tagsManuallyEdited = state.tagsEdited,
                 )
-                persistedSnapshot = PersistedSnapshot(
+                persistedSnapshot = EditorPersistedSnapshot(
                     content = state.content,
                     topic = state.topic,
                     folderKey = state.folderKey,
                     tags = state.tags,
                     status = state.status,
                     horizon = state.horizon,
+                    knowledgeTrust = state.knowledgeTrust,
                     isArchived = state.isArchived,
                 )
                 loadNote(existingId)
@@ -1129,34 +1182,26 @@ class NoteEditorViewModel(
                 return@launch
             }
 
-            persistedSnapshot = PersistedSnapshot(
-                content = note.content,
-                topic = note.topic,
-                folderKey = note.folderKey,
-                tags = note.tags,
-                status = note.status,
-                horizon = note.horizon,
-                knowledgeTrust = note.knowledgeTrust,
-                isArchived = note.isArchived,
-            )
+            val displayNote = note.withEditorDisplayFields()
+            persistedSnapshot = displayNote.toEditorPersistedSnapshot()
             _uiState.update {
                 it.copy(
                     isNew = false,
-                    noteId = note.id,
+                    noteId = displayNote.id,
                     isLoading = false,
-                    content = note.content,
-                    topic = note.topic,
-                    topicSource = note.topicSource,
-                    folderKey = note.folderKey,
-                    folderSource = note.folderSource,
-                    tags = note.tags,
-                    tagSource = note.tagSource,
-                    status = note.status,
-                    horizon = note.horizon,
-                    knowledgeTrust = note.knowledgeTrust,
-                    isArchived = note.isArchived,
-                    createdAt = note.createdAt,
-                    updatedAt = note.updatedAt,
+                    content = displayNote.content,
+                    topic = displayNote.topic,
+                    topicSource = displayNote.topicSource,
+                    folderKey = displayNote.folderKey,
+                    folderSource = displayNote.folderSource,
+                    tags = displayNote.tags,
+                    tagSource = displayNote.tagSource,
+                    status = displayNote.status,
+                    horizon = displayNote.horizon,
+                    knowledgeTrust = displayNote.knowledgeTrust,
+                    isArchived = displayNote.isArchived,
+                    createdAt = displayNote.createdAt,
+                    updatedAt = displayNote.updatedAt,
                     aiSummary = validAiSummary(note),
                     aiKeyPoints = validAiKeyPoints(note),
                     polishedOriginalContent = null,
@@ -1176,12 +1221,19 @@ class NoteEditorViewModel(
         val changed = noteRepository.ensureAiInsight(note.id)
         if (!changed) return
         val refreshed = noteRepository.getNote(note.id) ?: return
+        if (_uiState.value.noteId != note.id || _uiState.value.hasUnsavedChanges) return
+        val displayRefreshed = refreshed.withEditorDisplayFields()
+        persistedSnapshot = displayRefreshed.toEditorPersistedSnapshot()
         _uiState.update {
             it.copy(
-                topic = refreshed.topic,
-                topicSource = refreshed.topicSource,
-                aiSummary = validAiSummary(refreshed),
-                aiKeyPoints = validAiKeyPoints(refreshed),
+                topic = displayRefreshed.topic,
+                topicSource = displayRefreshed.topicSource,
+                aiSummary = validAiSummary(displayRefreshed),
+                aiKeyPoints = validAiKeyPoints(displayRefreshed),
+                folderEdited = false,
+                topicEdited = false,
+                tagsEdited = false,
+                hasUnsavedChanges = false,
             )
         }
     }
@@ -1202,7 +1254,7 @@ class NoteEditorViewModel(
             topicManuallyEdited = state.topicEdited,
             tagsManuallyEdited = state.tagsEdited,
         )
-        persistedSnapshot = PersistedSnapshot(
+        persistedSnapshot = EditorPersistedSnapshot(
             content = state.content,
             topic = state.topic,
             folderKey = state.folderKey,
@@ -1238,18 +1290,7 @@ class NoteEditorViewModel(
             note.aiInsightContentHash == NoteInsightPlanner.contentHash(note.content)
 
     private fun hasUnsavedChanges(): Boolean {
-        val state = _uiState.value
-        return state.content != persistedSnapshot.content ||
-            state.topic != persistedSnapshot.topic ||
-            state.folderKey != persistedSnapshot.folderKey ||
-            state.tags != persistedSnapshot.tags ||
-            state.status != persistedSnapshot.status ||
-            state.horizon != persistedSnapshot.horizon ||
-            state.knowledgeTrust != persistedSnapshot.knowledgeTrust ||
-            state.isArchived != persistedSnapshot.isArchived ||
-            state.folderEdited ||
-            state.topicEdited ||
-            state.tagsEdited
+        return persistedSnapshot.hasUnsavedChanges(_uiState.value)
     }
 
     private fun updateDirtyState(
@@ -1258,17 +1299,7 @@ class NoteEditorViewModel(
         _uiState.update { current ->
             val next = transform(current)
             next.copy(
-                hasUnsavedChanges = next.content != persistedSnapshot.content ||
-                    next.topic != persistedSnapshot.topic ||
-                    next.folderKey != persistedSnapshot.folderKey ||
-                    next.tags != persistedSnapshot.tags ||
-                    next.status != persistedSnapshot.status ||
-                    next.horizon != persistedSnapshot.horizon ||
-                    next.knowledgeTrust != persistedSnapshot.knowledgeTrust ||
-                    next.isArchived != persistedSnapshot.isArchived ||
-                    next.folderEdited ||
-                    next.topicEdited ||
-                    next.tagsEdited,
+                hasUnsavedChanges = persistedSnapshot.hasUnsavedChanges(next),
             )
         }
     }

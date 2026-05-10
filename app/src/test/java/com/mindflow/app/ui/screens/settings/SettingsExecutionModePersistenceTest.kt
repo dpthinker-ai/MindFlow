@@ -24,6 +24,19 @@ class SettingsExecutionModePersistenceTest {
         assertThat(repository.savedStates.single().executionMode).isEqualTo(AiExecutionMode.ON_DEVICE_ONLY)
     }
 
+    @Test
+    fun cloudAiUsableRequiresEnabledAndConfigured() {
+        assertThat(SettingsUiState(aiEnabled = true, isConfigured = false).isCloudAiUsable()).isFalse()
+        assertThat(SettingsUiState(aiEnabled = false, isConfigured = true).isCloudAiUsable()).isFalse()
+        assertThat(SettingsUiState(aiEnabled = true, isConfigured = true).isCloudAiUsable()).isTrue()
+    }
+
+    @Test
+    fun cloudAiSwitchDescriptionDoesNotPretendCloudWorksWithoutKey() {
+        assertThat(SettingsUiState(aiEnabled = true, isConfigured = false).cloudAiSwitchDescription())
+            .isEqualTo("补全 API Key 并保存后，才能启用云端能力")
+    }
+
     private class FakeOnDeviceModelSettingsRepository : OnDeviceModelSettingsRepository {
         private val flow = MutableStateFlow(OnDeviceModelSettings())
         val savedStates = mutableListOf<OnDeviceModelSettings>()

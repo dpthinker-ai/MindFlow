@@ -2,6 +2,13 @@ package com.mindflow.app.ui.screens.flow
 
 import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.connect.ThemeThread
+import com.mindflow.app.data.local.entity.NoteEntity
+import com.mindflow.app.data.model.FolderSource
+import com.mindflow.app.data.model.KnowledgeTrust
+import com.mindflow.app.data.model.NoteHorizon
+import com.mindflow.app.data.model.NoteStatus
+import com.mindflow.app.data.model.TagSource
+import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import org.junit.Test
 
@@ -225,6 +232,73 @@ class TodayDesignModelTest {
     }
 
     @Test
+    fun toTodayDesignModel_deduplicatesRepeatedReviewTitleAndExcerpt() {
+        val uiState = FlowUiState(todayCount = 1)
+
+        val model = uiState.toTodayDesignModel(
+            latestSavedConversationSummary = SavedReviewChatSessionSummary(
+                sessionId = 9L,
+                title = "我最近在关注什么？",
+                updatedAt = 2_000L,
+                messageCount = 1,
+                latestExcerpt = "我最近在关注什么？",
+            ),
+            surface = uiState.toIncubationSurfaceState(),
+        )
+
+        assertThat(model.review.description).isEqualTo("我最近在关注什么？")
+    }
+
+    @Test
+    fun toTodayDesignModel_hidesCaptureMetadataPathsFromContinueNote() {
+        val uiState = FlowUiState(
+            continueNote = note(
+                topic = "原始录音：/data/user/0/com.mindflow.app/files/recordings/voice-001.m4a",
+                content = """
+                    原始录音：/data/user/0/com.mindflow.app/files/recordings/voice-001.m4a
+                    识别信息：端侧识别失败，等待重试。
+                    语音转写（可编辑）：
+                """.trimIndent(),
+            ),
+        )
+
+        val model = uiState.toTodayDesignModel(
+            latestSavedConversationSummary = null,
+            surface = uiState.toIncubationSurfaceState(),
+        )
+
+        assertThat(model.focus.title).isEqualTo("语音记录")
+        assertThat(model.focus.summary).isEqualTo("等待语音转写")
+        assertThat(model.focus.title).doesNotContain("/data/")
+        assertThat(model.focus.summary).doesNotContain("/data/")
+        assertThat(model.focus.summary).doesNotContain("原始录音")
+        assertThat(model.focus.summary).doesNotContain(".m4a")
+    }
+
+    @Test
+    fun toTodayDesignModel_hidesCaptureMetadataPathsFromDiscoverySource() {
+        val uiState = FlowUiState(
+            followedDirections = listOf(
+                followedDirection(
+                    key = "project",
+                    title = "项目",
+                    summary = "原始录音：/data/user/0/com.mindflow.app/files/recordings/voice-001.m4a · 图谱整理",
+                    nextStep = "先补一条真实记录。",
+                ),
+            ),
+        )
+
+        val model = uiState.toTodayDesignModel(
+            latestSavedConversationSummary = null,
+            surface = uiState.toIncubationSurfaceState(),
+        )
+
+        assertThat(model.discoveryCards.first().source).isEqualTo("来自相关记录")
+        assertThat(model.discoveryCards.first().source).doesNotContain("/data/")
+        assertThat(model.discoveryCards.first().source).doesNotContain("原始录音")
+    }
+
+    @Test
     fun taskDetailFor_buildsReferenceTaskDetailFromDisplayedDirection() {
         val uiState = FlowUiState(
             followedDirections = listOf(
@@ -301,5 +375,25 @@ class TodayDesignModelTest {
         lastProgressLine = lastProgressLine,
         nextStep = nextStep,
         wikiValidatedPoint = wikiValidatedPoint,
+    )
+
+    private fun note(
+        topic: String,
+        content: String,
+    ) = NoteEntity(
+        id = 7L,
+        content = content,
+        topic = topic,
+        topicSource = TopicSource.AI,
+        folderKey = null,
+        folderSource = FolderSource.RULE,
+        tags = listOf("语音"),
+        tagSource = TagSource.RULE,
+        status = NoteStatus.IN_PROGRESS,
+        horizon = NoteHorizon.MEDIUM,
+        knowledgeTrust = KnowledgeTrust.NONE,
+        isArchived = false,
+        createdAt = 1_000L,
+        updatedAt = 2_000L,
     )
 }

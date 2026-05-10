@@ -115,6 +115,75 @@ class EditorScreenLogicTest {
     }
 
     @Test
+    fun editorPersistedSnapshot_treatsRefreshedAiInsightAsCleanLoadedState() {
+        val refreshed = sampleNote(
+            id = 7L,
+            topic = "语音记录",
+            content = "语音转写（可编辑）：今天想整理图谱入口。",
+            folderKey = "work",
+            tags = listOf("语音", "图谱"),
+        ).copy(
+            aiSummary = "整理图谱入口。",
+            aiKeyPoints = listOf("统一图谱命名", "优化入口动作"),
+        )
+        val state = NoteEditorUiState(
+            isNew = false,
+            noteId = refreshed.id,
+            isLoading = false,
+            content = refreshed.content,
+            topic = refreshed.topic,
+            topicSource = refreshed.topicSource,
+            folderKey = refreshed.folderKey,
+            folderSource = refreshed.folderSource,
+            tags = refreshed.tags,
+            tagSource = refreshed.tagSource,
+            status = refreshed.status,
+            horizon = refreshed.horizon,
+            knowledgeTrust = refreshed.knowledgeTrust,
+            isArchived = refreshed.isArchived,
+        )
+
+        val snapshot = refreshed.toEditorPersistedSnapshot()
+
+        assertThat(snapshot.hasUnsavedChanges(state)).isFalse()
+    }
+
+    @Test
+    fun editorDisplayFields_hideVoiceCaptureMetadataTopicAndStayClean() {
+        val loaded = sampleNote(
+            id = 8L,
+            topic = "原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-1.m4a",
+            content = """
+                原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-1.m4a
+                语音转写（可编辑）：
+                识别信息：转写失败：端侧转写没有产出结果
+            """.trimIndent(),
+            folderKey = "project",
+            tags = listOf("语音"),
+        )
+
+        val display = loaded.withEditorDisplayFields()
+        val state = NoteEditorUiState(
+            isNew = false,
+            noteId = display.id,
+            content = display.content,
+            topic = display.topic,
+            topicSource = display.topicSource,
+            folderKey = display.folderKey,
+            folderSource = display.folderSource,
+            tags = display.tags,
+            tagSource = display.tagSource,
+            status = display.status,
+            horizon = display.horizon,
+            knowledgeTrust = display.knowledgeTrust,
+            isArchived = display.isArchived,
+        )
+
+        assertThat(display.topic).isEqualTo("语音记录")
+        assertThat(display.toEditorPersistedSnapshot().hasUnsavedChanges(state)).isFalse()
+    }
+
+    @Test
     fun buildEditorAiModeSummary_explainsEffectiveStrategy() {
         assertThat(
             buildEditorAiModeSummary(
@@ -281,6 +350,13 @@ class EditorScreenLogicTest {
                 transcript = "今天验证语音转写",
             ),
         ).isEqualTo("语音输入验证")
+        assertThat(
+            voiceTitleForDisplay(
+                topic = "原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-1.m4a",
+                topicSource = TopicSource.MANUAL,
+                transcript = "",
+            ),
+        ).isEqualTo("语音记录")
     }
 
     @Test
@@ -389,6 +465,30 @@ class EditorScreenLogicTest {
                 content = "语音转写（可编辑）：已经有转写",
                 isTranscribingVoice = false,
                 audioPathOverride = "/tmp/voice.m4a",
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun shouldAutoAttemptVoiceTranscription_onlyRunsForNewCapture() {
+        val pending = """
+            原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-2.m4a
+            语音转写（可编辑）：
+            识别信息：音频已保存，转写暂未完成，可先手动补充。
+        """.trimIndent()
+
+        assertThat(
+            shouldAutoAttemptVoiceTranscription(
+                isNew = true,
+                content = pending,
+                isTranscribingVoice = false,
+            ),
+        ).isTrue()
+        assertThat(
+            shouldAutoAttemptVoiceTranscription(
+                isNew = false,
+                content = pending,
+                isTranscribingVoice = false,
             ),
         ).isFalse()
     }

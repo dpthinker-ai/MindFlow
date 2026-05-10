@@ -1,5 +1,6 @@
 package com.mindflow.app.data.localmodel
 
+import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.topic.AiChatResult
@@ -34,7 +35,7 @@ class EditorKnowledgeRecallPlanner(
         )
 
         val settings = onDeviceModelSettingsRepository.getCurrent()
-        if (!settings.preferOnDevice || !settings.isReady) return fallback
+        if (settings.executionMode == AiExecutionMode.CLOUD_ONLY || !settings.isReady) return fallback
 
         val contextSummary = buildContextSummary(
             draftTopic = trimmedTopic,

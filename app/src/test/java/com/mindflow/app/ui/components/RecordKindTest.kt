@@ -82,6 +82,24 @@ class RecordKindTest {
         assertThat(imagePreview).doesNotContain("/data/user/0")
     }
 
+    @Test
+    fun compactRecordPreviewTextDoesNotShowEmptyImageFieldLabels() {
+        val preview = note(
+            content = """
+                图片：/data/user/0/com.mindflow.app/files/captures/images/one.jpg
+                补充说明：
+                图像理解结果：
+                关键信息提取：
+                结构化识别：
+                OCR 文本(可选)：
+            """.trimIndent(),
+        ).compactRecordPreviewText()
+
+        assertThat(preview).isEqualTo("图片已保存，等待理解")
+        assertThat(preview).doesNotContain("补充说明")
+        assertThat(preview).doesNotContain("OCR 文本")
+    }
+
     private fun note(
         content: String,
         topic: String = "测试记录",

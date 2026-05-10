@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -375,6 +378,16 @@ private enum class GraphTopicTab(val label: String) {
     STATS("统计"),
     RECORDS("记录"),
 }
+
+internal fun graphPanelTitle(): String = "概念图谱"
+
+internal fun emptyConceptGraphTitle(): String = graphPanelTitle()
+
+internal fun graphTopicActionTitle(hasRelatedNotes: Boolean): String =
+    if (hasRelatedNotes) "从相关记录继续整理" else "等待相关记录"
+
+internal fun graphTopicActionLabel(hasRelatedNotes: Boolean): String =
+    if (hasRelatedNotes) "打开相关记录" else "待补记录"
 
 @Composable
 private fun KnowledgeGraphHeader(
@@ -1524,7 +1537,7 @@ private fun KnowledgeGraphPanel(
 
     PanelCard {
         SectionHeader(
-            title = "信息图谱",
+            title = graphPanelTitle(),
             headline = if (graph.nodes.isNotEmpty()) {
                 "${graph.nodes.size} 个主题 · ${graph.edges.size} 条连接"
             } else {
@@ -1664,6 +1677,7 @@ private fun GraphTopicActionCard(
     relatedNotes: List<NoteEntity>,
     onOpenNote: (Long) -> Unit,
 ) {
+    val hasRelatedNotes = relatedNotes.isNotEmpty()
     Surface(
         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
         shape = RoundedCornerShape(16.dp),
@@ -1681,14 +1695,18 @@ private fun GraphTopicActionCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "是否整理为项目结构？",
+                    text = graphTopicActionTitle(hasRelatedNotes),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${centerNode.label} 已经有可追踪线索，先从相关记录提炼项目骨架。",
+                    text = if (hasRelatedNotes) {
+                        "${centerNode.label} 已经有可追踪线索，先打开相关记录继续整理。"
+                    } else {
+                        "${centerNode.label} 还缺少可打开的记录，继续积累后再整理。"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -1696,10 +1714,10 @@ private fun GraphTopicActionCard(
                 )
             }
             TextButton(
-                enabled = relatedNotes.isNotEmpty(),
+                enabled = hasRelatedNotes,
                 onClick = { relatedNotes.firstOrNull()?.id?.let(onOpenNote) },
             ) {
-                Text(if (relatedNotes.isNotEmpty()) "立即整理" else "待补记录")
+                Text(graphTopicActionLabel(hasRelatedNotes))
             }
         }
     }
@@ -1877,16 +1895,44 @@ private fun ConceptGraphViewportCanvas(
             }
         } else {
             key(retryNonce) {
-                WebViewGraphCanvas(
-                    payload = payload,
+                var graphCanvasSize by remember(payload) { mutableStateOf(androidx.compose.ui.geometry.Size.Zero) }
+                val density = LocalDensity.current.density
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(canvasHeight),
-                    onNodeClick = onSelectNode,
-                    onRenderError = { message ->
-                        renderError = message.ifBlank { "graph_render_failed" }
-                    },
-                )
+                        .height(canvasHeight)
+                        .onSizeChanged { size ->
+                            graphCanvasSize = androidx.compose.ui.geometry.Size(
+                                width = size.width.toFloat(),
+                                height = size.height.toFloat(),
+                            )
+                        },
+                ) {
+                    WebViewGraphCanvas(
+                        payload = payload,
+                        modifier = Modifier.fillMaxSize(),
+                        onNodeClick = onSelectNode,
+                        onRenderError = { message ->
+                            renderError = message.ifBlank { "graph_render_failed" }
+                        },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(payload, graphCanvasSize, density) {
+                                detectTapGestures { tapOffset ->
+                                    resolveWebGraphTapNodeId(
+                                        payload = payload,
+                                        tapX = tapOffset.x,
+                                        tapY = tapOffset.y,
+                                        viewportWidth = graphCanvasSize.width,
+                                        viewportHeight = graphCanvasSize.height,
+                                        density = density,
+                                    )?.let(onSelectNode)
+                                }
+                            },
+                    )
+                }
             }
         }
     }
@@ -2261,7 +2307,7 @@ private fun ActivatedThreadStrip(
 private fun EmptyConceptGraphPanel() {
     PanelCard {
         SectionHeader(
-            title = "知识图谱",
+            title = emptyConceptGraphTitle(),
             headline = "还没有结构",
         )
         Text(

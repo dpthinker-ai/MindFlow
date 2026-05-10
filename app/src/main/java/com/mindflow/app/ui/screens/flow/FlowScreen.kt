@@ -471,7 +471,7 @@ private fun TodayFocusCard(
         ) {
             TodaySectionTitle(
                 title = "今日焦点",
-                action = "查看全部",
+                action = if (focus.hasTarget) "打开焦点" else "新建记录",
                 onAction = onOpenFocus,
             )
             Text(

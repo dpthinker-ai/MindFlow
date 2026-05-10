@@ -66,7 +66,7 @@ object GemmaTaskPromptFactory {
         原始录音文件：$audioPath
     """.trimIndent()
 
-    fun understandImage(imagePath: String, userNote: String): String = """
+    fun understandImage(userNote: String): String = """
         你在做 MindFlow 本地端侧图片理解。
         图片已作为图像输入提供，不要根据文件路径猜测内容，不要上传，不要假设云端可用。
         目标：先观察图片中真实可见的内容，再根据图片类型选择场景总结、文字提取、图表解释或对象识别。

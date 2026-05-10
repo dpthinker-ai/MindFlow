@@ -1,6 +1,7 @@
 package com.mindflow.app.data.localmodel
 
 import android.content.Context
+import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.model.MindFolderCatalog
 import com.mindflow.app.data.model.NoteStatus
@@ -120,7 +121,7 @@ class LocalKnowledgeMaintenancePlanner(
             currentStep = "检查本地模型状态"
             updateMaintenanceProgress(currentStep, 0.06f)
             val settings = onDeviceModelSettingsRepository.getCurrent()
-            if (!settings.preferOnDevice || !settings.isReady) {
+            if (settings.executionMode == AiExecutionMode.CLOUD_ONLY || !settings.isReady) {
                 val error = IllegalStateException("本地模型尚未就绪或没有开启本地优先。")
                 markMaintenanceFailure(error.message.orEmpty(), currentStep, "")
                 return@withContext Result.failure(error)

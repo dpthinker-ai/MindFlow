@@ -43,6 +43,16 @@ internal fun reviewHomeReferenceQuestionPrompts(): List<String> =
         "最近一个月有哪些未推进的想法？",
     )
 
+internal fun SavedReviewChatSessionSummary.reviewHomeLatestExcerpt(): String {
+    val titleText = title.trim()
+    val excerptText = latestExcerpt.trim()
+    return when {
+        excerptText.isBlank() -> "继续这段历史记忆对话。"
+        titleText.equals(excerptText, ignoreCase = true) -> "继续这段历史记忆对话。"
+        else -> excerptText
+    }
+}
+
 @Composable
 fun ReviewChatEntryCard(
     latestSavedSummary: SavedReviewChatSessionSummary?,
@@ -238,7 +248,7 @@ private fun ReviewRecentConversationCard(
     ) {
         ReviewRecentConversationContent(
             title = latestSavedSummary.title.ifBlank { "未命名回看" },
-            excerpt = latestSavedSummary.latestExcerpt.ifBlank { "继续这段历史记忆对话。" },
+            excerpt = latestSavedSummary.reviewHomeLatestExcerpt(),
             timeLabel = TimeFormatter.compact(latestSavedSummary.updatedAt),
             onClick = { onOpenSaved(latestSavedSummary.sessionId) },
         )

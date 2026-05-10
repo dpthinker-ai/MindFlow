@@ -264,4 +264,58 @@ class WebViewGraphContractTest {
         assertThat(click).isEqualTo(GraphBridgeEvent.NodeClick("neighbor"))
         assertThat(malformed).isEqualTo(GraphBridgeEvent.Invalid("missing_or_invalid_type"))
     }
+
+    @Test
+    fun `native graph hit test reaches the top neighbor`() {
+        val payload = WebGraphPayload(
+            centerNodeId = "center",
+            nodes = listOf(
+                WebGraphNode(
+                    id = "center",
+                    label = "数据采集",
+                    displayLabel = "数据采集",
+                    accentColor = "#158CFF",
+                    isCenter = true,
+                    isSuggested = false,
+                    isReturnNode = false,
+                    emphasis = 3,
+                    xFraction = 0.5,
+                    yFraction = 0.5,
+                ),
+                WebGraphNode(
+                    id = "douyin",
+                    label = "抖音",
+                    displayLabel = "抖音",
+                    accentColor = "#45B7FF",
+                    isCenter = false,
+                    isSuggested = false,
+                    isReturnNode = false,
+                    emphasis = 2,
+                    xFraction = 0.51,
+                    yFraction = 0.2,
+                ),
+            ),
+            edges = listOf(
+                WebGraphEdge(
+                    id = "center->douyin",
+                    source = "center",
+                    target = "douyin",
+                    relationType = "parallel",
+                    confidence = 0.8,
+                    isSuggested = false,
+                ),
+            ),
+        )
+
+        val hitNodeId = resolveWebGraphTapNodeId(
+            payload = payload,
+            tapX = 453f,
+            tapY = 78f,
+            viewportWidth = 890f,
+            viewportHeight = 389f,
+            density = 2.7083333f,
+        )
+
+        assertThat(hitNodeId).isEqualTo("douyin")
+    }
 }

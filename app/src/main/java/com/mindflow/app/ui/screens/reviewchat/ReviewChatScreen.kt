@@ -36,11 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -767,7 +767,7 @@ private fun ReviewChatAnswerCompanion(
                 )
                 ReviewChatQuickAction(
                     text = "总结成记录",
-                    icon = Icons.Outlined.StickyNote2,
+                    icon = Icons.AutoMirrored.Outlined.StickyNote2,
                     onClick = { onCreateCapture(reviewChatAnswerToSummaryCaptureSeed(message)) },
                     modifier = Modifier.weight(1f),
                 )

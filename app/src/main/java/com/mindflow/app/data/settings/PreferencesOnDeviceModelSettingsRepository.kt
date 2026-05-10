@@ -59,7 +59,7 @@ class PreferencesOnDeviceModelSettingsRepository(
             preferences[MODEL_LABEL] = settings.modelLabel.trim().ifBlank { OnDeviceModelSettings.DEFAULT_MODEL_LABEL }
             preferences[MODEL_DOWNLOAD_URL] = OnDeviceModelSettings.normalizeDownloadUrl(settings.modelDownloadUrl)
             preferences[EXECUTION_MODE] = settings.executionMode.name
-            preferences[PREFER_ON_DEVICE] = settings.preferOnDevice
+            preferences[PREFER_ON_DEVICE] = settings.executionMode != AiExecutionMode.CLOUD_ONLY
             preferences[DOWNLOAD_TARGET_BYTES] = settings.downloadTargetBytes
         }
     }

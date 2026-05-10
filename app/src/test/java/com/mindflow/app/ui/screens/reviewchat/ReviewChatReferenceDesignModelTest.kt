@@ -1,8 +1,10 @@
 package com.mindflow.app.ui.screens.reviewchat
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.screens.flow.reviewHomeReferenceSectionKeys
 import com.mindflow.app.ui.screens.flow.reviewHomeReferenceQuestionPrompts
+import com.mindflow.app.ui.screens.flow.reviewHomeLatestExcerpt
 import org.junit.Test
 
 class ReviewChatReferenceDesignModelTest {
@@ -31,5 +33,19 @@ class ReviewChatReferenceDesignModelTest {
         assertThat(reviewHistoryReferenceFilterLabels())
             .containsExactly("全部", "时间", "主题", "任务", "今天", "本周", "本月", "去年今日")
             .inOrder()
+    }
+
+    @Test
+    fun recentConversationExcerptDoesNotRepeatTitle() {
+        val summary = SavedReviewChatSessionSummary(
+            sessionId = 1L,
+            title = "我最近在关注什么？",
+            updatedAt = 0L,
+            messageCount = 2,
+            latestExcerpt = "我最近在关注什么？",
+        )
+
+        assertThat(summary.reviewHomeLatestExcerpt())
+            .isEqualTo("继续这段历史记忆对话。")
     }
 }
