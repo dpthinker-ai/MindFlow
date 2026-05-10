@@ -41,7 +41,8 @@ class GemmaTaskPromptFactoryTest {
             audioPath = "/private/voice.m4a",
             localeHint = "zh-CN",
         )
-        assertThat(audioPrompt).contains("原始录音文件")
+        assertThat(audioPrompt).contains("音频已经作为 audio 输入随消息提供")
+        assertThat(audioPrompt).contains("不要根据常见句子、示例或文件路径猜测内容")
         assertThat(audioPrompt).contains("本地端侧")
         assertThat(audioPrompt).contains("transcript")
         assertThat(audioPrompt).contains("topic")

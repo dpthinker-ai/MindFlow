@@ -52,10 +52,12 @@ object GemmaTaskPromptFactory {
 
     fun transcribeAudio(audioPath: String, localeHint: String?): String = """
         你在做 MindFlow 本地端侧语音识别。
-        输入是用户保存在设备私有目录中的原始录音文件，不要上传，不要假设云端可用。
+        音频已经作为 audio 输入随消息提供；文件路径只用于 App 保存记录，不是转写依据。
+        不要上传，不要假设云端可用。
         目标：把语音转成可编辑文本，并提取一个短主题。
+        如果没有听清、没有语音，或音频输入不可用，返回空 transcript，confidence 设为 0；不要根据常见句子、示例或文件路径猜测内容。
         只返回 JSON：{"transcript":"...","language":"${localeHint.orEmpty()}","topic":"...","confidence":0.0}
-        原始录音文件：$audioPath
+        本地记录路径：$audioPath
     """.trimIndent()
 
     fun translateAudio(audioPath: String, targetLanguage: String): String = """
