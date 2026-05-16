@@ -41,11 +41,16 @@ class GemmaTaskPromptFactoryTest {
             audioPath = "/private/voice.m4a",
             localeHint = "zh-CN",
         )
-        assertThat(audioPrompt).contains("音频已经作为 audio 输入随消息提供")
-        assertThat(audioPrompt).contains("不要根据常见句子、示例或文件路径猜测内容")
+        assertThat(audioPrompt).contains("audio")
+        assertThat(audioPrompt).contains("本消息的文字都是指令")
+        assertThat(audioPrompt).contains("逐字转写")
+        assertThat(audioPrompt).contains("不总结")
         assertThat(audioPrompt).contains("本地端侧")
         assertThat(audioPrompt).contains("transcript")
-        assertThat(audioPrompt).contains("topic")
+        assertThat(audioPrompt).contains("confidence")
+        assertThat(audioPrompt).doesNotContain("topic")
+        assertThat(audioPrompt).doesNotContain("/private")
+        assertThat(audioPrompt).doesNotContain("voice.m4a")
 
         val imagePrompt = GemmaTaskPromptFactory.understandImage(userNote = "会议白板")
         assertThat(imagePrompt).contains("图片已作为图像输入提供")

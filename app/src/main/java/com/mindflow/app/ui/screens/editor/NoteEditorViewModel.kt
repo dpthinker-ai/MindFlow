@@ -795,6 +795,13 @@ class NoteEditorViewModel(
 
             when (val result = voiceTranscriptionPlanner.transcribe(audioPath = audioPath)) {
                 is VoiceTranscriptionResult.Success -> {
+                    val topicResult = runCatching { topicExtractor.extract(result.transcript) }.getOrNull()
+                    val generatedTitle = topicResult
+                        ?.suggestion
+                        ?.topic
+                        ?.let(::normalizeEditorTitle)
+                        .orEmpty()
+                        .ifBlank { normalizeEditorTitle(result.topic) }
                     var updatedState: NoteEditorUiState? = null
                     var accepted = false
                     updateDirtyState { current ->
@@ -803,7 +810,6 @@ class NoteEditorViewModel(
                         }
                         val currentTranscript = voiceTranscriptFromContent(current.content)
                         val nextTranscript = currentTranscript.ifBlank { result.transcript }
-                        val generatedTitle = normalizeEditorTitle(result.topic)
                         val contentWithSections = ensureEditorCaptureSections(
                             content = current.content,
                             sectionLabels = listOf(VoiceTranscriptFieldLabel, VoiceRecognitionFieldLabel),
@@ -820,7 +826,11 @@ class NoteEditorViewModel(
                                 voiceTranscriptionCompletedMessage(result),
                             ),
                             topic = generatedTitle.ifBlank { current.topic },
-                            topicSource = if (generatedTitle.isBlank()) current.topicSource else TopicSource.AI,
+                            topicSource = if (generatedTitle.isBlank()) {
+                                current.topicSource
+                            } else {
+                                topicResult?.suggestion?.source ?: TopicSource.AI
+                            },
                             topicEdited = current.topicEdited || generatedTitle.isNotBlank(),
                             tags = appendCaptureTag(current.tags, "语音"),
                             tagsEdited = true,
