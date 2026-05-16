@@ -55,7 +55,7 @@ class VoiceTranscriptionPlannerTest {
         assertThat(result).isInstanceOf(VoiceTranscriptionResult.Success::class.java)
         val success = result as VoiceTranscriptionResult.Success
         assertThat(success.transcript).isEqualTo("今天确认语音转写链路")
-        assertThat(success.topic).isEqualTo("语音转写链路")
+        assertThat(success.topic).isEmpty()
         assertThat(success.provider).isEqualTo(AiProvider.ON_DEVICE)
         assertThat(capturedPaths).containsExactly(audio.absolutePath)
         assertThat(capturedMimeTypes).containsExactly("audio/wav")

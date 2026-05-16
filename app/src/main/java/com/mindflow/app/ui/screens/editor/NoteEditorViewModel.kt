@@ -289,6 +289,43 @@ internal fun replaceEditorCaptureField(
     }
 }
 
+internal fun clearVoiceCaptureForNewRecording(content: String): String {
+    var next = content
+    listOf(
+        VoiceAudioFieldLabel,
+        VoiceTranscriptFieldLabel,
+        VoiceAiSummaryFieldLabel,
+        VoiceKeyInfoFieldLabel,
+        VoiceRecognitionFieldLabel,
+    ).forEach { label ->
+        next = replaceExistingEditorCaptureField(next, label, "")
+    }
+    return next
+}
+
+private fun replaceExistingEditorCaptureField(
+    content: String,
+    label: String,
+    value: String,
+): String {
+    val lines = content.lines().toMutableList()
+    val index = lines.indexOfFirst { line ->
+        val trimmed = line.trim()
+        trimmed.startsWith("$label：") || trimmed.startsWith("$label:")
+    }
+    if (index < 0) return content
+    val replacement = "$label：$value"
+    var endExclusive = index + 1
+    while (endExclusive < lines.size && !isEditorCaptureFieldBoundary(lines[endExclusive])) {
+        endExclusive += 1
+    }
+    repeat(endExclusive - index) {
+        lines.removeAt(index)
+    }
+    lines.addAll(index, replacement.lines())
+    return lines.joinToString("\n").trimEnd()
+}
+
 private fun voiceContentWithAiInfo(
     content: String,
     transcript: String,
@@ -519,6 +556,18 @@ class NoteEditorViewModel(
         }
     }
 
+    fun prepareNewVoiceRecording() {
+        updateDirtyState { current ->
+            current.copy(
+                content = clearVoiceCaptureForNewRecording(current.content),
+                aiSummary = "",
+                aiKeyPoints = emptyList(),
+                isTranscribingVoice = false,
+                isExtractingVoiceInfo = false,
+            )
+        }
+    }
+
     fun onTopicChange(value: String) {
         if (value == _uiState.value.topic) return
         updateDirtyState { it.copy(topic = value, topicEdited = true) }
@@ -660,6 +709,7 @@ class NoteEditorViewModel(
         viewModelScope.launch {
             val startContent = _uiState.value.content
             val startTranscript = voiceTranscriptFromContent(startContent)
+            val startAudioPath = voiceAudioPathFromContent(startContent)
             if (startTranscript.isBlank()) return@launch
             _uiState.update { it.copy(isExtractingVoiceInfo = true) }
             val topicResult = runCatching { topicExtractor.extract(startTranscript) }.getOrNull()
@@ -671,7 +721,10 @@ class NoteEditorViewModel(
                         ?.let(::normalizeEditorTitle)
                         .orEmpty()
                     _uiState.update {
-                        if (voiceTranscriptFromContent(it.content) != startTranscript) {
+                        if (
+                            voiceTranscriptFromContent(it.content) != startTranscript ||
+                            voiceAudioPathFromContent(it.content) != startAudioPath
+                        ) {
                             return@update it.copy(isExtractingVoiceInfo = false)
                         }
                         it.copy(
@@ -687,10 +740,28 @@ class NoteEditorViewModel(
                     }
                 }
                 NoteInsightResult.BlankContent -> {
-                    _uiState.update { it.copy(isExtractingVoiceInfo = false) }
+                    _uiState.update {
+                        if (
+                            voiceTranscriptFromContent(it.content) == startTranscript &&
+                            voiceAudioPathFromContent(it.content) == startAudioPath
+                        ) {
+                            it.copy(isExtractingVoiceInfo = false)
+                        } else {
+                            it
+                        }
+                    }
                 }
                 is NoteInsightResult.Failure -> {
-                    _uiState.update { it.copy(isExtractingVoiceInfo = false) }
+                    _uiState.update {
+                        if (
+                            voiceTranscriptFromContent(it.content) == startTranscript &&
+                            voiceAudioPathFromContent(it.content) == startAudioPath
+                        ) {
+                            it.copy(isExtractingVoiceInfo = false)
+                        } else {
+                            it
+                        }
+                    }
                 }
             }
         }
@@ -724,11 +795,21 @@ class NoteEditorViewModel(
 
             when (val result = voiceTranscriptionPlanner.transcribe(audioPath = audioPath)) {
                 is VoiceTranscriptionResult.Success -> {
+                    val topicResult = runCatching { topicExtractor.extract(result.transcript) }.getOrNull()
+                    val generatedTitle = topicResult
+                        ?.suggestion
+                        ?.topic
+                        ?.let(::normalizeEditorTitle)
+                        .orEmpty()
+                        .ifBlank { normalizeEditorTitle(result.topic) }
                     var updatedState: NoteEditorUiState? = null
+                    var accepted = false
                     updateDirtyState { current ->
+                        if (voiceAudioPathFromContent(current.content) != audioPath) {
+                            return@updateDirtyState current
+                        }
                         val currentTranscript = voiceTranscriptFromContent(current.content)
                         val nextTranscript = currentTranscript.ifBlank { result.transcript }
-                        val generatedTitle = normalizeEditorTitle(result.topic)
                         val contentWithSections = ensureEditorCaptureSections(
                             content = current.content,
                             sectionLabels = listOf(VoiceTranscriptFieldLabel, VoiceRecognitionFieldLabel),
@@ -745,27 +826,39 @@ class NoteEditorViewModel(
                                 voiceTranscriptionCompletedMessage(result),
                             ),
                             topic = generatedTitle.ifBlank { current.topic },
-                            topicSource = if (generatedTitle.isBlank()) current.topicSource else TopicSource.AI,
+                            topicSource = if (generatedTitle.isBlank()) {
+                                current.topicSource
+                            } else {
+                                topicResult?.suggestion?.source ?: TopicSource.AI
+                            },
                             topicEdited = current.topicEdited || generatedTitle.isNotBlank(),
                             tags = appendCaptureTag(current.tags, "语音"),
                             tagsEdited = true,
                             isTranscribingVoice = false,
                         )
                         updatedState = next
+                        accepted = true
                         next
                     }
-                    updatedState?.let { persistVoiceTranscriptionIfNeeded(it) }
-                    if (updatedState?.noteId == null) {
-                        ensureVoiceAiInsight()
+                    if (accepted) {
+                        updatedState?.let { persistVoiceTranscriptionIfNeeded(it) }
+                        if (updatedState?.noteId == null) {
+                            ensureVoiceAiInsight()
+                        }
+                        _events.emit(NoteEditorEvent.Message("语音转写已完成"))
                     }
-                    _events.emit(NoteEditorEvent.Message("语音转写已完成"))
                 }
                 is VoiceTranscriptionResult.Failure -> {
+                    var accepted = false
                     updateDirtyState { current ->
+                        if (voiceAudioPathFromContent(current.content) != audioPath) {
+                            return@updateDirtyState current
+                        }
                         val contentWithSections = ensureEditorCaptureSections(
                             content = current.content,
                             sectionLabels = listOf(VoiceTranscriptFieldLabel, VoiceRecognitionFieldLabel),
                         )
+                        accepted = true
                         current.copy(
                             content = replaceEditorCaptureField(
                                 contentWithSections,
@@ -775,7 +868,9 @@ class NoteEditorViewModel(
                             isTranscribingVoice = false,
                         )
                     }
-                    _events.emit(NoteEditorEvent.Message(result.message))
+                    if (accepted) {
+                        _events.emit(NoteEditorEvent.Message(result.message))
+                    }
                 }
             }
         }

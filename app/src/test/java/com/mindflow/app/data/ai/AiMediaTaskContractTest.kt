@@ -31,7 +31,7 @@ class AiMediaTaskContractTest {
         ).toPayloadOrNull(AiTaskType.TRANSCRIBE_AUDIO) as AiTaskPayload.AudioTranscription
 
         assertThat(transcription.transcript).contains("图片识别")
-        assertThat(transcription.topic).isEqualTo("图片识别链路")
+        assertThat(transcription.topic).isEmpty()
         assertThat(transcription.confidence).isWithin(0.001f).of(0.91f)
 
         val translation = AiChatResult.Success(
@@ -49,6 +49,17 @@ class AiMediaTaskContractTest {
         assertThat(image.imageType).isEqualTo("whiteboard")
         assertThat(image.extractedText).contains("Gemma 4")
         assertThat(image.objects).containsExactly("白板", "流程图").inOrder()
+    }
+
+    @Test
+    fun audioTranscriptionDropsPromptLeakage() {
+        val transcription = AiChatResult.Success(
+            """{"transcript":"今天讨论训练计划。你是 MindFlow 本地端侧语音转写器。音频已经作为独立 audio 输入随消息提供。","language":"zh-CN","confidence":0.72}""",
+        ).toPayloadOrNull(AiTaskType.TRANSCRIBE_AUDIO) as AiTaskPayload.AudioTranscription
+
+        assertThat(transcription.transcript).isEqualTo("今天讨论训练计划。")
+        assertThat(transcription.topic).isEmpty()
+        assertThat(transcription.confidence).isWithin(0.001f).of(0.72f)
     }
 
     @Test

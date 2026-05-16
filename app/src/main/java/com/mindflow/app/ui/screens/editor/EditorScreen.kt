@@ -395,6 +395,7 @@ fun EditorRoute(
             onContentChange = viewModel::onContentChange,
             onEnsureVoiceInsight = viewModel::ensureVoiceAiInsight,
             onEnsureVoiceTranscription = viewModel::ensureVoiceTranscription,
+            onPrepareNewVoiceRecording = viewModel::prepareNewVoiceRecording,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
             onCaptureAction = viewModel::saveWithCaptureAction,
@@ -1133,6 +1134,7 @@ internal fun VoiceCaptureScreen(
     onContentChange: (String) -> Unit,
     onEnsureVoiceInsight: () -> Unit,
     onEnsureVoiceTranscription: (String) -> Unit,
+    onPrepareNewVoiceRecording: () -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
     onCaptureAction: (CapturePostAction) -> Unit,
@@ -1171,9 +1173,12 @@ internal fun VoiceCaptureScreen(
     }
 
     fun startRecording() {
+        val previousPath = recordedPath
         runCatching {
             recorder.start()
         }.onSuccess {
+            deleteUnsavedVoiceRecordingForRetake(context, uiState, previousPath)
+            onPrepareNewVoiceRecording()
             recordingStartedAt = System.currentTimeMillis()
             elapsedSeconds = 0
             recordedPath = it.absolutePath
@@ -1210,10 +1215,11 @@ internal fun VoiceCaptureScreen(
             return
         }
         recordedPath = file.absolutePath
+        val contentForNewRecording = clearVoiceCaptureForNewRecording(uiState.content)
         onContentChange(
             replaceCaptureField(
                 ensureCaptureSections(
-                    replaceCaptureField(uiState.content, "原始录音", file.absolutePath),
+                    replaceCaptureField(contentForNewRecording, "原始录音", file.absolutePath),
                     listOf(VoiceTranscriptFieldLabel, VoiceRecognitionFieldLabel),
                 ),
                 VoiceRecognitionFieldLabel,
@@ -2199,6 +2205,26 @@ private fun cleanupCaptureFilesForDiscard(
             if (file.exists()) {
                 file.delete()
             }
+        }
+    }
+}
+
+private fun deleteUnsavedVoiceRecordingForRetake(
+    context: Context,
+    uiState: NoteEditorUiState,
+    previousPath: String?,
+) {
+    if (!uiState.isNew) return
+    val path = previousPath
+        ?.takeIf { it.isNotBlank() }
+        ?: extractCaptureField(uiState.content, VoiceAudioFieldLabel).takeIf { it.isNotBlank() }
+        ?: return
+    val voiceRoot = File(context.applicationContext.filesDir, "captures/voice").canonicalFile
+    val file = runCatching { File(path).canonicalFile }.getOrNull() ?: return
+    if (!file.isInsideDirectory(voiceRoot)) return
+    runCatching {
+        if (file.exists()) {
+            file.delete()
         }
     }
 }
