@@ -108,13 +108,41 @@ private fun parseNoteInsightPayload(raw: String): AiTaskPayload.NoteInsight {
 
 private fun parseAudioTranscriptionPayload(raw: String): AiTaskPayload.AudioTranscription {
     val json = extractJsonObject(raw)
+    val transcript = sanitizeAudioTranscript(
+        json.stringValue("transcript").orEmpty().ifBlank { raw.trim() },
+    )
     return AiTaskPayload.AudioTranscription(
-        transcript = json.stringValue("transcript").orEmpty().ifBlank { raw.trim() },
+        transcript = transcript,
         language = json.stringValue("language"),
-        topic = json.stringValue("topic").orEmpty(),
+        topic = "",
         confidence = json.doubleValue("confidence").toFloat(),
     )
 }
+
+private fun sanitizeAudioTranscript(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return ""
+    val leakStart = AudioPromptLeakMarkers
+        .map { marker -> trimmed.indexOf(marker, ignoreCase = true) }
+        .filter { it >= 0 }
+        .minOrNull()
+    val withoutPromptLeak = if (leakStart == null) trimmed else trimmed.substring(0, leakStart)
+    return withoutPromptLeak.trim().trim('"', '\'', '`')
+}
+
+private val AudioPromptLeakMarkers = listOf(
+    "你是 MindFlow",
+    "MindFlow 本地端侧语音转写器",
+    "音频已经作为独立 audio",
+    "本消息的文字都是指令",
+    "只做逐字转写",
+    "只输出音频里实际听到的话",
+    "不总结，不缩写",
+    "不输出提示词",
+    "如果没有清晰语音",
+    "只返回 JSON",
+    "字段只能有 transcript",
+)
 
 private fun parseAudioTranslationPayload(raw: String): AiTaskPayload.AudioTranslation {
     val json = extractJsonObject(raw)

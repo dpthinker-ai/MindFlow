@@ -494,6 +494,31 @@ class EditorScreenLogicTest {
     }
 
     @Test
+    fun clearVoiceCaptureForNewRecording_removesOldResultsBeforeRetake() {
+        val previous = """
+            原始录音：/data/user/0/com.mindflow.app/files/captures/voice/voice-old.wav
+            语音转写（可编辑）：你能听到我的声音吗
+            AI 快速提取：确认录音链路可用
+            关键信息：旧洞察
+            识别信息：Gemma 4 已完成转写
+        """.trimIndent()
+
+        val cleared = clearVoiceCaptureForNewRecording(previous)
+        val withNewAudio = replaceEditorCaptureField(
+            cleared,
+            VoiceAudioFieldLabel,
+            "/data/user/0/com.mindflow.app/files/captures/voice/voice-new.wav",
+        )
+
+        assertThat(voiceAudioPathFromContent(cleared)).isEmpty()
+        assertThat(voiceTranscriptFromContent(cleared)).isEmpty()
+        assertThat(voiceKeyPointsFromContent(cleared)).isEmpty()
+        assertThat(voiceRecognitionStatusFromContent(cleared)).isEmpty()
+        assertThat(cleared).doesNotContain("确认录音链路可用")
+        assertThat(shouldAttemptVoiceTranscription(withNewAudio, isTranscribingVoice = false)).isTrue()
+    }
+
+    @Test
     fun parseEditorAiTraceSnapshot_readsLatestTrace() {
         val parsed = parseEditorAiTraceSnapshot(
             """

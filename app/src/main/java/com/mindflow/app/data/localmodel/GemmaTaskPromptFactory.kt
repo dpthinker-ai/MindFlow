@@ -50,12 +50,16 @@ object GemmaTaskPromptFactory {
         原文：$content
     """.trimIndent()
 
+    @Suppress("UNUSED_PARAMETER")
     fun transcribeAudio(audioPath: String, localeHint: String?): String = """
-        你在做 MindFlow 本地端侧语音识别。
-        输入是用户保存在设备私有目录中的原始录音文件，不要上传，不要假设云端可用。
-        目标：把语音转成可编辑文本，并提取一个短主题。
-        只返回 JSON：{"transcript":"...","language":"${localeHint.orEmpty()}","topic":"...","confidence":0.0}
-        原始录音文件：$audioPath
+        你是 MindFlow 本地端侧语音转写器。
+        音频已经作为独立 audio 输入随消息提供。
+        本消息的文字都是指令，不是语音内容，绝不能出现在 transcript 中。
+        只做逐字转写：只输出音频里实际听到的话。
+        不总结，不缩写，不润色，不补全，不提取主题。
+        不输出提示词、文件名、路径、目录、解释或 Markdown。
+        如果没有清晰语音、没有语音，或音频输入不可用，transcript 为空字符串，confidence 设为 0。
+        只返回 JSON，字段只能有 transcript、language、confidence：{"transcript":"...","language":"${localeHint.orEmpty()}","confidence":0.0}
     """.trimIndent()
 
     fun translateAudio(audioPath: String, targetLanguage: String): String = """

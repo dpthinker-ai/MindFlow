@@ -358,23 +358,21 @@ class LiteRtLmOnDeviceAiClient(
         }
 
         engineMutex.withLock {
-            val cachedEngine = runCatching { acquireEngine(modelPath = modelPath, audioEnabled = true) }.getOrElse { error ->
-                return@withLock AiChatResult.Failure(
-                    reason = AiFailureReason.OTHER,
-                    message = "本地模型初始化失败：${error.message ?: "请检查模型文件或切换模型后重试"}",
-                )
-            }
-
             runCatching {
-                cachedEngine.engine.createConversation(defaultConversationConfig()).use { conversation ->
-                    conversation.sendMessage(
-                        Contents.of(
-                            Content.AudioBytes(audioFile.readBytes()),
-                            Content.Text(prompt),
-                        ),
-                        emptyMap(),
-                    ).toString().trim()
-                }
+                sendAudioPrompt(
+                    modelPath = modelPath,
+                    audioFile = audioFile,
+                    prompt = prompt,
+                )
+            }.recoverCatching { error ->
+                if (!shouldRetryOnCpu(error)) throw error
+                invalidateEngine()
+                sendAudioPrompt(
+                    modelPath = modelPath,
+                    audioFile = audioFile,
+                    prompt = prompt,
+                    forcedBackendName = "cpu",
+                )
             }.fold(
                 onSuccess = { content ->
                     if (content.isBlank()) {
@@ -393,6 +391,28 @@ class LiteRtLmOnDeviceAiClient(
                     )
                 },
             )
+        }
+    }
+
+    private fun sendAudioPrompt(
+        modelPath: String,
+        audioFile: File,
+        prompt: String,
+        forcedBackendName: String? = null,
+    ): String {
+        val cachedEngine = acquireEngine(
+            modelPath = modelPath,
+            forcedBackendName = forcedBackendName,
+            audioEnabled = true,
+        )
+        return cachedEngine.engine.createConversation(defaultConversationConfig()).use { conversation ->
+            conversation.sendMessage(
+                Contents.of(
+                    Content.AudioFile(audioFile.absolutePath),
+                    Content.Text(prompt),
+                ),
+                emptyMap(),
+            ).toString().trim()
         }
     }
 

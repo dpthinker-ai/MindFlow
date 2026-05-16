@@ -52,7 +52,7 @@ class VoiceTranscriptionPlanner(
             onSuccess = { result ->
                 VoiceTranscriptionResult.Success(
                     transcript = result.payload.transcript.trim(),
-                    topic = result.payload.topic.trim(),
+                    topic = "",
                     language = result.payload.language,
                     provider = result.meta.providerUsed,
                     latencyMs = result.meta.latencyMs,
