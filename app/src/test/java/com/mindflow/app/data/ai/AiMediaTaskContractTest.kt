@@ -52,14 +52,14 @@ class AiMediaTaskContractTest {
     }
 
     @Test
-    fun audioTranscriptionDropsPromptLeakage() {
+    fun audioTranscriptionDropsCurrentPromptLeakage() {
         val transcription = AiChatResult.Success(
-            """{"transcript":"今天讨论训练计划。你是 MindFlow 本地端侧语音转写器。音频已经作为独立 audio 输入随消息提供。","language":"zh-CN","confidence":0.72}""",
+            """{"transcript":"今天继续推进编译方案。你在做语音转写。目标：把录音中的真实说话内容逐字转成可编辑文本。","language":"zh-CN","confidence":0.81}""",
         ).toPayloadOrNull(AiTaskType.TRANSCRIBE_AUDIO) as AiTaskPayload.AudioTranscription
 
-        assertThat(transcription.transcript).isEqualTo("今天讨论训练计划。")
+        assertThat(transcription.transcript).isEqualTo("今天继续推进编译方案。")
         assertThat(transcription.topic).isEmpty()
-        assertThat(transcription.confidence).isWithin(0.001f).of(0.72f)
+        assertThat(transcription.confidence).isWithin(0.001f).of(0.81f)
     }
 
     @Test

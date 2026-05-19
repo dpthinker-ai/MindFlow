@@ -122,26 +122,40 @@ private fun parseAudioTranscriptionPayload(raw: String): AiTaskPayload.AudioTran
 private fun sanitizeAudioTranscript(value: String): String {
     val trimmed = value.trim()
     if (trimmed.isBlank()) return ""
-    val leakStart = AudioPromptLeakMarkers
-        .map { marker -> trimmed.indexOf(marker, ignoreCase = true) }
+    val leakStart = AudioPromptLeakMarkers.asSequence()
+        .map { marker -> trimmed.indexOfPromptLeak(marker) }
         .filter { it >= 0 }
         .minOrNull()
     val withoutPromptLeak = if (leakStart == null) trimmed else trimmed.substring(0, leakStart)
     return withoutPromptLeak.trim().trim('"', '\'', '`')
 }
 
+private fun String.indexOfPromptLeak(marker: String): Int {
+    val directIndex = indexOf(marker, ignoreCase = true)
+    if (directIndex >= 0) return directIndex
+
+    val compactText = StringBuilder(length)
+    val sourceIndexes = mutableListOf<Int>()
+    forEachIndexed { index, char ->
+        if (!char.isWhitespace()) {
+            compactText.append(char)
+            sourceIndexes += index
+        }
+    }
+    val compactMarker = marker.filterNot { it.isWhitespace() }
+    val compactIndex = compactText.indexOf(compactMarker, ignoreCase = true)
+    return if (compactIndex >= 0) sourceIndexes[compactIndex] else -1
+}
+
 private val AudioPromptLeakMarkers = listOf(
-    "你是 MindFlow",
-    "MindFlow 本地端侧语音转写器",
-    "音频已经作为独立 audio",
-    "本消息的文字都是指令",
-    "只做逐字转写",
-    "只输出音频里实际听到的话",
-    "不总结，不缩写",
-    "不输出提示词",
+    "你在做语音转写",
+    "目标：把录音中的真实说话内容",
+    "规则：只记录音频中实际听到的话",
+    "禁止输出任务说明",
+    "提示词、文件名、路径",
     "如果没有清晰语音",
+    "音频输入不可用",
     "只返回 JSON",
-    "字段只能有 transcript",
 )
 
 private fun parseAudioTranslationPayload(raw: String): AiTaskPayload.AudioTranslation {
