@@ -135,7 +135,7 @@ internal fun SettingsUiState.mergeSavedAiSettings(
     val savedPreset = AiProviderPreset.fromProviderId(settings.providerId)
         .takeIf { preset -> preset != AiProviderPreset.CUSTOM }
         ?: AiProviderPreset.fromBaseUrl(settings.baseUrl)
-    val commonState = copy(
+    val metadataState = copy(
         aiLastVerifiedAt = settings.lastVerifiedAt,
         aiLastVerifiedSuccess = settings.lastVerifiedSuccess,
         aiLastVerificationMessage = settings.lastVerificationMessage,
@@ -145,9 +145,10 @@ internal fun SettingsUiState.mergeSavedAiSettings(
         aiTokensToday = settings.tokensToday,
     )
     return if (preserveDraft) {
-        commonState.copy(isConfigured = commonState.cloudAiDraftIsConfigured())
+        val nextState = if (savedPreset == aiProviderPreset) metadataState else this
+        nextState.copy(isConfigured = nextState.cloudAiDraftIsConfigured())
     } else {
-        commonState.copy(
+        metadataState.copy(
             apiKey = settings.apiKey,
             baseUrl = settings.baseUrl,
             model = settings.model,

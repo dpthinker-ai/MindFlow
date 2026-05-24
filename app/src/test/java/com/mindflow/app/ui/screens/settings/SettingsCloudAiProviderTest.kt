@@ -50,10 +50,15 @@ class SettingsCloudAiProviderTest {
     }
 
     @Test
-    fun dirtyCloudAiDraftKeepsDeepSeekWhenSavedZhipuUsageStatsRefresh() {
+    fun dirtyCloudAiDraftKeepsDeepSeekUsageWhenSavedZhipuStatsRefresh() {
         val draft = SettingsUiState()
             .applyAiProviderPreset(AiProviderPreset.DEEPSEEK)
-            .copy(apiKey = "sk-deepseek")
+            .copy(
+                apiKey = "sk-deepseek",
+                aiRequestsToday = 3,
+                aiSuccessesToday = 2,
+                aiTokensToday = 100,
+            )
 
         val merged = draft.mergeSavedAiSettings(
             settings = AiSettings(
@@ -72,8 +77,34 @@ class SettingsCloudAiProviderTest {
         assertThat(merged.apiKey).isEqualTo("sk-deepseek")
         assertThat(merged.baseUrl).isEqualTo("https://api.deepseek.com")
         assertThat(merged.model).isEqualTo("deepseek-v4-flash")
-        assertThat(merged.aiRequestsToday).isEqualTo(61)
-        assertThat(merged.aiSuccessesToday).isEqualTo(11)
-        assertThat(merged.aiTokensToday).isEqualTo(9_000)
+        assertThat(merged.aiRequestsToday).isEqualTo(3)
+        assertThat(merged.aiSuccessesToday).isEqualTo(2)
+        assertThat(merged.aiTokensToday).isEqualTo(100)
+    }
+
+    @Test
+    fun dirtyCloudAiDraftAcceptsUsageRefreshFromSameProvider() {
+        val draft = SettingsUiState()
+            .applyAiProviderPreset(AiProviderPreset.DEEPSEEK)
+            .copy(apiKey = "sk-deepseek")
+
+        val merged = draft.mergeSavedAiSettings(
+            settings = AiSettings(
+                providerId = AiProviderPreset.DEEPSEEK.providerId,
+                apiKey = "sk-deepseek",
+                baseUrl = AiProviderPreset.DEEPSEEK.baseUrl,
+                model = AiProviderPreset.DEEPSEEK.defaultModel,
+                requestsToday = 5,
+                successesToday = 4,
+                tokensToday = 800,
+            ),
+            preserveDraft = true,
+        )
+
+        assertThat(merged.aiProviderPreset).isEqualTo(AiProviderPreset.DEEPSEEK)
+        assertThat(merged.apiKey).isEqualTo("sk-deepseek")
+        assertThat(merged.aiRequestsToday).isEqualTo(5)
+        assertThat(merged.aiSuccessesToday).isEqualTo(4)
+        assertThat(merged.aiTokensToday).isEqualTo(800)
     }
 }

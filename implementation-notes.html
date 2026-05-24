@@ -182,6 +182,10 @@
       <strong>Provider switching behavior.</strong>
       Switching to a provider with no saved profile starts with an empty API Key and that provider's default Base URL/model. Switching to a provider with a saved profile restores that provider's own values. This avoids carrying a Zhipu key into DeepSeek while still allowing future provider-specific credentials to be remembered.
     </div>
+    <div class="entry">
+      <strong>Provider-scoped usage merge.</strong>
+      Phone validation showed that <code>今日请求</code>, <code>今日成功</code>, and <code>今日 Token</code> could still look shared after opening another provider page. The persistence layer already stores provider-level counters, but <code>SettingsViewModel.mergeSavedAiSettings</code> accepted usage and verification refreshes from the active saved provider even while a different provider draft was being edited. The merge now applies usage and verification metadata only when the saved provider matches the visible provider; otherwise the visible provider keeps its own counters until <code>getProviderSettings(providerId)</code> loads that provider's profile.
+    </div>
 
     <h2>Final Verification</h2>
     <div class="entry">
@@ -215,6 +219,10 @@
     <div class="entry">
       <strong>Latest verification commands.</strong>
       After provider-level persistence, ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.ui.screens.settings.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>. All passed. The release build still prints known R8 Kotlin metadata warnings, but the build exits successfully and the installed app did not show <code>FATAL EXCEPTION</code> or app <code>AndroidRuntime</code> crash entries in the checked logcat window.
+    </div>
+    <div class="entry">
+      <strong>Provider usage regression verification.</strong>
+      Added a failing regression test for the reported issue: while viewing a dirty DeepSeek draft, an active saved Zhipu settings refresh must not replace DeepSeek's <code>今日请求</code>, <code>今日成功</code>, or <code>今日 Tokens</code>. After the fix, the focused regression, all settings tests, and the full debug unit test suite pass. Rebuilt and installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> without uninstalling or clearing data; package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:15:36</code>. On the phone, DeepSeek showed <code>24 / 23 / 20201</code>, OpenAI showed <code>0 / 0 / 0</code>, and Zhipu showed <code>24 / 0 / 0</code>; therefore the counters are no longer copied as one shared triplet. The matching DeepSeek/Zhipu request count appears to be retained historical provider data, not the previous UI merge overwrite.
     </div>
   </main>
 </body>
