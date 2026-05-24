@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MindFlow Cloud AI Runtime Policy Implementation Notes</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+      color: #172026;
+      background: #f7f8f5;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 72px;
+    }
+    h1, h2 {
+      line-height: 1.25;
+      color: #101820;
+    }
+    h1 {
+      font-size: 32px;
+      margin: 0 0 8px;
+    }
+    h2 {
+      font-size: 20px;
+      margin-top: 32px;
+      border-top: 1px solid #d8ddd2;
+      padding-top: 20px;
+    }
+    .meta {
+      color: #60706a;
+      margin-bottom: 28px;
+    }
+    .entry {
+      background: #ffffff;
+      border: 1px solid #dfe5da;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin: 14px 0;
+    }
+    .entry strong {
+      color: #0e5f53;
+    }
+    code {
+      background: #eef2ea;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+    ul {
+      padding-left: 22px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Cloud AI Runtime Policy Implementation Notes</h1>
+    <p class="meta">Created on 2026-05-24 for the DeepSeek/general cloud AI provider implementation.</p>
+
+    <h2>Initial Decisions</h2>
+    <div class="entry">
+      <strong>Snapshot before implementation.</strong>
+      The original workspace had existing app and test edits plus large untracked local data directories. I committed the app/test code snapshot as
+      <code>e5c4751 chore: snapshot current app changes</code> and excluded <code>data/</code>, <code>recovery/</code>, <code>tmp/</code>, and product/local documents from the snapshot.
+    </div>
+    <div class="entry">
+      <strong>Isolated worktree.</strong>
+      The implementation is being done in <code>/Users/dpthinker/.config/superpowers/worktrees/MindFlow/cloud-ai-runtime-policy</code> on branch
+      <code>codex/cloud-ai-runtime-policy</code>. This keeps the main workspace's local artifacts and future user edits separate from the Spec implementation.
+    </div>
+    <div class="entry">
+      <strong>Implementation boundary.</strong>
+      The first production version stays on OpenAI Chat Completions-compatible providers. DeepSeek, OpenAI, Zhipu, and custom providers share one registry and request adapter. Native Anthropic/Gemini protocols and cloud audio/image upload remain out of this change because they need separate explicit consent and payload design.
+    </div>
+    <div class="entry">
+      <strong>Audit storage choice.</strong>
+      Usage audit will use a local JSONL/file-backed repository instead of a Room migration. This mirrors the existing <code>AiTaskTraceRecorder</code> style, avoids a database migration for metadata-only events, and keeps the release validation lower risk.
+    </div>
+
+    <h2>Implementation Log</h2>
+    <div class="entry">
+      <strong>Plan written.</strong>
+      The execution plan is stored at <code>docs/superpowers/plans/2026-05-24-cloud-ai-provider-runtime-policy.md</code>. The plan uses TDD checkpoints for provider registry, runtime settings, policy guards, usage audit, settings UI, and release verification.
+    </div>
+    <div class="entry">
+      <strong>Provider registry and adapter.</strong>
+      Added a generic cloud provider registry with <code>zhipu</code>, <code>openai</code>, <code>deepseek</code>, and <code>custom</code>. DeepSeek defaults to <code>https://api.deepseek.com</code>, <code>/chat/completions</code>, and <code>deepseek-v4-flash</code>, with <code>deepseek-v4-pro</code> available. Deprecated <code>deepseek-chat</code> and <code>deepseek-reasoner</code> are normalized to the current default.
+    </div>
+    <div class="entry">
+      <strong>Adapter testing decision.</strong>
+      The request adapter returns a JSON string rather than an Android <code>org.json.JSONObject</code>. JVM unit tests use Android's not-mocked <code>org.json</code> stub, so a string renderer keeps request construction testable without adding another JSON dependency or shifting these tests to instrumentation.
+    </div>
+    <div class="entry">
+      <strong>Verification.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.cloud.*"</code>; the provider and adapter tests pass.
+    </div>
+  </main>
+</body>
+</html>

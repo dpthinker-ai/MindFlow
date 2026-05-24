@@ -1,5 +1,8 @@
 package com.mindflow.app.data.topic
 
+import com.mindflow.app.data.ai.cloud.CloudAiPreparedRequest
+import com.mindflow.app.data.ai.cloud.CloudAiProviderSpec
+import com.mindflow.app.data.ai.cloud.CloudAiRequestAdapter
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import java.io.BufferedReader
@@ -80,7 +83,7 @@ class AiServiceClient {
         return@withContext when (result) {
             is AiChatResult.Success -> AiConnectionResult(
                 isConfiguredCorrectly = true,
-                message = "连接成功，${AiProviderPreset.fromBaseUrl(settings.baseUrl).label} 模型可以正常调用",
+                message = "连接成功，${AiProviderPreset.fromProviderId(settings.providerId).label} 模型可以正常调用",
             )
             is AiChatResult.Failure -> AiConnectionResult(
                 isConfiguredCorrectly = result.isConfiguredCorrectly,
@@ -447,27 +450,26 @@ class AiServiceClient {
             )
         }
         var lastFailure: AiChatResult.Failure? = null
-        val authCandidates = buildAuthCandidates(
-            apiKey = settings.apiKey.trim(),
-            providerPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
+        val request = CloudAiRequestAdapter.build(
+            settings = settings,
+            userPrompt = userPrompt,
+            systemPrompt = systemPrompt,
+            maxTokens = maxTokens,
+            temperature = temperature,
+            thinkingEnabled = thinkingEnabled,
         )
-        authCandidates.forEachIndexed { index, authHeader ->
+        request.authHeaders.forEachIndexed { index, authHeader ->
             when (
                 val result = executeChatCompletion(
-                    settings = settings,
+                    request = request,
                     authHeader = authHeader,
-                    userPrompt = userPrompt,
-                    systemPrompt = systemPrompt,
-                    maxTokens = maxTokens,
-                    temperature = temperature,
-                    thinkingEnabled = thinkingEnabled,
                     timeouts = timeouts,
                 )
             ) {
                 is AiChatResult.Success -> return result
                 is AiChatResult.Failure -> {
                     lastFailure = result
-                    val canRetryAuth = result.reason == AiFailureReason.AUTH && index < authCandidates.lastIndex
+                    val canRetryAuth = result.reason == AiFailureReason.AUTH && index < request.authHeaders.lastIndex
                     if (!canRetryAuth) {
                         return result
                     }
@@ -482,17 +484,12 @@ class AiServiceClient {
     }
 
     private fun executeChatCompletion(
-        settings: AiSettings,
+        request: CloudAiPreparedRequest,
         authHeader: String,
-        userPrompt: String,
-        systemPrompt: String,
-        maxTokens: Int,
-        temperature: Double,
-        thinkingEnabled: Boolean,
         timeouts: AiRequestTimeouts,
     ): AiChatResult {
         val connection = runCatching {
-            URL("${settings.baseUrl.trimEnd('/')}/chat/completions").openConnection() as HttpURLConnection
+            URL(request.url).openConnection() as HttpURLConnection
         }.getOrElse {
             return AiChatResult.Failure(
                 reason = AiFailureReason.CONFIG,
@@ -509,32 +506,8 @@ class AiServiceClient {
             connection.readTimeout = timeouts.readMs
             connection.doOutput = true
 
-            val payload = JSONObject()
-                .put("model", settings.model.trim())
-                .put("temperature", temperature)
-                .put("max_tokens", maxTokens)
-                .put("stream", false)
-                .put(
-                    "thinking",
-                    JSONObject().put("type", if (thinkingEnabled) "enabled" else "disabled")
-                )
-                .put(
-                    "messages",
-                    JSONArray()
-                        .put(
-                            JSONObject()
-                                .put("role", "system")
-                                .put("content", systemPrompt)
-                        )
-                        .put(
-                            JSONObject()
-                                .put("role", "user")
-                                .put("content", userPrompt)
-                        )
-                )
-
             connection.outputStream.bufferedWriter().use { writer ->
-                writer.write(payload.toString())
+                writer.write(request.body)
             }
 
             val responseCode = connection.responseCode
@@ -547,7 +520,7 @@ class AiServiceClient {
                 return parseFailure(
                     httpCode = responseCode,
                     responseBody = responseBody,
-                    providerPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
+                    provider = request.provider,
                 )
             }
 
@@ -587,22 +560,6 @@ class AiServiceClient {
         }
     }
 
-    private fun buildAuthCandidates(
-        apiKey: String,
-        providerPreset: AiProviderPreset,
-    ): List<String> {
-        val trimmed = apiKey.trim()
-        if (trimmed.isBlank()) return emptyList()
-
-        val rawKey = trimmed.removePrefix("Bearer").trim()
-        return when (providerPreset) {
-            AiProviderPreset.OPENAI -> listOf("Bearer $rawKey", rawKey).distinct()
-            AiProviderPreset.ZHIPU,
-            AiProviderPreset.CUSTOM,
-            -> listOf(rawKey, "Bearer $rawKey").distinct()
-        }
-    }
-
     private fun extractMessageContent(message: JSONObject?): String? {
         if (message == null) return null
 
@@ -632,7 +589,7 @@ class AiServiceClient {
     private fun parseFailure(
         httpCode: Int,
         responseBody: String,
-        providerPreset: AiProviderPreset,
+        provider: CloudAiProviderSpec,
     ): AiChatResult.Failure {
         val root = runCatching { JSONObject(responseBody) }.getOrNull()
         val errorObject = root?.optJSONObject("error")
@@ -643,7 +600,7 @@ class AiServiceClient {
             errorCode == "1302" || errorMessage.contains("速率限制") || errorMessage.contains("rate limit", ignoreCase = true) -> {
                 AiChatResult.Failure(
                     reason = AiFailureReason.RATE_LIMIT,
-                    message = "已连通${providerPreset.label}，但当前触发了速率限制，请稍后再试",
+                    message = "已连通${provider.label}，但当前触发了速率限制，请稍后再试",
                     isConfiguredCorrectly = true,
                 )
             }

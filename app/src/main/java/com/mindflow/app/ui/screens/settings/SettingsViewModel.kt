@@ -296,6 +296,7 @@ class SettingsViewModel(
             when (value) {
                 AiProviderPreset.OPENAI,
                 AiProviderPreset.ZHIPU,
+                AiProviderPreset.DEEPSEEK,
                 -> state.copy(
                     aiProviderPreset = value,
                     baseUrl = value.baseUrl,

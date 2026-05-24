@@ -1,8 +1,10 @@
 package com.mindflow.app.data.model
 
+import com.mindflow.app.data.ai.cloud.CloudAiProviderRegistry
 import java.security.MessageDigest
 
 data class AiSettings(
+    val providerId: String = DEFAULT_PROVIDER_ID,
     val apiKey: String = "",
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = DEFAULT_MODEL,
@@ -21,6 +23,7 @@ data class AiSettings(
 
     val configFingerprint: String
         get() = fingerprint(
+            providerId = providerId,
             apiKey = apiKey,
             baseUrl = baseUrl,
             model = model,
@@ -30,15 +33,18 @@ data class AiSettings(
         get() = verifiedFingerprint.isNotBlank() && verifiedFingerprint == configFingerprint
 
     companion object {
+        const val DEFAULT_PROVIDER_ID = CloudAiProviderRegistry.ZHIPU_ID
         val DEFAULT_BASE_URL = AiProviderPreset.ZHIPU.baseUrl
         val DEFAULT_MODEL = AiProviderPreset.ZHIPU.defaultModel
 
         fun fingerprint(
+            providerId: String = DEFAULT_PROVIDER_ID,
             apiKey: String,
             baseUrl: String,
             model: String,
         ): String {
             val raw = listOf(
+                providerId.trim(),
                 apiKey.trim(),
                 baseUrl.trim().trimEnd('/'),
                 model.trim(),

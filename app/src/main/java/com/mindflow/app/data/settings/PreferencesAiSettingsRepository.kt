@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mindflow.app.data.ai.cloud.CloudAiProviderRegistry
 import com.mindflow.app.data.model.AiSettings
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -30,9 +31,14 @@ class PreferencesAiSettingsRepository(
             }
         }
         .map { preferences ->
+            val baseUrl = preferences[BASE_URL] ?: defaultSettings.baseUrl
+            val providerId = preferences[PROVIDER_ID]
+                ?: defaultSettings.providerId.takeIf { it.isNotBlank() }
+                ?: CloudAiProviderRegistry.resolveProviderId(baseUrl)
             AiSettings(
+                providerId = providerId,
                 apiKey = preferences[API_KEY] ?: defaultSettings.apiKey,
-                baseUrl = preferences[BASE_URL] ?: defaultSettings.baseUrl,
+                baseUrl = baseUrl,
                 model = preferences[MODEL] ?: defaultSettings.model,
                 aiEnabled = preferences[AI_ENABLED] ?: true,
                 lastVerifiedAt = preferences[LAST_VERIFIED_AT] ?: 0L,
@@ -50,6 +56,9 @@ class PreferencesAiSettingsRepository(
 
     override suspend fun save(settings: AiSettings) {
         context.aiSettingsDataStore.edit { preferences ->
+            preferences[PROVIDER_ID] = settings.providerId.trim().ifBlank {
+                CloudAiProviderRegistry.resolveProviderId(settings.baseUrl)
+            }
             preferences[API_KEY] = settings.apiKey.trim()
             preferences[BASE_URL] = settings.baseUrl.trim().ifBlank { defaultSettings.baseUrl }
             preferences[MODEL] = settings.model.trim()
@@ -93,6 +102,7 @@ class PreferencesAiSettingsRepository(
     override suspend fun clear() {
         context.aiSettingsDataStore.edit { preferences ->
             preferences.remove(API_KEY)
+            preferences.remove(PROVIDER_ID)
             preferences.remove(BASE_URL)
             preferences.remove(MODEL)
             preferences.remove(AI_ENABLED)
@@ -108,6 +118,7 @@ class PreferencesAiSettingsRepository(
     }
 
     private companion object {
+        val PROVIDER_ID = stringPreferencesKey("provider_id")
         val API_KEY = stringPreferencesKey("api_key")
         val BASE_URL = stringPreferencesKey("base_url")
         val MODEL = stringPreferencesKey("model")
