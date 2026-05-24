@@ -142,6 +142,40 @@ class ReviewChatAnswerFormatterTest {
     }
 
     @Test
+    fun reviewChatHistoryPreviewText_extractsSummaryFromStructuredJson() {
+        val preview = reviewChatHistoryPreviewText(
+            """
+            {
+              "summary": "你近期关注的核心是注意力管理、AI工具与个人边界。",
+              "sections": [
+                {
+                  "title": "记录",
+                  "items": [
+                    "2026-05-01《注意力决定人生》：注意力管理"
+                  ]
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertThat(preview).isEqualTo("你近期关注的核心是注意力管理、AI工具与个人边界。")
+        assertThat(preview).doesNotContain("{")
+        assertThat(preview).doesNotContain("\"summary\"")
+    }
+
+    @Test
+    fun reviewChatHistoryPreviewText_extractsSummaryFromTruncatedJsonExcerpt() {
+        val preview = reviewChatHistoryPreviewText(
+            """{"summary":"你近期关注的核心是注意力管理、AI工具与个人边界，从4月初的注意力哲学延伸到最近的工具实验""",
+        )
+
+        assertThat(preview).isEqualTo("你近期关注的核心是注意力管理、AI工具与个人边界，从4月初的注意力哲学延伸到最近的工具实验")
+        assertThat(preview).doesNotContain("{")
+        assertThat(preview).doesNotContain("\"summary\"")
+    }
+
+    @Test
     fun normalizeReviewChatAnswerForDisplay_keepsRecordSubBulletsNestedInsteadOfFlat() {
         val formatted = normalizeReviewChatAnswerForDisplay(
             """

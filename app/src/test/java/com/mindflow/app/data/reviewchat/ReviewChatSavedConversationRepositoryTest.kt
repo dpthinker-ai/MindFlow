@@ -49,6 +49,64 @@ class ReviewChatSavedConversationRepositoryTest {
     }
 
     @Test
+    fun saveSession_usesHumanReadableExcerptForStructuredJsonAnswer() = runTest {
+        val repository = RoomReviewChatSavedConversationRepository(FakeReviewChatDao())
+
+        repository.saveSession(
+            title = "最近关注",
+            messages = listOf(
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.USER,
+                    content = "我最近在关注什么？",
+                    createdAt = 1_000L,
+                ),
+                ReviewChatMessage(
+                    role = ReviewChatMessageRole.ASSISTANT,
+                    content = """
+                        {
+                          "summary": "你近期关注的核心是注意力管理、AI工具与个人边界。",
+                          "sections": []
+                        }
+                    """.trimIndent(),
+                    provider = ReviewChatProvider.CLOUD,
+                    createdAt = 1_100L,
+                ),
+            ),
+        )
+
+        val latest = repository.observeLatestSavedSessionSummary().first()
+
+        assertThat(latest?.latestExcerpt).isEqualTo("你近期关注的核心是注意力管理、AI工具与个人边界。")
+        assertThat(latest?.latestExcerpt).doesNotContain("{")
+        assertThat(latest?.latestExcerpt).doesNotContain("\"summary\"")
+    }
+
+    @Test
+    fun observeSavedSessionSummaries_cleansLegacyTruncatedJsonExcerpt() = runTest {
+        val dao = FakeReviewChatDao().apply {
+            seedSession(
+                ReviewChatSessionEntity(
+                    id = 42L,
+                    title = "我最近在关注什么？",
+                    createdAt = 1_000L,
+                    updatedAt = 1_100L,
+                    messageCount = 2,
+                    latestExcerpt = """{"summary":"你近期关注的核心是注意力管理、AI工具与个人边界，从4月初的注意力哲学延伸到最近的工具实验""",
+                    isArchived = true,
+                )
+            )
+        }
+        val repository = RoomReviewChatSavedConversationRepository(dao)
+
+        val summary = repository.observeSavedSessionSummaries().first().single()
+
+        assertThat(summary.latestExcerpt)
+            .isEqualTo("你近期关注的核心是注意力管理、AI工具与个人边界，从4月初的注意力哲学延伸到最近的工具实验")
+        assertThat(summary.latestExcerpt).doesNotContain("{")
+        assertThat(summary.latestExcerpt).doesNotContain("\"summary\"")
+    }
+
+    @Test
     fun cacheWorkingSession_restoresEditableDraftWithoutBecomingLatestSaved() = runTest {
         val repository = RoomReviewChatSavedConversationRepository(FakeReviewChatDao())
 
@@ -235,6 +293,12 @@ class ReviewChatSavedConversationRepositoryTest {
                 sessions.remove(sessionId)
                 messages.remove(sessionId)
             }
+            updateLatestArchivedSession()
+        }
+
+        fun seedSession(entity: ReviewChatSessionEntity) {
+            sessions[entity.id] = entity
+            nextSessionId = maxOf(nextSessionId, entity.id + 1)
             updateLatestArchivedSession()
         }
 

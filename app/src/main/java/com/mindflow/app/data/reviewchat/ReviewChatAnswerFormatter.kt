@@ -48,6 +48,55 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
     return normalized
 }
 
+internal fun reviewChatHistoryPreviewText(
+    content: String,
+    limit: Int = 120,
+): String {
+    val normalizedInput = SimpleMarkdown.normalizeForDisplay(content).trim()
+    if (normalizedInput.isBlank()) return normalizedInput
+
+    val previewSource = extractReviewChatStructuredSummary(normalizedInput)
+        ?: normalizeReviewChatAnswerForDisplay(normalizedInput)
+    return previewSource
+        .replace("\n", " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .let { normalized ->
+            if (normalized.length <= limit) normalized else normalized.take(limit).trimEnd()
+        }
+}
+
+private fun extractReviewChatStructuredSummary(content: String): String? {
+    parseReviewChatStructuredAnswer(content)
+        ?.sections
+        ?.firstOrNull { it.title == "答复" }
+        ?.let { section ->
+            (section.body + section.items)
+                .joinToString(" ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+
+    return Regex(""""summary"\s*:\s*"((?:\\.|[^"\\])*)""")
+        .find(content)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let(::unescapeReviewChatJsonPreviewText)
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+}
+
+private fun unescapeReviewChatJsonPreviewText(content: String): String =
+    content
+        .replace("\\n", " ")
+        .replace("\\r", " ")
+        .replace("\\t", " ")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
+
 private fun normalizeLegacyReviewChatMarkdown(content: String): String = normalizeEvidenceEchoes(
     normalizeInlineCategorySectionBullets(
         normalizeRecordSummarySubBullets(normalizeMarkdownTables(content))

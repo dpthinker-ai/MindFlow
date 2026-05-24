@@ -93,8 +93,9 @@ class RoomReviewChatSavedConversationRepository(
         val now = System.currentTimeMillis()
         val createdAt = messages.firstOrNull()?.createdAt ?: System.currentTimeMillis()
         val updatedAt = listOfNotNull(messages.lastOrNull()?.createdAt, now).max()
-        val latestExcerpt = messages.lastOrNull()?.content?.take(120)
-            ?: draft.take(120)
+        val latestExcerpt = reviewChatHistoryPreviewText(
+            messages.lastOrNull()?.content ?: draft,
+        )
         val resolvedSessionId = sessionId?.takeIf { dao.getSession(it) != null }
         if (resolvedSessionId != null) {
             dao.updateSession(
@@ -192,7 +193,7 @@ class RoomReviewChatSavedConversationRepository(
             title = title,
             updatedAt = updatedAt,
             messageCount = messageCount,
-            latestExcerpt = latestExcerpt,
+            latestExcerpt = reviewChatHistoryPreviewText(latestExcerpt),
             isArchived = isArchived,
         )
 

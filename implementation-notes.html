@@ -280,6 +280,14 @@
       <strong>Follow-up unadvanced-query release install.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>; all passed. Installed the signed release APK on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:39:30</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
     </div>
+    <div class="entry">
+      <strong>Follow-up: history excerpt JSON cleanup.</strong>
+      A phone screenshot of the Review history page showed <code>主题回看</code> and the <code>我最近在关注什么？</code> history row rendering <code>{"summary": ...}</code> JSON in the preview text. Root cause: <code>ReviewChatScreen</code> already renders structured answers for the chat body, but <code>RoomReviewChatSavedConversationRepository</code> persisted <code>latestExcerpt</code> by taking the raw last message content. The fix adds a shared history-preview formatter that extracts the structured <code>summary</code> from full JSON answers and also from legacy truncated excerpts that only contain the beginning of <code>{"summary":"..."</code>. New saves now store human-readable excerpts; old rows are cleaned when converted to <code>SavedReviewChatSessionSummary</code> for display.
+    </div>
+    <div class="entry">
+      <strong>Follow-up history-preview verification.</strong>
+      Added focused tests for full structured JSON answers, legacy truncated JSON excerpts, new saved sessions, and old stored summaries. Ran the focused formatter/repository tests, the Review chat test group, the full debug unit suite, and <code>./gradlew --no-daemon :app:assembleRelease</code>; all passed. Installed <code>app/build/outputs/apk/release/app-release.apk</code> on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code> without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:48:37</code>. Post-install screenshots of the Review tab and full Review history page show human-readable previews for <code>最近在关注什么</code> and <code>最近一个月有哪些未推进的想法</code>, with no visible <code>{"summary": ...}</code> JSON. Launch/logcat checks found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries.
+    </div>
   </main>
 </body>
 </html>
