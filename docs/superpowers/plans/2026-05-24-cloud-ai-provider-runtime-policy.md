@@ -527,7 +527,7 @@ Expected: PASS and release artifact at `app/build/outputs/apk/release/app-releas
 
 Use only the release APK. Do not install debug APK, uninstall, clear app data, wipe emulator, or delete local model files. If a compatible device/emulator is available, install with `adb install -r app/build/outputs/apk/release/app-release.apk`, launch `com.mindflow.app`, and verify settings show DeepSeek plus existing notes/model remain present. If signing mismatch or device unavailable occurs, stop and record the exact blocked state in `implementation-notes.html`.
 
-Result: blocked because `adb devices -l` returned no attached devices. No debug/unsigned install or destructive reset was attempted.
+Result: emulator validation completed after starting `MindFlow_Pixel_API_36` without wipe/clear flags. Before install, a data backup was saved to `/Users/dpthinker/workspace/MindFlow/recovery/pre-emulator-validation-20260524-163831`. `adb install -r app/build/outputs/apk/release/app-release.apk` succeeded, the app launched to `com.mindflow.app/.MainActivity`, existing note files remained at 148, local model state stayed unchanged, and the cloud AI settings page showed DeepSeek with `https://api.deepseek.com` and `deepseek-v4-flash`.
 
 - [x] **Step 5: Final implementation notes update**
 

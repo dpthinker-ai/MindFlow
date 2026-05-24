@@ -178,7 +178,15 @@
     </div>
     <div class="entry">
       <strong>Manual release validation status.</strong>
-      <code>adb devices -l</code> returned no attached devices. I did not install an unsigned APK, install a debug APK, uninstall the app, clear app data, wipe an emulator, or delete local model/data files. Device/emulator UI validation is therefore blocked until a compatible device is online.
+      After the initial no-device result, I started the existing <code>MindFlow_Pixel_API_36</code> AVD without wipe or clear flags. Before installation, I backed up <code>/data/user/0/com.mindflow.app</code>, <code>/storage/emulated/0/Android/data/com.mindflow.app</code>, and the relevant Download export <code>mindflow-20260502-2148.md</code> to <code>/Users/dpthinker/workspace/MindFlow/recovery/pre-emulator-validation-20260524-163831</code>.
+    </div>
+    <div class="entry">
+      <strong>Emulator release validation.</strong>
+      Installed only <code>app/build/outputs/apk/release/app-release.apk</code> with <code>adb install -r</code>; install succeeded. The app launched to <code>com.mindflow.app/.MainActivity</code>, existing notes remained at 148 files, and <code>/data/user/0/com.mindflow.app/files/local-models</code> stayed empty as before installation. The cloud AI settings page shows DeepSeek; selecting it updates Base URL to <code>https://api.deepseek.com</code> and Model to <code>deepseek-v4-flash</code>. No <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> crash entries appeared in the checked logcat window.
+    </div>
+    <div class="entry">
+      <strong>Validation screenshots.</strong>
+      Emulator screenshots were captured at <code>/tmp/mindflow-cloud-ai-release-launched.png</code>, <code>/tmp/mindflow-cloud-ai-release-ai-settings.png</code>, <code>/tmp/mindflow-cloud-ai-release-cloud-config.png</code>, and <code>/tmp/mindflow-cloud-ai-release-deepseek.png</code>.
     </div>
   </main>
 </body>
