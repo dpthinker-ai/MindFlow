@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MindFlow 今天 / 回看路由拆分 Spec</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172026;
+      background: #f7f8f5;
+      line-height: 1.7;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 72px;
+    }
+    h1, h2 {
+      color: #101820;
+      line-height: 1.25;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+    h2 {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #d8ddd2;
+      font-size: 20px;
+    }
+    .meta {
+      margin: 0 0 28px;
+      color: #60706a;
+    }
+    .card {
+      margin: 14px 0;
+      padding: 16px 18px;
+      border: 1px solid #dfe5da;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .decision {
+      border-color: #b8d9d2;
+      background: #f2fbf8;
+    }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2ea;
+      font-size: 0.92em;
+    }
+    ul, ol {
+      padding-left: 22px;
+    }
+    strong {
+      color: #0e5f53;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>今天 / 回看路由拆分 Spec</h1>
+    <p class="meta">创建于 2026-05-24。目标是把当前共享的 <code>FlowRoute</code> / <code>FlowViewModel</code> 拆成清晰的“今天”和“回看”边界，避免两个功能继续在 UI 与状态层耦合。</p>
+
+    <h2>背景</h2>
+    <div class="card">
+      <p>当前底部导航已经没有独立的用户可见 <code>Flow</code> 页，但代码中 <code>FLOW_TODAY</code> 与 <code>FLOW_REVIEW</code> 都进入 <code>FlowRoute</code>。<code>FlowRoute</code> 会收集 <code>FlowViewModel.uiState</code>，再在 <code>FlowScreen</code> 内根据 <code>FlowFocus</code> 分支展示“今天”或“回看”。</p>
+      <p>这造成两个实际问题：第一，打开“回看”也会依赖“今天”的聚合状态和模型转换；第二，后续修改“今天”的行动中枢、知识压缩、任务发现时，容易影响只需要回看入口和历史会话的页面。</p>
+    </div>
+
+    <h2>目标</h2>
+    <div class="card decision">
+      <p><strong>推荐实现方案：</strong>保留历史 route 字符串以兼容通知、Widget 和 deep link，但把运行时边界拆成 <code>TodayRoute</code> / <code>TodayViewModel</code> / <code>TodayUiState</code> 与 <code>ReviewHomeRoute</code> / <code>ReviewHomeScreen</code>。</p>
+      <ul>
+        <li><code>今天</code> 负责行动中枢、今日聚焦、自动发现、跟踪任务、今日回看提示。</li>
+        <li><code>回看</code> 负责回看入口、最近会话、推荐问题、进入回看聊天与历史。</li>
+        <li><code>FlowFocus</code> 只作为旧入口兼容层存在，把旧通知或 intent 映射到 <code>今天</code> 或 <code>回看</code>。</li>
+      </ul>
+    </div>
+
+    <h2>非目标</h2>
+    <div class="card">
+      <ul>
+        <li>不重命名持久化 route 字符串，例如 <code>flow/today</code>、<code>flow/review</code>，避免破坏历史 PendingIntent 和深链。</li>
+        <li>不在本次拆分中重做“今天”的产品视觉或回看聊天能力。</li>
+        <li>不删除底层 planner、repository 或知识层模型；只调整 UI route 与 ViewModel 边界。</li>
+        <li>不安装 debug APK，不清空模拟器或真机数据。</li>
+      </ul>
+    </div>
+
+    <h2>架构设计</h2>
+    <div class="card">
+      <p><strong>1. Today 边界。</strong>将当前 <code>FlowViewModel</code> 重命名或迁移为 <code>TodayViewModel</code>，将 <code>FlowUiState</code> 改为 <code>TodayUiState</code>。它继续承载今日计数、继续推进记录、旧记录重连、主线候选、知识压缩、自动发现、跟踪任务和今日回看提示需要的状态。</p>
+      <p><strong>2. Review 边界。</strong>新增 <code>ReviewHomeRoute</code> 和 <code>ReviewHomeScreen</code>。它只观察 <code>ReviewChatSavedConversationRepository.observeLatestSavedSessionSummary()</code>，并通过导航回调进入回看聊天、回看历史或指定保存会话。它不依赖 <code>TodayViewModel</code>，也不计算 <code>TodayDesignModel</code>。</p>
+      <p><strong>3. 共享组件。</strong><code>ReviewChatEntryCard</code> 保持可复用组件身份，但移出 <code>flow</code> 包或至少改为由回看 home 明确拥有。<code>TodayReviewHintCard</code> 仍可在“今天”中展示最近回看提示，但只接收一个轻量的 <code>SavedReviewChatSessionSummary</code>。</p>
+      <p><strong>4. 兼容适配。</strong><code>MindFlowDestinations</code> 可继续保留 <code>FLOW_TODAY</code>、<code>FLOW_REVIEW</code> 常量名作为兼容层，但导航 graph 中分别接入 <code>TodayRoute</code> 和 <code>ReviewHomeRoute</code>。如果改名为 <code>TODAY</code> / <code>REVIEW</code>，必须保留旧字符串值。</p>
+    </div>
+
+    <h2>迁移步骤</h2>
+    <div class="card">
+      <ol>
+        <li>新增 <code>ReviewHomeRoute</code>，让 <code>FLOW_REVIEW</code> 先改走独立 route，并删除回看路径对 <code>FlowViewModel</code> 的依赖。</li>
+        <li>将 <code>FlowRoute</code> 拆为 <code>TodayRoute</code>，删除 <code>FlowPage</code>、<code>FlowFocus.toPage()</code> 与回看分支。</li>
+        <li>将 <code>FlowViewModel</code> / <code>FlowUiState</code> 迁移为 <code>TodayViewModel</code> / <code>TodayUiState</code>，同步更新 <code>TodayDesignModel</code> 和 <code>TodaySecondaryScreens</code>。</li>
+        <li>清理确定无引用的私有 UI 函数、测试名称和导入；保留历史 route 字符串与旧入口映射。</li>
+        <li>更新 <code>PROJECT_GUIDE.md</code> 和 <code>implementation-notes.html</code>，说明拆分后的边界。</li>
+      </ol>
+    </div>
+
+    <h2>验收标准</h2>
+    <div class="card">
+      <ul>
+        <li>点击底部 <code>今天</code> 时，只创建/收集 <code>TodayViewModel</code> 相关状态。</li>
+        <li>点击底部 <code>回看</code> 时，不依赖 <code>TodayViewModel</code>，不计算 <code>TodayDesignModel</code>。</li>
+        <li>通知、Widget 和旧 <code>ACTION_OPEN_FLOW</code> 仍能正确打开“今天”或“回看”。</li>
+        <li>回看首页仍能打开新聊天、推荐问题、历史列表和最近保存会话。</li>
+        <li>今天首页、自动发现、今日任务详情仍保持现有行为。</li>
+      </ul>
+    </div>
+
+    <h2>测试与验证</h2>
+    <div class="card">
+      <ul>
+        <li>新增或调整路由单测，覆盖旧 <code>FlowFocus.TODAY</code> / <code>FlowFocus.REVIEW</code> 的兼容映射。</li>
+        <li>新增 Review home 测试，确认它只依赖保存会话摘要和导航回调。</li>
+        <li>更新 Today 相关单测，将 <code>FlowUiState</code> 引用替换为 <code>TodayUiState</code>。</li>
+        <li>运行 <code>./gradlew --no-daemon :app:testDebugUnitTest</code> 与 <code>./gradlew --no-daemon :app:assembleRelease</code>。</li>
+        <li>用户可见验证必须安装 release APK <code>app/build/outputs/apk/release/app-release.apk</code>；优先模拟器验证，真机安装前不清数据、不卸载。</li>
+      </ul>
+    </div>
+
+    <h2>风险与取舍</h2>
+    <div class="card">
+      <p>本次拆分会触及导航 graph、Compose route、ViewModel factory 和 Today 测试。最大风险是误删历史入口兼容逻辑，因此 route 字符串和 <code>ACTION_OPEN_FLOW</code> 不应在第一轮删除。更深层的 planner/use case 拆分暂不纳入，避免一次性重构过大。</p>
+    </div>
+  </main>
+</body>
+</html>
