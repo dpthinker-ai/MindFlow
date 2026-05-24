@@ -110,6 +110,22 @@
       <strong>Verification.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.settings.OnDeviceExecutionModeCodecTest" --tests "com.mindflow.app.data.settings.AiRuntimeSettingsTest"</code>; the runtime/default-mode tests pass.
     </div>
+    <div class="entry">
+      <strong>Task policy registry.</strong>
+      Added a first local policy table for router-backed tasks. Foreground polish uses cloud then on-device with Toast notice; background summary/topic/tag/folder/graph tasks use on-device then cloud with aggregated notice; audio, translation, and image understanding remain on-device only.
+    </div>
+    <div class="entry">
+      <strong>Sensitivity and budget guards.</strong>
+      Added a rule-based sensitivity classifier and a background-only budget guard. High sensitivity background content, such as identity numbers, bank-card-like numbers, credentials, tokens, or similar keywords, blocks cloud fallback. Foreground user-triggered cloud work is not blocked by background request/token budget.
+    </div>
+    <div class="entry">
+      <strong>Router compatibility.</strong>
+      <code>AiTaskRouter</code> now filters candidate providers through task policy and cloud guards while preserving the existing <code>automaticPreference</code> behavior for current callers. This avoids forcing all planners to be rewritten in the same commit.
+    </div>
+    <div class="entry">
+      <strong>Verification.</strong>
+      Ran focused policy/router tests including <code>AiTaskPolicyRegistryTest</code>, <code>AiDataSensitivityClassifierTest</code>, <code>CloudUsageBudgetGuardTest</code>, <code>AiTaskRouterPolicyTest</code>, and the existing <code>AiTaskRouterTest</code>; they pass.
+    </div>
   </main>
 </body>
 </html>

@@ -20,6 +20,48 @@ enum class AiAutomaticPreference {
     PREFER_CLOUD,
 }
 
+enum class AiTriggerMode {
+    FOREGROUND_USER_ACTION,
+    BACKGROUND_AUTOMATION,
+    BACKGROUND_HELPER,
+}
+
+enum class AiTriggerSurface {
+    EDITOR,
+    FLOW,
+    REVIEW_CHAT,
+    GRAPH,
+    SETTINGS,
+    BACKGROUND,
+}
+
+enum class PromptPayloadPolicy {
+    METADATA_ONLY,
+    SUMMARY_ONLY,
+    SELECTED_SNIPPETS,
+    SINGLE_NOTE_EXCERPT,
+    FULL_NOTE_EXPLICIT,
+    MULTI_NOTE_COMPACT_CONTEXT,
+    COMPACT_MEMORY_CONTEXT,
+    COMPACT_SUMMARY,
+    COMPACT_THREAD_CONTEXT,
+    METADATA_AND_SUMMARY,
+    LOCAL_FILE_ONLY,
+}
+
+enum class AiDataSensitivity {
+    LOW,
+    MEDIUM,
+    HIGH,
+}
+
+enum class AiCloudNoticeMode {
+    NONE,
+    TOAST,
+    INLINE,
+    AGGREGATED,
+}
+
 sealed interface AiTaskInput {
     data class NoteText(val content: String) : AiTaskInput
     data class TitleText(val title: String, val content: String) : AiTaskInput
@@ -108,6 +150,9 @@ data class AiTaskRequest<T : AiTaskPayload>(
     val input: AiTaskInput,
     val automaticPreference: AiAutomaticPreference = AiAutomaticPreference.PREFER_ON_DEVICE,
     val allowProviderFallback: Boolean = true,
+    val triggerSurface: AiTriggerSurface = AiTriggerSurface.BACKGROUND,
+    val triggerMode: AiTriggerMode = AiTriggerMode.FOREGROUND_USER_ACTION,
+    val payloadPolicyOverride: PromptPayloadPolicy? = null,
     val validate: (T) -> Boolean,
 )
 

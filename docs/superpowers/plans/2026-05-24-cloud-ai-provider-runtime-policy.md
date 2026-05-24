@@ -262,7 +262,7 @@ git commit -m "feat: add ai runtime settings"
 - Test: `app/src/test/java/com/mindflow/app/data/ai/AiDataSensitivityClassifierTest.kt`
 - Test: `app/src/test/java/com/mindflow/app/data/ai/CloudUsageBudgetGuardTest.kt`
 
-- [ ] **Step 1: Write failing task policy tests**
+- [x] **Step 1: Write failing task policy tests**
 
 ```kotlin
 @Test
@@ -282,7 +282,7 @@ fun mediaTasksRemainOnDeviceOnly() {
 }
 ```
 
-- [ ] **Step 2: Run policy tests and verify red**
+- [x] **Step 2: Run policy tests and verify red**
 
 Run:
 
@@ -292,11 +292,11 @@ Run:
 
 Expected: FAIL because policy registry does not exist.
 
-- [ ] **Step 3: Implement policy registry and request metadata**
+- [x] **Step 3: Implement policy registry and request metadata**
 
 Add trigger metadata to `AiTaskRequest`: `triggerSurface`, `triggerMode`, and optional `payloadPolicyOverride`. Keep constructor defaults compatible with existing tests.
 
-- [ ] **Step 4: Write failing sensitivity and budget tests**
+- [x] **Step 4: Write failing sensitivity and budget tests**
 
 ```kotlin
 @Test
@@ -314,15 +314,15 @@ fun backgroundBudgetBlocksWhenDailyRequestsReachLimit() {
 }
 ```
 
-- [ ] **Step 5: Implement sensitivity and budget guards**
+- [x] **Step 5: Implement sensitivity and budget guards**
 
 Rules: high sensitivity blocks background cloud, low and medium can proceed when runtime allows background cloud, request limit blocks only background cloud.
 
-- [ ] **Step 6: Modify router to use policy order and guards**
+- [x] **Step 6: Modify router to use policy order and guards**
 
 `AiTaskRouter` should keep existing behavior for defaults but derive order from `AiTaskPolicyRegistry` when request metadata is not explicit. It should throw `AiTaskRoutingException` with `firstFailureReason = "background_cloud_blocked"` or `budget_blocked` when policy blocks cloud after local failure.
 
-- [ ] **Step 7: Run AI policy/router tests and verify green**
+- [x] **Step 7: Run AI policy/router tests and verify green**
 
 Run:
 
