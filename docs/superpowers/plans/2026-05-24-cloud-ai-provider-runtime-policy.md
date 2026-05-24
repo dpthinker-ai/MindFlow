@@ -533,7 +533,7 @@ Result: blocked because `adb devices -l` returned no attached devices. No debug/
 
 Record commits, tests, release build result, and any manual validation limitation in `implementation-notes.html`.
 
-- [ ] **Step 6: Final commit if verification changes notes**
+- [x] **Step 6: Final commit if verification changes notes**
 
 ```bash
 git add implementation-notes.html
