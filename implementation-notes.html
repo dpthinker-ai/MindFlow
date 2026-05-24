@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MindFlow Cloud AI Runtime Policy Implementation Notes</title>
+  <title>MindFlow 云侧 AI 运行策略实现记录</title>
   <style>
     body {
       margin: 0;
@@ -42,6 +42,11 @@
       padding: 16px 18px;
       margin: 14px 0;
     }
+    .entry-time {
+      color: #60706a;
+      font-size: 0.92em;
+      margin: 0 0 6px;
+    }
     .entry strong {
       color: #0e5f53;
     }
@@ -58,235 +63,284 @@
 </head>
 <body>
   <main>
-    <h1>Cloud AI Runtime Policy Implementation Notes</h1>
-    <p class="meta">Created on 2026-05-24 for the DeepSeek/general cloud AI provider implementation.</p>
+    <h1>云侧 AI 运行策略实现记录</h1>
+    <p class="meta">创建于 2026-05-24，用于记录 DeepSeek 以及通用云侧 AI 供应商接入方案的实现过程。以下记录按时间从新到旧排列；没有独立设备时间的条目使用对应提交或实现阶段的记录时间。</p>
 
-    <h2>Initial Decisions</h2>
+    <h2>时间线（从新到旧）</h2>
     <div class="entry">
-      <strong>Snapshot before implementation.</strong>
-      The original workspace had existing app and test edits plus large untracked local data directories. I committed the app/test code snapshot as
-      <code>e5c4751 chore: snapshot current app changes</code> and excluded <code>data/</code>, <code>recovery/</code>, <code>tmp/</code>, and product/local documents from the snapshot.
+      <p class="entry-time"><time datetime="2026-05-24T20:59:57+08:00">2026-05-24 20:59:57 +08:00</time></p>
+      <strong>文档时间线整理。</strong>
+      根据用户要求，将 <code>implementation-notes.html</code> 调整为中文时间线格式：每条记录都补充明确日期和时间，并把原来的“初始决策 / 实现日志 / 最终验证”合并为一个从新到旧的连续时间线。
     </div>
     <div class="entry">
-      <strong>Isolated worktree.</strong>
-      The implementation is being done in <code>/Users/dpthinker/.config/superpowers/worktrees/MindFlow/cloud-ai-runtime-policy</code> on branch
-      <code>codex/cloud-ai-runtime-policy</code>. This keeps the main workspace's local artifacts and future user edits separate from the Spec implementation.
+      <p class="entry-time"><time datetime="2026-05-24T20:52:17+08:00">2026-05-24 20:52:17 +08:00</time></p>
+      <strong>后续：历史摘要 JSON 清理。</strong>
+      真机上的回看历史页截图显示，<code>主题回看</code> 和 <code>我最近在关注什么？</code> 历史行会在预览文本里渲染 <code>{"summary": ...}</code> JSON。根因是 <code>ReviewChatScreen</code> 已经会为聊天正文渲染结构化答复，但 <code>RoomReviewChatSavedConversationRepository</code> 保存 <code>latestExcerpt</code> 时直接截取了最后一条消息原文。修复后新增共享的历史预览格式化器，可以从完整 JSON 答复中提取结构化 <code>summary</code>，也可以从只包含 <code>{"summary":"..."</code> 开头的旧截断摘要中提取 summary。新保存的会话现在直接存人类可读摘要；旧行转换为 <code>SavedReviewChatSessionSummary</code> 展示时会被清理。
     </div>
     <div class="entry">
-      <strong>Implementation boundary.</strong>
-      The first production version stays on OpenAI Chat Completions-compatible providers. DeepSeek, OpenAI, Zhipu, and custom providers share one registry and request adapter. Native Anthropic/Gemini protocols and cloud audio/image upload remain out of this change because they need separate explicit consent and payload design.
+      <p class="entry-time"><time datetime="2026-05-24T20:48:37+08:00">2026-05-24 20:48:37 +08:00</time></p>
+      <strong>后续历史预览验证。</strong>
+      新增聚焦测试，覆盖完整结构化 JSON 答复、旧截断 JSON 摘要、新保存会话和旧存储摘要。已运行聚焦 formatter/repository 测试、回看聊天测试组、全量 debug 单测以及 <code>./gradlew --no-daemon :app:assembleRelease</code>；全部通过。已用 <code>adb install -r</code> 将 <code>app/build/outputs/apk/release/app-release.apk</code> 安装到手机 <code>AWPQUT6116001779</code>，未卸载也未清除数据。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 20:48:37</code>。安装后的回看 tab 和完整回看历史页截图显示，<code>最近在关注什么</code> 与 <code>最近一个月有哪些未推进的想法</code> 都是人类可读预览，没有可见的 <code>{"summary": ...}</code> JSON。启动/logcat 检查发现 <code>com.mindflow.app/.MainActivity</code> 处于焦点，并且没有近期 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 记录。
     </div>
     <div class="entry">
-      <strong>Audit storage choice.</strong>
-      Usage audit will use a local JSONL/file-backed repository instead of a Room migration. This mirrors the existing <code>AiTaskTraceRecorder</code> style, avoids a database migration for metadata-only events, and keeps the release validation lower risk.
-    </div>
-
-    <h2>Implementation Log</h2>
-    <div class="entry">
-      <strong>Plan written.</strong>
-      The execution plan is stored at <code>docs/superpowers/plans/2026-05-24-cloud-ai-provider-runtime-policy.md</code>. The plan uses TDD checkpoints for provider registry, runtime settings, policy guards, usage audit, settings UI, and release verification.
+      <p class="entry-time"><time datetime="2026-05-24T20:40:55+08:00">2026-05-24 20:40:55 +08:00</time></p>
+      <strong>后续：未推进想法查询语义。</strong>
+      真机反馈显示，快捷问题 <code>最近一个月有哪些未推进的想法</code> 返回 0 条记录。我追踪到两个本地解析缺口：<code>最近一个月</code> 会残留 <code>一个月</code> 作为假的实体词；<code>未推进的想法</code> 被当成字面标题/正文文本，而不是状态请求。修复后，<code>未推进的想法</code>、<code>没推进想法</code>、<code>待推进的想法</code> 等未推进想法表达会映射到 <code>NoteStatus.IDEA</code>，然后在请求的时间范围之后应用该状态过滤。我有意保持这个规则较窄，避免用户只是把 <code>想法</code> 当真实主题搜索时，被错误转换为状态过滤。
     </div>
     <div class="entry">
-      <strong>Provider registry and adapter.</strong>
-      Added a generic cloud provider registry with <code>zhipu</code>, <code>openai</code>, <code>deepseek</code>, and <code>custom</code>. DeepSeek defaults to <code>https://api.deepseek.com</code>, <code>/chat/completions</code>, and <code>deepseek-v4-flash</code>, with <code>deepseek-v4-pro</code> available. Deprecated <code>deepseek-chat</code> and <code>deepseek-reasoner</code> are normalized to the current default.
+      <p class="entry-time"><time datetime="2026-05-24T20:40:55+08:00">2026-05-24 20:40:55 +08:00</time></p>
+      <strong>后续未推进查询回归验证。</strong>
+      新增先失败的测试，证明 <code>最近一个月有哪些未推进的想法</code> 会被解析为最近 30 天列表，并且不会残留假实体词；同时证明 context packet 会包含最近活跃的 <code>想法</code> 记录，排除 <code>进行中</code> 记录和陈旧想法。聚焦测试最初因实体词 <code>[一个月, 未推进的想法]</code> 和 0 命中失败，状态过滤实现后通过。
     </div>
     <div class="entry">
-      <strong>Adapter testing decision.</strong>
-      The request adapter returns a JSON string rather than an Android <code>org.json.JSONObject</code>. JVM unit tests use Android's not-mocked <code>org.json</code> stub, so a string renderer keeps request construction testable without adding another JSON dependency or shifting these tests to instrumentation.
+      <p class="entry-time"><time datetime="2026-05-24T20:39:30+08:00">2026-05-24 20:39:30 +08:00</time></p>
+      <strong>后续未推进查询 release 安装。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>、<code>./gradlew --no-daemon :app:testDebugUnitTest</code> 和 <code>./gradlew --no-daemon :app:assembleRelease</code>；全部通过。已用 <code>adb install -r</code> 将签名 release APK 安装到手机 <code>AWPQUT6116001779</code>；安装成功，未卸载也未清除数据。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 20:39:30</code>。启动检查发现 <code>com.mindflow.app/.MainActivity</code> 处于焦点，检查的 logcat 窗口中没有近期 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 记录。
     </div>
     <div class="entry">
-      <strong>Verification.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.cloud.*"</code>; the provider and adapter tests pass.
+      <p class="entry-time"><time datetime="2026-05-24T20:29:50+08:00">2026-05-24 20:29:50 +08:00</time></p>
+      <strong>后续：精确的本周问法。</strong>
+      真机上的精确问题 <code>本周我记录了哪些内容？</code> 仍然返回没有记录。根因是 <code>本周</code> 已被识别为时间范围，但没有从实体抽取中移除，所以 query parser 生成了一个假的实体词 <code>本周</code>。真实笔记通常不包含这个字面词，导致带时间范围的语料又被过滤为 0。已将 <code>本周</code>、<code>这周</code>、<code>本星期</code>、<code>这个星期</code>、<code>这星期</code>、<code>上周</code>、<code>上星期</code> 和 <code>上个星期</code> 加入回看聊天 operation/stop words，使周表达保留为时间范围，而不是主题过滤词。
     </div>
     <div class="entry">
-      <strong>Runtime settings split.</strong>
-      Added <code>AiRuntimeSettings</code> with explicit execution mode, foreground/background cloud permission, low-frequency notification mode, and background request/token defaults. The first repository is DataStore-backed and can migrate its initial execution mode from the existing on-device settings repository.
+      <p class="entry-time"><time datetime="2026-05-24T20:29:50+08:00">2026-05-24 20:29:50 +08:00</time></p>
+      <strong>后续精确问题回归验证。</strong>
+      将回归测试更新为使用 <code>本周我记录了哪些内容？</code>。该测试最初因实体词 <code>[本周]</code> 失败，加入 stop-word 修复后通过。同时重跑回看聊天测试组：<code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>；测试通过。
     </div>
     <div class="entry">
-      <strong>Default execution mode correction.</strong>
-      Fixed <code>OnDeviceExecutionModeCodec.decode(raw = null, legacyPreferOnDevice = null)</code> to return <code>AUTOMATIC</code>. The older explicit legacy value <code>preferOnDevice = false</code> still returns <code>CLOUD_ONLY</code>, so intentional old cloud-only choices remain intact.
+      <p class="entry-time"><time datetime="2026-05-24T20:28:57+08:00">2026-05-24 20:28:57 +08:00</time></p>
+      <strong>后续精确问题 release 安装。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest</code> 和 <code>./gradlew --no-daemon :app:assembleRelease</code>；均通过。已用 <code>adb install -r</code> 将 <code>app/build/outputs/apk/release/app-release.apk</code> 安装到手机 <code>AWPQUT6116001779</code>；安装成功，未卸载也未清除数据。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 20:28:57</code>。启动检查发现 <code>com.mindflow.app/.MainActivity</code> 处于焦点，并且检查的 logcat 窗口中没有近期 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 记录。
     </div>
     <div class="entry">
-      <strong>Verification.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.settings.OnDeviceExecutionModeCodecTest" --tests "com.mindflow.app.data.settings.AiRuntimeSettingsTest"</code>; the runtime/default-mode tests pass.
+      <p class="entry-time"><time datetime="2026-05-24T20:22:05+08:00">2026-05-24 20:22:05 +08:00</time></p>
+      <strong>后续：移除残留的回看聊天 Skill 展示面。</strong>
+      真机反馈显示，用户仍然能感知到 Skill 参与，并且答复前阶段很长。我没有发现生产路径里仍有 <code>SkillRuntime.execute</code> 调用，但旧保存消息仍可能渲染 <code>skillWebView</code> 卡片，UI 仍有遗留的 <code>RUN_SKILL</code> 标题，回看聊天在真正答复前还会多做一次云侧查询规划调用。后续修复会从回看聊天展示和完成态中剥离 Skill 卡片，从回看聊天气泡中移除 Skill 卡片宿主，把遗留 Skill 进度标题改为本地历史整理，并禁用额外的云侧规划调用，让答复路径直接从本地解析开始。
     </div>
     <div class="entry">
-      <strong>Task policy registry.</strong>
-      Added a first local policy table for router-backed tasks. Foreground polish uses cloud then on-device with Toast notice; background summary/topic/tag/folder/graph tasks use on-device then cloud with aggregated notice; audio, translation, and image understanding remain on-device only.
+      <p class="entry-time"><time datetime="2026-05-24T20:22:05+08:00">2026-05-24 20:22:05 +08:00</time></p>
+      <strong>后续：本周范围。</strong>
+      在已有 <code>本周末</code> 之外，新增普通 <code>本周</code> / <code>这周</code> / <code>本星期</code> 范围。<code>本周</code> 使用从周一到今天的当前自然周，并使用活跃时间 <code>max(createdAt, updatedAt)</code>，因此本周更新过的记录即使创建更早，也会被纳入。
     </div>
     <div class="entry">
-      <strong>Sensitivity and budget guards.</strong>
-      Added a rule-based sensitivity classifier and a background-only budget guard. High sensitivity background content, such as identity numbers, bank-card-like numbers, credentials, tokens, or similar keywords, blocks cloud fallback. Foreground user-triggered cloud work is not blocked by background request/token budget.
+      <p class="entry-time"><time datetime="2026-05-24T20:22:05+08:00">2026-05-24 20:22:05 +08:00</time></p>
+      <strong>后续回归验证。</strong>
+      新增先失败的测试，覆盖本周活跃时间过滤、丢弃 Skill WebView、隐藏遗留 Skill 进度阶段，以及跳过答复前云侧 planner。聚焦红测在修复前失败，修复后通过。回看聊天测试组也已通过：<code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>。
     </div>
     <div class="entry">
-      <strong>Router compatibility.</strong>
-      <code>AiTaskRouter</code> now filters candidate providers through task policy and cloud guards while preserving the existing <code>automaticPreference</code> behavior for current callers. This avoids forcing all planners to be rewritten in the same commit.
+      <p class="entry-time"><time datetime="2026-05-24T20:21:04+08:00">2026-05-24 20:21:04 +08:00</time></p>
+      <strong>后续 release 安装。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest</code> 和 <code>./gradlew --no-daemon :app:assembleRelease</code>；均通过。使用 <code>adb -s AWPQUT6116001779 install -r app/build/outputs/apk/release/app-release.apk</code> 安装签名 release APK；安装成功，未卸载也未清除数据。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 20:21:04</code>。启动检查发现 <code>com.mindflow.app/.MainActivity</code> 处于焦点，检查的 logcat 窗口没有 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 记录。
     </div>
     <div class="entry">
-      <strong>Verification.</strong>
-      Ran focused policy/router tests including <code>AiTaskPolicyRegistryTest</code>, <code>AiDataSensitivityClassifierTest</code>, <code>CloudUsageBudgetGuardTest</code>, <code>AiTaskRouterPolicyTest</code>, and the existing <code>AiTaskRouterTest</code>; they pass.
+      <p class="entry-time"><time datetime="2026-05-24T18:45:12+08:00">2026-05-24 18:45:12 +08:00</time></p>
+      <strong>回看聊天 Skill 路径移除。</strong>
+      复盘回看聊天变慢的问题后，我决定不再把 <code>history-query</code> 放在同步答复路径里。<code>ReviewChatPlanner</code> 现在依赖本地语料查询引擎，不再执行 WebView 支撑的 Skill runtime，不再在模型 prompt 中暴露 <code>可用技能</code>，也不再把 <code>SkillResult</code> 或 Skill WebView 卡片附加到回看聊天轮次里。Skill 源文件暂时保留，因为删除整个 asset/runtime 子系统比本次“回看聊天延迟”问题范围更大。
     </div>
     <div class="entry">
-      <strong>Usage audit.</strong>
-      Added <code>AiUsageEvent</code>, <code>FileAiUsageEventRepository</code>, and <code>AiCloudUsageReporter</code>. Events include provider, model, task, trigger mode, payload policy, sensitivity, token count, success/failure, and notification batch metadata. Events intentionally do not include prompt text, note body, API keys, attachment paths, or local file paths.
+      <p class="entry-time"><time datetime="2026-05-24T18:45:12+08:00">2026-05-24 18:45:12 +08:00</time></p>
+      <strong>近期记录范围修正。</strong>
+      新增 <code>最近一周</code>、<code>最近两周</code> 和 <code>最近30天</code> 的显式相对时间范围。这些相对范围使用记录活跃时间，即 <code>max(createdAt, updatedAt)</code>，因此一条更早创建但最近编辑过的笔记，也能在用户询问最近记录内容时被统计和展示。同时修正解析优先级，让 <code>把最近两周的矛盾串一下</code> 这类分析语言仍被视为分析任务，同时携带近期时间范围。
     </div>
     <div class="entry">
-      <strong>Low-frequency notification aggregation.</strong>
-      Added <code>CloudUsageNotificationAggregator</code> with a 5-minute earliest flush, 30-minute max window, and 3-per-day cap. The aggregator returns notification batches and marks events as notified through the repository; Android notification delivery stays outside this pure component.
+      <p class="entry-time"><time datetime="2026-05-24T18:45:12+08:00">2026-05-24 18:45:12 +08:00</time></p>
+      <strong>回看聊天回归验证。</strong>
+      新增测试证明回看聊天不会执行 Skill runtime，也不会注入 Skill prompt 段，并证明 <code>最近我记录了什么</code> 会包含最近更新的笔记，同时排除陈旧旧笔记。已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>；测试通过。
     </div>
     <div class="entry">
-      <strong>Visible background notification dispatch.</strong>
-      Added <code>CloudUsageNotifier</code> and <code>AndroidCloudUsageNotifier</code> after noticing that aggregation alone would not visibly inform the user. Background batches now flow from <code>AiCloudUsageReporter</code> into an Android notification channel named <code>mindflow_cloud_ai_usage</code>, using the existing notification permission and launcher icon patterns. Foreground cloud calls still use Toast via <code>MindFlowApp</code>.
+      <p class="entry-time"><time datetime="2026-05-24T18:44:09+08:00">2026-05-24 18:44:09 +08:00</time></p>
+      <strong>最新 release 安装。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest</code> 和 <code>./gradlew --no-daemon :app:assembleRelease</code>；均通过。Release 构建仍会打印已知的 R8 Kotlin metadata 警告，但构建成功退出。已用 <code>adb install -r</code> 将 <code>app/build/outputs/apk/release/app-release.apk</code> 安装到手机 <code>AWPQUT6116001779</code>；安装成功，未卸载也未清除数据。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 18:44:09</code>。启动检查发现 <code>com.mindflow.app/.MainActivity</code> 处于焦点，检查的 logcat 窗口中没有近期 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 记录。
     </div>
     <div class="entry">
-      <strong>Direct client audit bridge.</strong>
-      <code>AiServiceClient</code> now accepts an optional <code>AiCloudUsageReporter</code>. All cloud HTTP calls made through the client produce usage events, including the planners that still call the client directly. This is an incremental bridge before every planner is moved behind the longer-term runtime orchestrator.
+      <p class="entry-time"><time datetime="2026-05-24T18:20:13+08:00">2026-05-24 18:20:13 +08:00</time></p>
+      <strong>按供应商合并用量。</strong>
+      真机验证发现，打开另一个供应商页面后，<code>今日请求</code>、<code>今日成功</code> 和 <code>今日 Token</code> 仍可能看起来像共享值。持久化层已经按供应商保存计数，但 <code>SettingsViewModel.mergeSavedAiSettings</code> 在编辑不同供应商草稿时，仍会接受 active saved provider 的用量和验证刷新。现在只有当已保存供应商与当前可见供应商一致时才合并用量和验证元数据；否则当前可见供应商会保持自己的计数，直到 <code>getProviderSettings(providerId)</code> 加载该供应商 profile。
     </div>
     <div class="entry">
-      <strong>Verification.</strong>
-      Ran focused usage and notification tests plus policy/router regression tests; they pass.
+      <p class="entry-time"><time datetime="2026-05-24T18:15:36+08:00">2026-05-24 18:15:36 +08:00</time></p>
+      <strong>供应商用量回归验证。</strong>
+      针对用户反馈新增了一个先失败的回归测试：当正在查看 DeepSeek 的脏草稿时，active saved Zhipu 设置刷新不应覆盖 DeepSeek 的 <code>今日请求</code>、<code>今日成功</code> 或 <code>今日 Tokens</code>。修复后，聚焦回归测试、所有设置测试和全量 debug 单测均通过。重新构建并将 <code>app/build/outputs/apk/release/app-release.apk</code> 安装到手机 <code>AWPQUT6116001779</code>，未卸载也未清除数据；包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 18:15:36</code>。真机上 DeepSeek 显示 <code>24 / 23 / 20201</code>，OpenAI 显示 <code>0 / 0 / 0</code>，智谱显示 <code>24 / 0 / 0</code>；因此计数不再作为一个共享三元组被复制。DeepSeek 和智谱请求数相同看起来是保留下来的历史供应商数据，而不是之前的 UI 合并覆盖。
     </div>
     <div class="entry">
-      <strong>Settings and app wiring.</strong>
-      Wired <code>AiRuntimeSettingsRepository</code>, <code>FileAiUsageEventRepository</code>, <code>AiCloudUsageReporter</code>, and the DeepSeek-aware <code>AiServiceClient</code> through <code>AppContainer</code>. <code>MindFlowApp</code> now observes foreground cloud notices and shows a Toast.
+      <p class="entry-time"><time datetime="2026-05-24T18:07:25+08:00">2026-05-24 18:07:25 +08:00</time></p>
+      <strong>供应商草稿被覆盖的问题。</strong>
+      真机验证发现，选择 DeepSeek 后页面会在编辑中回落到之前保存的智谱设置。原因是 <code>SettingsViewModel</code> 会把每次 <code>AiSettingsRepository</code> emission 合并进整个表单，其中也包括只用于用量/验证刷新的 emission。修复后会保留脏草稿中的供应商、API Key、Base URL、模型和启用状态，同时仍接收最新的验证与用量元数据。
     </div>
     <div class="entry">
-      <strong>Settings copy and provider selection.</strong>
-      The cloud AI screen now exposes all non-custom built-in providers, including DeepSeek. The description no longer claims background maintenance never uses cloud; it says automatic mode may use cloud by task policy, with low-frequency notification and usage records when content leaves the device.
+      <p class="entry-time"><time datetime="2026-05-24T18:07:25+08:00">2026-05-24 18:07:25 +08:00</time></p>
+      <strong>独立供应商页面。</strong>
+      将云侧 AI 设置入口改成“供应商概览 + 每个供应商一个独立页面”。打开 DeepSeek、智谱、OpenAI 或 Custom 时，只编辑该供应商自己的表单，不再使用一个 chip group 共享同一个实时表单。
     </div>
     <div class="entry">
-      <strong>Execution mode compatibility.</strong>
-      Settings changes write the new runtime settings repository and continue writing the old on-device field as a compatibility mirror. This keeps existing code paths and tests stable while routing reads move to runtime settings.
+      <p class="entry-time"><time datetime="2026-05-24T18:07:25+08:00">2026-05-24 18:07:25 +08:00</time></p>
+      <strong>按供应商持久化。</strong>
+      复盘“独立页面”方向后，我对仅做 UI 隔离并不满意。<code>PreferencesAiSettingsRepository</code> 现在会按供应商分别保存 API Key、Base URL、模型、启用状态、验证结果和用量计数，同时保留现有 active-provider 设置供运行时调用方使用。已有旧值会作为当前 active provider profile 的初始值迁移，因此当前智谱配置不会被破坏性重置。
     </div>
     <div class="entry">
-      <strong>Verification.</strong>
-      Ran <code>SettingsCloudAiProviderTest</code> and existing settings execution-mode persistence tests; they pass.
+      <p class="entry-time"><time datetime="2026-05-24T18:07:25+08:00">2026-05-24 18:07:25 +08:00</time></p>
+      <strong>供应商切换行为。</strong>
+      切换到没有保存过配置的供应商时，会从空 API Key 和该供应商默认 Base URL/模型开始。切换到已有 profile 的供应商时，会恢复该供应商自己的值。这样既避免把智谱 Key 带到 DeepSeek，也允许未来记住各供应商自己的凭据。
     </div>
     <div class="entry">
-      <strong>Notification dispatch verification.</strong>
-      Added a TDD regression test that first failed because <code>CloudUsageNotifier</code> and <code>backgroundNotifier</code> did not exist, then passed after adding the dispatcher bridge. Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.AiCloudUsageReporterTest"</code>; it passes.
+      <p class="entry-time"><time datetime="2026-05-24T18:03:59+08:00">2026-05-24 18:03:59 +08:00</time></p>
+      <strong>DeepSeek 真机回归验证。</strong>
+      在供应商独立页面和供应商持久化修复后，重新构建并将 release APK 安装到手机 <code>AWPQUT6116001779</code>。包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 18:03:59</code>。真机上云侧 AI 概览展示智谱、OpenAI、DeepSeek 和 Custom 四个独立行。打开 DeepSeek 后显示 <code>https://api.deepseek.com</code>、<code>deepseek-v4-flash</code>、空 API Key，以及该供应商自己的用量计数。在 API Key 字段临时输入一个字符并等待后，页面仍停留在 DeepSeek；随后删除该测试字符且未保存。
     </div>
     <div class="entry">
-      <strong>Provider draft overwrite fix.</strong>
-      Real-phone validation found that selecting DeepSeek could fall back to the previously saved Zhipu settings while editing. The cause was that <code>SettingsViewModel</code> merged every <code>AiSettingsRepository</code> emission into the whole form, including usage/verification-only refreshes. The fix now preserves the dirty draft's provider, API Key, Base URL, model, and enabled state while still accepting fresh verification and usage metadata.
+      <p class="entry-time"><time datetime="2026-05-24T17:29:46+08:00">2026-05-24 17:29:46 +08:00</time></p>
+      <strong>真机安装。</strong>
+      已将同一个签名 release APK 安装到手机 <code>AWPQUT6116001779</code>，命令为 <code>adb install -r app/build/outputs/apk/release/app-release.apk</code>；安装成功，没有卸载应用，也没有清除数据。安装后包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 17:29:46</code>。用户在一次安装前备份命令已经完成后要求跳过备份，因此后续没有再做额外备份。
     </div>
     <div class="entry">
-      <strong>Independent provider pages.</strong>
-      Reworked the cloud AI settings entry into a provider overview plus one page per provider. Opening DeepSeek, Zhipu, OpenAI, or Custom now edits only that provider's form, so the selector is no longer a chip group sharing one live form.
+      <p class="entry-time"><time datetime="2026-05-24T16:42:17+08:00">2026-05-24 16:42:17 +08:00</time></p>
+      <strong>Release 构建。</strong>
+      已运行 <code>./gradlew --no-daemon :app:assembleRelease</code>。隔离 worktree 起初只生成 <code>app-release-unsigned.apk</code>，因为本地签名文件按设计被忽略。我临时把主工作区现有签名配置和 keystore 链接到该 worktree，重新构建，确认 <code>app/build/outputs/apk/release/app-release.apk</code> 存在，然后移除了这些本地 symlink。签名 release APK 大小为 12 MB，version code 为 78，version name 为 4.0.0。
     </div>
     <div class="entry">
-      <strong>Provider-level persistence.</strong>
-      After reviewing the separate-page direction, I was not satisfied with UI-only isolation. <code>PreferencesAiSettingsRepository</code> now stores provider-specific API Key, Base URL, model, enabled flag, verification, and usage counters while preserving the existing active-provider settings for runtime callers. Existing legacy values are used as the initial active provider profile, so current Zhipu settings migrate without a destructive reset.
+      <p class="entry-time"><time datetime="2026-05-24T16:42:17+08:00">2026-05-24 16:42:17 +08:00</time></p>
+      <strong>模拟器 release 验证。</strong>
+      仅安装 <code>app/build/outputs/apk/release/app-release.apk</code>，命令为 <code>adb install -r</code>；安装成功。应用启动到 <code>com.mindflow.app/.MainActivity</code>，原有笔记仍为 148 个文件，<code>/data/user/0/com.mindflow.app/files/local-models</code> 和安装前一样为空。云侧 AI 设置页显示 DeepSeek；选中后 Base URL 更新为 <code>https://api.deepseek.com</code>，模型更新为 <code>deepseek-v4-flash</code>。检查的 logcat 窗口中没有 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code> 崩溃记录。
     </div>
     <div class="entry">
-      <strong>Provider switching behavior.</strong>
-      Switching to a provider with no saved profile starts with an empty API Key and that provider's default Base URL/model. Switching to a provider with a saved profile restores that provider's own values. This avoids carrying a Zhipu key into DeepSeek while still allowing future provider-specific credentials to be remembered.
+      <p class="entry-time"><time datetime="2026-05-24T16:42:17+08:00">2026-05-24 16:42:17 +08:00</time></p>
+      <strong>验证截图。</strong>
+      模拟器截图已保存到 <code>/tmp/mindflow-cloud-ai-release-launched.png</code>、<code>/tmp/mindflow-cloud-ai-release-ai-settings.png</code>、<code>/tmp/mindflow-cloud-ai-release-cloud-config.png</code> 和 <code>/tmp/mindflow-cloud-ai-release-deepseek.png</code>。
     </div>
     <div class="entry">
-      <strong>Provider-scoped usage merge.</strong>
-      Phone validation showed that <code>今日请求</code>, <code>今日成功</code>, and <code>今日 Token</code> could still look shared after opening another provider page. The persistence layer already stores provider-level counters, but <code>SettingsViewModel.mergeSavedAiSettings</code> accepted usage and verification refreshes from the active saved provider even while a different provider draft was being edited. The merge now applies usage and verification metadata only when the saved provider matches the visible provider; otherwise the visible provider keeps its own counters until <code>getProviderSettings(providerId)</code> loads that provider's profile.
-    </div>
-
-    <h2>Final Verification</h2>
-    <div class="entry">
-      <strong>Focused and full unit tests.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.*" --tests "com.mindflow.app.data.ai.cloud.*" --tests "com.mindflow.app.data.settings.*" --tests "com.mindflow.app.ui.screens.settings.*"</code> and <code>./gradlew --no-daemon :app:testDebugUnitTest</code>. Both commands passed after the notification dispatch change.
+      <p class="entry-time"><time datetime="2026-05-24T16:38:31+08:00">2026-05-24 16:38:31 +08:00</time></p>
+      <strong>手动 release 验证状态。</strong>
+      第一次没有可用设备后，我启动了已有 <code>MindFlow_Pixel_API_36</code> AVD，没有使用 wipe 或 clear 标志。安装前，我将 <code>/data/user/0/com.mindflow.app</code>、<code>/storage/emulated/0/Android/data/com.mindflow.app</code> 和相关 Download 导出文件 <code>mindflow-20260502-2148.md</code> 备份到 <code>/Users/dpthinker/workspace/MindFlow/recovery/pre-emulator-validation-20260524-163831</code>。
     </div>
     <div class="entry">
-      <strong>Release build.</strong>
-      Ran <code>./gradlew --no-daemon :app:assembleRelease</code>. The isolated worktree initially produced <code>app-release-unsigned.apk</code> because local signing files are intentionally ignored. I temporarily linked the existing local signing config and keystore from the main workspace, rebuilt, confirmed <code>app/build/outputs/apk/release/app-release.apk</code> exists, then removed those local symlinks from the worktree. The signed release APK is 12 MB and uses version code 78, version name 4.0.0.
+      <p class="entry-time"><time datetime="2026-05-24T16:34:38+08:00">2026-05-24 16:34:38 +08:00</time></p>
+      <strong>执行计划已写入。</strong>
+      执行计划保存在 <code>docs/superpowers/plans/2026-05-24-cloud-ai-provider-runtime-policy.md</code>。计划按 TDD 检查点覆盖供应商注册表、运行时设置、策略守卫、用量审计、设置页 UI 和发布验证。
     </div>
     <div class="entry">
-      <strong>Manual release validation status.</strong>
-      After the initial no-device result, I started the existing <code>MindFlow_Pixel_API_36</code> AVD without wipe or clear flags. Before installation, I backed up <code>/data/user/0/com.mindflow.app</code>, <code>/storage/emulated/0/Android/data/com.mindflow.app</code>, and the relevant Download export <code>mindflow-20260502-2148.md</code> to <code>/Users/dpthinker/workspace/MindFlow/recovery/pre-emulator-validation-20260524-163831</code>.
+      <p class="entry-time"><time datetime="2026-05-24T16:34:09+08:00">2026-05-24 16:34:09 +08:00</time></p>
+      <strong>可见的后台通知投递。</strong>
+      在发现“只有聚合还不足以真正告知用户”后，新增 <code>CloudUsageNotifier</code> 和 <code>AndroidCloudUsageNotifier</code>。后台批次现在会从 <code>AiCloudUsageReporter</code> 流向 Android 通知渠道 <code>mindflow_cloud_ai_usage</code>，沿用现有通知权限和启动图标模式。前台云侧调用仍由 <code>MindFlowApp</code> 通过 Toast 提示。
     </div>
     <div class="entry">
-      <strong>Emulator release validation.</strong>
-      Installed only <code>app/build/outputs/apk/release/app-release.apk</code> with <code>adb install -r</code>; install succeeded. The app launched to <code>com.mindflow.app/.MainActivity</code>, existing notes remained at 148 files, and <code>/data/user/0/com.mindflow.app/files/local-models</code> stayed empty as before installation. The cloud AI settings page shows DeepSeek; selecting it updates Base URL to <code>https://api.deepseek.com</code> and Model to <code>deepseek-v4-flash</code>. No <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> crash entries appeared in the checked logcat window.
+      <p class="entry-time"><time datetime="2026-05-24T16:34:09+08:00">2026-05-24 16:34:09 +08:00</time></p>
+      <strong>直接客户端审计桥接。</strong>
+      <code>AiServiceClient</code> 现在接受可选的 <code>AiCloudUsageReporter</code>。所有通过该客户端发出的云侧 HTTP 调用都会产生用量事件，包括仍然直接调用客户端的 planner。这是把所有 planner 移到长期运行时编排器之前的增量桥接。
     </div>
     <div class="entry">
-      <strong>Validation screenshots.</strong>
-      Emulator screenshots were captured at <code>/tmp/mindflow-cloud-ai-release-launched.png</code>, <code>/tmp/mindflow-cloud-ai-release-ai-settings.png</code>, <code>/tmp/mindflow-cloud-ai-release-cloud-config.png</code>, and <code>/tmp/mindflow-cloud-ai-release-deepseek.png</code>.
+      <p class="entry-time"><time datetime="2026-05-24T16:34:09+08:00">2026-05-24 16:34:09 +08:00</time></p>
+      <strong>验证。</strong>
+      已运行聚焦的用量、通知测试以及策略/router 回归测试；全部通过。
     </div>
     <div class="entry">
-      <strong>Phone install.</strong>
-      Installed the same signed release APK to phone <code>AWPQUT6116001779</code> using <code>adb install -r app/build/outputs/apk/release/app-release.apk</code>; the install succeeded without uninstalling or clearing data. Package verification after install shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 17:29:46</code>. The user asked to skip backup after a pre-install backup command had already completed, so no additional backup work was performed.
+      <p class="entry-time"><time datetime="2026-05-24T16:34:09+08:00">2026-05-24 16:34:09 +08:00</time></p>
+      <strong>通知投递验证。</strong>
+      新增 TDD 回归测试：在 <code>CloudUsageNotifier</code> 和 <code>backgroundNotifier</code> 不存在时该测试先失败，添加投递桥接后通过。已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.AiCloudUsageReporterTest"</code>；测试通过。
     </div>
     <div class="entry">
-      <strong>DeepSeek phone regression verification.</strong>
-      Rebuilt and installed the release APK on phone <code>AWPQUT6116001779</code> after the provider-page/provider-persistence fix. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:03:59</code>. On the phone, the cloud AI overview shows separate rows for Zhipu, OpenAI, DeepSeek, and Custom. Opening DeepSeek shows <code>https://api.deepseek.com</code>, <code>deepseek-v4-flash</code>, an empty API Key, and provider-local usage counters. Typing a temporary character into the API Key field kept the page on DeepSeek after a wait; the test character was then deleted without saving.
+      <p class="entry-time"><time datetime="2026-05-24T16:22:25+08:00">2026-05-24 16:22:25 +08:00</time></p>
+      <strong>设置页与应用装配。</strong>
+      已通过 <code>AppContainer</code> 接入 <code>AiRuntimeSettingsRepository</code>、<code>FileAiUsageEventRepository</code>、<code>AiCloudUsageReporter</code> 和支持 DeepSeek 的 <code>AiServiceClient</code>。<code>MindFlowApp</code> 现在会观察前台云侧提示并展示 Toast。
     </div>
     <div class="entry">
-      <strong>Latest verification commands.</strong>
-      After provider-level persistence, ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.ui.screens.settings.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>. All passed. The release build still prints known R8 Kotlin metadata warnings, but the build exits successfully and the installed app did not show <code>FATAL EXCEPTION</code> or app <code>AndroidRuntime</code> crash entries in the checked logcat window.
+      <p class="entry-time"><time datetime="2026-05-24T16:22:25+08:00">2026-05-24 16:22:25 +08:00</time></p>
+      <strong>设置文案和供应商选择。</strong>
+      云侧 AI 页面现在展示所有非自定义的内置供应商，包括 DeepSeek。说明文案不再声称后台维护永远不会使用云侧，而是说明自动模式会按任务策略使用云侧，并在内容离开设备时通过低频通知和用量记录告知用户。
     </div>
     <div class="entry">
-      <strong>Provider usage regression verification.</strong>
-      Added a failing regression test for the reported issue: while viewing a dirty DeepSeek draft, an active saved Zhipu settings refresh must not replace DeepSeek's <code>今日请求</code>, <code>今日成功</code>, or <code>今日 Tokens</code>. After the fix, the focused regression, all settings tests, and the full debug unit test suite pass. Rebuilt and installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> without uninstalling or clearing data; package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:15:36</code>. On the phone, DeepSeek showed <code>24 / 23 / 20201</code>, OpenAI showed <code>0 / 0 / 0</code>, and Zhipu showed <code>24 / 0 / 0</code>; therefore the counters are no longer copied as one shared triplet. The matching DeepSeek/Zhipu request count appears to be retained historical provider data, not the previous UI merge overwrite.
+      <p class="entry-time"><time datetime="2026-05-24T16:22:25+08:00">2026-05-24 16:22:25 +08:00</time></p>
+      <strong>执行模式兼容。</strong>
+      设置变更会写入新的运行时设置仓库，同时继续把旧端侧字段作为兼容镜像写入。这样在读取路径逐步迁移到运行时设置之前，现有代码路径和测试仍能保持稳定。
     </div>
     <div class="entry">
-      <strong>Review chat Skill path removal.</strong>
-      After reviewing the slow Review chat behavior, I decided not to keep <code>history-query</code> in the synchronous answer path. <code>ReviewChatPlanner</code> now relies on the local corpus query engine and no longer executes the WebView-backed Skill runtime, no longer exposes <code>可用技能</code> in model prompts, and no longer attaches <code>SkillResult</code> or Skill WebView cards to Review chat turns. The Skill source files are left in place for now because removing the asset/runtime subsystem is a wider cleanup than the reported Review chat latency problem.
+      <p class="entry-time"><time datetime="2026-05-24T16:22:25+08:00">2026-05-24 16:22:25 +08:00</time></p>
+      <strong>验证。</strong>
+      已运行 <code>SettingsCloudAiProviderTest</code> 和现有设置执行模式持久化测试；全部通过。
     </div>
     <div class="entry">
-      <strong>Recent-record scope correction.</strong>
-      Added explicit relative scopes for <code>最近一周</code>, <code>最近两周</code>, and <code>最近30天</code>. These relative scopes use record activity time, defined as <code>max(createdAt, updatedAt)</code>, so a note created earlier but edited recently can be counted and surfaced when the user asks what was recorded recently. Fixed parser precedence so analysis language such as <code>把最近两周的矛盾串一下</code> remains an analysis task while still carrying the recent time scope.
+      <p class="entry-time"><time datetime="2026-05-24T16:11:11+08:00">2026-05-24 16:11:11 +08:00</time></p>
+      <strong>用量审计。</strong>
+      新增 <code>AiUsageEvent</code>、<code>FileAiUsageEventRepository</code> 和 <code>AiCloudUsageReporter</code>。事件会记录供应商、模型、任务、触发模式、payload 策略、敏感度、Token 数、成功/失败和通知批次元数据。事件刻意不记录 prompt 文本、笔记正文、API Key、附件路径或本地文件路径。
     </div>
     <div class="entry">
-      <strong>Review chat regression verification.</strong>
-      Added tests proving that Review chat does not execute the Skill runtime or inject Skill prompt sections, and that <code>最近我记录了什么</code> includes a recently updated note while excluding stale old notes. Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>; it passed.
+      <p class="entry-time"><time datetime="2026-05-24T16:11:11+08:00">2026-05-24 16:11:11 +08:00</time></p>
+      <strong>低频通知聚合。</strong>
+      新增 <code>CloudUsageNotificationAggregator</code>，最早 5 分钟 flush，最长 30 分钟窗口，每天最多 3 次。聚合器返回通知批次并通过仓库标记事件已通知；Android 通知投递留在纯组件之外实现。
     </div>
     <div class="entry">
-      <strong>Latest release install.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. The release build still prints the known R8 Kotlin metadata warnings but exits successfully. Installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:44:09</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused, with no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+      <p class="entry-time"><time datetime="2026-05-24T16:01:26+08:00">2026-05-24 16:01:26 +08:00</time></p>
+      <strong>任务策略注册表。</strong>
+      新增第一版本地策略表，用于 router 支撑的任务。前台润色任务采用“云侧优先，再回退端侧”，并用 Toast 告知；后台摘要、主题、标签、文件夹和图谱任务采用“端侧优先，再按策略回退云侧”，并合并为低频通知；音频、翻译和图片理解仍保持仅端侧。
     </div>
     <div class="entry">
-      <strong>Follow-up: remove remaining Review chat Skill surfaces.</strong>
-      Phone feedback showed the user could still perceive Skill participation and a long pre-answer phase. I found no remaining production call to <code>SkillRuntime.execute</code>, but old saved messages could still render <code>skillWebView</code> cards, the UI still had a legacy <code>RUN_SKILL</code> title, and Review chat still made an extra cloud query-planning call before the real answer. The follow-up fix strips Skill cards from Review chat display and completion, removes the Skill card host from the Review chat message bubble, renames the legacy progress title to local history organization, and disables the extra cloud planning call so the answer path starts from local parsing.
+      <p class="entry-time"><time datetime="2026-05-24T16:01:26+08:00">2026-05-24 16:01:26 +08:00</time></p>
+      <strong>敏感内容和预算守卫。</strong>
+      新增规则型敏感内容分类器和仅用于后台的预算守卫。后台内容如果包含身份证号、类似银行卡号、凭据、Token 或相关关键词，会阻止云侧 fallback。前台由用户主动触发的云侧任务不会被后台请求/Token 预算拦截。
     </div>
     <div class="entry">
-      <strong>Follow-up: current-week scope.</strong>
-      Added a normal <code>本周</code> / <code>这周</code> / <code>本星期</code> range in addition to the existing <code>本周末</code>. <code>本周</code> uses the current calendar week from Monday through today, and uses activity time <code>max(createdAt, updatedAt)</code> so records updated this week are included even if they were created earlier.
+      <p class="entry-time"><time datetime="2026-05-24T16:01:26+08:00">2026-05-24 16:01:26 +08:00</time></p>
+      <strong>Router 兼容性。</strong>
+      <code>AiTaskRouter</code> 现在会通过任务策略和云侧守卫过滤候选供应商，同时保留现有调用方依赖的 <code>automaticPreference</code> 行为。这样不需要在同一个提交里重写所有 planner。
     </div>
     <div class="entry">
-      <strong>Follow-up regression verification.</strong>
-      Added failing tests for current-week activity filtering, dropping Skill WebViews, hiding the legacy Skill progress stage, and skipping the pre-answer cloud planner. The focused red tests failed before the fix, then passed after the implementation. The Review chat test group also passed with <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>.
+      <p class="entry-time"><time datetime="2026-05-24T16:01:26+08:00">2026-05-24 16:01:26 +08:00</time></p>
+      <strong>验证。</strong>
+      已运行聚焦的策略/router 测试，包括 <code>AiTaskPolicyRegistryTest</code>、<code>AiDataSensitivityClassifierTest</code>、<code>CloudUsageBudgetGuardTest</code>、<code>AiTaskRouterPolicyTest</code> 和现有 <code>AiTaskRouterTest</code>；全部通过。
     </div>
     <div class="entry">
-      <strong>Follow-up release install.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed the signed release APK with <code>adb -s AWPQUT6116001779 install -r app/build/outputs/apk/release/app-release.apk</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:21:04</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and the checked logcat window had no <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries.
+      <p class="entry-time"><time datetime="2026-05-24T15:57:24+08:00">2026-05-24 15:57:24 +08:00</time></p>
+      <strong>运行时设置拆分。</strong>
+      新增 <code>AiRuntimeSettings</code>，显式区分执行模式、前台/后台是否允许云侧、低频通知模式，以及后台请求/Token 默认预算。第一版仓库基于 DataStore，并可从现有端侧设置仓库迁移初始执行模式。
     </div>
     <div class="entry">
-      <strong>Follow-up: exact current-week wording.</strong>
-      The exact phone query <code>本周我记录了哪些内容？</code> still returned no records. Root cause: <code>本周</code> was recognized as a time range but was not removed from entity extraction, so the query parser produced a fake entity term <code>本周</code>. Real notes normally do not contain that literal term, causing the scoped corpus to be filtered down to zero. Added <code>本周</code>, <code>这周</code>, <code>本星期</code>, <code>这个星期</code>, <code>这星期</code>, <code>上周</code>, <code>上星期</code>, and <code>上个星期</code> to Review chat operation/stop words so week expressions remain time scopes rather than topic filters.
+      <p class="entry-time"><time datetime="2026-05-24T15:57:24+08:00">2026-05-24 15:57:24 +08:00</time></p>
+      <strong>默认执行模式修正。</strong>
+      将 <code>OnDeviceExecutionModeCodec.decode(raw = null, legacyPreferOnDevice = null)</code> 修正为返回 <code>AUTOMATIC</code>。旧版显式值 <code>preferOnDevice = false</code> 仍返回 <code>CLOUD_ONLY</code>，因此用户过去有意选择的云侧优先不会被破坏。
     </div>
     <div class="entry">
-      <strong>Follow-up exact-query regression verification.</strong>
-      Updated the regression to use <code>本周我记录了哪些内容？</code>. The test first failed with entity terms <code>[本周]</code>, then passed after the stop-word fix. Also reran the Review chat test group with <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>; it passed.
+      <p class="entry-time"><time datetime="2026-05-24T15:57:24+08:00">2026-05-24 15:57:24 +08:00</time></p>
+      <strong>验证。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.settings.OnDeviceExecutionModeCodecTest" --tests "com.mindflow.app.data.settings.AiRuntimeSettingsTest"</code>；运行时设置和默认模式测试通过。
     </div>
     <div class="entry">
-      <strong>Follow-up exact-query release install.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed <code>app/build/outputs/apk/release/app-release.apk</code> on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:28:57</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+      <p class="entry-time"><time datetime="2026-05-24T15:54:59+08:00">2026-05-24 15:54:59 +08:00</time></p>
+      <strong>供应商注册表与适配器。</strong>
+      新增通用云侧供应商注册表，内置 <code>zhipu</code>、<code>openai</code>、<code>deepseek</code> 和 <code>custom</code>。DeepSeek 默认使用 <code>https://api.deepseek.com</code>、<code>/chat/completions</code> 和 <code>deepseek-v4-flash</code>，同时保留 <code>deepseek-v4-pro</code> 可选项。已废弃的 <code>deepseek-chat</code> 和 <code>deepseek-reasoner</code> 会被规范化到当前默认模型。
     </div>
     <div class="entry">
-      <strong>Follow-up: unadvanced idea query semantics.</strong>
-      Phone feedback showed the quick question <code>最近一个月有哪些未推进的想法</code> returned zero records. I traced this to two local parsing gaps: <code>最近一个月</code> left <code>一个月</code> behind as a fake entity term, and <code>未推进的想法</code> was treated as literal title/body text instead of a status request. The fix maps unadvanced idea phrases such as <code>未推进的想法</code>, <code>没推进想法</code>, and <code>待推进的想法</code> to <code>NoteStatus.IDEA</code>, then applies that status filter after the requested time scope. I intentionally kept this narrow to avoid turning every mention of <code>想法</code> into a status filter when the user may be searching for a real topic.
+      <p class="entry-time"><time datetime="2026-05-24T15:54:59+08:00">2026-05-24 15:54:59 +08:00</time></p>
+      <strong>适配器测试取舍。</strong>
+      请求适配器返回 JSON 字符串，而不是 Android 的 <code>org.json.JSONObject</code>。JVM 单测里 Android 的 <code>org.json</code> 是未 mock 的 stub，所以字符串渲染能让请求构造保持可测试，同时不新增 JSON 依赖，也不把这些测试改成 instrumentation 测试。
     </div>
     <div class="entry">
-      <strong>Follow-up unadvanced-query regression verification.</strong>
-      Added failing tests proving that <code>最近一个月有哪些未推进的想法</code> parses as a recent-30-day list with no fake entity terms, and that the context packet includes a recently active <code>想法</code> record while excluding <code>进行中</code> records and stale ideas. The focused tests first failed with entity terms <code>[一个月, 未推进的想法]</code> and zero hits, then passed after the status-filter implementation.
+      <p class="entry-time"><time datetime="2026-05-24T15:54:59+08:00">2026-05-24 15:54:59 +08:00</time></p>
+      <strong>验证。</strong>
+      已运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.cloud.*"</code>；供应商和适配器测试通过。
     </div>
     <div class="entry">
-      <strong>Follow-up unadvanced-query release install.</strong>
-      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>; all passed. Installed the signed release APK on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:39:30</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+      <p class="entry-time"><time datetime="2026-05-24T15:52:00+08:00">2026-05-24 15:52:00 +08:00</time></p>
+      <strong>审计存储选择。</strong>
+      使用本地 JSONL/文件型仓库存储用量审计，而不是引入 Room 迁移。这个选择与现有 <code>AiTaskTraceRecorder</code> 风格一致，可以避免为了元数据事件增加数据库迁移，也能降低发布验证风险。
     </div>
     <div class="entry">
-      <strong>Follow-up: history excerpt JSON cleanup.</strong>
-      A phone screenshot of the Review history page showed <code>主题回看</code> and the <code>我最近在关注什么？</code> history row rendering <code>{"summary": ...}</code> JSON in the preview text. Root cause: <code>ReviewChatScreen</code> already renders structured answers for the chat body, but <code>RoomReviewChatSavedConversationRepository</code> persisted <code>latestExcerpt</code> by taking the raw last message content. The fix adds a shared history-preview formatter that extracts the structured <code>summary</code> from full JSON answers and also from legacy truncated excerpts that only contain the beginning of <code>{"summary":"..."</code>. New saves now store human-readable excerpts; old rows are cleaned when converted to <code>SavedReviewChatSessionSummary</code> for display.
+      <p class="entry-time"><time datetime="2026-05-24T15:51:00+08:00">2026-05-24 15:51:00 +08:00</time></p>
+      <strong>实现边界。</strong>
+      第一版生产实现只覆盖兼容 OpenAI Chat Completions 的云侧供应商。DeepSeek、OpenAI、智谱和自定义供应商共用同一套注册表与请求适配器。原生 Anthropic/Gemini 协议以及云侧音频/图片上传暂不纳入本次改动，因为它们需要额外的显式授权和 payload 设计。
     </div>
     <div class="entry">
-      <strong>Follow-up history-preview verification.</strong>
-      Added focused tests for full structured JSON answers, legacy truncated JSON excerpts, new saved sessions, and old stored summaries. Ran the focused formatter/repository tests, the Review chat test group, the full debug unit suite, and <code>./gradlew --no-daemon :app:assembleRelease</code>; all passed. Installed <code>app/build/outputs/apk/release/app-release.apk</code> on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code> without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:48:37</code>. Post-install screenshots of the Review tab and full Review history page show human-readable previews for <code>最近在关注什么</code> and <code>最近一个月有哪些未推进的想法</code>, with no visible <code>{"summary": ...}</code> JSON. Launch/logcat checks found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries.
+      <p class="entry-time"><time datetime="2026-05-24T15:44:00+08:00">2026-05-24 15:44:00 +08:00</time></p>
+      <strong>隔离 worktree。</strong>
+      本次实现放在 <code>/Users/dpthinker/.config/superpowers/worktrees/MindFlow/cloud-ai-runtime-policy</code>，分支为 <code>codex/cloud-ai-runtime-policy</code>。这样可以把主工作区里的本地产物、后续用户改动和本次 Spec 实现隔离开。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T15:43:25+08:00">2026-05-24 15:43:25 +08:00</time></p>
+      <strong>实现前快照。</strong>
+      原始工作区中已经存在应用代码、测试代码改动，以及较大的未跟踪本地数据目录。我先把应用和测试代码快照提交为 <code>e5c4751 chore: snapshot current app changes</code>，并且没有把 <code>data/</code>、<code>recovery/</code>、<code>tmp/</code> 以及产品/本地文档纳入该快照。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T15:35:51+08:00">2026-05-24 15:35:51 +08:00</time></p>
+      <strong>方案规格确认。</strong>
+      已形成云侧 AI 供应商与运行策略的规格方向：为 DeepSeek 接入预留通用供应商架构，同时审视端侧/云侧默认配置、云侧使用告知、低频通知、后续多供应商扩展和发布验证路径。
     </div>
   </main>
 </body>
