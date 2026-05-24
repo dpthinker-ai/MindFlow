@@ -27,10 +27,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -77,6 +73,8 @@ import com.mindflow.app.util.TimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+internal const val SearchDeleteUsesDeferredSnackbarUndo = false
+
 @Composable
 fun SearchRoute(
     noteRepository: NoteRepository,
@@ -99,9 +97,7 @@ fun SearchRoute(
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
     var legacySearchExpanded by rememberSaveable {
         mutableStateOf(initialStatus != null || initialArchivedOnly)
     }
@@ -142,8 +138,6 @@ fun SearchRoute(
 
     SearchScreen(
         uiState = uiState,
-        hiddenNoteIds = pendingDeletedIds,
-        snackbarHostState = snackbarHostState,
         legacySearchExpanded = legacySearchExpanded,
         onToggleLegacySearch = { legacySearchExpanded = !legacySearchExpanded },
         onQueryChange = viewModel::updateQuery,
@@ -157,21 +151,7 @@ fun SearchRoute(
         onOpenThread = onOpenThread,
         onCreateCapture = onCreateCapture,
         onClassifyPendingFolders = viewModel::classifyPendingFolders,
-        onDeleteNote = { note ->
-            scope.launch {
-                pendingDeletedIds = pendingDeletedIds + note.id
-                val result = snackbarHostState.showSnackbar(
-                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
-                    actionLabel = "撤销",
-                    duration = SnackbarDuration.Short,
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    pendingDeletedIds = pendingDeletedIds - note.id
-                } else {
-                    viewModel.deleteNote(note.id)
-                }
-            }
-        },
+        onDeleteNote = { note -> viewModel.deleteNote(note.id) },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -180,8 +160,6 @@ fun SearchRoute(
 @Composable
 private fun SearchScreen(
     uiState: SearchUiState,
-    hiddenNoteIds: Set<Long>,
-    snackbarHostState: SnackbarHostState,
     legacySearchExpanded: Boolean,
     onToggleLegacySearch: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -203,9 +181,7 @@ private fun SearchScreen(
     val visibleTags = remember(uiState.availableTags, showAllTags) {
         if (showAllTags) uiState.availableTags else uiState.availableTags.take(6)
     }
-    val visibleResults = remember(uiState.results, hiddenNoteIds) {
-        uiState.results.filterNot { it.id in hiddenNoteIds }
-    }
+    val visibleResults = uiState.results
     val activeFilterLabels = remember(uiState) {
         buildList {
             if (uiState.filters.query.isNotBlank()) add("关键词")
@@ -622,13 +598,6 @@ private fun SearchScreen(
                 }
             }
         }
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(androidx.compose.ui.Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
-        )
     }
 }
 

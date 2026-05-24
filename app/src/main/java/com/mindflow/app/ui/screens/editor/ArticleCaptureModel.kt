@@ -24,13 +24,9 @@ internal data class ParsedCaptureModel(
 )
 
 internal fun textInputReferenceLabels(): List<String> = listOf(
-    "纯文本输入",
-    "内容（可编辑）",
-    "AI 建议标题",
-    "类型识别",
-    "标签",
-    "附件",
-    "完成记录",
+    "记录",
+    "内容",
+    "保存",
 )
 
 internal fun voiceInputReferenceLabels(): List<String> = listOf(

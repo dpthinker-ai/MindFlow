@@ -9,6 +9,10 @@ import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
 import com.mindflow.app.ui.navigation.CaptureMode
+import com.mindflow.app.ui.screens.folder.FolderDeleteUsesDeferredSnackbarUndo
+import com.mindflow.app.ui.screens.search.SearchDeleteUsesDeferredSnackbarUndo
+import com.mindflow.app.ui.screens.stats.StatsDeleteUsesDeferredSnackbarUndo
+import com.mindflow.app.ui.screens.thread.ThreadDeleteUsesDeferredSnackbarUndo
 import org.junit.Test
 
 class FeedRecordFiltersTest {
@@ -100,6 +104,12 @@ class FeedRecordFiltersTest {
         assertThat(RecordSearchMinHeight.value).isEqualTo(48f)
         assertThat(RecordQuickCaptureVerticalPadding.value).isAtMost(10f)
         assertThat(RecordFilterChipVerticalPadding.value).isAtMost(6f)
+        assertThat(RecordHomeUsesDuplicateFloatingCreateButton).isFalse()
+        assertThat(RecordDeleteUsesDeferredSnackbarUndo).isFalse()
+        assertThat(StatsDeleteUsesDeferredSnackbarUndo).isFalse()
+        assertThat(SearchDeleteUsesDeferredSnackbarUndo).isFalse()
+        assertThat(FolderDeleteUsesDeferredSnackbarUndo).isFalse()
+        assertThat(ThreadDeleteUsesDeferredSnackbarUndo).isFalse()
     }
 
     @Test

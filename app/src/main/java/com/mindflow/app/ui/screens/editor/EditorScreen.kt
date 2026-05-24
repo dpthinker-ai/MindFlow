@@ -427,8 +427,6 @@ fun EditorRoute(
             onContentChange = viewModel::onContentChange,
             onSave = { viewModel.save(exitAfterSave = false) },
             onSaveAndExit = { viewModel.save(exitAfterSave = true) },
-            onGenerateTitle = viewModel::generateTitle,
-            onCaptureTypeSelect = viewModel::onCaptureTypeChange,
         )
     } else {
         FullEditorScreen(
@@ -552,8 +550,6 @@ internal fun CaptureEditorScreen(
     onContentChange: (String) -> Unit,
     onSave: () -> Unit,
     onSaveAndExit: () -> Unit,
-    onGenerateTitle: () -> Unit,
-    onCaptureTypeSelect: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val screenHeightDp = LocalConfiguration.current.screenHeightDp
@@ -597,7 +593,7 @@ internal fun CaptureEditorScreen(
             verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         ) {
             EditorTopBar(
-                title = "纯文本输入",
+                title = "记录",
                 onBack = ::requestBack,
             )
 
@@ -609,7 +605,7 @@ internal fun CaptureEditorScreen(
                 verticalArrangement = Arrangement.spacedBy(sectionSpacing),
             ) {
                 Text(
-                    text = "内容（可编辑）",
+                    text = "内容",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -618,22 +614,12 @@ internal fun CaptureEditorScreen(
                     onContentChange = onContentChange,
                     height = writingCardHeight,
                 )
-                CaptureSuggestionRow(
-                    uiState = uiState,
-                    onGenerateTitle = onGenerateTitle,
-                )
-                CaptureTypeSection(
-                    uiState = uiState,
-                    onTypeSelect = onCaptureTypeSelect,
-                )
-                CaptureTagSection(uiState = uiState)
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                CaptureAttachmentSection(modifier = Modifier.fillMaxWidth())
                 InputStickyActionBar(
                     actions = listOf(
                         InputActionSpec(
-                            text = if (uiState.isSaving) "保存中..." else "完成记录",
+                            text = if (uiState.isSaving) "保存中..." else "保存",
                             icon = Icons.Outlined.Check,
                             onClick = onSave,
                             enabled = !uiState.isSaving && uiState.content.isNotBlank(),
@@ -693,167 +679,6 @@ private fun textCaptureWritingCardHeight(screenHeightDp: Int): Dp = when {
     else -> 384.dp
 }
 
-@Composable
-private fun CaptureSuggestionRow(
-    uiState: NoteEditorUiState,
-    onGenerateTitle: () -> Unit,
-) {
-    val isHint = uiState.topic.isBlank()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "AI 建议标题",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = 0.dp,
-        ) {
-            Row(
-                modifier = Modifier.padding(start = 14.dp, top = 11.dp, end = 6.dp, bottom = 11.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = suggestedCaptureTitle(uiState),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isHint) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                FieldIconAction(
-                    icon = Icons.Outlined.Refresh,
-                    contentDescription = if (uiState.isRefreshingTopic) "正在重新建议标题" else "重新建议标题",
-                    onClick = onGenerateTitle,
-                    enabled = !uiState.isRefreshingTopic && uiState.content.isNotBlank(),
-            )
-        }
-    }
-}
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CaptureTypeSection(
-    uiState: NoteEditorUiState,
-    onTypeSelect: (String) -> Unit,
-) {
-    val selected = remember(uiState.content, uiState.status, uiState.tags) {
-        inferCaptureType(uiState)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "类型识别",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CaptureType.entries.forEach { type ->
-                CaptureTypeChip(
-                    type = type,
-                    selected = type == selected,
-                    onClick = { onTypeSelect(type.label) },
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CaptureTagSection(uiState: NoteEditorUiState) {
-    val tags = remember(uiState.content, uiState.tags) {
-        uiState.tags.filterNot { it in TextCaptureTypeLabels }
-            .ifEmpty { textInputPreviewTags(uiState.content) }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "标签",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            tags.take(3).forEach { tag ->
-                AssistChip(text = tag, accent = if (tag in uiState.tags) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            AssistChip(text = "保存后整理", accent = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun CaptureAttachmentSection(modifier: Modifier = Modifier) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "附件",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            AttachmentHint(
-                icon = Icons.Outlined.Image,
-                text = "图片",
-                modifier = Modifier.weight(1f),
-            )
-            AttachmentHint(
-                icon = Icons.Outlined.Link,
-                text = "链接",
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AttachmentHint(
-    icon: ImageVector,
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.height(46.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(19.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
 private enum class CaptureType(
     val label: String,
     val icon: ImageVector,
@@ -900,12 +725,6 @@ private fun CaptureTypeChip(
             }
         }
     }
-}
-
-private fun suggestedCaptureTitle(uiState: NoteEditorUiState): String {
-    if (uiState.topic.isNotBlank()) return uiState.topic
-    if (uiState.isRefreshingTopic) return "正在生成标题..."
-    return "点击刷新自动生成标题"
 }
 
 private fun inferCaptureType(uiState: NoteEditorUiState): CaptureType {
@@ -962,6 +781,12 @@ internal fun ArticleCaptureScreen(
     val articleBody = remember(uiState.content) { articleBodyFromContent(uiState.content) }
     val noteValue = remember(uiState.content) { extractCaptureField(uiState.content, ArticleNoteFieldLabel) }
     val extractStatus = remember(uiState.content) { articleStatusFromContent(uiState.content) }
+    val canExtractArticle = !uiState.isExtractingArticle && urlValue.isNotBlank() && articleBody.isBlank()
+    val extractActionText = when {
+        uiState.isExtractingArticle -> "提取中..."
+        articleBody.isNotBlank() -> "正文已填"
+        else -> "解析正文"
+    }
 
     fun requestBack() {
         if (uiState.hasUnsavedChanges) {
@@ -1031,9 +856,9 @@ internal fun ArticleCaptureScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         ActionButton(
-                            text = if (uiState.isExtractingArticle) "提取中..." else "解析正文",
+                            text = extractActionText,
                             onClick = { onEnsureArticleExtraction(urlValue) },
-                            enabled = !uiState.isExtractingArticle && urlValue.isNotBlank(),
+                            enabled = canExtractArticle,
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.AutoFixHigh,
                         )
@@ -1115,8 +940,9 @@ internal fun ArticleCaptureScreen(
                 isSaving = uiState.isSaving,
                 canSave = uiState.content.isNotBlank(),
                 primaryText = "保存链接",
-                secondaryText = if (uiState.isExtractingArticle) "提取中..." else "解析正文",
+                secondaryText = extractActionText,
                 secondaryIcon = Icons.Outlined.AutoFixHigh,
+                secondaryEnabled = canExtractArticle,
                 onSecondary = { onEnsureArticleExtraction(urlValue) },
                 onSave = onSave,
                 onCaptureAction = onCaptureAction,
@@ -2091,6 +1917,7 @@ private fun CaptureStickyActionBar(
     primaryText: String,
     secondaryText: String,
     secondaryIcon: ImageVector,
+    secondaryEnabled: Boolean = true,
     onSecondary: () -> Unit,
     onSave: () -> Unit,
     onCaptureAction: (CapturePostAction) -> Unit,
@@ -2140,6 +1967,7 @@ private fun CaptureStickyActionBar(
                 GhostActionButton(
                     text = secondaryText,
                     onClick = onSecondary,
+                    enabled = secondaryEnabled,
                     modifier = Modifier.weight(1f),
                     icon = secondaryIcon,
                 )

@@ -420,6 +420,23 @@ class EditorScreenLogicTest {
     }
 
     @Test
+    fun articleExtractionFields_doNotOverwriteManualBody() {
+        val content = articleContentWithExtraction(
+            content = "链接：https://example.com/post\n正文：我手动粘贴的重要正文\n补充说明：稍后复盘",
+            article = ExtractedArticleContent(
+                url = "https://example.com/post",
+                title = "自动解析标题",
+                host = "example.com",
+                body = "自动解析正文",
+            ),
+        )
+
+        assertThat(articleBodyFromContent(content)).isEqualTo("我手动粘贴的重要正文")
+        assertThat(articleTitleFromContent(content)).isEqualTo("自动解析标题")
+        assertThat(articleStatusFromContent(content)).isEqualTo("已从 example.com 提取正文；正文已有内容，未覆盖")
+    }
+
+    @Test
     fun normalizeExternalLinkUrl_acceptsOnlyHttpLinks() {
         assertThat(normalizeExternalLinkUrl(" https://example.com/post。 ")).isEqualTo("https://example.com/post")
         assertThat(normalizeExternalLinkUrl("http://example.com/a?b=1")).isEqualTo("http://example.com/a?b=1")
@@ -558,13 +575,9 @@ class EditorScreenLogicTest {
     @Test
     fun inputReferenceLabels_matchLatestDesign() {
         assertThat(textInputReferenceLabels()).containsExactly(
-            "纯文本输入",
-            "内容（可编辑）",
-            "AI 建议标题",
-            "类型识别",
-            "标签",
-            "附件",
-            "完成记录",
+            "记录",
+            "内容",
+            "保存",
         ).inOrder()
 
         assertThat(voiceInputReferenceLabels()).containsExactly(

@@ -16,10 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +65,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+
+internal const val FolderDeleteUsesDeferredSnackbarUndo = false
 
 data class FolderUiState(
     val folderKey: String,
@@ -169,9 +167,7 @@ fun FolderRoute(
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -203,26 +199,10 @@ fun FolderRoute(
 
     FolderScreen(
         uiState = uiState,
-        hiddenNoteIds = pendingDeletedIds,
-        snackbarHostState = snackbarHostState,
         onBack = onBack,
         onOpenNote = onOpenNote,
         onArchiveNote = viewModel::archiveNote,
-        onDeleteNote = { note ->
-            scope.launch {
-                pendingDeletedIds = pendingDeletedIds + note.id
-                val result = snackbarHostState.showSnackbar(
-                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
-                    actionLabel = "撤销",
-                    duration = SnackbarDuration.Short,
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    pendingDeletedIds = pendingDeletedIds - note.id
-                } else {
-                    viewModel.deleteNote(note.id)
-                }
-            }
-        },
+        onDeleteNote = { note -> viewModel.deleteNote(note.id) },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -230,8 +210,6 @@ fun FolderRoute(
 @Composable
 private fun FolderScreen(
     uiState: FolderUiState,
-    hiddenNoteIds: Set<Long>,
-    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onOpenNote: (Long) -> Unit,
     onArchiveNote: (Long) -> Unit,
@@ -241,9 +219,7 @@ private fun FolderScreen(
     val accent = Color(AndroidColor.parseColor(uiState.accentHex))
     val progress = if (uiState.totalCount == 0) 0f else uiState.doneCount.toFloat() / uiState.totalCount.toFloat()
     val percent = (progress * 100).toInt()
-    val visibleNotes = remember(uiState.notes, hiddenNoteIds) {
-        uiState.notes.filterNot { it.id in hiddenNoteIds }
-    }
+    val visibleNotes = uiState.notes
 
     ScreenBackground {
         Column(
@@ -353,12 +329,5 @@ private fun FolderScreen(
                 }
             }
         }
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
-        )
     }
 }

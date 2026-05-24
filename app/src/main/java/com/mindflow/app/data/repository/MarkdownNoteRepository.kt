@@ -348,11 +348,17 @@ class MarkdownNoteRepository(
     }
 
     override suspend fun deleteNote(noteId: Long) {
+        var deleted = false
         storageMutex.withLock {
             val current = storeState.value
             if (current[noteId] == null) return
-            deleteNoteFile(noteId)
+            deleted = deleteNoteFile(noteId)
+            if (!deleted) return@withLock
             storeState.value = current - noteId
+        }
+        if (!deleted) {
+            emitSystemNotice("删除失败：本地记录文件仍存在，请重试")
+            return
         }
         refreshWidget()
     }
@@ -746,9 +752,8 @@ class MarkdownNoteRepository(
         )
     }
 
-    private fun deleteNoteFile(noteId: Long) {
-        File(notesDir, cloudNoteDocumentCodec.fileName(noteId)).delete()
-    }
+    private fun deleteNoteFile(noteId: Long): Boolean =
+        deleteStoredNoteFile(File(notesDir, cloudNoteDocumentCodec.fileName(noteId)))
 
     private fun writeFileAtomically(
         file: File,
@@ -888,6 +893,9 @@ class MarkdownNoteRepository(
         const val NOTES_DIR_NAME = "notes"
     }
 }
+
+internal fun deleteStoredNoteFile(file: File): Boolean =
+    !file.exists() || file.delete() || !file.exists()
 
 internal fun shouldApplyAiRefreshResult(
     extractedFromContent: String,

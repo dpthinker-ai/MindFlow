@@ -343,13 +343,20 @@ internal fun articleContentWithExtraction(
     content: String,
     article: ExtractedArticleContent,
 ): String {
+    val existingBody = articleBodyFromContent(content)
     var next = replaceEditorCaptureField(content, ArticleUrlFieldLabel, article.url)
     next = replaceEditorCaptureField(next, ArticleTitleFieldLabel, article.title)
-    next = replaceEditorCaptureField(next, ArticleBodyFieldLabel, article.body)
+    if (existingBody.isBlank()) {
+        next = replaceEditorCaptureField(next, ArticleBodyFieldLabel, article.body)
+    }
     next = replaceEditorCaptureField(
         next,
         ArticleExtractStatusFieldLabel,
-        "已从 ${article.host} 提取正文",
+        if (existingBody.isBlank()) {
+            "已从 ${article.host} 提取正文"
+        } else {
+            "已从 ${article.host} 提取正文；正文已有内容，未覆盖"
+        },
     )
     return next
 }
@@ -879,8 +886,28 @@ class NoteEditorViewModel(
     fun ensureArticleExtraction(urlOverride: String = "") {
         val state = _uiState.value
         val url = urlOverride.trim().ifBlank { articleUrlFromContent(state.content) }
-        if (url.isBlank() || state.isExtractingArticle) {
+        if (url.isBlank()) {
             viewModelScope.launch { _events.emit(NoteEditorEvent.Message("请先粘贴链接")) }
+            return
+        }
+        if (state.isExtractingArticle) return
+        if (articleBodyFromContent(state.content).isNotBlank()) {
+            viewModelScope.launch {
+                updateDirtyState { current ->
+                    val contentWithStatus = ensureEditorCaptureSections(
+                        content = replaceEditorCaptureField(current.content, ArticleUrlFieldLabel, url),
+                        sectionLabels = listOf(ArticleExtractStatusFieldLabel),
+                    )
+                    current.copy(
+                        content = replaceEditorCaptureField(
+                            contentWithStatus,
+                            ArticleExtractStatusFieldLabel,
+                            "正文已有内容，未重新提取",
+                        ),
+                    )
+                }
+                _events.emit(NoteEditorEvent.Message("正文已有内容，未重新提取"))
+            }
             return
         }
 
@@ -1115,13 +1142,14 @@ class NoteEditorViewModel(
 
     fun save(exitAfterSave: Boolean = false) {
         val state = _uiState.value
+        if (state.isSaving) return
         if (state.content.isBlank()) {
             viewModelScope.launch { _events.emit(NoteEditorEvent.Message("先写下你的想法")) }
             return
         }
 
+        _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
             if (state.isNew) {
                 val hasPrecomputedInsight = state.aiSummary.isNotBlank() && state.aiKeyPoints.isNotEmpty()
                 noteRepository.createNote(

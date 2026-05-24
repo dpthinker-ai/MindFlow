@@ -13,4 +13,13 @@ class MindFlowEntryIntentsTest {
         assertThat(seed.initialContent).isEqualTo("图片：\n补充说明：")
         assertThat(seed.initialTags).containsExactly("图片")
     }
+
+    @Test
+    fun defaultVoiceCaptureSeed_waitsForManualRecordingStart() {
+        val seed = MindFlowEntryIntents.defaultVoiceCaptureSeed()
+
+        assertThat(seed.mode).isEqualTo(CaptureMode.VOICE)
+        assertThat(seed.autoStartVoiceInput).isFalse()
+        assertThat(seed.initialTags).containsExactly("语音")
+    }
 }

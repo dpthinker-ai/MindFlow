@@ -2,6 +2,7 @@ package com.mindflow.app.ui.screens.feed
 
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.CaptureMode
+import com.mindflow.app.ui.navigation.MindFlowEntryIntents
 
 internal enum class FeedCaptureAction {
     TEXT,
@@ -12,10 +13,7 @@ internal enum class FeedCaptureAction {
 
 internal fun FeedCaptureAction.toCaptureSeed(): CaptureSeed = when (this) {
     FeedCaptureAction.TEXT -> CaptureSeed()
-    FeedCaptureAction.VOICE -> CaptureSeed(
-        mode = CaptureMode.VOICE,
-        initialTags = listOf("语音"),
-    )
+    FeedCaptureAction.VOICE -> MindFlowEntryIntents.defaultVoiceCaptureSeed()
     FeedCaptureAction.IMAGE -> CaptureSeed(
         mode = CaptureMode.IMAGE,
         initialTopic = "图片记录",

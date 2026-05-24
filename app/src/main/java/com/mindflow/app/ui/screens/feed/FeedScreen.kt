@@ -18,12 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
@@ -32,10 +30,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,6 +80,8 @@ internal val RecordTimeBankBadgeVerticalPadding = 5.dp
 internal const val RecordSearchUsesStandaloneFilterButton = false
 internal const val RecordSearchUsesOutlinedTextField = false
 internal const val RecordSearchPlaceholder = "搜索记录、标签、链接、任务、语音"
+internal const val RecordHomeUsesDuplicateFloatingCreateButton = false
+internal const val RecordDeleteUsesDeferredSnackbarUndo = false
 
 @Composable
 fun FeedRoute(
@@ -105,9 +101,7 @@ fun FeedRoute(
     val context = LocalContext.current
     val shareCardGenerator = remember(context) { NoteShareCardGenerator(context.applicationContext) }
     val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
     var pendingShareNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var pendingDeletedIds by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -139,27 +133,11 @@ fun FeedRoute(
 
     FeedScreen(
         uiState = uiState,
-        hiddenNoteIds = pendingDeletedIds,
-        snackbarHostState = snackbarHostState,
         onCreateCapture = onCreateCapture,
         onOpenStatusFilter = onOpenStatusFilter,
         onOpenNote = onOpenNote,
         onArchiveNote = viewModel::archiveNote,
-        onDeleteNote = { note ->
-            scope.launch {
-                pendingDeletedIds = pendingDeletedIds + note.id
-                val result = snackbarHostState.showSnackbar(
-                    message = "已移除「${note.topic.ifBlank { "未命名想法" }}」",
-                    actionLabel = "撤销",
-                    duration = SnackbarDuration.Short,
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    pendingDeletedIds = pendingDeletedIds - note.id
-                } else {
-                    viewModel.deleteNote(note.id)
-                }
-            }
-        },
+        onDeleteNote = { note -> viewModel.deleteNote(note.id) },
         onShareNote = { pendingShareNote = it },
     )
 }
@@ -167,8 +145,6 @@ fun FeedRoute(
 @Composable
 private fun FeedScreen(
     uiState: FeedUiState,
-    hiddenNoteIds: Set<Long>,
-    snackbarHostState: SnackbarHostState,
     onCreateCapture: (CaptureSeed) -> Unit,
     onOpenStatusFilter: (NoteStatus?, Boolean) -> Unit,
     onOpenNote: (Long) -> Unit,
@@ -178,9 +154,9 @@ private fun FeedScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(FeedQuickFilter.ALL) }
-    val visibleNotes = remember(uiState.notes, hiddenNoteIds, searchQuery, selectedFilter) {
+    val visibleNotes = remember(uiState.notes, searchQuery, selectedFilter) {
         filterFeedNotes(
-            notes = uiState.notes.filterNot { it.id in hiddenNoteIds },
+            notes = uiState.notes,
             query = searchQuery,
             filter = selectedFilter,
         )
@@ -304,45 +280,6 @@ private fun FeedScreen(
                     }
                 }
             }
-        }
-        FloatingCreateButton(
-            onClick = { onCreateCapture(FeedCaptureAction.TEXT.toCaptureSeed()) },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = ScreenHorizontalPadding + 4.dp,
-                    bottom = BottomBarClearance + 16.dp,
-                ),
-        )
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = ScreenHorizontalPadding, vertical = 18.dp),
-        )
-    }
-}
-
-@Composable
-private fun FloatingCreateButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.size(56.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        shadowElevation = 0.dp,
-        onClick = onClick,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
-                contentDescription = "新建记录",
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(30.dp),
-            )
         }
     }
 }

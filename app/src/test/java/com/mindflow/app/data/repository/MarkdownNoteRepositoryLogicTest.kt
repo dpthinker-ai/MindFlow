@@ -1,6 +1,7 @@
 package com.mindflow.app.data.repository
 
 import com.google.common.truth.Truth.assertThat
+import java.io.File
 import org.junit.Test
 
 class MarkdownNoteRepositoryLogicTest {
@@ -49,5 +50,19 @@ class MarkdownNoteRepositoryLogicTest {
     @Test
     fun `article insight auto generation ignores short plain notes`() {
         assertThat(shouldAutoGenerateArticleInsight("今天想到一个很短的捕捉。")).isFalse()
+    }
+
+    @Test
+    fun `delete stored note file reports failure when path still exists`() {
+        val dir = kotlin.io.path.createTempDirectory().toFile()
+        val nonEmptyDirectory = File(dir, "note-1.md").apply {
+            mkdirs()
+            File(this, "child").writeText("still here")
+        }
+
+        assertThat(deleteStoredNoteFile(nonEmptyDirectory)).isFalse()
+        assertThat(nonEmptyDirectory.exists()).isTrue()
+
+        dir.deleteRecursively()
     }
 }

@@ -120,16 +120,28 @@ object MindFlowEntryIntents {
         val initialTopic = intent.getStringExtra(EXTRA_CAPTURE_TOPIC).orEmpty()
         val initialTags = intent.getStringArrayListExtra(EXTRA_CAPTURE_TAGS)?.toList().orEmpty()
         return MindFlowLaunchRequest.OpenCapture(
-            CaptureSeed(
-                mode = CaptureMode.VOICE,
+            defaultVoiceCaptureSeed(
                 initialContent = initialContent,
                 initialTopic = initialTopic,
                 initialFolderKey = intent.getStringExtra(EXTRA_CAPTURE_FOLDER)?.takeIf { it.isNotBlank() },
                 initialTags = initialTags,
-                autoStartVoiceInput = false,
             ),
         )
     }
+
+    internal fun defaultVoiceCaptureSeed(
+        initialContent: String = "",
+        initialTopic: String = "",
+        initialFolderKey: String? = null,
+        initialTags: List<String> = listOf("语音"),
+    ): CaptureSeed = CaptureSeed(
+        mode = CaptureMode.VOICE,
+        initialContent = initialContent,
+        initialTopic = initialTopic,
+        initialFolderKey = initialFolderKey,
+        initialTags = (initialTags + "语音").distinct(),
+        autoStartVoiceInput = false,
+    )
 
     private fun parseImageCaptureIntent(intent: Intent): MindFlowLaunchRequest {
         val initialContent = intent.getStringExtra(EXTRA_CAPTURE_CONTENT)
