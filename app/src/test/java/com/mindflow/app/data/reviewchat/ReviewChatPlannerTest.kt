@@ -106,10 +106,11 @@ class ReviewChatPlannerTest {
         assertThat((weekendQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周末")
         assertThat(weekendQuery.wantsCategories).isTrue()
 
-        val thisWeekQuery = ReviewChatQueryParser.parse("本周记录了哪些信息")
+        val thisWeekQuery = ReviewChatQueryParser.parse("本周我记录了哪些内容？")
         assertThat(thisWeekQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(thisWeekQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
         assertThat((thisWeekQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周")
+        assertThat(thisWeekQuery.entityTerms).isEmpty()
 
         val briefSummaryQuery = ReviewChatQueryParser.parse("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。")
         assertThat(briefSummaryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
@@ -432,7 +433,7 @@ class ReviewChatPlannerTest {
         val updatedThisWeek = thisWeekStart.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val updatedBeforeThisWeek = thisWeekStart.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val packet = buildReviewChatContextPacket(
-            question = "本周记录了哪些信息",
+            question = "本周我记录了哪些内容？",
             intent = ReviewChatIntent.RECALL,
             notes = listOf(
                 sampleNote(1L, "旧创建但本周更新", "这条是本周补充的新信息")

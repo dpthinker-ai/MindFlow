@@ -256,6 +256,18 @@
       <strong>Follow-up release install.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed the signed release APK with <code>adb -s AWPQUT6116001779 install -r app/build/outputs/apk/release/app-release.apk</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:21:04</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and the checked logcat window had no <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries.
     </div>
+    <div class="entry">
+      <strong>Follow-up: exact current-week wording.</strong>
+      The exact phone query <code>本周我记录了哪些内容？</code> still returned no records. Root cause: <code>本周</code> was recognized as a time range but was not removed from entity extraction, so the query parser produced a fake entity term <code>本周</code>. Real notes normally do not contain that literal term, causing the scoped corpus to be filtered down to zero. Added <code>本周</code>, <code>这周</code>, <code>本星期</code>, <code>这个星期</code>, <code>这星期</code>, <code>上周</code>, <code>上星期</code>, and <code>上个星期</code> to Review chat operation/stop words so week expressions remain time scopes rather than topic filters.
+    </div>
+    <div class="entry">
+      <strong>Follow-up exact-query regression verification.</strong>
+      Updated the regression to use <code>本周我记录了哪些内容？</code>. The test first failed with entity terms <code>[本周]</code>, then passed after the stop-word fix. Also reran the Review chat test group with <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>; it passed.
+    </div>
+    <div class="entry">
+      <strong>Follow-up exact-query release install.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed <code>app/build/outputs/apk/release/app-release.apk</code> on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:28:57</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+    </div>
   </main>
 </body>
 </html>
