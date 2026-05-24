@@ -98,6 +98,18 @@
       <strong>Verification.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.cloud.*"</code>; the provider and adapter tests pass.
     </div>
+    <div class="entry">
+      <strong>Runtime settings split.</strong>
+      Added <code>AiRuntimeSettings</code> with explicit execution mode, foreground/background cloud permission, low-frequency notification mode, and background request/token defaults. The first repository is DataStore-backed and can migrate its initial execution mode from the existing on-device settings repository.
+    </div>
+    <div class="entry">
+      <strong>Default execution mode correction.</strong>
+      Fixed <code>OnDeviceExecutionModeCodec.decode(raw = null, legacyPreferOnDevice = null)</code> to return <code>AUTOMATIC</code>. The older explicit legacy value <code>preferOnDevice = false</code> still returns <code>CLOUD_ONLY</code>, so intentional old cloud-only choices remain intact.
+    </div>
+    <div class="entry">
+      <strong>Verification.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.settings.OnDeviceExecutionModeCodecTest" --tests "com.mindflow.app.data.settings.AiRuntimeSettingsTest"</code>; the runtime/default-mode tests pass.
+    </div>
   </main>
 </body>
 </html>

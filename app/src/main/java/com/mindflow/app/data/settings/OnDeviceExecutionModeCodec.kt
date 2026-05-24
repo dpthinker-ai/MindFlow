@@ -7,10 +7,10 @@ object OnDeviceExecutionModeCodec {
         raw?.trim()?.takeIf { it.isNotBlank() }?.let { candidate ->
             return runCatching { AiExecutionMode.valueOf(candidate) }.getOrElse { AiExecutionMode.AUTOMATIC }
         }
-        return if (legacyPreferOnDevice == true) {
-            AiExecutionMode.AUTOMATIC
-        } else {
-            AiExecutionMode.CLOUD_ONLY
+        return when (legacyPreferOnDevice) {
+            true -> AiExecutionMode.AUTOMATIC
+            false -> AiExecutionMode.CLOUD_ONLY
+            null -> AiExecutionMode.AUTOMATIC
         }
     }
 }

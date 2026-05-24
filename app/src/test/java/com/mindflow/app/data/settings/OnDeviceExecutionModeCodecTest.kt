@@ -18,6 +18,12 @@ class OnDeviceExecutionModeCodecTest {
     }
 
     @Test
+    fun `missing stored mode and missing legacy flag defaults to automatic`() {
+        assertThat(OnDeviceExecutionModeCodec.decode(raw = null, legacyPreferOnDevice = null))
+            .isEqualTo(AiExecutionMode.AUTOMATIC)
+    }
+
+    @Test
     fun `explicit stored mode wins over legacy flag`() {
         assertThat(OnDeviceExecutionModeCodec.decode(raw = "ON_DEVICE_ONLY", legacyPreferOnDevice = false))
             .isEqualTo(AiExecutionMode.ON_DEVICE_ONLY)

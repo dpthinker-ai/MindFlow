@@ -190,7 +190,7 @@ git commit -m "feat: add cloud ai provider registry"
 - Test: `app/src/test/java/com/mindflow/app/data/settings/OnDeviceExecutionModeCodecTest.kt`
 - Test: `app/src/test/java/com/mindflow/app/data/settings/AiRuntimeSettingsRepositoryTest.kt`
 
-- [ ] **Step 1: Write failing empty-history default test**
+- [x] **Step 1: Write failing empty-history default test**
 
 ```kotlin
 @Test
@@ -200,7 +200,7 @@ fun missingStoredModeAndMissingLegacyFlagDefaultsToAutomatic() {
 }
 ```
 
-- [ ] **Step 2: Run codec test and verify red**
+- [x] **Step 2: Run codec test and verify red**
 
 Run:
 
@@ -210,11 +210,11 @@ Run:
 
 Expected: FAIL because missing legacy flag currently decodes as `CLOUD_ONLY`.
 
-- [ ] **Step 3: Implement codec fix**
+- [x] **Step 3: Implement codec fix**
 
 Change the no-history branch to `AUTOMATIC`, while keeping `legacyPreferOnDevice = false` as `CLOUD_ONLY` and explicit stored mode as highest priority.
 
-- [ ] **Step 4: Add runtime settings model and repository tests**
+- [x] **Step 4: Add runtime settings model and repository tests**
 
 ```kotlin
 @Test
@@ -227,11 +227,11 @@ fun defaultsAllowLowFrequencyBackgroundCloudWithAutomaticMode() {
 }
 ```
 
-- [ ] **Step 5: Implement runtime settings files**
+- [x] **Step 5: Implement runtime settings files**
 
 Persist `executionMode`, `cloudAllowedForInteractive`, `cloudAllowedForBackground`, `notifyOnCloudUse`, `backgroundCloudNotificationMode`, `dailyBackgroundCloudRequestLimit`, and `dailyBackgroundTokenSoftLimit`.
 
-- [ ] **Step 6: Run runtime tests and verify green**
+- [x] **Step 6: Run runtime tests and verify green**
 
 Run:
 
