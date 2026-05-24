@@ -87,6 +87,7 @@ data class ReviewChatMessage(
     val createdAt: Long,
     val referencedNoteId: Long? = null,
     val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
+    val answerTrace: ReviewChatAnswerTrace? = null,
     val skillWebView: ReviewChatSkillWebView? = null,
 )
 
@@ -106,6 +107,7 @@ data class ReviewChatTurnResult(
     val titleSuggestion: String,
     val referencedNoteId: Long? = null,
     val referencedNotes: List<ReviewChatReferencedNote> = emptyList(),
+    val answerTrace: ReviewChatAnswerTrace? = null,
     val skillWebView: ReviewChatSkillWebView? = null,
 )
 
@@ -222,6 +224,26 @@ data class ReviewChatCollectionOverview(
     val last30DaysCount: Int? = null,
 )
 
+data class ReviewChatAnswerTrace(
+    val displayLine: String,
+    val scopeLabel: String = "",
+    val hitCount: Int = 0,
+    val scopedCount: Int = 0,
+    val filterLabel: String = "",
+    val sourceLabel: String = "本地检索",
+    val includesActivityUpdates: Boolean = false,
+    val emptyReason: String? = null,
+) {
+    fun withSource(source: String): ReviewChatAnswerTrace {
+        val resolvedSource = source.ifBlank { sourceLabel }
+        val baseLine = displayLine.removeSuffix(" · $sourceLabel")
+        return copy(
+            sourceLabel = resolvedSource,
+            displayLine = "$baseLine · $resolvedSource",
+        )
+    }
+}
+
 data class ReviewChatEvidenceItem(
     val noteId: Long,
     val dateLabel: String,
@@ -258,6 +280,7 @@ data class ReviewChatContextPacket(
     val memoryDigestSnippets: List<String>,
     val memoryThreadSnippets: List<String>,
     val availableSkillSnippets: List<String> = emptyList(),
+    val answerTrace: ReviewChatAnswerTrace? = null,
     val knowledgeBaseSnippets: List<String>,
     val wikiSnippets: List<String>,
     val rawNoteEvidence: List<ReviewChatEvidenceItem>,

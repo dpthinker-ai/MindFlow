@@ -176,6 +176,17 @@ class ReviewChatAnswerFormatterTest {
     }
 
     @Test
+    fun normalizeReviewChatAnswerForDisplay_usesSummaryForMalformedStructuredJson() {
+        val formatted = normalizeReviewChatAnswerForDisplay(
+            """{"summary":"本周共记录了 17 条内容，时间从2026年5月18日到5月23日。","sections":[{"title":"记录","body":[],"items":["2026-05-23《语音转写状态》：识别信息：正在转写音频..."""",
+        )
+
+        assertThat(formatted).isEqualTo("本周共记录了 17 条内容，时间从2026年5月18日到5月23日。")
+        assertThat(formatted).doesNotContain("{")
+        assertThat(formatted).doesNotContain("\"summary\"")
+    }
+
+    @Test
     fun normalizeReviewChatAnswerForDisplay_keepsRecordSubBulletsNestedInsteadOfFlat() {
         val formatted = normalizeReviewChatAnswerForDisplay(
             """

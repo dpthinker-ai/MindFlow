@@ -42,8 +42,6 @@ object MindFlowDestinations {
         when (focus) {
             FlowFocus.REVIEW,
             FlowFocus.RECONNECT -> FLOW_REVIEW
-            FlowFocus.MAINLINE,
-            FlowFocus.DIRECTION -> FLOW_TODAY
             FlowFocus.TODAY,
             null -> FLOW_TODAY
         }

@@ -71,21 +71,23 @@ Do not lead with backend maintenance terms on user-facing surfaces.
 ## Primary surfaces
 
 - `记录`: fast capture
-- `Flow`: incubation feed
-- `查询`: directed thinking over maintained memory
+- `今天`: active incubation feed and next actions
+- `回看`: directed thinking over maintained memory
 - `图谱`: shape, hubs, isolation, missing links
 - `设置`: model controls, sync, diagnostics
 
-## Flow rules
+## 今天 / 回看 rules
 
-Flow is not:
+There is no standalone user-facing `Flow` tab. Older internal route names may still use `flow/*` for compatibility, but user-facing validation and product discussion should refer to `今天` or `回看`.
+
+今天 / 回看 are not:
 
 - an AI brief
 - a system status screen
 - a direction dashboard
 - a maintainer console
 
-Flow is:
+今天 / 回看 are:
 
 - the home of the incubator
 - a readable feed of what is alive in the user's idea system

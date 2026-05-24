@@ -855,6 +855,60 @@ private fun buildAiAutomationSummary(uiState: SettingsUiState): String {
     return "$model，$cloud"
 }
 
+internal fun SettingsUiState.currentModelHeadline(): String =
+    when (aiExecutionMode) {
+        AiExecutionMode.CLOUD_ONLY -> cloudAiModelDisplayName()
+        AiExecutionMode.ON_DEVICE_ONLY -> localAiModelDisplayName()
+        AiExecutionMode.AUTOMATIC -> {
+            val local = localAiModelDisplayName()
+            if (shouldMentionCloudModel()) "$local + ${cloudAiModelDisplayName()}" else local
+        }
+    }
+
+internal fun SettingsUiState.currentModelDescription(): String =
+    when (aiExecutionMode) {
+        AiExecutionMode.CLOUD_ONLY -> {
+            if (isCloudAiUsable()) {
+                "已切到云端运行，当前使用 ${cloudAiModelDisplayName()}；内容离开设备会提示并记录。"
+            } else {
+                "已选择云端运行；补全 ${aiProviderPreset.label} 的 API Key 并保存后才能使用。"
+            }
+        }
+
+        AiExecutionMode.ON_DEVICE_ONLY -> localModelStatusDescription()
+        AiExecutionMode.AUTOMATIC -> {
+            if (isCloudAiUsable()) {
+                "默认本地优先；需要云端能力时会显式使用 ${cloudAiModelDisplayName()}，并通过低频通知告知。"
+            } else if (shouldMentionCloudModel()) {
+                "默认本地优先；${cloudAiModelDisplayName()} 尚未完成配置。"
+            } else {
+                localModelStatusDescription()
+            }
+        }
+    }
+
+private fun SettingsUiState.localAiModelDisplayName(): String =
+    localModelLabel.ifBlank { "Gemma 4" }
+
+private fun SettingsUiState.cloudAiModelDisplayName(): String {
+    val cloudModel = model.ifBlank { aiProviderPreset.defaultModel }.ifBlank { "自定义模型" }
+    return "${aiProviderPreset.label} · $cloudModel"
+}
+
+private fun SettingsUiState.shouldMentionCloudModel(): Boolean =
+    aiExecutionMode == AiExecutionMode.CLOUD_ONLY ||
+        isCloudAiUsable() ||
+        isConfigured ||
+        aiProviderPreset != AiProviderPreset.ZHIPU
+
+private fun SettingsUiState.localModelStatusDescription(): String =
+    when {
+        localModelStatus == OnDeviceModelStatus.READY -> "端侧摘要、标题、转写和图谱整理优先使用本地模型。"
+        localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到本地，断开后可以继续。"
+        localModelLastMessage.isNotBlank() -> localModelLastMessage
+        else -> "下载模型后，默认在设备本地完成 AI 处理。"
+    }
+
 internal fun SettingsUiState.isCloudAiUsable(): Boolean =
     isConfigured && aiEnabled
 
@@ -1085,17 +1139,12 @@ private fun LocalModelSettingsScreen(
                             SettingsStatusChip(text = statusHeadline, accent = AccentBlue)
                         }
                         Text(
-                            text = uiState.localModelLabel.ifBlank { "Gemma 4" },
+                            text = uiState.currentModelHeadline(),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = when {
-                                uiState.localModelStatus == OnDeviceModelStatus.READY -> "端侧摘要、标题、转写和图谱整理优先使用本地模型。"
-                                uiState.localModelStatus == OnDeviceModelStatus.DOWNLOADING -> "模型正在下载到本地，断开后可以继续。"
-                                uiState.localModelLastMessage.isNotBlank() -> uiState.localModelLastMessage
-                                else -> "下载模型后，默认在设备本地完成 AI 处理。"
-                            },
+                            text = uiState.currentModelDescription(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1720,6 +1769,11 @@ private fun AiSettingsScreen(
                 title = "今日使用",
                 description = "这里显示云端 AI 的请求量、成功量和 token 估算，具体 API Key 在各模型页单独配置。",
             ) {
+                Text(
+                    text = "当前显示：${uiState.aiProviderPreset.label}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 GridTwo {
                     MetricTile(
                         label = "今日请求",
@@ -1828,6 +1882,20 @@ private fun AiProviderSettingsScreen(
                             enabled = uiState.isConfigured,
                         )
                     }
+                }
+                GridTwo {
+                    Text(
+                        text = "当前统计仅限 ${provider.label}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "不同云端模型互不合并",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 GridTwo {
                     MetricTile(

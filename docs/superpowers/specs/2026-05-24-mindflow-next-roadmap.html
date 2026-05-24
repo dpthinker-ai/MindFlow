@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MindFlow 下一步优化 RoadMap</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8f5;
+      --panel: #ffffff;
+      --ink: #14201e;
+      --muted: #61706b;
+      --line: #dce3d8;
+      --accent: #0e5f53;
+      --accent-soft: #e6f2ee;
+      --warn: #8a5a00;
+      --warn-soft: #fff3d5;
+      --blue: #245a88;
+      --blue-soft: #e8f1f8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 20px 72px;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.25;
+      color: #0d1715;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin: 0 0 10px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 36px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+    }
+
+    h3 {
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    ul {
+      margin: 8px 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 4px;
+    }
+
+    code {
+      background: #eef2ea;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+
+    .meta {
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .summary-card,
+    .section,
+    .phase,
+    .decision {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .summary-card strong {
+      display: block;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .section,
+    .phase,
+    .decision {
+      margin: 14px 0;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 13px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid #c9e4dc;
+    }
+
+    .badge.warn {
+      color: var(--warn);
+      background: var(--warn-soft);
+      border-color: #ecd28f;
+    }
+
+    .badge.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+      border-color: #c7daea;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 28px;
+    }
+
+    .checklist li::before {
+      content: "□";
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 820px;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      color: #20312d;
+      background: #eef3ed;
+      font-weight: 700;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        padding: 28px 14px 56px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .summary {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>MindFlow 下一步优化 RoadMap</h1>
+    <p class="meta">创建时间：2026-05-24 21:15 +08:00。用途：作为下一阶段开发 Spec，承接云侧 AI 接入、回看聊天修复和产品方向复盘后的优化事项。</p>
+
+    <section class="decision">
+      <h2>总体判断</h2>
+      <p>下一阶段不优先增加新的 AI 花样，而是先把“用户提问 → 系统理解 → 取材 → 回答 → 沉淀”的链路做可信、可解释、可继续推进。近期暴露的问题都指向同一个核心：用户问的是自然语言，系统内部却经过时间范围、状态过滤、端/云路由、结构化输出和历史摘要等多层转换；任何一层不透明，用户都会感觉回答不可靠。</p>
+      <p>因此 RoadMap 的第一优先级是回看/查询可信度，其次是 Flow 的孵化动作化，再往后才是云侧诊断和 AI 产物沉淀的系统化。</p>
+    </section>
+
+    <div class="summary">
+      <div class="summary-card">
+        <strong>P0</strong>
+        回看/查询可信度专项：让每个回答都能解释“我查了什么、用了什么范围、为什么这么答”。
+      </div>
+      <div class="summary-card">
+        <strong>P1</strong>
+        Flow 孵化动作化：从信息展示变成“值得继续养”的行动流。
+      </div>
+      <div class="summary-card">
+        <strong>P2</strong>
+        云侧可诊断与产物沉淀：让多模型、云侧调用和 AI 输出成为可追溯资产。
+      </div>
+    </div>
+
+    <h2>设计原则</h2>
+    <div class="section">
+      <h3>产品原则</h3>
+      <ul>
+        <li>MindFlow 是 <strong>idea incubator</strong>，不是普通 AI 笔记，也不是系统状态 dashboard。</li>
+        <li>捕捉优先：记录入口必须始终短、快、明显，不能为了后续整理要求用户先结构化。</li>
+        <li>孵化优先于检查：产品应该推动 rescue、expand、collide、verify、reuse，而不是只展示库存。</li>
+        <li>本地优先：本地知识层是长期记忆源；云侧是增强路径，必须可见、可解释、可追踪。</li>
+        <li>一个 AI 产品角色：捕捉辅助、记忆维护、线索发现、碰撞生成、资产成形应该像同一个系统在工作。</li>
+      </ul>
+    </div>
+    <div class="section">
+      <h3>移动端体验原则</h3>
+      <ul>
+        <li>首屏要直接告诉用户“现在有什么值得继续推进”，避免用户在多个页面间记忆上下文。</li>
+        <li>高频动作放在可触达区域，并保持可见，不把核心操作藏在长按、二级菜单或顶部角落。</li>
+        <li>每次 AI 等待都要有明确进度/取材状态；空白等待会被用户理解为卡住。</li>
+        <li>所有状态不能只靠颜色区分；触摸目标按 Android 48dp 以上设计。</li>
+      </ul>
+    </div>
+
+    <h2>阶段 1：回看/查询可信度专项</h2>
+    <div class="phase">
+      <div class="badge-row">
+        <span class="badge warn">优先级 P0</span>
+        <span class="badge">建议先做</span>
+        <span class="badge blue">影响面：回看聊天、查询、历史摘要</span>
+      </div>
+      <h3>目标</h3>
+      <p>让用户每次得到回答时，都能知道系统理解了什么、检索了什么、过滤了什么，以及结果为什么可信。重点不是暴露技术细节，而是用轻量、人话的方式把“理解和取材范围”说清楚。</p>
+
+      <p class="label">功能范围</p>
+      <ul>
+        <li>在回看聊天回答顶部增加轻量范围说明，例如：<code>本周 · 18 条记录 · 包含更新记录 · 本地检索</code>。</li>
+        <li>范围说明至少包含：时间范围、命中记录数、是否包含更新记录、状态过滤、端侧/云侧来源。</li>
+        <li>当命中为 0 时，必须说明是“没有符合过滤条件”还是“时间范围内没有记录”。</li>
+        <li>当云侧参与时，沿用低频通知策略，但当前回答内也要有轻量可见标识。</li>
+        <li>历史摘要保存时继续使用人类可读 preview，禁止再次把结构化 JSON 直接暴露给用户。</li>
+      </ul>
+
+      <p class="label">验收标准</p>
+      <ul class="checklist">
+        <li>提问 <code>本周我记录了哪些内容？</code> 时，回答能显示本周范围、命中数，并能包含本周更新过的旧记录。</li>
+        <li>提问 <code>最近一个月有哪些未推进的想法？</code> 时，回答能显示最近 30 天范围和 <code>IDEA</code> 状态过滤。</li>
+        <li>当没有结果时，UI 不只说“没有记录”，而是说明使用了哪个范围和哪个过滤条件。</li>
+        <li>回看历史列表与最新回看卡片不出现 <code>{"summary": ...}</code> 或其他原始 JSON。</li>
+        <li>新增 parser、context packet、formatter 和 UI 层回归测试。</li>
+      </ul>
+    </div>
+
+    <h2>阶段 2：真实问法回归集</h2>
+    <div class="phase">
+      <div class="badge-row">
+        <span class="badge warn">优先级 P0</span>
+        <span class="badge">阶段 1 同步推进</span>
+        <span class="badge blue">影响面：测试体系</span>
+      </div>
+      <h3>目标</h3>
+      <p>把用户真实使用中暴露过的问题，沉淀成长期回归集。以后任何 parser、检索、云侧路由、格式化改动，都必须先守住这些真实问法。</p>
+
+      <p class="label">首批问法</p>
+      <ul>
+        <li><code>本周我记录了哪些内容？</code></li>
+        <li><code>最近一个月有哪些未推进的想法？</code></li>
+        <li><code>我最近在关注什么？</code></li>
+        <li><code>哪些想法一直没动？</code></li>
+        <li><code>最近两周的矛盾帮我串一下</code></li>
+      </ul>
+
+      <p class="label">验收标准</p>
+      <ul class="checklist">
+        <li>每个真实问法都有 parser 级测试，验证时间范围、状态过滤、实体词和意图。</li>
+        <li>每个真实问法至少有一个 context packet 测试，验证实际取材集合。</li>
+        <li>关键问法覆盖最终展示摘要，避免再次出现 JSON、空结果误报或范围误判。</li>
+        <li>新增测试命令记录在开发文档中，作为后续回归固定入口。</li>
+      </ul>
+    </div>
+
+    <h2>阶段 3：Flow 孵化动作化</h2>
+    <div class="phase">
+      <div class="badge-row">
+        <span class="badge warn">优先级 P1</span>
+        <span class="badge">阶段 1 稳定后启动</span>
+        <span class="badge blue">影响面：Flow 首页、记录详情、回看入口</span>
+      </div>
+      <h3>目标</h3>
+      <p>把 Flow 从“信息展示面”变成“今天有哪些东西值得继续养”的行动流。用户打开 Flow 后，不应该像看报表，而应该看到几个可继续推进的思想对象。</p>
+
+      <p class="label">建议信息架构</p>
+      <ul>
+        <li><strong>Fragile Spark：</strong>脆弱但值得救的想法，动作是“继续养”。</li>
+        <li><strong>Recurring Thread：</strong>反复出现但尚未命名清楚的线索，动作是“命名它”。</li>
+        <li><strong>Collision：</strong>两个旧想法之间值得碰撞的地方，动作是“撞一下”。</li>
+        <li><strong>Asset：</strong>已经成熟、可复用的内容，动作是“整理成方案”。</li>
+        <li><strong>Gap：</strong>缺证据、缺案例、缺下一步的洞，动作是“找证据”。</li>
+      </ul>
+
+      <p class="label">验收标准</p>
+      <ul class="checklist">
+        <li>Flow 首屏不使用 <code>库存</code>、<code>当前知识</code>、<code>维护状态</code> 等后台化语言。</li>
+        <li>每张 Flow 卡片至少有一个明确动作，且动作会把用户带到可继续推进的上下文。</li>
+        <li>卡片解释为什么值得继续推进，而不只是展示一段摘要。</li>
+        <li>空状态能引导用户记录一条 Spark，而不是仅显示“暂无数据”。</li>
+        <li>新增 Flow 卡片生成/排序的单元测试，避免低价值内容占据首屏。</li>
+      </ul>
+    </div>
+
+    <h2>阶段 4：云侧 AI 可诊断</h2>
+    <div class="phase">
+      <div class="badge-row">
+        <span class="badge">优先级 P1</span>
+        <span class="badge blue">影响面：设置、云侧调用、用量记录</span>
+      </div>
+      <h3>目标</h3>
+      <p>云侧 AI 设置不只是“能配置”，还要“能解释”。用户应该知道当前 provider 是否可用、最近一次失败原因是什么、今日用量来自哪里、自动模式为什么选择端侧或云侧。</p>
+
+      <p class="label">功能范围</p>
+      <ul>
+        <li>每个供应商页面增加“测试连接”动作，展示成功、鉴权失败、网络失败、模型不可用等人话原因。</li>
+        <li>设置页展示最近一次调用：provider、model、任务、时间、成功/失败、Token 数。</li>
+        <li>自动模式增加“为什么这样选择”的解释，例如“该任务包含敏感内容，已保持端侧”。</li>
+        <li>用量统计按 provider、model、任务维度可展开，但默认保持低噪音。</li>
+      </ul>
+
+      <p class="label">验收标准</p>
+      <ul class="checklist">
+        <li>DeepSeek、智谱、OpenAI、Custom 均可独立测试连接，不互相污染配置。</li>
+        <li>错误提示可行动，例如提示检查 API Key、Base URL、模型名或网络。</li>
+        <li>后台云侧使用仍遵守低频通知，不因诊断信息变成通知轰炸。</li>
+        <li>用量记录不包含 prompt、笔记正文、API Key 或本地文件路径。</li>
+      </ul>
+    </div>
+
+    <h2>阶段 5：AI 产物沉淀回本地记忆</h2>
+    <div class="phase">
+      <div class="badge-row">
+        <span class="badge">优先级 P2</span>
+        <span class="badge blue">影响面：回看聊天、Flow、知识层、记录详情</span>
+      </div>
+      <h3>目标</h3>
+      <p>AI 回答不应该只停留在聊天气泡里。好的回答要能被一键沉淀为 <code>Thread</code>、<code>Collision</code>、<code>Asset</code> 或 <code>Gap</code>，并带着来源和生成路径回到本地知识层。</p>
+
+      <p class="label">功能范围</p>
+      <ul>
+        <li>回看回答提供“沉淀为 Thread / Asset / Gap”的轻量动作。</li>
+        <li>沉淀对象记录 provenance：来源记录、生成时间、端侧/云侧、provider/model。</li>
+        <li>沉淀内容可编辑，默认不自动写入不可逆长期记忆。</li>
+        <li>Flow 可以读取这些沉淀对象，并在后续继续推进时复用。</li>
+      </ul>
+
+      <p class="label">验收标准</p>
+      <ul class="checklist">
+        <li>用户可以从一条回看回答创建一个可编辑 Asset 草稿。</li>
+        <li>Asset 草稿能看到来源记录列表，不丢 provenance。</li>
+        <li>沉淀后的对象能在 Flow 或相关详情中再次出现。</li>
+        <li>云侧生成的沉淀对象明确标记云侧来源，但不泄露敏感 payload。</li>
+      </ul>
+    </div>
+
+    <h2>建议实施顺序</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>顺序</th>
+            <th>主题</th>
+            <th>理由</th>
+            <th>完成信号</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>回看/查询可信度专项</td>
+            <td>直接解决近期用户不信任问题，是后续所有 AI 能力的地基。</td>
+            <td>真实问法不再误报空结果，回答能显示范围和取材说明。</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>真实问法回归集</td>
+            <td>把最近踩过的坑固定下来，防止后续功能开发反复回退。</td>
+            <td>parser、context packet、展示层都有真实问法测试。</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Flow 孵化动作化</td>
+            <td>把产品体验从“回看旧内容”推向“继续推进想法”。</td>
+            <td>Flow 首屏出现 Spark、Thread、Collision、Asset、Gap 类型行动卡。</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>云侧 AI 可诊断</td>
+            <td>多供应商接入后，配置正确性和路由解释会变成长期维护成本。</td>
+            <td>每个 provider 可独立测试连接，并能解释最近一次调用状态。</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>AI 产物沉淀回本地记忆</td>
+            <td>让 AI 回答成为可复用资产，而不是一次性聊天结果。</td>
+            <td>回看回答可沉淀为带 provenance 的 Thread / Asset / Gap 草稿。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>非目标</h2>
+    <div class="section">
+      <ul>
+        <li>本 RoadMap 不要求立即增加新的云侧模型协议，例如 Anthropic/Gemini 原生协议。</li>
+        <li>不把 Flow 改成系统维护 dashboard，不展示后台维护术语作为主体验。</li>
+        <li>不让后台云侧任务静默升级；云侧使用仍必须可见、低频、可回看。</li>
+        <li>不在阶段 1 中重写整个知识层，只围绕回看/查询可信度做收敛改进。</li>
+      </ul>
+    </div>
+
+    <h2>验证要求</h2>
+    <div class="section">
+      <ul>
+        <li>代码级验证：每阶段至少包含聚焦单测；影响回看/设置/Flow 时补充对应 UI state 或 ViewModel 测试。</li>
+        <li>发布验证：涉及用户可见体验时，必须构建 release APK：<code>./gradlew --no-daemon :app:assembleRelease</code>。</li>
+        <li>真机/模拟器安装必须使用 <code>app/build/outputs/apk/release/app-release.apk</code>，不得安装 debug APK 覆盖 release 数据。</li>
+        <li>禁止执行 <code>adb uninstall</code>、<code>pm clear</code>、AVD wipe 或删除本地模型/数据，除非用户明确授权。</li>
+        <li>每次实现都要同步更新 <code>implementation-notes.html</code> 或后续对应实现记录，写清楚决策、取舍、验证和安装结果。</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

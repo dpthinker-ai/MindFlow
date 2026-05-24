@@ -266,6 +266,7 @@ class ReviewChatViewModel(
                                         createdAt = System.currentTimeMillis(),
                                         referencedNoteId = result.referencedNoteId,
                                         referencedNotes = result.referencedNotes,
+                                        answerTrace = result.answerTrace,
                                         skillWebView = null,
                                     ),
                                     isSending = false,

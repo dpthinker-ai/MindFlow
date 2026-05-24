@@ -118,6 +118,23 @@ class ReviewChatPlannerTest {
         assertThat((unadvancedIdeasQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("最近30天")
         assertThat(unadvancedIdeasQuery.entityTerms).isEmpty()
 
+        val recentFocusQuery = ReviewChatQueryParser.parse("我最近在关注什么？")
+        assertThat(recentFocusQuery.operation).isEqualTo(ReviewChatQueryOperation.ANALYZE)
+        assertThat(recentFocusQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
+        assertThat((recentFocusQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("最近30天")
+        assertThat(recentFocusQuery.entityTerms).isEmpty()
+
+        val stuckIdeasQuery = ReviewChatQueryParser.parse("哪些想法一直没动？")
+        assertThat(stuckIdeasQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(stuckIdeasQuery.timeScope).isEqualTo(ReviewChatTimeScope.AllTime)
+        assertThat(requestedReviewChatStatusFilter(stuckIdeasQuery.question)).containsExactly(NoteStatus.IDEA)
+
+        val contradictionQuery = ReviewChatQueryParser.parse("最近两周的矛盾帮我串一下")
+        assertThat(contradictionQuery.operation).isEqualTo(ReviewChatQueryOperation.ANALYZE)
+        assertThat(contradictionQuery.intent).isEqualTo(ReviewChatIntent.SYNTHESIZE)
+        assertThat(contradictionQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
+        assertThat((contradictionQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("最近两周")
+
         val briefSummaryQuery = ReviewChatQueryParser.parse("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。")
         assertThat(briefSummaryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(briefSummaryQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)

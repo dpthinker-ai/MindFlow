@@ -7,8 +7,6 @@ enum class FlowFocus {
     TODAY,
     RECONNECT,
     REVIEW,
-    DIRECTION,
-    MAINLINE,
 }
 
 enum class CaptureMode {

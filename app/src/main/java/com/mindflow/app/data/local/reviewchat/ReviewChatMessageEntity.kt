@@ -28,4 +28,6 @@ data class ReviewChatMessageEntity(
     val skillWebViewUrl: String? = null,
     val skillWebViewIframe: Boolean = false,
     val skillWebViewAspectRatio: Float? = null,
+    val answerTraceDisplayLine: String? = null,
+    val answerTraceEmptyReason: String? = null,
 )

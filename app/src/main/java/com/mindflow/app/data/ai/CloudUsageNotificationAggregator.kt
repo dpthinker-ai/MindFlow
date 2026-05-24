@@ -79,7 +79,7 @@ class CloudUsageNotificationAggregator(
         AiTaskType.FUSION_SUGGESTION -> "碰撞建议"
         AiTaskType.FLOW_MAINLINE,
         AiTaskType.FLOW_SETTLED_KNOWLEDGE,
-        AiTaskType.FLOW_BREAKTHROUGH_GAP -> "Flow 整理"
+        AiTaskType.FLOW_BREAKTHROUGH_GAP -> "今天/回看整理"
         AiTaskType.THREAD_WORKSPACE,
         AiTaskType.THREAD_EXECUTION -> "方向执行"
         AiTaskType.RESEARCH_BRIEF,

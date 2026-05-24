@@ -26,7 +26,7 @@ class ReviewChatReferenceDesignModelTest {
     fun reviewAnswerCompanionMatchesReferenceLimits() {
         assertThat(ReviewChatReferenceSourceLimit).isEqualTo(3)
         assertThat(reviewChatReferenceQuickActionLabels())
-            .containsExactly("加入今天", "转成任务", "继续追问", "总结成记录")
+            .containsExactly("加入今天", "转成任务", "继续追问", "沉淀资产")
             .inOrder()
         assertThat(reviewChatReferenceComposerPlaceholder())
             .isEqualTo("继续回看或提问...")

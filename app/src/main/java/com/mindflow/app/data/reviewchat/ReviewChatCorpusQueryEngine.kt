@@ -13,6 +13,7 @@ internal data class ReviewChatCorpusContext(
     val querySummarySnippets: List<String>,
     val deterministicAnswerSnippets: List<String>,
     val categoryDigestSnippets: List<String>,
+    val answerTrace: ReviewChatAnswerTrace?,
 )
 
 internal object ReviewChatCorpusQueryEngine {
@@ -55,6 +56,10 @@ internal object ReviewChatCorpusQueryEngine {
             notes = selection.queryNotes,
             directRawNoteDetails = rawNoteDetails,
         )
+        val answerTrace = buildAnswerTrace(
+            query = query,
+            selection = selection,
+        )
         return ReviewChatCorpusContext(
             query = query,
             selection = selection,
@@ -67,6 +72,7 @@ internal object ReviewChatCorpusQueryEngine {
                 query = query,
                 selection = selection,
                 overview = collectionOverview,
+                answerTrace = answerTrace,
             ),
             deterministicAnswerSnippets = buildDeterministicAnswerSnippets(
                 query = query,
@@ -79,6 +85,7 @@ internal object ReviewChatCorpusQueryEngine {
                 query = query,
                 selection = selection,
             ),
+            answerTrace = answerTrace,
         )
     }
 
@@ -86,6 +93,7 @@ internal object ReviewChatCorpusQueryEngine {
         query: ReviewChatParsedQuery,
         selection: ReviewChatCorpusSelection,
         overview: ReviewChatCollectionOverview?,
+        answerTrace: ReviewChatAnswerTrace?,
     ): List<String> {
         if (query.isExternalQuestion) return emptyList()
 
@@ -111,14 +119,70 @@ internal object ReviewChatCorpusQueryEngine {
             if (query.entityTerms.isNotEmpty()) {
                 add("主题｜${query.entityTerms.joinToString("、")}")
             }
+            if (selection.statusFilter.isNotEmpty()) {
+                add("过滤｜${selection.statusFilter.toReviewChatStatusFilterLabel()}")
+            }
             if (query.wantsCategories) {
                 add("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
             }
             add("命中｜共 $hitCount 条记录")
+            answerTrace?.emptyReason?.let { reason ->
+                add("空结果｜$reason")
+            }
             if (overview?.earliestDateLabel != null && overview.latestDateLabel != null && hitCount > 0) {
                 add("时间范围｜最早 ${overview.earliestDateLabel}，最近 ${overview.latestDateLabel}")
             }
         }
+    }
+
+    private fun buildAnswerTrace(
+        query: ReviewChatParsedQuery,
+        selection: ReviewChatCorpusSelection,
+    ): ReviewChatAnswerTrace? {
+        if (query.isExternalQuestion) return null
+        val scopeLabel = query.timeScope.toReviewChatTraceScopeLabel()
+        val statusFilterLabel = selection.statusFilter.toReviewChatStatusFilterLabel()
+        val entityLabel = selection.entityTerms
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("、", prefix = "主题：")
+            .orEmpty()
+        val filterLabel = listOf(statusFilterLabel, entityLabel)
+            .filter(String::isNotBlank)
+            .joinToString(" · ")
+        val hitCount = selection.queryNotes.size
+        val scopedCount = selection.scopedNotes.size
+        val sourceLabel = "本地检索"
+        val includesActivityUpdates = query.timeScope.usesActivityDateForTrace() &&
+            selection.queryNotes.any { note -> note.createdLocalDate() != note.activityLocalDate() }
+        val emptyReason = when {
+            hitCount > 0 -> null
+            selection.scopeNotesBeforeStatusFilter.isEmpty() -> "时间范围内没有记录"
+            selection.statusFilter.isNotEmpty() && scopedCount == 0 ->
+                "时间范围内有记录，但没有符合${statusFilterLabel}的内容"
+            selection.entityTerms.isNotEmpty() ->
+                "范围内有 $scopedCount 条记录，但没有命中${entityLabel.ifBlank { "指定主题" }}"
+            else -> "范围内没有命中记录"
+        }
+        val parts = buildList {
+            add(scopeLabel)
+            if (filterLabel.isNotBlank()) add(filterLabel)
+            if (hitCount == 0 && selection.scopeNotesBeforeStatusFilter.isNotEmpty()) {
+                add("范围内 ${selection.scopeNotesBeforeStatusFilter.size} 条")
+            }
+            add("命中 $hitCount 条")
+            if (includesActivityUpdates) add("包含更新记录")
+            add(sourceLabel)
+        }
+        return ReviewChatAnswerTrace(
+            displayLine = parts.joinToString(" · "),
+            scopeLabel = scopeLabel,
+            hitCount = hitCount,
+            scopedCount = scopedCount,
+            filterLabel = filterLabel,
+            sourceLabel = sourceLabel,
+            includesActivityUpdates = includesActivityUpdates,
+            emptyReason = emptyReason,
+        )
     }
 
     private fun buildDeterministicAnswerSnippets(
@@ -255,3 +319,28 @@ internal object ReviewChatCorpusQueryEngine {
         }
     }
 }
+
+private fun ReviewChatTimeScope.toReviewChatTraceScopeLabel(): String =
+    when (this) {
+        ReviewChatTimeScope.AllTime -> "全部历史"
+        is ReviewChatTimeScope.Day -> date.format(reviewChatDateFormatter)
+        is ReviewChatTimeScope.Month -> "${month.monthValue}月"
+        is ReviewChatTimeScope.Range -> label.ifBlank {
+            "${start.format(reviewChatDateFormatter)} 至 ${endInclusive.format(reviewChatDateFormatter)}"
+        }
+    }
+
+private fun ReviewChatTimeScope.usesActivityDateForTrace(): Boolean =
+    this is ReviewChatTimeScope.Range &&
+        (
+            label.startsWith("最近") ||
+                label.startsWith("近") ||
+                label.startsWith("这") ||
+                label == "本周" ||
+                label == "上周"
+            )
+
+private fun Set<com.mindflow.app.data.model.NoteStatus>.toReviewChatStatusFilterLabel(): String =
+    takeIf { it.isNotEmpty() }
+        ?.joinToString("、", prefix = "状态：") { status -> status.name }
+        .orEmpty()

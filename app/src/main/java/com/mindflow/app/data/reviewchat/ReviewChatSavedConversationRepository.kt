@@ -144,6 +144,14 @@ class RoomReviewChatSavedConversationRepository(
                 },
                 provider = entity.provider?.let(ReviewChatProvider::valueOf),
                 createdAt = entity.createdAt,
+                answerTrace = entity.answerTraceDisplayLine
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { displayLine ->
+                        ReviewChatAnswerTrace(
+                            displayLine = displayLine,
+                            emptyReason = entity.answerTraceEmptyReason,
+                        )
+                    },
                 skillWebView = entity.skillWebViewUrl?.let { url ->
                     ReviewChatSkillWebView(
                         url = url,
@@ -213,6 +221,8 @@ class RoomReviewChatSavedConversationRepository(
                     skillWebViewUrl = message.skillWebView?.url,
                     skillWebViewIframe = message.skillWebView?.iframe ?: false,
                     skillWebViewAspectRatio = message.skillWebView?.aspectRatio,
+                    answerTraceDisplayLine = message.answerTrace?.displayLine,
+                    answerTraceEmptyReason = message.answerTrace?.emptyReason,
                 )
             },
         )

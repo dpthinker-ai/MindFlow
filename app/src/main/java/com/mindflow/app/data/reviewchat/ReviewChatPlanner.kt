@@ -90,6 +90,7 @@ internal val reviewChatOperationPhrases = (
             "分析", "总结", "归纳", "分为",
             "未推进的想法", "未推进想法", "没有推进的想法", "没有推进想法", "没推进的想法", "没推进想法",
             "还没推进的想法", "还没推进想法", "待推进的想法", "待推进想法",
+            "最近在关注什么", "在关注什么", "关注什么",
         )
 ).distinct()
     .sortedByDescending(String::length)
@@ -141,6 +142,11 @@ private val reviewChatUnadvancedIdeaHints = listOf(
     "没有推进",
     "还没推进",
     "待推进",
+    "没动",
+    "没怎么动",
+    "一直没动",
+    "没有动",
+    "还没动",
     "未开始推进",
     "还没开始推进",
     "停留在想法",
@@ -265,9 +271,11 @@ private fun isPotentialReviewChatClarificationProbe(question: String): Boolean {
 }
 
 internal data class ReviewChatCorpusSelection(
+    val scopeNotesBeforeStatusFilter: List<NoteEntity>,
     val scopedNotes: List<NoteEntity>,
     val queryNotes: List<NoteEntity>,
     val entityTerms: List<String>,
+    val statusFilter: Set<NoteStatus> = emptySet(),
 )
 
 internal fun wantsReviewChatListExamples(question: String): Boolean =
@@ -344,6 +352,7 @@ internal fun buildReviewChatContextPacket(
         memoryDigestSnippets = emptyList(),
         memoryThreadSnippets = emptyList(),
         availableSkillSnippets = emptyList(),
+        answerTrace = corpusContext.answerTrace,
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
         rawNoteEvidence = rawNoteEvidenceOverride ?: corpusContext.rawNoteEvidence,
@@ -471,14 +480,17 @@ internal fun buildReviewChatCorpusSelection(
     entityTerms: List<String>,
 ): ReviewChatCorpusSelection {
     val statusFilter = requestedReviewChatStatusFilter(question)
-    val scopedNotes = filterNotesForRequestedScope(question, notes)
+    val scopeNotesBeforeStatusFilter = filterNotesForRequestedScope(question, notes)
+    val scopedNotes = scopeNotesBeforeStatusFilter
         .filter { note -> statusFilter.isEmpty() || note.status in statusFilter }
         .sortedBy(NoteEntity::createdAt)
     if (mode == ReviewChatQuestionMode.EXTERNAL || scopedNotes.isEmpty() || entityTerms.isEmpty()) {
         return ReviewChatCorpusSelection(
+            scopeNotesBeforeStatusFilter = scopeNotesBeforeStatusFilter,
             scopedNotes = scopedNotes,
             queryNotes = scopedNotes,
             entityTerms = entityTerms,
+            statusFilter = statusFilter,
         )
     }
 
@@ -515,9 +527,11 @@ internal fun buildReviewChatCorpusSelection(
     }
 
     return ReviewChatCorpusSelection(
+        scopeNotesBeforeStatusFilter = scopeNotesBeforeStatusFilter,
         scopedNotes = scopedNotes,
         queryNotes = queryNotes,
         entityTerms = entityTerms,
+        statusFilter = statusFilter,
     )
 }
 
@@ -644,8 +658,14 @@ internal fun buildRawNoteEvidence(
         ).map(NoteEntity::toReviewChatEvidence)
     }
     if (mode == ReviewChatQuestionMode.RECORD_LOOKUP && hasRequestedTimeScope(question)) {
-        return scopedNotes
-            .sortedBy(NoteEntity::createdAt)
+        val rangeScope = requestedDateRangeForReviewChat(question)
+        val useActivityDate = rangeScope?.usesActivityDate == true
+        val sorted = if (rangeScope != null) {
+            scopedNotes.sortedByDescending { note -> note.scopeEpochMillis(useActivityDate) }
+        } else {
+            scopedNotes.sortedBy(NoteEntity::createdAt)
+        }
+        return sorted
             .take(12)
             .map(NoteEntity::toReviewChatEvidence)
     }
@@ -999,6 +1019,7 @@ class ReviewChatPlanner(
                     titleSuggestion = request.question.take(18),
                     referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                     referencedNotes = prepared.referencedNotes,
+                    answerTrace = prepared.packet.answerTrace.forReviewChatProvider(provider, fallbackOccurred),
                     skillWebView = prepared.skillWebView,
                 )
             }
@@ -1067,6 +1088,7 @@ class ReviewChatPlanner(
                                     titleSuggestion = request.question.take(18),
                                     referencedNoteId = prepared.directRawNoteDetails.singleOrNull()?.noteId,
                                     referencedNotes = prepared.referencedNotes,
+                                    answerTrace = prepared.packet.answerTrace.forReviewChatProvider(provider, fallbackOccurred = index > 0),
                                     skillWebView = prepared.skillWebView,
                                 )
                             )
@@ -1165,6 +1187,7 @@ class ReviewChatPlanner(
                                             titleSuggestion = request.question.take(18),
                                             referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                             referencedNotes = prepared.referencedNotes,
+                                            answerTrace = prepared.packet.answerTrace.forReviewChatProvider(provider, fallbackOccurred = index > 0),
                                             skillWebView = prepared.skillWebView,
                                         )
                                     )
@@ -1216,6 +1239,7 @@ class ReviewChatPlanner(
                                         titleSuggestion = request.question.take(18),
                                         referencedNoteId = prepared.referencedNotes.singleOrNull()?.noteId,
                                         referencedNotes = prepared.referencedNotes,
+                                        answerTrace = prepared.packet.answerTrace.forReviewChatProvider(provider, fallbackOccurred = index > 0),
                                         skillWebView = prepared.skillWebView,
                                     )
                                 )
@@ -1410,6 +1434,20 @@ private fun buildReviewChatQueryProgressDetail(query: ReviewChatParsedQuery): St
         .joinToString("、")
         .ifBlank { "无指定主题" }
     return "意图：$operationLabel；范围：$scopeLabel；主题：$entityLabel。"
+}
+
+private fun ReviewChatAnswerTrace?.forReviewChatProvider(
+    provider: ReviewChatProvider,
+    fallbackOccurred: Boolean,
+): ReviewChatAnswerTrace? {
+    val trace = this ?: return null
+    val sourceLabel = when (provider) {
+        ReviewChatProvider.CLOUD -> "云侧回答"
+        ReviewChatProvider.ON_DEVICE -> if (fallbackOccurred) "端侧回答（云侧回退）" else "端侧回答"
+        ReviewChatProvider.LOCAL_MEMORY -> "本地检索"
+        ReviewChatProvider.SYSTEM -> "系统提示"
+    }
+    return trace.withSource(sourceLabel)
 }
 
 private fun buildReviewChatRetrievalProgressDetail(corpusContext: ReviewChatCorpusContext): String {
@@ -1688,7 +1726,7 @@ internal fun requestedDateRangeForReviewChat(question: String): ReviewChatTimeSc
                 label = "最近一周",
             )
         }
-        listOf("最近一个月", "近一个月", "最近30天", "近30天").any(question::contains) ||
+        listOf("最近一个月", "近一个月", "最近30天", "近30天", "最近在关注", "近期在关注").any(question::contains) ||
             (question.contains("最近") && reviewChatScopeHints.any(question::contains)) -> {
             ReviewChatTimeScope.Range(
                 start = today.minusDays(29),

@@ -141,8 +141,6 @@ private enum class FlowPage {
 private fun FlowFocus?.toPage(): FlowPage = when (this) {
     FlowFocus.REVIEW,
     FlowFocus.RECONNECT -> FlowPage.REVIEW
-    FlowFocus.MAINLINE,
-    FlowFocus.DIRECTION -> FlowPage.TODAY
     FlowFocus.TODAY,
     null -> FlowPage.TODAY
 }
@@ -1187,12 +1185,12 @@ private fun SettledKnowledgeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "值得回看的",
-                headline = if (resolvedSettledLine.isNotBlank()) "先回看这一条" else "先等一条结果站稳",
+                title = "可复用资产",
+                headline = if (resolvedSettledLine.isNotBlank()) "整理成方案" else "先等一条结果站稳",
             )
             if (direction == null || resolvedSettledLine.isBlank()) {
                 Text(
-                    text = "当一条线反复被验证、被用上，这里才会开始留下真正值得回看的东西。",
+                    text = "当一条线反复被验证、被用上，这里会留下可以复用、整理和继续推进的资产。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1239,7 +1237,7 @@ private fun SettledKnowledgeCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ActionButton(
-                        text = "回看这条",
+                        text = "整理成方案",
                         onClick = {
                             direction.assetNoteId?.let(onOpenNote) ?: onOpenThread(direction.thread.key)
                         },
@@ -1312,12 +1310,12 @@ private fun FeedGapCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "还值得翻的",
-                headline = if (line.isNotBlank()) "接着翻这一条" else "先等旧积累再厚一点",
+                title = "待补证据",
+                headline = if (line.isNotBlank()) "找证据或下一步" else "先等旧积累再厚一点",
             )
             if (line.isBlank()) {
                 Text(
-                    text = "当旧积累之间开始互相支撑或互相冲突时，这里才会出现真正值得翻出来再看的点。",
+                    text = "当旧积累之间开始互相支撑或互相冲突时，这里会露出需要补证据、补案例或补下一步的缺口。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1346,7 +1344,7 @@ private fun FeedGapCard(
                     }
                 }
                 ActionButton(
-                    text = "回去看看",
+                    text = "找证据",
                     onClick = {
                         card.noteId?.let(onOpenNote)
                             ?: card.threadKey.takeIf { key -> key.isNotBlank() }?.let(onOpenThread)
@@ -1385,7 +1383,7 @@ private fun ReviewFollowupsBlock(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "另外值得翻的",
+            text = "另外的缺口",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

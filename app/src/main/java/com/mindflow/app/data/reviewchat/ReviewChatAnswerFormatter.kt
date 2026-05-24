@@ -8,7 +8,11 @@ internal fun normalizeReviewChatAnswerForDisplay(content: String): String {
 
     val rendered = parseReviewChatStructuredAnswer(normalizedInput)
         ?.let(::renderReviewChatStructuredAnswerAsMarkdown)
-        ?: normalizedInput
+        ?: if (isReviewChatStructuredJsonLike(normalizedInput)) {
+            extractReviewChatStructuredSummaryText(normalizedInput).orEmpty()
+        } else {
+            normalizedInput
+        }
 
     var normalized = normalizeLegacyReviewChatMarkdown(rendered)
     if (normalized.isBlank()) return normalized
@@ -55,7 +59,7 @@ internal fun reviewChatHistoryPreviewText(
     val normalizedInput = SimpleMarkdown.normalizeForDisplay(content).trim()
     if (normalizedInput.isBlank()) return normalizedInput
 
-    val previewSource = extractReviewChatStructuredSummary(normalizedInput)
+    val previewSource = extractReviewChatStructuredSummaryText(normalizedInput)
         ?: normalizeReviewChatAnswerForDisplay(normalizedInput)
     return previewSource
         .replace("\n", " ")
@@ -65,37 +69,6 @@ internal fun reviewChatHistoryPreviewText(
             if (normalized.length <= limit) normalized else normalized.take(limit).trimEnd()
         }
 }
-
-private fun extractReviewChatStructuredSummary(content: String): String? {
-    parseReviewChatStructuredAnswer(content)
-        ?.sections
-        ?.firstOrNull { it.title == "答复" }
-        ?.let { section ->
-            (section.body + section.items)
-                .joinToString(" ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .takeIf { it.isNotBlank() }
-                ?.let { return it }
-        }
-
-    return Regex(""""summary"\s*:\s*"((?:\\.|[^"\\])*)""")
-        .find(content)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.let(::unescapeReviewChatJsonPreviewText)
-        ?.replace(Regex("\\s+"), " ")
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-}
-
-private fun unescapeReviewChatJsonPreviewText(content: String): String =
-    content
-        .replace("\\n", " ")
-        .replace("\\r", " ")
-        .replace("\\t", " ")
-        .replace("\\\"", "\"")
-        .replace("\\\\", "\\")
 
 private fun normalizeLegacyReviewChatMarkdown(content: String): String = normalizeEvidenceEchoes(
     normalizeInlineCategorySectionBullets(

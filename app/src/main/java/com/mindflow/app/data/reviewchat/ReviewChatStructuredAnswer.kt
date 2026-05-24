@@ -52,7 +52,7 @@ internal fun finalizeReviewChatStructuredAnswer(
         }
 
     if ("答复" !in mergedSections) {
-        rawAnswer.trim()
+        fallbackReviewChatAnswerSummary(rawAnswer)
             .takeIf { it.isNotBlank() }
             ?.let { summary ->
                 mergedSections["答复"] = ReviewChatStructuredSection(
@@ -93,6 +93,37 @@ internal fun finalizeReviewChatStructuredAnswer(
         .filterNot { it.body.isEmpty() && it.items.isEmpty() }
 
     return sections.takeIf { it.isNotEmpty() }?.let(::ReviewChatStructuredAnswer)
+}
+
+internal fun extractReviewChatStructuredSummaryText(content: String): String? {
+    parseReviewChatStructuredAnswer(content)
+        ?.sections
+        ?.firstOrNull { it.title == "答复" }
+        ?.let { section ->
+            (section.body + section.items)
+                .joinToString(" ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+
+    return Regex(""""summary"\s*:\s*"((?:\\.|[^"\\])*)""")
+        .find(content)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let(::unescapeReviewChatJsonText)
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: Regex(""""answer"\s*:\s*"((?:\\.|[^"\\])*)""")
+            .find(content)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let(::unescapeReviewChatJsonText)
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
 }
 
 internal fun buildReviewChatStructuredOutputSchema(
@@ -651,6 +682,34 @@ private fun parseReviewChatStructuredJson(content: String): ReviewChatStructured
         }
     }.getOrNull()
 }
+
+private fun fallbackReviewChatAnswerSummary(rawAnswer: String): String {
+    val trimmed = rawAnswer.trim()
+    if (trimmed.isBlank()) return ""
+    if (!isReviewChatStructuredJsonLike(trimmed)) return trimmed
+    return extractReviewChatStructuredSummaryText(trimmed).orEmpty()
+}
+
+internal fun isReviewChatStructuredJsonLike(content: String): Boolean {
+    val unfenced = content
+        .trim()
+        .removePrefix("```json")
+        .removePrefix("```JSON")
+        .removePrefix("```")
+        .trim()
+    return unfenced.startsWith("{") &&
+        (unfenced.contains(""""summary"""") ||
+            unfenced.contains(""""sections"""") ||
+            unfenced.contains(""""answer""""))
+}
+
+private fun unescapeReviewChatJsonText(content: String): String =
+    content
+        .replace("\\n", " ")
+        .replace("\\r", " ")
+        .replace("\\t", " ")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
 
 private fun parseStructuredSections(array: List<ReviewChatJsonValue>): List<ReviewChatStructuredSection> =
     buildList {

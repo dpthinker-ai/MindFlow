@@ -93,7 +93,7 @@ import kotlinx.coroutines.launch
 internal const val ReviewChatReferenceSourceLimit = 3
 
 internal fun reviewChatReferenceQuickActionLabels(): List<String> =
-    listOf("加入今天", "转成任务", "继续追问", "总结成记录")
+    listOf("加入今天", "转成任务", "继续追问", "沉淀资产")
 
 internal fun reviewChatReferenceComposerPlaceholder(): String =
     "继续回看或提问..."
@@ -639,6 +639,22 @@ private fun ReviewChatMessageBubble(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        message.answerTrace
+                            ?.takeIf { trace -> trace.displayLine.isNotBlank() }
+                            ?.let { trace ->
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    InsightChip(text = trace.displayLine)
+                                    trace.emptyReason
+                                        ?.takeIf(String::isNotBlank)
+                                        ?.let { reason ->
+                                            Text(
+                                                text = reason,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                }
+                            }
                         if (message.structuredAnswer != null) {
                             ReviewChatStructuredAnswerContent(message.structuredAnswer)
                         } else {
@@ -758,7 +774,7 @@ private fun ReviewChatAnswerCompanion(
                     modifier = Modifier.weight(1f),
                 )
                 ReviewChatQuickAction(
-                    text = "总结成记录",
+                    text = "沉淀资产",
                     icon = Icons.AutoMirrored.Outlined.StickyNote2,
                     onClick = { onCreateCapture(reviewChatAnswerToSummaryCaptureSeed(message)) },
                     modifier = Modifier.weight(1f),
@@ -947,12 +963,17 @@ internal fun reviewChatAnswerToTaskCaptureSeed(message: ReviewChatMessage): Capt
 internal fun reviewChatAnswerToSummaryCaptureSeed(message: ReviewChatMessage): CaptureSeed =
     CaptureSeed(
         mode = CaptureMode.TEXT,
-        initialTopic = "回看总结",
-        initialTags = listOf("回看"),
+        initialTopic = "回看资产",
+        initialTags = listOf("回看", "资产"),
         initialContent = """
-            回看总结：
+            回看资产草稿：
 
             ${message.reviewChatActionContent()}
+
+            来源：回看对话
+            取材：${message.answerTrace?.displayLine ?: "未记录"}
+            生成：${message.reviewChatProviderLabel()}
+            来源记录：${message.reviewChatReferencedNotesLine()}
         """.trimIndent(),
     )
 
@@ -972,6 +993,34 @@ internal fun reviewChatFollowUpPrompt(message: ReviewChatMessage): String {
 private fun ReviewChatMessage.reviewChatActionContent(): String {
     val rendered = structuredAnswer?.let(::renderReviewChatStructuredAnswerAsMarkdown)
     return (rendered ?: normalizeReviewChatAnswerForDisplay(content)).trim()
+}
+
+private fun ReviewChatMessage.reviewChatProviderLabel(): String =
+    when (provider) {
+        ReviewChatProvider.CLOUD -> "云侧"
+        ReviewChatProvider.ON_DEVICE -> "端侧"
+        ReviewChatProvider.LOCAL_MEMORY -> "本地记忆"
+        ReviewChatProvider.SYSTEM -> "系统提示"
+        null -> "未记录"
+    }
+
+private fun ReviewChatMessage.reviewChatReferencedNotesLine(): String {
+    val notes = referencedNotes.ifEmpty {
+        referencedNoteId?.let { id ->
+            listOf(
+                ReviewChatReferencedNote(
+                    noteId = id,
+                    title = "原记录",
+                    dateLabel = "",
+                )
+            )
+        }.orEmpty()
+    }
+    return notes.take(6)
+        .joinToString("；") { note ->
+            buildReferencedNoteLabel(note)
+        }
+        .ifBlank { "未记录" }
 }
 
 @Composable

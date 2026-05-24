@@ -68,6 +68,26 @@
 
     <h2>时间线（从新到旧）</h2>
     <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T23:20:16+08:00">2026-05-24 23:20:16 +08:00</time></p>
+      <strong>后续入口与模型显示验证。</strong>
+      已运行设置页聚焦测试 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.mindflow.app.ui.screens.settings.*'</code>，覆盖云端运行时 <code>DeepSeek · deepseek-v4-flash</code> 必须成为当前模型，以及自动模式下本地 Gemma 与已选 DeepSeek 都应被说明。随后运行 <code>./gradlew --no-daemon :app:assembleRelease</code> 成功，仍只有既有的 R8 Kotlin metadata 警告。已将 release APK 安装到模拟器 <code>emulator-5554</code>，包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 23:20:16</code>；通过 <code>SplashActivity</code> 启动后焦点落在 <code>com.mindflow.app/.MainActivity</code>，检查的 logcat 窗口没有 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code>。当前 adb 设备列表只有模拟器，真机 <code>AWPQUT6116001779</code> 未在线，因此本轮尚未覆盖安装到真机。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T23:15:31+08:00">2026-05-24 23:15:31 +08:00</time></p>
+      <strong>后续：当前入口和当前模型显示校正。</strong>
+      根据真机验证反馈，应用底部导航已经没有独立的 <code>Flow</code> 页，实际应按 <code>记录</code>、<code>今天</code>、<code>回看</code>、<code>图谱</code>、<code>设置</code> 理解。我检查后确认 <code>FlowRoute</code> 与 <code>FlowViewModel</code> 仍是 <code>今天</code> / <code>回看</code> 的共享实现，不是可删除页面；因此没有误删活跃实现，只清理了已不再生成的旧 <code>FlowFocus.MAINLINE</code> 和 <code>FlowFocus.DIRECTION</code>，并把 <code>PROJECT_GUIDE.md</code> 的主入口和验证口径改为 <code>今天</code> / <code>回看</code>。同时修正设置页 <code>当前模型</code>：此前它只读取本地模型名，所以即使选择 DeepSeek 云端也会显示 <code>Gemma 4 E4B</code>；现在云端运行会显示 <code>DeepSeek · deepseek-v4-flash</code>，自动模式会同时说明本地优先和已选云端模型，避免端侧/云侧状态互相误导。云端后台使用通知里的旧 <code>Flow 整理</code> 文案也同步改为 <code>今天/回看整理</code>。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T23:08:11+08:00">2026-05-24 23:08:11 +08:00</time></p>
+      <strong>后续：回看回答开头裸露 JSON。</strong>
+      根据真机连续截图，<code>本周我记录了哪些内容？</code> 的回答开头直接显示 <code>{"summary": ...}</code>，向下滚动后才出现正常的 <code>记录：</code> 列表。根因是云侧模型按要求返回了结构化 JSON，但回答很长时可能被截断或包含不完整 JSON，导致 <code>parseReviewChatStructuredAnswer</code> 解析失败；随后确定性兜底又把整段原始 JSON 当成 <code>答复</code> 正文展示。修复后，结构化解析失败但内容明显是回看 JSON 时，只提取 <code>summary</code> 作为答复，不再展示原始 JSON；确定性的记录列表仍由本地证据生成。同步补充了展示层保护，旧的截断 JSON 摘要也会被清理成人类可读 summary。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-24T23:08:11+08:00">2026-05-24 23:08:11 +08:00</time></p>
+      <strong>后续裸露 JSON 回归验证。</strong>
+      新增回归测试覆盖两条路径：<code>finalizeReviewChatStructuredAnswer</code> 在坏 JSON 输入下应使用 <code>summary</code> 而不是原文；<code>normalizeReviewChatAnswerForDisplay</code> 遇到截断结构化 JSON 也不应显示 <code>{</code> 或 <code>"summary"</code>。已运行聚焦测试、回看聊天测试组，以及 <code>./gradlew --no-daemon :app:assembleRelease</code>，结果通过。新的 release APK 已生成到 <code>app/build/outputs/apk/release/app-release.apk</code>；安装到真机时 <code>AWPQUT6116001779</code> 从 adb 设备列表掉线，因此尚未完成这次真机覆盖安装。
+    </div>
+    <div class="entry">
       <p class="entry-time"><time datetime="2026-05-24T20:59:57+08:00">2026-05-24 20:59:57 +08:00</time></p>
       <strong>文档时间线整理。</strong>
       根据用户要求，将 <code>implementation-notes.html</code> 调整为中文时间线格式：每条记录都补充明确日期和时间，并把原来的“初始决策 / 实现日志 / 最终验证”合并为一个从新到旧的连续时间线。

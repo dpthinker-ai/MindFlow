@@ -70,7 +70,7 @@ class ReviewChatScreenInstrumentedTest {
         composeRule.onNodeWithText("快速操作").assertIsDisplayed()
         composeRule.onNodeWithText("加入今天").assertIsDisplayed()
         composeRule.onNodeWithText("转成任务").assertIsDisplayed()
-        composeRule.onNodeWithText("总结成记录").assertIsDisplayed()
+        composeRule.onNodeWithText("沉淀资产").assertIsDisplayed()
     }
 
     @Test

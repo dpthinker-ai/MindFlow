@@ -372,6 +372,7 @@ class AppContainer(context: Context) {
     ).addMigrations(
         ReviewChatDatabase.MIGRATION_1_2,
         ReviewChatDatabase.MIGRATION_2_3,
+        ReviewChatDatabase.MIGRATION_3_4,
     ).fallbackToDestructiveMigration(dropAllTables = true).build()
 
     val reviewChatSavedConversationRepository: ReviewChatSavedConversationRepository =

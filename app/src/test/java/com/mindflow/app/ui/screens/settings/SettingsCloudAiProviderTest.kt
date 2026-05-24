@@ -1,6 +1,7 @@
 package com.mindflow.app.ui.screens.settings
 
 import com.google.common.truth.Truth.assertThat
+import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.model.AiProviderPreset
 import com.mindflow.app.data.model.AiSettings
 import org.junit.Test
@@ -47,6 +48,31 @@ class SettingsCloudAiProviderTest {
     fun cloudAiSwitchDescriptionMentionsLowFrequencyBackgroundNotice() {
         assertThat(SettingsUiState(aiEnabled = true, isConfigured = true).cloudAiSwitchDescription())
             .contains("低频通知")
+    }
+
+    @Test
+    fun cloudOnlyCurrentModelHeadlineUsesSelectedDeepSeekModel() {
+        val state = SettingsUiState(
+            aiExecutionMode = AiExecutionMode.CLOUD_ONLY,
+            aiEnabled = true,
+            isConfigured = true,
+        ).applyAiProviderPreset(AiProviderPreset.DEEPSEEK)
+            .copy(apiKey = "sk-deepseek", isConfigured = true)
+
+        assertThat(state.currentModelHeadline()).isEqualTo("DeepSeek · deepseek-v4-flash")
+        assertThat(state.currentModelDescription()).contains("云端运行")
+        assertThat(state.currentModelDescription()).contains("DeepSeek · deepseek-v4-flash")
+    }
+
+    @Test
+    fun automaticCurrentModelHeadlineMentionsSelectedCloudModel() {
+        val state = SettingsUiState(
+            aiExecutionMode = AiExecutionMode.AUTOMATIC,
+        ).applyAiProviderPreset(AiProviderPreset.DEEPSEEK)
+
+        assertThat(state.currentModelHeadline()).contains("Gemma")
+        assertThat(state.currentModelHeadline()).contains("DeepSeek · deepseek-v4-flash")
+        assertThat(state.currentModelDescription()).contains("尚未完成配置")
     }
 
     @Test

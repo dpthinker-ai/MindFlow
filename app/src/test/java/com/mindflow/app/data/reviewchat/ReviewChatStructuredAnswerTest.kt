@@ -169,6 +169,39 @@ class ReviewChatStructuredAnswerTest {
     }
 
     @Test
+    fun finalizeReviewChatStructuredAnswer_usesSummaryInsteadOfRawMalformedJson() {
+        val packet = basePacket(
+            questionMode = ReviewChatQuestionMode.RECORD_LOOKUP,
+            question = "本周我记录了哪些内容？",
+        ).copy(
+            rawNoteEvidence = listOf(
+                ReviewChatEvidenceItem(
+                    noteId = 1L,
+                    dateLabel = "2026-05-23",
+                    title = "语音转写状态",
+                    summary = "识别信息：正在转写音频。",
+                ),
+            ),
+        )
+
+        val answer = finalizeReviewChatStructuredAnswer(
+            packet = packet,
+            rawAnswer = """
+                {"summary":"本周共记录了 17 条内容，时间从2026年5月18日到5月23日。","sections":[{"title":"记录","body":[],"items":["2026-05-23《语音转写状态》：识别信息：正在转写音频..."
+            """.trimIndent(),
+            candidate = null,
+        )
+
+        assertThat(answer).isNotNull()
+        assertThat(answer!!.sections.map { it.title }).containsExactly("答复", "记录").inOrder()
+        assertThat(answer.sections.first().body.single()).isEqualTo("本周共记录了 17 条内容，时间从2026年5月18日到5月23日。")
+        assertThat(answer.sections.first().body.single()).doesNotContain("\"summary\"")
+        assertThat(answer.sections[1].items).containsExactly(
+            "2026-05-23《语音转写状态》：识别信息：正在转写音频。",
+        )
+    }
+
+    @Test
     fun finalizeReviewChatStructuredAnswer_briefSummaryDropsEvidenceAndRecordSections() {
         val packet = ReviewChatContextPacket(
             questionMode = ReviewChatQuestionMode.RECORD_LOOKUP,
