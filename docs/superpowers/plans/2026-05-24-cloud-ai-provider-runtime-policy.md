@@ -352,7 +352,7 @@ git commit -m "feat: add ai task policy guards"
 - Test: `app/src/test/java/com/mindflow/app/data/ai/AiCloudUsageReporterTest.kt`
 - Test: `app/src/test/java/com/mindflow/app/data/ai/CloudUsageNotificationAggregatorTest.kt`
 
-- [ ] **Step 1: Write failing usage repository test**
+- [x] **Step 1: Write failing usage repository test**
 
 ```kotlin
 @Test
@@ -367,7 +367,7 @@ fun repositoryPersistsMetadataWithoutPromptOrApiKey() = runTest {
 }
 ```
 
-- [ ] **Step 2: Run repository test and verify red**
+- [x] **Step 2: Run repository test and verify red**
 
 Run:
 
@@ -377,11 +377,11 @@ Run:
 
 Expected: FAIL because usage repository does not exist.
 
-- [ ] **Step 3: Implement usage event and JSONL repository**
+- [x] **Step 3: Implement usage event and JSONL repository**
 
 Write only metadata fields; enforce retention during append.
 
-- [ ] **Step 4: Write failing notification aggregation tests**
+- [x] **Step 4: Write failing notification aggregation tests**
 
 ```kotlin
 @Test
@@ -395,15 +395,15 @@ fun backgroundEventsWaitAtLeastFiveMinutesBeforeFlush() {
 }
 ```
 
-- [ ] **Step 5: Implement reporter and aggregator**
+- [x] **Step 5: Implement reporter and aggregator**
 
 Reporter appends events, emits foreground notice immediately, and sends background events into the aggregator.
 
-- [ ] **Step 6: Wire `AiServiceClient` and `CloudAiTaskProvider` to reporter**
+- [x] **Step 6: Wire `AiServiceClient` and `CloudAiTaskProvider` to reporter**
 
 Use request metadata to record provider id, provider label, model, task type, trigger mode, payload policy, success/failure, and token count. Do not record prompts or API keys.
 
-- [ ] **Step 7: Run audit and notice tests and verify green**
+- [x] **Step 7: Run audit and notice tests and verify green**
 
 Run:
 

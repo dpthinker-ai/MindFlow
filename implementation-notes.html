@@ -126,6 +126,22 @@
       <strong>Verification.</strong>
       Ran focused policy/router tests including <code>AiTaskPolicyRegistryTest</code>, <code>AiDataSensitivityClassifierTest</code>, <code>CloudUsageBudgetGuardTest</code>, <code>AiTaskRouterPolicyTest</code>, and the existing <code>AiTaskRouterTest</code>; they pass.
     </div>
+    <div class="entry">
+      <strong>Usage audit.</strong>
+      Added <code>AiUsageEvent</code>, <code>FileAiUsageEventRepository</code>, and <code>AiCloudUsageReporter</code>. Events include provider, model, task, trigger mode, payload policy, sensitivity, token count, success/failure, and notification batch metadata. Events intentionally do not include prompt text, note body, API keys, attachment paths, or local file paths.
+    </div>
+    <div class="entry">
+      <strong>Low-frequency notification aggregation.</strong>
+      Added <code>CloudUsageNotificationAggregator</code> with a 5-minute earliest flush, 30-minute max window, and 3-per-day cap. The aggregator returns notification batches and marks events as notified through the repository; Android notification delivery will be wired from the app layer rather than inside this pure component.
+    </div>
+    <div class="entry">
+      <strong>Direct client audit bridge.</strong>
+      <code>AiServiceClient</code> now accepts an optional <code>AiCloudUsageReporter</code>. All cloud HTTP calls made through the client produce usage events, including the planners that still call the client directly. This is an incremental bridge before every planner is moved behind the longer-term runtime orchestrator.
+    </div>
+    <div class="entry">
+      <strong>Verification.</strong>
+      Ran focused usage and notification tests plus policy/router regression tests; they pass.
+    </div>
   </main>
 </body>
 </html>

@@ -230,6 +230,23 @@ internal fun buildEditorAiRunFeedback(
         AiTaskType.GRAPH_EXTRACT_CONCEPTS,
         AiTaskType.GRAPH_CANONICALIZE_CONCEPTS,
         AiTaskType.GRAPH_GENERATE_RELATIONS,
+        AiTaskType.GRAPH_GENERATE_SNAPSHOT,
+        AiTaskType.TEST_CONNECTION,
+        AiTaskType.DAILY_BRIEF,
+        AiTaskType.NEXT_ACTION,
+        AiTaskType.WEEKLY_REVIEW,
+        AiTaskType.FUSION_SUGGESTION,
+        AiTaskType.FLOW_MAINLINE,
+        AiTaskType.FLOW_SETTLED_KNOWLEDGE,
+        AiTaskType.FLOW_BREAKTHROUGH_GAP,
+        AiTaskType.THREAD_WORKSPACE,
+        AiTaskType.RESEARCH_BRIEF,
+        AiTaskType.RESEARCH_ACTION_SUMMARY,
+        AiTaskType.THREAD_EXECUTION,
+        AiTaskType.EXTERNAL_RESEARCH,
+        AiTaskType.STALE_RECONNECT,
+        AiTaskType.REVIEW_CHAT_REPLY,
+        AiTaskType.REVIEW_CHAT_QUERY_PLAN,
         -> "AI 任务"
     }
     val providerLabel = when (provider) {

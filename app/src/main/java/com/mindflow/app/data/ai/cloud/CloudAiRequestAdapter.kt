@@ -6,6 +6,7 @@ data class CloudAiPreparedRequest(
     val provider: CloudAiProviderSpec,
     val url: String,
     val authHeaders: List<String>,
+    val model: String,
     val body: String,
 )
 
@@ -46,6 +47,7 @@ object CloudAiRequestAdapter {
                 apiKey = settings.apiKey,
                 authScheme = provider.authScheme,
             ),
+            model = model,
             body = renderJsonObject(fields),
         )
     }

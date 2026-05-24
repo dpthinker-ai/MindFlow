@@ -31,6 +31,23 @@ class CloudAiTaskProvider(
             AiTaskType.GRAPH_EXTRACT_CONCEPTS -> client.extractConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> client.canonicalizeConceptGraphConcepts(settings, (input as AiTaskInput.GraphContext).contextSummary)
             AiTaskType.GRAPH_GENERATE_RELATIONS -> client.generateConceptGraphRelations(settings, (input as AiTaskInput.GraphContext).contextSummary)
+            AiTaskType.TEST_CONNECTION,
+            AiTaskType.GRAPH_GENERATE_SNAPSHOT,
+            AiTaskType.DAILY_BRIEF,
+            AiTaskType.NEXT_ACTION,
+            AiTaskType.WEEKLY_REVIEW,
+            AiTaskType.FUSION_SUGGESTION,
+            AiTaskType.FLOW_MAINLINE,
+            AiTaskType.FLOW_SETTLED_KNOWLEDGE,
+            AiTaskType.FLOW_BREAKTHROUGH_GAP,
+            AiTaskType.THREAD_WORKSPACE,
+            AiTaskType.RESEARCH_BRIEF,
+            AiTaskType.RESEARCH_ACTION_SUMMARY,
+            AiTaskType.THREAD_EXECUTION,
+            AiTaskType.EXTERNAL_RESEARCH,
+            AiTaskType.STALE_RECONNECT,
+            AiTaskType.REVIEW_CHAT_REPLY,
+            AiTaskType.REVIEW_CHAT_QUERY_PLAN -> return null
         }
         return result.toPayloadOrNull(request.type) as T?
     }
@@ -54,6 +71,23 @@ private fun parsePayload(taskType: AiTaskType, raw: String): AiTaskPayload? = wh
     AiTaskType.GRAPH_EXTRACT_CONCEPTS -> parseGraphConceptsPayload(raw)
     AiTaskType.GRAPH_CANONICALIZE_CONCEPTS -> parseCanonicalizationPayload(raw)
     AiTaskType.GRAPH_GENERATE_RELATIONS -> parseRelationsPayload(raw)
+    AiTaskType.TEST_CONNECTION,
+    AiTaskType.GRAPH_GENERATE_SNAPSHOT,
+    AiTaskType.DAILY_BRIEF,
+    AiTaskType.NEXT_ACTION,
+    AiTaskType.WEEKLY_REVIEW,
+    AiTaskType.FUSION_SUGGESTION,
+    AiTaskType.FLOW_MAINLINE,
+    AiTaskType.FLOW_SETTLED_KNOWLEDGE,
+    AiTaskType.FLOW_BREAKTHROUGH_GAP,
+    AiTaskType.THREAD_WORKSPACE,
+    AiTaskType.RESEARCH_BRIEF,
+    AiTaskType.RESEARCH_ACTION_SUMMARY,
+    AiTaskType.THREAD_EXECUTION,
+    AiTaskType.EXTERNAL_RESEARCH,
+    AiTaskType.STALE_RECONNECT,
+    AiTaskType.REVIEW_CHAT_REPLY,
+    AiTaskType.REVIEW_CHAT_QUERY_PLAN -> null
 }
 
 private fun extractJsonObject(raw: String): Map<String, SkillJsonValue>? {
