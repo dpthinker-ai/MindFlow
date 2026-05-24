@@ -84,7 +84,6 @@ import com.mindflow.app.ui.components.MarkdownText
 import com.mindflow.app.ui.components.PanelCard
 import com.mindflow.app.ui.components.ScreenBackground
 import com.mindflow.app.ui.components.ScreenHorizontalPadding
-import com.mindflow.app.ui.components.SkillWebViewCardHost
 import com.mindflow.app.ui.navigation.CaptureMode
 import com.mindflow.app.ui.navigation.CaptureSeed
 import com.mindflow.app.ui.navigation.ReviewChatSeed
@@ -624,13 +623,6 @@ private fun ReviewChatMessageBubble(
                     .widthIn(max = 390.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                message.skillWebView?.let { skillWebView ->
-                    SkillWebViewCardHost(
-                        url = skillWebView.url,
-                        aspectRatio = skillWebView.aspectRatio,
-                    )
-                }
-
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()

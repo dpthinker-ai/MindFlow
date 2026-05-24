@@ -106,6 +106,11 @@ class ReviewChatPlannerTest {
         assertThat((weekendQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周末")
         assertThat(weekendQuery.wantsCategories).isTrue()
 
+        val thisWeekQuery = ReviewChatQueryParser.parse("本周记录了哪些信息")
+        assertThat(thisWeekQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(thisWeekQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
+        assertThat((thisWeekQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周")
+
         val briefSummaryQuery = ReviewChatQueryParser.parse("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。")
         assertThat(briefSummaryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(briefSummaryQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
@@ -417,6 +422,35 @@ class ReviewChatPlannerTest {
         assertThat(packet.rawNoteEvidence.map { it.title }).containsExactly("旧创建但最近更新")
         assertThat(ReviewChatPromptFactory.cloud(packet)).contains("命中｜共 1 条记录")
         assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("很久没动的旧记录")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_thisWeekQuestionUsesCurrentWeekActivity() {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val thisWeekStart = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val oldCreatedAt = thisWeekStart.minusDays(45).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val updatedThisWeek = thisWeekStart.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val updatedBeforeThisWeek = thisWeekStart.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "本周记录了哪些信息",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "旧创建但本周更新", "这条是本周补充的新信息")
+                    .copy(createdAt = oldCreatedAt, updatedAt = updatedThisWeek),
+                sampleNote(2L, "上周活动记录", "这条不属于本周")
+                    .copy(createdAt = oldCreatedAt, updatedAt = updatedBeforeThisWeek),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.collectionOverview?.scopeLabel).isEqualTo("本周")
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(1)
+        assertThat(packet.rawNoteEvidence.map { it.title }).containsExactly("旧创建但本周更新")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).contains("范围｜本周")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("上周活动记录")
     }
 
     @Test
@@ -790,7 +824,8 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_cloudQueryPlannerUsesModelPlanBeforeCorpusSelection() = runTest {
+    fun answer_categoryQuestionDoesNotCallCloudPlannerBeforeAnswer() = runTest {
+        var plannerCalls = 0
         val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
@@ -808,8 +843,9 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { false },
             planQueryWithCloud = {
+                plannerCalls += 1
                 AiChatResult.Success(
-                    """{"operation":"list","entity_terms":[],"wants_categories":true,"wants_examples":false,"wants_links":false}"""
+                    """{"operation":"list","entity_terms":["不存在的云侧主题"],"wants_categories":true,"wants_examples":false,"wants_links":false}"""
                 )
             },
             runCloud = { prompt ->
@@ -827,6 +863,7 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(plannerCalls).isEqualTo(0)
         assertThat(capturedPrompts.first()).contains("命中｜共 4 条记录")
         assertThat(capturedPrompts.first()).contains("任务｜归纳命中记录的主要类别，不要把时间范围或统计口径当成类别")
         assertThat(capturedPrompts.first()).doesNotContain("主题｜")

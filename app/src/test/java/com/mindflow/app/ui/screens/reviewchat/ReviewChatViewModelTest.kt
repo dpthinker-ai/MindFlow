@@ -12,6 +12,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatStructuredSection
 import com.mindflow.app.data.reviewchat.ReviewChatTurnEvent
 import com.mindflow.app.data.reviewchat.ReviewChatTurnRequest
 import com.mindflow.app.data.reviewchat.ReviewChatTurnResult
+import com.mindflow.app.data.reviewchat.ReviewChatTurnStage
 import com.mindflow.app.data.reviewchat.SavedReviewChatSession
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.navigation.ReviewChatSeed
@@ -517,7 +518,7 @@ class ReviewChatViewModelTest {
     }
 
     @Test
-    fun completeTurn_preservesSkillWebViewOnAssistantMessage() = runTest(dispatcher) {
+    fun completeTurn_dropsSkillWebViewOnAssistantMessage() = runTest(dispatcher) {
         val skillWebView = ReviewChatSkillWebView(
             url = "file:///android_asset/skills/history-query/assets/result-card.html?matched=3",
             iframe = false,
@@ -546,7 +547,28 @@ class ReviewChatViewModelTest {
         advanceUntilIdle()
 
         val assistant = viewModel.uiState.value.messages.last()
-        assertThat(assistant.skillWebView).isEqualTo(skillWebView)
+        assertThat(assistant.skillWebView).isNull()
+    }
+
+    @Test
+    fun progressStatus_doesNotExposeLegacySkillStage() = runTest(dispatcher) {
+        val viewModel = ReviewChatViewModel(
+            seed = ReviewChatSeed(initialQuestion = "今天记录了什么"),
+            answerTurnStream = {
+                flowOf(
+                    ReviewChatTurnEvent.Status(
+                        message = "",
+                        stage = ReviewChatTurnStage.RUN_SKILL,
+                    )
+                )
+            },
+            savedConversationRepository = FakeSavedConversationRepository(),
+        )
+
+        advanceUntilIdle()
+
+        val step = viewModel.uiState.value.progressSteps.last()
+        assertThat(step.title).doesNotContain("Skill")
     }
 
     private class FakeSavedConversationRepository : ReviewChatSavedConversationRepository {

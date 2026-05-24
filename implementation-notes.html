@@ -240,6 +240,22 @@
       <strong>Latest release install.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. The release build still prints the known R8 Kotlin metadata warnings but exits successfully. Installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:44:09</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused, with no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
     </div>
+    <div class="entry">
+      <strong>Follow-up: remove remaining Review chat Skill surfaces.</strong>
+      Phone feedback showed the user could still perceive Skill participation and a long pre-answer phase. I found no remaining production call to <code>SkillRuntime.execute</code>, but old saved messages could still render <code>skillWebView</code> cards, the UI still had a legacy <code>RUN_SKILL</code> title, and Review chat still made an extra cloud query-planning call before the real answer. The follow-up fix strips Skill cards from Review chat display and completion, removes the Skill card host from the Review chat message bubble, renames the legacy progress title to local history organization, and disables the extra cloud planning call so the answer path starts from local parsing.
+    </div>
+    <div class="entry">
+      <strong>Follow-up: current-week scope.</strong>
+      Added a normal <code>本周</code> / <code>这周</code> / <code>本星期</code> range in addition to the existing <code>本周末</code>. <code>本周</code> uses the current calendar week from Monday through today, and uses activity time <code>max(createdAt, updatedAt)</code> so records updated this week are included even if they were created earlier.
+    </div>
+    <div class="entry">
+      <strong>Follow-up regression verification.</strong>
+      Added failing tests for current-week activity filtering, dropping Skill WebViews, hiding the legacy Skill progress stage, and skipping the pre-answer cloud planner. The focused red tests failed before the fix, then passed after the implementation. The Review chat test group also passed with <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>.
+    </div>
+    <div class="entry">
+      <strong>Follow-up release install.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed the signed release APK with <code>adb -s AWPQUT6116001779 install -r app/build/outputs/apk/release/app-release.apk</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:21:04</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and the checked logcat window had no <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries.
+    </div>
   </main>
 </body>
 </html>

@@ -266,7 +266,7 @@ class ReviewChatViewModel(
                                         createdAt = System.currentTimeMillis(),
                                         referencedNoteId = result.referencedNoteId,
                                         referencedNotes = result.referencedNotes,
-                                        skillWebView = result.skillWebView,
+                                        skillWebView = null,
                                     ),
                                     isSending = false,
                                     providerLine = result.providerLine,
@@ -374,7 +374,10 @@ private fun String.toReviewChatDisplayAnswer(): String {
 private fun List<ReviewChatMessage>.toReviewChatDisplayMessages(): List<ReviewChatMessage> =
     map { message ->
         if (message.role == ReviewChatMessageRole.ASSISTANT) {
-            message.copy(content = message.content.toReviewChatDisplayAnswer())
+            message.copy(
+                content = message.content.toReviewChatDisplayAnswer(),
+                skillWebView = null,
+            )
         } else {
             message
         }
@@ -465,7 +468,7 @@ private fun ReviewChatTurnStage.defaultProgressTitle(): String = when (this) {
     ReviewChatTurnStage.PARSE_INTENT -> "识别问题意图"
     ReviewChatTurnStage.LOAD_HISTORY -> "读取历史记录"
     ReviewChatTurnStage.RETRIEVE_HISTORY -> "检索历史记录"
-    ReviewChatTurnStage.RUN_SKILL -> "运行 Skill"
+    ReviewChatTurnStage.RUN_SKILL -> "整理历史结果"
     ReviewChatTurnStage.BUILD_CONTEXT -> "组织上下文"
     ReviewChatTurnStage.CLOUD_MODEL -> "请求云侧模型"
     ReviewChatTurnStage.ON_DEVICE_CHECK -> "检查端侧模型"

@@ -902,7 +902,8 @@ class ReviewChatPlanner(
     private val resolveExecutionMode: suspend () -> AiExecutionMode,
     private val isCloudConfigured: suspend () -> Boolean,
     private val isOnDeviceReady: suspend () -> Boolean,
-    private val planQueryWithCloud: (suspend (String) -> AiChatResult)? = null,
+    @Suppress("UNUSED_PARAMETER")
+    planQueryWithCloud: (suspend (String) -> AiChatResult)? = null,
     @Suppress("UNUSED_PARAMETER")
     listAvailableSkillSnippets: () -> List<String> = { emptyList() },
     @Suppress("UNUSED_PARAMETER")
@@ -1316,20 +1317,7 @@ class ReviewChatPlanner(
     }
 
     private suspend fun resolveParsedQuery(question: String): ReviewChatParsedQuery {
-        val fallbackQuery = ReviewChatQueryParser.parse(question)
-        val canUseCloudPlanning =
-            planQueryWithCloud != null &&
-                resolveExecutionMode() != AiExecutionMode.ON_DEVICE_ONLY &&
-                isCloudConfigured()
-        if (!canUseCloudPlanning) return fallbackQuery
-
-        val planResult = planQueryWithCloud.invoke(
-            ReviewChatModelQueryPlanner.buildPlanningPrompt(question)
-        )
-        if (planResult !is AiChatResult.Success) return fallbackQuery
-
-        val plannedQuery = ReviewChatModelQueryPlanner.parse(planResult.content) ?: return fallbackQuery
-        return ReviewChatQueryParser.parse(question, plannedQuery)
+        return ReviewChatQueryParser.parse(question)
     }
 
     private suspend fun coerceStructuredAnswer(
@@ -1696,12 +1684,33 @@ internal fun requestedDateRangeForReviewChat(question: String): ReviewChatTimeSc
                 label = "上周末",
             )
         }
+        listOf("本周", "这周", "本星期", "这个星期", "这星期").any(question::contains) -> {
+            val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+            ReviewChatTimeScope.Range(
+                start = monday,
+                endInclusive = today,
+                label = "本周",
+            )
+        }
+        listOf("上周", "上星期", "上个星期").any(question::contains) -> {
+            val thisWeekMonday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+            val lastWeekMonday = thisWeekMonday.minusWeeks(1)
+            ReviewChatTimeScope.Range(
+                start = lastWeekMonday,
+                endInclusive = lastWeekMonday.plusDays(6),
+                label = "上周",
+            )
+        }
         else -> null
     }
 }
 
 private val ReviewChatTimeScope.Range.usesActivityDate: Boolean
-    get() = label.startsWith("最近") || label.startsWith("近") || label.startsWith("这")
+    get() = label.startsWith("最近") ||
+        label.startsWith("近") ||
+        label.startsWith("这") ||
+        label == "本周" ||
+        label == "上周"
 
 internal fun hasRequestedTimeScope(question: String): Boolean =
     requestedDateForReviewChat(question) != null ||
