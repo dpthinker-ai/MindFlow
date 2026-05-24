@@ -166,6 +166,22 @@
       <strong>Notification dispatch verification.</strong>
       Added a TDD regression test that first failed because <code>CloudUsageNotifier</code> and <code>backgroundNotifier</code> did not exist, then passed after adding the dispatcher bridge. Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.AiCloudUsageReporterTest"</code>; it passes.
     </div>
+    <div class="entry">
+      <strong>Provider draft overwrite fix.</strong>
+      Real-phone validation found that selecting DeepSeek could fall back to the previously saved Zhipu settings while editing. The cause was that <code>SettingsViewModel</code> merged every <code>AiSettingsRepository</code> emission into the whole form, including usage/verification-only refreshes. The fix now preserves the dirty draft's provider, API Key, Base URL, model, and enabled state while still accepting fresh verification and usage metadata.
+    </div>
+    <div class="entry">
+      <strong>Independent provider pages.</strong>
+      Reworked the cloud AI settings entry into a provider overview plus one page per provider. Opening DeepSeek, Zhipu, OpenAI, or Custom now edits only that provider's form, so the selector is no longer a chip group sharing one live form.
+    </div>
+    <div class="entry">
+      <strong>Provider-level persistence.</strong>
+      After reviewing the separate-page direction, I was not satisfied with UI-only isolation. <code>PreferencesAiSettingsRepository</code> now stores provider-specific API Key, Base URL, model, enabled flag, verification, and usage counters while preserving the existing active-provider settings for runtime callers. Existing legacy values are used as the initial active provider profile, so current Zhipu settings migrate without a destructive reset.
+    </div>
+    <div class="entry">
+      <strong>Provider switching behavior.</strong>
+      Switching to a provider with no saved profile starts with an empty API Key and that provider's default Base URL/model. Switching to a provider with a saved profile restores that provider's own values. This avoids carrying a Zhipu key into DeepSeek while still allowing future provider-specific credentials to be remembered.
+    </div>
 
     <h2>Final Verification</h2>
     <div class="entry">
@@ -191,6 +207,14 @@
     <div class="entry">
       <strong>Phone install.</strong>
       Installed the same signed release APK to phone <code>AWPQUT6116001779</code> using <code>adb install -r app/build/outputs/apk/release/app-release.apk</code>; the install succeeded without uninstalling or clearing data. Package verification after install shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 17:29:46</code>. The user asked to skip backup after a pre-install backup command had already completed, so no additional backup work was performed.
+    </div>
+    <div class="entry">
+      <strong>DeepSeek phone regression verification.</strong>
+      Rebuilt and installed the release APK on phone <code>AWPQUT6116001779</code> after the provider-page/provider-persistence fix. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:03:59</code>. On the phone, the cloud AI overview shows separate rows for Zhipu, OpenAI, DeepSeek, and Custom. Opening DeepSeek shows <code>https://api.deepseek.com</code>, <code>deepseek-v4-flash</code>, an empty API Key, and provider-local usage counters. Typing a temporary character into the API Key field kept the page on DeepSeek after a wait; the test character was then deleted without saving.
+    </div>
+    <div class="entry">
+      <strong>Latest verification commands.</strong>
+      After provider-level persistence, ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.ui.screens.settings.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>. All passed. The release build still prints known R8 Kotlin metadata warnings, but the build exits successfully and the installed app did not show <code>FATAL EXCEPTION</code> or app <code>AndroidRuntime</code> crash entries in the checked logcat window.
     </div>
   </main>
 </body>

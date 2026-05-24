@@ -128,6 +128,7 @@ private enum class SettingsDestination {
     HOME,
     CLOUD,
     AI,
+    AI_PROVIDER,
     LOCAL_MODEL,
     REMINDER,
     TIME_BANK,
@@ -338,9 +339,16 @@ private fun SettingsScreen(
     showRestoreDialog: Boolean,
 ) {
     var destination by rememberSaveable { mutableStateOf(SettingsDestination.HOME) }
+    var selectedAiProviderName by rememberSaveable { mutableStateOf(uiState.aiProviderPreset.name) }
+    val selectedAiProvider = AiProviderPreset.entries.firstOrNull { it.name == selectedAiProviderName }
+        ?: AiProviderPreset.ZHIPU
 
     BackHandler(enabled = destination != SettingsDestination.HOME) {
-        destination = SettingsDestination.HOME
+        destination = if (destination == SettingsDestination.AI_PROVIDER) {
+            SettingsDestination.AI
+        } else {
+            SettingsDestination.HOME
+        }
     }
 
     if (showRestoreDialog) {
@@ -391,8 +399,17 @@ private fun SettingsScreen(
             SettingsDestination.AI -> AiSettingsScreen(
                 uiState = uiState,
                 onBack = { destination = SettingsDestination.HOME },
+                onOpenProvider = { provider ->
+                    selectedAiProviderName = provider.name
+                    onAiProviderPresetChange(provider)
+                    destination = SettingsDestination.AI_PROVIDER
+                },
+            )
+            SettingsDestination.AI_PROVIDER -> AiProviderSettingsScreen(
+                uiState = uiState,
+                provider = selectedAiProvider,
+                onBack = { destination = SettingsDestination.AI },
                 onAiEnabledChange = onAiEnabledChange,
-                onAiProviderPresetChange = onAiProviderPresetChange,
                 onApiKeyChange = onApiKeyChange,
                 onBaseUrlChange = onBaseUrlChange,
                 onModelChange = onModelChange,
@@ -1633,14 +1650,7 @@ private fun CloudBackupScreen(
 private fun AiSettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
-    onAiEnabledChange: (Boolean) -> Unit,
-    onAiProviderPresetChange: (AiProviderPreset) -> Unit,
-    onApiKeyChange: (String) -> Unit,
-    onBaseUrlChange: (String) -> Unit,
-    onModelChange: (String) -> Unit,
-    onSaveAi: () -> Unit,
-    onTestAi: () -> Unit,
-    onClearAi: () -> Unit,
+    onOpenProvider: (AiProviderPreset) -> Unit,
 ) {
     val currentFingerprint = AiSettings.fingerprint(
         providerId = uiState.aiProviderPreset.providerId,
@@ -1667,7 +1677,112 @@ private fun AiSettingsScreen(
                 SectionHeader(title = "当前状态", headline = verificationHeadline)
                 Text(
                     text = if (!uiState.isConfigured) {
-                        "补一个 ${uiState.aiProviderPreset.label} API Key 并保存后才能启用云端 AI。"
+                        "选择一个云端模型，补 API Key 并保存后才能启用。"
+                    } else if (!uiState.aiEnabled) {
+                        "云端 AI 已关闭。"
+                    } else if (isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess) {
+                        "当前使用 ${uiState.aiProviderPreset.label}，最近验证 ${TimeFormatter.compact(uiState.aiLastVerifiedAt)}"
+                    } else if (isVerifiedForCurrentConfig && uiState.aiLastVerificationMessage.isNotBlank()) {
+                        uiState.aiLastVerificationMessage
+                    } else {
+                        "当前使用 ${uiState.aiProviderPreset.label}，配置还没验证。"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "模型配置",
+                description = "每个云端 AI 进入独立配置页，避免 API Key、模型和 Base URL 互相干扰。",
+            ) {
+                AiProviderPreset.entries.forEach { preset ->
+                    SettingsDataRow(
+                        icon = Icons.Outlined.AutoAwesome,
+                        title = preset.label,
+                        summary = if (uiState.aiProviderPreset == preset) {
+                            uiState.model.ifBlank { preset.defaultModel }.ifBlank { "自定义模型" }
+                        } else {
+                            preset.defaultModel.ifBlank { "自定义 Base URL 与模型" }
+                        },
+                        status = if (uiState.aiProviderPreset == preset && uiState.isConfigured) "当前" else null,
+                        accent = if (uiState.aiProviderPreset == preset) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = { onOpenProvider(preset) },
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "今日使用",
+                description = "这里显示云端 AI 的请求量、成功量和 token 估算，具体 API Key 在各模型页单独配置。",
+            ) {
+                GridTwo {
+                    MetricTile(
+                        label = "今日请求",
+                        value = uiState.aiRequestsToday.toString(),
+                        modifier = Modifier.weight(1f),
+                        accent = AccentBlue,
+                    )
+                    MetricTile(
+                        label = "今日成功",
+                        value = uiState.aiSuccessesToday.toString(),
+                        modifier = Modifier.weight(1f),
+                        accent = Accent,
+                    )
+                }
+                MetricTile(
+                    label = "今日 Tokens",
+                    value = uiState.aiTokensToday.toString(),
+                    accent = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiProviderSettingsScreen(
+    uiState: SettingsUiState,
+    provider: AiProviderPreset,
+    onBack: () -> Unit,
+    onAiEnabledChange: (Boolean) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onModelChange: (String) -> Unit,
+    onSaveAi: () -> Unit,
+    onTestAi: () -> Unit,
+    onClearAi: () -> Unit,
+) {
+    val currentFingerprint = AiSettings.fingerprint(
+        providerId = uiState.aiProviderPreset.providerId,
+        apiKey = uiState.apiKey,
+        baseUrl = uiState.baseUrl,
+        model = uiState.model,
+    )
+    val isVerifiedForCurrentConfig = uiState.aiVerifiedFingerprint == currentFingerprint
+    val verificationHeadline = when {
+        !uiState.isConfigured -> "未启用"
+        !uiState.aiEnabled -> "已关闭"
+        isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess -> "已连通"
+        isVerifiedForCurrentConfig && !uiState.aiLastVerifiedSuccess -> "检查失败"
+        else -> "待验证"
+    }
+
+    DetailScreenFrame(
+        title = provider.label,
+        subtitle = if (uiState.aiProviderPreset == provider) "独立配置 API Key、模型与连接验证" else "正在切换配置",
+        onBack = onBack,
+    ) {
+        item {
+            PanelCard {
+                SectionHeader(title = "当前状态", headline = verificationHeadline)
+                Text(
+                    text = if (!uiState.isConfigured) {
+                        "补一个 ${provider.label} API Key 并保存后才能启用云端 AI。"
                     } else if (!uiState.aiEnabled) {
                         "云端 AI 已关闭。"
                     } else if (isVerifiedForCurrentConfig && uiState.aiLastVerifiedSuccess) {
@@ -1685,13 +1800,9 @@ private fun AiSettingsScreen(
 
         item {
             SettingsSection(
-                title = "模型配置",
-                description = "自动模式会按任务策略选择本地或云端；内容离开设备会低频通知并写入 AI 使用记录。",
+                title = "${provider.label} 配置",
+                description = "当前页只编辑 ${provider.label}。自动模式会按任务策略选择本地或云端；内容离开设备会低频通知并写入 AI 使用记录。",
             ) {
-                ProviderPresetSelector(
-                    selectedPreset = uiState.aiProviderPreset,
-                    onSelect = onAiProviderPresetChange,
-                )
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
                     shape = MaterialTheme.shapes.medium,

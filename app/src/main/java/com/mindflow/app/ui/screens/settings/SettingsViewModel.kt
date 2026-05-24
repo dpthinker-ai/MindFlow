@@ -119,12 +119,68 @@ internal fun SettingsUiState.applyAiProviderPreset(value: AiProviderPreset): Set
             aiProviderPreset = value,
             baseUrl = value.baseUrl,
             model = value.defaultModel,
+            apiKey = if (aiProviderPreset == value) apiKey else "",
         )
 
         AiProviderPreset.CUSTOM -> copy(
             aiProviderPreset = value,
+            apiKey = if (aiProviderPreset == value) apiKey else "",
         )
     }
+
+internal fun SettingsUiState.mergeSavedAiSettings(
+    settings: AiSettings,
+    preserveDraft: Boolean,
+): SettingsUiState {
+    val savedPreset = AiProviderPreset.fromProviderId(settings.providerId)
+        .takeIf { preset -> preset != AiProviderPreset.CUSTOM }
+        ?: AiProviderPreset.fromBaseUrl(settings.baseUrl)
+    val commonState = copy(
+        aiLastVerifiedAt = settings.lastVerifiedAt,
+        aiLastVerifiedSuccess = settings.lastVerifiedSuccess,
+        aiLastVerificationMessage = settings.lastVerificationMessage,
+        aiVerifiedFingerprint = settings.verifiedFingerprint,
+        aiRequestsToday = settings.requestsToday,
+        aiSuccessesToday = settings.successesToday,
+        aiTokensToday = settings.tokensToday,
+    )
+    return if (preserveDraft) {
+        commonState.copy(isConfigured = commonState.cloudAiDraftIsConfigured())
+    } else {
+        commonState.copy(
+            apiKey = settings.apiKey,
+            baseUrl = settings.baseUrl,
+            model = settings.model,
+            aiProviderPreset = savedPreset,
+            aiEnabled = settings.aiEnabled,
+            isConfigured = settings.isConfigured,
+        )
+    }
+}
+
+internal fun SettingsUiState.applyAiProviderSettings(settings: AiSettings): SettingsUiState {
+    val preset = AiProviderPreset.fromProviderId(settings.providerId)
+        .takeIf { value -> value != AiProviderPreset.CUSTOM }
+        ?: AiProviderPreset.fromBaseUrl(settings.baseUrl)
+    return copy(
+        aiProviderPreset = preset,
+        apiKey = settings.apiKey,
+        baseUrl = settings.baseUrl,
+        model = settings.model,
+        aiEnabled = settings.aiEnabled,
+        isConfigured = settings.isConfigured,
+        aiLastVerifiedAt = settings.lastVerifiedAt,
+        aiLastVerifiedSuccess = settings.lastVerifiedSuccess,
+        aiLastVerificationMessage = settings.lastVerificationMessage,
+        aiVerifiedFingerprint = settings.verifiedFingerprint,
+        aiRequestsToday = settings.requestsToday,
+        aiSuccessesToday = settings.successesToday,
+        aiTokensToday = settings.tokensToday,
+    )
+}
+
+private fun SettingsUiState.cloudAiDraftIsConfigured(): Boolean =
+    apiKey.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank()
 
 internal fun SettingsUiState.toOnDeviceModelSettings(): OnDeviceModelSettings = OnDeviceModelSettings(
     modelLabel = localModelLabel,
@@ -172,6 +228,7 @@ class SettingsViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState
+    private var aiSettingsDraftDirty = false
 
     private val _events = MutableSharedFlow<SettingsEvent>()
     val events = _events.asSharedFlow()
@@ -184,23 +241,10 @@ class SettingsViewModel(
         }
         viewModelScope.launch {
             aiSettingsRepository.settings.collectLatest { settings ->
-                _uiState.update {
-                    it.copy(
-                        apiKey = settings.apiKey,
-                        baseUrl = settings.baseUrl,
-                        model = settings.model,
-                        aiProviderPreset = AiProviderPreset.fromProviderId(settings.providerId)
-                            .takeIf { preset -> preset != AiProviderPreset.CUSTOM }
-                            ?: AiProviderPreset.fromBaseUrl(settings.baseUrl),
-                        aiEnabled = settings.aiEnabled,
-                        isConfigured = settings.isConfigured,
-                        aiLastVerifiedAt = settings.lastVerifiedAt,
-                        aiLastVerifiedSuccess = settings.lastVerifiedSuccess,
-                        aiLastVerificationMessage = settings.lastVerificationMessage,
-                        aiVerifiedFingerprint = settings.verifiedFingerprint,
-                        aiRequestsToday = settings.requestsToday,
-                        aiSuccessesToday = settings.successesToday,
-                        aiTokensToday = settings.tokensToday,
+                _uiState.update { state ->
+                    state.mergeSavedAiSettings(
+                        settings = settings,
+                        preserveDraft = aiSettingsDraftDirty,
                     )
                 }
             }
@@ -302,23 +346,33 @@ class SettingsViewModel(
     }
 
     fun onApiKeyChange(value: String) {
-        _uiState.update { it.copy(apiKey = value) }
+        updateAiDraft { it.copy(apiKey = value) }
     }
 
     fun onBaseUrlChange(value: String) {
-        _uiState.update { it.copy(baseUrl = value) }
+        updateAiDraft { it.copy(baseUrl = value) }
     }
 
     fun onModelChange(value: String) {
-        _uiState.update { it.copy(model = value) }
+        updateAiDraft { it.copy(model = value) }
     }
 
     fun onAiEnabledChange(value: Boolean) {
-        _uiState.update { it.copy(aiEnabled = value) }
+        updateAiDraft { it.copy(aiEnabled = value) }
     }
 
     fun onAiProviderPresetChange(value: AiProviderPreset) {
-        _uiState.update { state -> state.applyAiProviderPreset(value) }
+        updateAiDraft { state -> state.applyAiProviderPreset(value) }
+        viewModelScope.launch {
+            val providerSettings = aiSettingsRepository.getProviderSettings(value.providerId)
+            _uiState.update { state ->
+                if (state.aiProviderPreset == value && state.apiKey.isBlank()) {
+                    state.applyAiProviderSettings(providerSettings)
+                } else {
+                    state
+                }
+            }
+        }
     }
 
     fun onLocalModelDownloadUrlChange(value: String) {
@@ -416,6 +470,7 @@ class SettingsViewModel(
                     aiEnabled = state.aiEnabled,
                 )
             )
+            aiSettingsDraftDirty = false
             _uiState.update { it.copy(isSavingAi = false) }
             _events.emit(
                 SettingsEvent.Message(
@@ -437,19 +492,34 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingAi = true) }
             val result = aiServiceClient.testConnection(testSettings)
+            val verifiedAt = System.currentTimeMillis()
             aiSettingsRepository.updateVerificationStatus(
+                providerId = testSettings.providerId,
                 fingerprint = testSettings.configFingerprint,
                 success = result.isConfiguredCorrectly,
                 message = result.message,
+                verifiedAt = verifiedAt,
             )
+            _uiState.update {
+                it.copy(
+                    aiLastVerifiedAt = verifiedAt,
+                    aiLastVerifiedSuccess = result.isConfiguredCorrectly,
+                    aiLastVerificationMessage = result.message,
+                    aiVerifiedFingerprint = testSettings.configFingerprint,
+                )
+            }
             _events.emit(SettingsEvent.Message(result.message))
             _uiState.update { it.copy(isTestingAi = false) }
         }
     }
 
     fun clear() {
+        val provider = _uiState.value.aiProviderPreset
         viewModelScope.launch {
-            aiSettingsRepository.clear()
+            aiSettingsDraftDirty = true
+            aiSettingsRepository.clearProvider(provider.providerId)
+            val providerSettings = aiSettingsRepository.getProviderSettings(provider.providerId)
+            _uiState.update { it.applyAiProviderSettings(providerSettings) }
             _events.emit(SettingsEvent.Message("AI 设置已清空"))
         }
     }
@@ -586,6 +656,14 @@ class SettingsViewModel(
             }
             reminderSettingsRepository.save(settings)
             reminderScheduler.syncNow(settings)
+        }
+    }
+
+    private fun updateAiDraft(transform: (SettingsUiState) -> SettingsUiState) {
+        aiSettingsDraftDirty = true
+        _uiState.update { state ->
+            val next = transform(state)
+            next.copy(isConfigured = next.cloudAiDraftIsConfigured())
         }
     }
 
