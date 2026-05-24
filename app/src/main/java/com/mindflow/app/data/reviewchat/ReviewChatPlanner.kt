@@ -3,6 +3,7 @@ package com.mindflow.app.data.reviewchat
 import com.mindflow.app.data.ai.AiExecutionMode
 import com.mindflow.app.data.local.entity.NoteEntity
 import com.mindflow.app.data.localmodel.LocalKnowledgeMaintenanceSnapshot
+import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.review.WeeklyReviewState
 import com.mindflow.app.data.skills.SkillRuntime
 import com.mindflow.app.data.topic.AiChatResult
@@ -23,7 +24,8 @@ import kotlinx.coroutines.coroutineScope
 
 private val reviewChatStopWords = setOf(
     "把", "最近", "一下", "一下子", "什么", "怎么", "为什么", "哪些", "哪里", "之前",
-    "关于", "这个", "那个", "最近两周", "最近一周", "本周", "这周", "本星期", "这个星期", "这星期", "上周",
+    "关于", "这个", "那个", "最近一个月", "近一个月", "最近30天", "近30天", "最近两周", "最近一周",
+    "本周", "这周", "本星期", "这个星期", "这星期", "上周",
     "我们", "你们", "他们", "我的", "你的", "时候",
     "分析", "总结", "归纳", "分类", "类别", "类型", "分为", "看看",
 )
@@ -73,7 +75,8 @@ internal val reviewChatOperationPhrases = (
         reviewChatExternalHints +
         reviewChatLinkHints +
         listOf(
-            "今天", "昨天", "前天", "最近", "最近两周", "最近一周",
+            "今天", "昨天", "前天", "最近", "最近一个月", "近一个月", "最近30天", "近30天", "一个月",
+            "最近两周", "最近一周",
             "本周", "这周", "本星期", "这个星期", "这星期", "上周", "上星期", "上个星期",
             "完整内容", "全部内容", "完整", "全文", "原文",
             "第一条", "第一次", "最早", "最初", "一开始",
@@ -85,6 +88,8 @@ internal val reviewChatOperationPhrases = (
             "把它们", "简单",
             "本周末", "上周末", "周末", "类别", "分类", "类型", "什么类型", "哪些类型", "都是什么类型", "是什么类型",
             "分析", "总结", "归纳", "分为",
+            "未推进的想法", "未推进想法", "没有推进的想法", "没有推进想法", "没推进的想法", "没推进想法",
+            "还没推进的想法", "还没推进想法", "待推进的想法", "待推进想法",
         )
 ).distinct()
     .sortedByDescending(String::length)
@@ -128,6 +133,18 @@ private const val reviewChatSemanticEntityMinScore = 8
 
 private val reviewChatLowIntentProbeTerms = setOf(
     "abc", "test", "testing", "hello", "hi", "ok", "1", "11", "123", "测试", "试试",
+)
+
+private val reviewChatUnadvancedIdeaHints = listOf(
+    "未推进",
+    "没推进",
+    "没有推进",
+    "还没推进",
+    "待推进",
+    "未开始推进",
+    "还没开始推进",
+    "停留在想法",
+    "停在想法",
 )
 
 internal val reviewChatDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -387,6 +404,13 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .replace("记了", " ")
         .replace("写了", " ")
         .replace("说过", " ")
+        .let { strippedQuestion ->
+            if (requestedReviewChatStatusFilter(question).isEmpty()) {
+                strippedQuestion
+            } else {
+                strippedQuestion.replace("想法", " ")
+            }
+        }
 
     return Regex("[\\p{IsHan}A-Za-z0-9]{2,}")
         .findAll(stripped)
@@ -419,6 +443,14 @@ internal fun extractReviewChatEntityTerms(question: String): List<String> {
         .toList()
 }
 
+internal fun requestedReviewChatStatusFilter(question: String): Set<NoteStatus> {
+    val normalized = question.lowercase()
+    val asksForUnadvancedIdea =
+        normalized.contains("想法") &&
+            reviewChatUnadvancedIdeaHints.any(normalized::contains)
+    return if (asksForUnadvancedIdea) setOf(NoteStatus.IDEA) else emptySet()
+}
+
 private fun isGenericReviewChatEntityTerm(term: String): Boolean {
     val normalized = term.trim().lowercase()
     if (normalized.isBlank()) return true
@@ -438,7 +470,10 @@ internal fun buildReviewChatCorpusSelection(
     notes: List<NoteEntity>,
     entityTerms: List<String>,
 ): ReviewChatCorpusSelection {
-    val scopedNotes = filterNotesForRequestedScope(question, notes).sortedBy(NoteEntity::createdAt)
+    val statusFilter = requestedReviewChatStatusFilter(question)
+    val scopedNotes = filterNotesForRequestedScope(question, notes)
+        .filter { note -> statusFilter.isEmpty() || note.status in statusFilter }
+        .sortedBy(NoteEntity::createdAt)
     if (mode == ReviewChatQuestionMode.EXTERNAL || scopedNotes.isEmpty() || entityTerms.isEmpty()) {
         return ReviewChatCorpusSelection(
             scopedNotes = scopedNotes,

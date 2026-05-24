@@ -112,6 +112,12 @@ class ReviewChatPlannerTest {
         assertThat((thisWeekQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("本周")
         assertThat(thisWeekQuery.entityTerms).isEmpty()
 
+        val unadvancedIdeasQuery = ReviewChatQueryParser.parse("最近一个月有哪些未推进的想法")
+        assertThat(unadvancedIdeasQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
+        assertThat(unadvancedIdeasQuery.timeScope).isInstanceOf(ReviewChatTimeScope.Range::class.java)
+        assertThat((unadvancedIdeasQuery.timeScope as ReviewChatTimeScope.Range).label).isEqualTo("最近30天")
+        assertThat(unadvancedIdeasQuery.entityTerms).isEmpty()
+
         val briefSummaryQuery = ReviewChatQueryParser.parse("我记了哪些人生建议？帮我总结一下，把它们简单总结成几句话。")
         assertThat(briefSummaryQuery.operation).isEqualTo(ReviewChatQueryOperation.LIST)
         assertThat(briefSummaryQuery.mode).isEqualTo(ReviewChatQuestionMode.RECORD_LOOKUP)
@@ -423,6 +429,37 @@ class ReviewChatPlannerTest {
         assertThat(packet.rawNoteEvidence.map { it.title }).containsExactly("旧创建但最近更新")
         assertThat(ReviewChatPromptFactory.cloud(packet)).contains("命中｜共 1 条记录")
         assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("很久没动的旧记录")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_recentMonthUnadvancedIdeasUseIdeaStatus() {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val oldCreatedAt = today.minusDays(60).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val recentUpdatedAt = today.minusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val staleUpdatedAt = today.minusDays(45).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "最近一个月有哪些未推进的想法",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "方向草案", "这条还没压成动作，但最近补过一段背景")
+                    .copy(status = NoteStatus.IDEA, createdAt = oldCreatedAt, updatedAt = recentUpdatedAt),
+                sampleNote(2L, "推进中的方案", "已经在推进，不应该算未推进想法")
+                    .copy(status = NoteStatus.IN_PROGRESS, createdAt = oldCreatedAt, updatedAt = recentUpdatedAt),
+                sampleNote(3L, "旧想法", "这条想法近 30 天没有活动，不应该命中")
+                    .copy(status = NoteStatus.IDEA, createdAt = oldCreatedAt, updatedAt = staleUpdatedAt),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.collectionOverview?.scopeLabel).isEqualTo("最近30天")
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(1)
+        assertThat(packet.rawNoteEvidence.map { it.title }).containsExactly("方向草案")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).contains("命中｜共 1 条记录")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("推进中的方案")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("旧想法")
     }
 
     @Test

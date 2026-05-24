@@ -268,6 +268,18 @@
       <strong>Follow-up exact-query release install.</strong>
       Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. Installed <code>app/build/outputs/apk/release/app-release.apk</code> on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:28:57</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
     </div>
+    <div class="entry">
+      <strong>Follow-up: unadvanced idea query semantics.</strong>
+      Phone feedback showed the quick question <code>最近一个月有哪些未推进的想法</code> returned zero records. I traced this to two local parsing gaps: <code>最近一个月</code> left <code>一个月</code> behind as a fake entity term, and <code>未推进的想法</code> was treated as literal title/body text instead of a status request. The fix maps unadvanced idea phrases such as <code>未推进的想法</code>, <code>没推进想法</code>, and <code>待推进的想法</code> to <code>NoteStatus.IDEA</code>, then applies that status filter after the requested time scope. I intentionally kept this narrow to avoid turning every mention of <code>想法</code> into a status filter when the user may be searching for a real topic.
+    </div>
+    <div class="entry">
+      <strong>Follow-up unadvanced-query regression verification.</strong>
+      Added failing tests proving that <code>最近一个月有哪些未推进的想法</code> parses as a recent-30-day list with no fake entity terms, and that the context packet includes a recently active <code>想法</code> record while excluding <code>进行中</code> records and stale ideas. The focused tests first failed with entity terms <code>[一个月, 未推进的想法]</code> and zero hits, then passed after the status-filter implementation.
+    </div>
+    <div class="entry">
+      <strong>Follow-up unadvanced-query release install.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>, <code>./gradlew --no-daemon :app:testDebugUnitTest</code>, and <code>./gradlew --no-daemon :app:assembleRelease</code>; all passed. Installed the signed release APK on phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 20:39:30</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused and no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+    </div>
   </main>
 </body>
 </html>
