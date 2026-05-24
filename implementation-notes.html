@@ -132,7 +132,11 @@
     </div>
     <div class="entry">
       <strong>Low-frequency notification aggregation.</strong>
-      Added <code>CloudUsageNotificationAggregator</code> with a 5-minute earliest flush, 30-minute max window, and 3-per-day cap. The aggregator returns notification batches and marks events as notified through the repository; Android notification delivery will be wired from the app layer rather than inside this pure component.
+      Added <code>CloudUsageNotificationAggregator</code> with a 5-minute earliest flush, 30-minute max window, and 3-per-day cap. The aggregator returns notification batches and marks events as notified through the repository; Android notification delivery stays outside this pure component.
+    </div>
+    <div class="entry">
+      <strong>Visible background notification dispatch.</strong>
+      Added <code>CloudUsageNotifier</code> and <code>AndroidCloudUsageNotifier</code> after noticing that aggregation alone would not visibly inform the user. Background batches now flow from <code>AiCloudUsageReporter</code> into an Android notification channel named <code>mindflow_cloud_ai_usage</code>, using the existing notification permission and launcher icon patterns. Foreground cloud calls still use Toast via <code>MindFlowApp</code>.
     </div>
     <div class="entry">
       <strong>Direct client audit bridge.</strong>
@@ -157,6 +161,24 @@
     <div class="entry">
       <strong>Verification.</strong>
       Ran <code>SettingsCloudAiProviderTest</code> and existing settings execution-mode persistence tests; they pass.
+    </div>
+    <div class="entry">
+      <strong>Notification dispatch verification.</strong>
+      Added a TDD regression test that first failed because <code>CloudUsageNotifier</code> and <code>backgroundNotifier</code> did not exist, then passed after adding the dispatcher bridge. Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.AiCloudUsageReporterTest"</code>; it passes.
+    </div>
+
+    <h2>Final Verification</h2>
+    <div class="entry">
+      <strong>Focused and full unit tests.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.ai.*" --tests "com.mindflow.app.data.ai.cloud.*" --tests "com.mindflow.app.data.settings.*" --tests "com.mindflow.app.ui.screens.settings.*"</code> and <code>./gradlew --no-daemon :app:testDebugUnitTest</code>. Both commands passed after the notification dispatch change.
+    </div>
+    <div class="entry">
+      <strong>Release build.</strong>
+      Ran <code>./gradlew --no-daemon :app:assembleRelease</code>. The isolated worktree initially produced <code>app-release-unsigned.apk</code> because local signing files are intentionally ignored. I temporarily linked the existing local signing config and keystore from the main workspace, rebuilt, confirmed <code>app/build/outputs/apk/release/app-release.apk</code> exists, then removed those local symlinks from the worktree. The signed release APK is 12 MB and uses version code 78, version name 4.0.0.
+    </div>
+    <div class="entry">
+      <strong>Manual release validation status.</strong>
+      <code>adb devices -l</code> returned no attached devices. I did not install an unsigned APK, install a debug APK, uninstall the app, clear app data, wipe an emulator, or delete local model/data files. Device/emulator UI validation is therefore blocked until a compatible device is online.
     </div>
   </main>
 </body>

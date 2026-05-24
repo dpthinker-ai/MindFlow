@@ -44,14 +44,47 @@ class AiCloudUsageReporterTest {
         assertThat(result.foregroundNotice).isEqualTo("本地模型未完成，已改用 DeepSeek 处理这次请求。")
     }
 
+    @Test
+    fun backgroundBatchIsDispatchedToNotifierWhenLowFrequencyWindowIsDue() = runTest {
+        val repository = FileAiUsageEventRepository(Files.createTempDirectory("ai-usage").toFile())
+        val notifier = RecordingCloudUsageNotifier()
+        val reporter = AiCloudUsageReporter(
+            repository = repository,
+            notificationAggregator = CloudUsageNotificationAggregator(),
+            backgroundNotifier = notifier,
+        )
+
+        reporter.record(
+            sampleEvent(
+                eventId = "event-1",
+                timestamp = 1_000L,
+                triggerSurface = AiTriggerSurface.BACKGROUND,
+                triggerMode = AiTriggerMode.BACKGROUND_AUTOMATION,
+            ),
+        )
+        val result = reporter.record(
+            sampleEvent(
+                eventId = "event-2",
+                timestamp = 301_000L,
+                triggerSurface = AiTriggerSurface.BACKGROUND,
+                triggerMode = AiTriggerMode.BACKGROUND_AUTOMATION,
+            ),
+        )
+
+        assertThat(result.backgroundBatch?.eventIds).containsExactly("event-1", "event-2").inOrder()
+        assertThat(notifier.batches.single().eventIds).containsExactly("event-1", "event-2").inOrder()
+    }
+
     private fun sampleEvent(
+        eventId: String = "event-1",
+        timestamp: Long = 1_000L,
         triggerSurface: AiTriggerSurface = AiTriggerSurface.EDITOR,
         triggerMode: AiTriggerMode = AiTriggerMode.FOREGROUND_USER_ACTION,
         fallbackOccurred: Boolean = false,
         fallbackReason: String? = null,
     ): AiUsageEvent = AiUsageEvent(
-        eventId = "event-1",
-        timestamp = 1_000L,
+        eventId = eventId,
+        timestamp = timestamp,
         taskType = AiTaskType.POLISH_CONTENT,
         triggerSurface = triggerSurface,
         triggerMode = triggerMode,
@@ -68,4 +101,12 @@ class AiCloudUsageReporterTest {
         success = true,
         failureReason = null,
     )
+
+    private class RecordingCloudUsageNotifier : CloudUsageNotifier {
+        val batches = mutableListOf<CloudUsageNotificationBatch>()
+
+        override suspend fun notify(batch: CloudUsageNotificationBatch) {
+            batches += batch
+        }
+    }
 }

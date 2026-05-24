@@ -67,6 +67,7 @@ import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.ai.AiTaskRouter
 import com.mindflow.app.data.ai.AiTaskTraceRecorder
 import com.mindflow.app.data.ai.AiCloudUsageReporter
+import com.mindflow.app.data.ai.AndroidCloudUsageNotifier
 import com.mindflow.app.data.ai.CloudUsageNotificationAggregator
 import com.mindflow.app.data.ai.CloudAiTaskProvider
 import com.mindflow.app.data.ai.FileAiUsageEventRepository
@@ -166,6 +167,7 @@ class AppContainer(context: Context) {
     val aiCloudUsageReporter = AiCloudUsageReporter(
         repository = aiUsageEventRepository,
         notificationAggregator = CloudUsageNotificationAggregator(),
+        backgroundNotifier = AndroidCloudUsageNotifier(context.applicationContext),
     )
     val aiServiceClient = AiServiceClient(
         usageReporter = aiCloudUsageReporter,

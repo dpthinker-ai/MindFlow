@@ -48,6 +48,8 @@
   - Records events and emits foreground notice text.
 - Create `app/src/main/java/com/mindflow/app/data/ai/CloudUsageNotificationAggregator.kt`
   - Low-frequency aggregation rules: 5-minute earliest flush, 30-minute max window, 3 notifications per day.
+- Create `app/src/main/java/com/mindflow/app/data/ai/AndroidCloudUsageNotifier.kt`
+  - Dispatches low-frequency background cloud-use batches as Android notifications when permission is available.
 - Create `app/src/main/java/com/mindflow/app/data/ai/CloudUsageBudgetGuard.kt`
   - Blocks background cloud after daily request/token thresholds.
 - Create `app/src/main/java/com/mindflow/app/data/ai/AiDataSensitivityClassifier.kt`
@@ -172,7 +174,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit provider registry**
+- [x] **Step 9: Commit provider registry**
 
 ```bash
 git add app/src/main/java/com/mindflow/app/data/ai/cloud app/src/main/java/com/mindflow/app/data/model/AiProviderPreset.kt app/src/main/java/com/mindflow/app/data/model/AiSettings.kt app/src/main/java/com/mindflow/app/data/settings/PreferencesAiSettingsRepository.kt app/src/test/java/com/mindflow/app/data/ai/cloud implementation-notes.html
@@ -242,7 +244,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit runtime settings**
+- [x] **Step 7: Commit runtime settings**
 
 ```bash
 git add app/src/main/java/com/mindflow/app/data/ai/AiRuntimeSettings.kt app/src/main/java/com/mindflow/app/data/settings/AiRuntimeSettingsRepository.kt app/src/main/java/com/mindflow/app/data/settings/PreferencesAiRuntimeSettingsRepository.kt app/src/main/java/com/mindflow/app/data/settings/OnDeviceExecutionModeCodec.kt app/src/main/java/com/mindflow/app/data/settings/PreferencesOnDeviceModelSettingsRepository.kt app/src/test/java/com/mindflow/app/data/settings implementation-notes.html
@@ -332,7 +334,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit policy and guards**
+- [x] **Step 8: Commit policy and guards**
 
 ```bash
 git add app/src/main/java/com/mindflow/app/data/ai app/src/test/java/com/mindflow/app/data/ai implementation-notes.html
@@ -346,6 +348,7 @@ git commit -m "feat: add ai task policy guards"
 - Create: `app/src/main/java/com/mindflow/app/data/ai/AiUsageEventRepository.kt`
 - Create: `app/src/main/java/com/mindflow/app/data/ai/AiCloudUsageReporter.kt`
 - Create: `app/src/main/java/com/mindflow/app/data/ai/CloudUsageNotificationAggregator.kt`
+- Create: `app/src/main/java/com/mindflow/app/data/ai/AndroidCloudUsageNotifier.kt`
 - Modify: `app/src/main/java/com/mindflow/app/data/topic/AiServiceClient.kt`
 - Modify: `app/src/main/java/com/mindflow/app/data/ai/CloudAiTaskProvider.kt`
 - Test: `app/src/test/java/com/mindflow/app/data/ai/AiUsageEventRepositoryTest.kt`
@@ -399,11 +402,19 @@ fun backgroundEventsWaitAtLeastFiveMinutesBeforeFlush() {
 
 Reporter appends events, emits foreground notice immediately, and sends background events into the aggregator.
 
-- [x] **Step 6: Wire `AiServiceClient` and `CloudAiTaskProvider` to reporter**
+- [x] **Step 6: Write failing background notifier dispatch test**
+
+Verify that a due background batch is passed from `AiCloudUsageReporter` to a `CloudUsageNotifier`, not only returned as an in-memory batch.
+
+- [x] **Step 7: Implement background notifier dispatch**
+
+Add `CloudUsageNotifier` plus an Android implementation using the app's existing notification permission and icon patterns.
+
+- [x] **Step 8: Wire `AiServiceClient` and `CloudAiTaskProvider` to reporter**
 
 Use request metadata to record provider id, provider label, model, task type, trigger mode, payload policy, success/failure, and token count. Do not record prompts or API keys.
 
-- [x] **Step 7: Run audit and notice tests and verify green**
+- [x] **Step 9: Run audit and notice tests and verify green**
 
 Run:
 
@@ -413,7 +424,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit audit and notices**
+- [x] **Step 10: Commit audit and notices**
 
 ```bash
 git add app/src/main/java/com/mindflow/app/data/ai app/src/main/java/com/mindflow/app/data/topic/AiServiceClient.kt app/src/main/java/com/mindflow/app/data/ai/CloudAiTaskProvider.kt app/src/test/java/com/mindflow/app/data/ai implementation-notes.html
@@ -470,7 +481,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit UI wiring**
+- [x] **Step 6: Commit UI wiring**
 
 ```bash
 git add app/src/main/java/com/mindflow/app/di/AppContainer.kt app/src/main/java/com/mindflow/app/ui/MindFlowApp.kt app/src/main/java/com/mindflow/app/ui/screens/settings app/src/test/java/com/mindflow/app/ui/screens/settings implementation-notes.html
@@ -482,7 +493,7 @@ git commit -m "feat: expose cloud ai policy settings"
 **Files:**
 - Modify: `implementation-notes.html`
 
-- [ ] **Step 1: Run focused unit tests**
+- [x] **Step 1: Run focused unit tests**
 
 Run:
 
@@ -492,7 +503,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 2: Run full unit test suite**
+- [x] **Step 2: Run full unit test suite**
 
 Run:
 
@@ -502,7 +513,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 3: Build release APK**
+- [x] **Step 3: Build release APK**
 
 Run:
 
@@ -512,11 +523,13 @@ Run:
 
 Expected: PASS and release artifact at `app/build/outputs/apk/release/app-release.apk`.
 
-- [ ] **Step 4: Manual release validation**
+- [x] **Step 4: Manual release validation**
 
 Use only the release APK. Do not install debug APK, uninstall, clear app data, wipe emulator, or delete local model files. If a compatible device/emulator is available, install with `adb install -r app/build/outputs/apk/release/app-release.apk`, launch `com.mindflow.app`, and verify settings show DeepSeek plus existing notes/model remain present. If signing mismatch or device unavailable occurs, stop and record the exact blocked state in `implementation-notes.html`.
 
-- [ ] **Step 5: Final implementation notes update**
+Result: blocked because `adb devices -l` returned no attached devices. No debug/unsigned install or destructive reset was attempted.
+
+- [x] **Step 5: Final implementation notes update**
 
 Record commits, tests, release build result, and any manual validation limitation in `implementation-notes.html`.
 

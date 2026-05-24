@@ -12,6 +12,7 @@ data class AiCloudUsageReportResult(
 class AiCloudUsageReporter(
     private val repository: AiUsageEventRepository,
     private val notificationAggregator: CloudUsageNotificationAggregator,
+    private val backgroundNotifier: CloudUsageNotifier? = null,
 ) {
     private val _foregroundNotices = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val foregroundNotices: SharedFlow<String> = _foregroundNotices.asSharedFlow()
@@ -32,6 +33,7 @@ class AiCloudUsageReporter(
                 notifiedAt = batch.notifiedAt,
                 notificationBatchId = batch.batchId,
             )
+            backgroundNotifier?.notify(batch)
         }
         return AiCloudUsageReportResult(backgroundBatch = batch)
     }
@@ -42,4 +44,8 @@ class AiCloudUsageReporter(
         } else {
             "已使用 ${event.providerLabel} 处理这次请求。"
         }
+}
+
+interface CloudUsageNotifier {
+    suspend fun notify(batch: CloudUsageNotificationBatch)
 }
