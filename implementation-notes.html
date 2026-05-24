@@ -142,6 +142,22 @@
       <strong>Verification.</strong>
       Ran focused usage and notification tests plus policy/router regression tests; they pass.
     </div>
+    <div class="entry">
+      <strong>Settings and app wiring.</strong>
+      Wired <code>AiRuntimeSettingsRepository</code>, <code>FileAiUsageEventRepository</code>, <code>AiCloudUsageReporter</code>, and the DeepSeek-aware <code>AiServiceClient</code> through <code>AppContainer</code>. <code>MindFlowApp</code> now observes foreground cloud notices and shows a Toast.
+    </div>
+    <div class="entry">
+      <strong>Settings copy and provider selection.</strong>
+      The cloud AI screen now exposes all non-custom built-in providers, including DeepSeek. The description no longer claims background maintenance never uses cloud; it says automatic mode may use cloud by task policy, with low-frequency notification and usage records when content leaves the device.
+    </div>
+    <div class="entry">
+      <strong>Execution mode compatibility.</strong>
+      Settings changes write the new runtime settings repository and continue writing the old on-device field as a compatibility mirror. This keeps existing code paths and tests stable while routing reads move to runtime settings.
+    </div>
+    <div class="entry">
+      <strong>Verification.</strong>
+      Ran <code>SettingsCloudAiProviderTest</code> and existing settings execution-mode persistence tests; they pass.
+    </div>
   </main>
 </body>
 </html>

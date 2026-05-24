@@ -430,7 +430,7 @@ git commit -m "feat: record cloud ai usage"
 - Test: `app/src/test/java/com/mindflow/app/ui/screens/settings/SettingsExecutionModePersistenceTest.kt`
 - Test: `app/src/test/java/com/mindflow/app/ui/screens/settings/SettingsCloudAiProviderTest.kt`
 
-- [ ] **Step 1: Write failing settings provider test**
+- [x] **Step 1: Write failing settings provider test**
 
 ```kotlin
 @Test
@@ -442,7 +442,7 @@ fun deepSeekPresetSetsProviderBaseUrlAndDefaultModel() {
 }
 ```
 
-- [ ] **Step 2: Run settings test and verify red**
+- [x] **Step 2: Run settings test and verify red**
 
 Run:
 
@@ -452,15 +452,15 @@ Run:
 
 Expected: FAIL because DeepSeek preset is not exposed.
 
-- [ ] **Step 3: Implement settings UI/provider wiring**
+- [x] **Step 3: Implement settings UI/provider wiring**
 
 Expose all non-custom presets in `ProviderPresetSelector`, save `providerId`, update cloud copy to say background cloud can happen in automatic mode with low-frequency notice and usage records.
 
-- [ ] **Step 4: Wire reporter into app root Toast**
+- [x] **Step 4: Wire reporter into app root Toast**
 
 Add reporter to `MindFlowApp` parameters and use `LaunchedEffect` to collect foreground notice text and show Toast.
 
-- [ ] **Step 5: Run settings tests and verify green**
+- [x] **Step 5: Run settings tests and verify green**
 
 Run:
 

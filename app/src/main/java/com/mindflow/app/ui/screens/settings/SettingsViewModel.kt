@@ -23,6 +23,7 @@ import com.mindflow.app.data.model.TimeBankSettings
 import com.mindflow.app.data.reminder.ReminderScheduler
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AiRuntimeSettingsRepository
 import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
@@ -109,6 +110,22 @@ data class SettingsUiState(
         )
 }
 
+internal fun SettingsUiState.applyAiProviderPreset(value: AiProviderPreset): SettingsUiState =
+    when (value) {
+        AiProviderPreset.OPENAI,
+        AiProviderPreset.ZHIPU,
+        AiProviderPreset.DEEPSEEK,
+        -> copy(
+            aiProviderPreset = value,
+            baseUrl = value.baseUrl,
+            model = value.defaultModel,
+        )
+
+        AiProviderPreset.CUSTOM -> copy(
+            aiProviderPreset = value,
+        )
+    }
+
 internal fun SettingsUiState.toOnDeviceModelSettings(): OnDeviceModelSettings = OnDeviceModelSettings(
     modelLabel = localModelLabel,
     modelDownloadUrl = localModelDownloadUrl,
@@ -139,6 +156,7 @@ sealed interface SettingsEvent {
 class SettingsViewModel(
     private val noteRepository: NoteRepository,
     private val aiSettingsRepository: AiSettingsRepository,
+    private val aiRuntimeSettingsRepository: AiRuntimeSettingsRepository,
     private val cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     private val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     private val reminderSettingsRepository: ReminderSettingsRepository,
@@ -171,7 +189,9 @@ class SettingsViewModel(
                         apiKey = settings.apiKey,
                         baseUrl = settings.baseUrl,
                         model = settings.model,
-                        aiProviderPreset = AiProviderPreset.fromBaseUrl(settings.baseUrl),
+                        aiProviderPreset = AiProviderPreset.fromProviderId(settings.providerId)
+                            .takeIf { preset -> preset != AiProviderPreset.CUSTOM }
+                            ?: AiProviderPreset.fromBaseUrl(settings.baseUrl),
                         aiEnabled = settings.aiEnabled,
                         isConfigured = settings.isConfigured,
                         aiLastVerifiedAt = settings.lastVerifiedAt,
@@ -186,12 +206,18 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            aiRuntimeSettingsRepository.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(aiExecutionMode = settings.executionMode)
+                }
+            }
+        }
+        viewModelScope.launch {
             onDeviceModelSettingsRepository.settings.collectLatest { settings ->
                 _uiState.update {
                     it.copy(
                         localModelLabel = settings.modelLabel,
                         localModelDownloadUrl = settings.modelDownloadUrl,
-                        aiExecutionMode = settings.executionMode,
                         localModelPath = settings.localModelPath,
                         localModelDownloadedBytes = settings.downloadedBytes,
                         localModelDownloadTargetBytes = settings.downloadTargetBytes,
@@ -292,22 +318,7 @@ class SettingsViewModel(
     }
 
     fun onAiProviderPresetChange(value: AiProviderPreset) {
-        _uiState.update { state ->
-            when (value) {
-                AiProviderPreset.OPENAI,
-                AiProviderPreset.ZHIPU,
-                AiProviderPreset.DEEPSEEK,
-                -> state.copy(
-                    aiProviderPreset = value,
-                    baseUrl = value.baseUrl,
-                    model = value.defaultModel,
-                )
-
-                AiProviderPreset.CUSTOM -> state.copy(
-                    aiProviderPreset = value,
-                )
-            }
-        }
+        _uiState.update { state -> state.applyAiProviderPreset(value) }
     }
 
     fun onLocalModelDownloadUrlChange(value: String) {
@@ -321,6 +332,8 @@ class SettingsViewModel(
                 mode = value,
                 repository = onDeviceModelSettingsRepository,
             )
+            val runtimeSettings = aiRuntimeSettingsRepository.getCurrent()
+            aiRuntimeSettingsRepository.save(runtimeSettings.copy(executionMode = value))
             _uiState.value = nextState
         }
     }
@@ -396,6 +409,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isSavingAi = true) }
             aiSettingsRepository.save(
                 AiSettings(
+                    providerId = state.aiProviderPreset.providerId,
                     apiKey = state.apiKey,
                     baseUrl = state.baseUrl,
                     model = state.model,
@@ -414,6 +428,7 @@ class SettingsViewModel(
     fun testAiConnection() {
         val state = _uiState.value
         val testSettings = AiSettings(
+            providerId = state.aiProviderPreset.providerId,
             apiKey = state.apiKey,
             baseUrl = state.baseUrl,
             model = state.model,
@@ -634,6 +649,7 @@ class SettingsViewModel(
         fun factory(
             noteRepository: NoteRepository,
             aiSettingsRepository: AiSettingsRepository,
+            aiRuntimeSettingsRepository: AiRuntimeSettingsRepository,
             cloudBackupSettingsRepository: CloudBackupSettingsRepository,
             onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
             reminderSettingsRepository: ReminderSettingsRepository,
@@ -651,6 +667,7 @@ class SettingsViewModel(
                 SettingsViewModel(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
+                    aiRuntimeSettingsRepository = aiRuntimeSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,

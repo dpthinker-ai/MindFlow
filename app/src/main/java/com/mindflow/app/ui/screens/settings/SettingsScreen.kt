@@ -98,6 +98,7 @@ import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
 import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
+import com.mindflow.app.data.settings.AiRuntimeSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
@@ -139,6 +140,7 @@ private enum class SettingsDestination {
 fun SettingsRoute(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
+    aiRuntimeSettingsRepository: AiRuntimeSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
@@ -156,6 +158,7 @@ fun SettingsRoute(
         factory = SettingsViewModel.factory(
             noteRepository = noteRepository,
             aiSettingsRepository = aiSettingsRepository,
+            aiRuntimeSettingsRepository = aiRuntimeSettingsRepository,
             cloudBackupSettingsRepository = cloudBackupSettingsRepository,
             onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
             reminderSettingsRepository = reminderSettingsRepository,
@@ -840,7 +843,7 @@ internal fun SettingsUiState.isCloudAiUsable(): Boolean =
 
 internal fun SettingsUiState.cloudAiSwitchDescription(): String = when {
     !isConfigured -> "补全 API Key 并保存后，才能启用云端能力"
-    aiEnabled -> "会用于显式的云端升级、编辑整理和方向判断；不会静默上传本地维护任务"
+    aiEnabled -> "自动模式可按策略使用云端；内容离开设备会低频通知并记录"
     else -> "关闭后只用本地模型和规则整理"
 }
 
@@ -1640,6 +1643,7 @@ private fun AiSettingsScreen(
     onClearAi: () -> Unit,
 ) {
     val currentFingerprint = AiSettings.fingerprint(
+        providerId = uiState.aiProviderPreset.providerId,
         apiKey = uiState.apiKey,
         baseUrl = uiState.baseUrl,
         model = uiState.model,
@@ -1682,7 +1686,7 @@ private fun AiSettingsScreen(
         item {
             SettingsSection(
                 title = "模型配置",
-                description = "这里的模型只在显式云端升级动作里使用，不会静默替本地维护跑云端；所有结果仍会回写到本地知识层。",
+                description = "自动模式会按任务策略选择本地或云端；内容离开设备会低频通知并写入 AI 使用记录。",
             ) {
                 ProviderPresetSelector(
                     selectedPreset = uiState.aiProviderPreset,
@@ -1772,7 +1776,7 @@ private fun ProviderPresetSelector(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         GridTwo {
-            AiProviderPreset.entries.take(2).forEach { preset ->
+            AiProviderPreset.entries.filter { preset -> preset != AiProviderPreset.CUSTOM }.forEach { preset ->
                 FilterChip(
                     selected = selectedPreset == preset,
                     onClick = { onSelect(preset) },

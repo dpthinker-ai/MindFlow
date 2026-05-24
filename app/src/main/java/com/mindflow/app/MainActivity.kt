@@ -33,7 +33,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mindflow.app.data.model.AppThemeMode
 import com.mindflow.app.data.model.AppearanceSettings
 import com.mindflow.app.data.repository.NoteRepository
+import com.mindflow.app.data.ai.AiCloudUsageReporter
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AiRuntimeSettingsRepository
 import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
@@ -67,6 +69,8 @@ class MainActivity : ComponentActivity() {
         val appContainer = (application as MindFlowApplication).appContainer
         val repository: NoteRepository = appContainer.noteRepository
         val aiSettingsRepository: AiSettingsRepository = appContainer.aiSettingsRepository
+        val aiRuntimeSettingsRepository: AiRuntimeSettingsRepository = appContainer.aiRuntimeSettingsRepository
+        val aiCloudUsageReporter: AiCloudUsageReporter = appContainer.aiCloudUsageReporter
         val cloudBackupSettingsRepository: CloudBackupSettingsRepository =
             appContainer.cloudBackupSettingsRepository
         val onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository =
@@ -135,6 +139,8 @@ class MainActivity : ComponentActivity() {
                 MindFlowApp(
                     noteRepository = repository,
                     aiSettingsRepository = aiSettingsRepository,
+                    aiCloudUsageReporter = aiCloudUsageReporter,
+                    aiRuntimeSettingsRepository = aiRuntimeSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,

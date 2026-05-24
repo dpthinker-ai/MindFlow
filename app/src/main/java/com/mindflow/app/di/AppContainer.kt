@@ -41,6 +41,7 @@ import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAiSettingsRepository
+import com.mindflow.app.data.settings.PreferencesAiRuntimeSettingsRepository
 import com.mindflow.app.data.settings.PreferencesAppearanceSettingsRepository
 import com.mindflow.app.data.settings.PreferencesCloudBackupSettingsRepository
 import com.mindflow.app.data.settings.PreferencesOnDeviceModelSettingsRepository
@@ -65,8 +66,12 @@ import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
 import com.mindflow.app.data.ai.AiTaskRouter
 import com.mindflow.app.data.ai.AiTaskTraceRecorder
+import com.mindflow.app.data.ai.AiCloudUsageReporter
+import com.mindflow.app.data.ai.CloudUsageNotificationAggregator
 import com.mindflow.app.data.ai.CloudAiTaskProvider
+import com.mindflow.app.data.ai.FileAiUsageEventRepository
 import com.mindflow.app.data.ai.OnDeviceAiTaskProvider
+import com.mindflow.app.data.ai.cloud.CloudAiProviderRegistry
 import com.mindflow.app.data.topic.AiFolderClassifier
 import com.mindflow.app.data.topic.AiTagExtractor
 import com.mindflow.app.data.topic.CombinedTagExtractor
@@ -103,11 +108,15 @@ class AppContainer(context: Context) {
         com.mindflow.app.data.local.MindFlowDatabase.MIGRATION_7_8,
     ).build()
 
+    private val defaultAiBaseUrl = BuildConfig.AI_BASE_URL
+    private val defaultAiProviderId = CloudAiProviderRegistry.resolveProviderId(defaultAiBaseUrl)
+
     val aiSettingsRepository: AiSettingsRepository = PreferencesAiSettingsRepository(
         context = context.applicationContext,
         defaultSettings = AiSettings(
+            providerId = defaultAiProviderId,
             apiKey = BuildConfig.AI_API_KEY,
-            baseUrl = BuildConfig.AI_BASE_URL,
+            baseUrl = defaultAiBaseUrl,
             model = BuildConfig.AI_MODEL,
         ),
     )
@@ -121,6 +130,11 @@ class AppContainer(context: Context) {
         PreferencesOnDeviceModelSettingsRepository(
             context = context.applicationContext,
         )
+
+    val aiRuntimeSettingsRepository = PreferencesAiRuntimeSettingsRepository(
+        context = context.applicationContext,
+        legacyExecutionMode = { onDeviceModelSettingsRepository.getCurrent().executionMode },
+    )
 
     val reminderSettingsRepository: ReminderSettingsRepository =
         PreferencesReminderSettingsRepository(
@@ -146,7 +160,16 @@ class AppContainer(context: Context) {
         context = context.applicationContext,
     )
 
-    val aiServiceClient = AiServiceClient()
+    val aiUsageEventRepository = FileAiUsageEventRepository(
+        File(context.applicationContext.filesDir, "ai-usage"),
+    )
+    val aiCloudUsageReporter = AiCloudUsageReporter(
+        repository = aiUsageEventRepository,
+        notificationAggregator = CloudUsageNotificationAggregator(),
+    )
+    val aiServiceClient = AiServiceClient(
+        usageReporter = aiCloudUsageReporter,
+    )
     val onDeviceAiClient: OnDeviceAiClient = LiteRtLmOnDeviceAiClient(
         context = context.applicationContext,
     )
@@ -184,7 +207,7 @@ class AppContainer(context: Context) {
     }
 
     val aiTaskRouter = AiTaskRouter(
-        resolveMode = { onDeviceModelSettingsRepository.getCurrent().executionMode },
+        resolveMode = { aiRuntimeSettingsRepository.getCurrent().executionMode },
         onDeviceProvider = OnDeviceAiTaskProvider(
             settingsRepository = onDeviceModelSettingsRepository,
             client = onDeviceAiClient,
@@ -194,6 +217,13 @@ class AppContainer(context: Context) {
             client = aiServiceClient,
         ),
         traceRecorder = aiTaskTraceRecorder,
+        resolveRuntimeSettings = { aiRuntimeSettingsRepository.getCurrent() },
+        backgroundCloudUsageSnapshot = {
+            val now = System.currentTimeMillis()
+            val dayStart = now - now % DAY_MS
+            val summary = aiUsageEventRepository.todaySummary(dayStart, dayStart + DAY_MS)
+            summary.backgroundRequests to summary.tokens
+        },
     )
 
     val contentPolishPlanner = ContentPolishPlanner(
@@ -443,5 +473,9 @@ class AppContainer(context: Context) {
             if (!StartupOnDeviceWarmUpPolicy.shouldWarmUpAtStartup(settings)) return@launch
             onDeviceAiClient.warmUp(settings)
         }
+    }
+
+    private companion object {
+        const val DAY_MS = 86_400_000L
     }
 }

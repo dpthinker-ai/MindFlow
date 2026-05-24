@@ -1,6 +1,7 @@
 package com.mindflow.app.ui
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,6 +50,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mindflow.app.data.backup.CloudBackupCoordinator
+import com.mindflow.app.data.ai.AiCloudUsageReporter
 import com.mindflow.app.data.action.NextActionPlanner
 import com.mindflow.app.data.brief.DailyBriefPlanner
 import com.mindflow.app.data.connect.FusionSuggestionPlanner
@@ -63,6 +66,7 @@ import com.mindflow.app.data.reviewchat.ReviewChatPlanner
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
 import com.mindflow.app.data.repository.NoteRepository
 import com.mindflow.app.data.settings.AiSettingsRepository
+import com.mindflow.app.data.settings.AiRuntimeSettingsRepository
 import com.mindflow.app.data.settings.AppearanceSettingsRepository
 import com.mindflow.app.data.settings.CloudBackupSettingsRepository
 import com.mindflow.app.data.settings.OnDeviceModelSettingsRepository
@@ -115,6 +119,8 @@ private data class TopLevelDestination(
 fun MindFlowApp(
     noteRepository: NoteRepository,
     aiSettingsRepository: AiSettingsRepository,
+    aiCloudUsageReporter: AiCloudUsageReporter,
+    aiRuntimeSettingsRepository: AiRuntimeSettingsRepository,
     cloudBackupSettingsRepository: CloudBackupSettingsRepository,
     onDeviceModelSettingsRepository: OnDeviceModelSettingsRepository,
     reminderSettingsRepository: ReminderSettingsRepository,
@@ -150,6 +156,7 @@ fun MindFlowApp(
     launchRequest: MindFlowLaunchRequest?,
     onLaunchRequestConsumed: (Long) -> Unit,
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -172,6 +179,12 @@ fun MindFlowApp(
             localKnowledgeBrainPlanner = localKnowledgeBrainPlanner,
         ),
     )
+
+    LaunchedEffect(aiCloudUsageReporter) {
+        aiCloudUsageReporter.foregroundNotices.collect { notice ->
+            Toast.makeText(context, notice, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     fun openCapture(seed: CaptureSeed = CaptureSeed()) {
         captureSeeds[seed.requestId] = seed
@@ -433,6 +446,7 @@ fun MindFlowApp(
                 SettingsRoute(
                     noteRepository = noteRepository,
                     aiSettingsRepository = aiSettingsRepository,
+                    aiRuntimeSettingsRepository = aiRuntimeSettingsRepository,
                     cloudBackupSettingsRepository = cloudBackupSettingsRepository,
                     onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
                     reminderSettingsRepository = reminderSettingsRepository,
