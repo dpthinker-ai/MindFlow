@@ -54,13 +54,6 @@ import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.settings.PreferencesTimeBankSettingsRepository
 import com.mindflow.app.data.settings.PreferencesThreadPreferencesRepository
 import com.mindflow.app.data.settings.ReminderSettingsRepository
-import com.mindflow.app.data.skills.AssetSkillRegistry
-import com.mindflow.app.data.skills.DefaultNativeToolBridge
-import com.mindflow.app.data.skills.DefaultSkillRuntime
-import com.mindflow.app.data.skills.SkillRegistry
-import com.mindflow.app.data.skills.SkillRuntime
-import com.mindflow.app.data.skills.WebViewJsSkillExecutor
-import com.mindflow.app.data.skills.listPromptLines
 import com.mindflow.app.data.settings.TimeBankSettingsRepository
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
 import com.mindflow.app.data.topic.AiServiceClient
@@ -187,26 +180,6 @@ class AppContainer(context: Context) {
     private val aiTaskTraceRecorder = AiTaskTraceRecorder(
         File(context.applicationContext.filesDir, "ai-traces"),
     )
-
-    val skillRegistry: SkillRegistry = AssetSkillRegistry(
-        context = context.applicationContext,
-    )
-
-    val nativeToolBridge by lazy {
-        DefaultNativeToolBridge(
-            loadAllNotes = { noteRepository.observeAllNotes().first() },
-        )
-    }
-
-    val skillRuntime: SkillRuntime by lazy {
-        DefaultSkillRuntime(
-            registry = skillRegistry,
-            jsSkillExecutor = WebViewJsSkillExecutor(
-                context = context.applicationContext,
-                nativeToolBridge = nativeToolBridge,
-            ),
-        )
-    }
 
     val aiTaskRouter = AiTaskRouter(
         resolveMode = { aiRuntimeSettingsRepository.getCurrent().executionMode },
@@ -434,10 +407,6 @@ class AppContainer(context: Context) {
                 prompt = prompt,
             )
         },
-        listAvailableSkillSnippets = {
-            skillRegistry.listPromptLines()
-        },
-        skillRuntime = skillRuntime,
         runCloud = { prompt ->
             aiServiceClient.generateReviewChatReply(
                 settings = aiSettingsRepository.getCurrent(),

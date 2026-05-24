@@ -16,6 +16,9 @@ internal object ReviewChatQueryParser {
         val fallbackWantsCategories = wantsReviewChatCategories(question)
         val fallbackWantsBriefAnswer = wantsReviewChatBriefAnswer(question)
         val fallbackIsExternalQuestion = reviewChatExternalHints.any(question::contains)
+        val fallbackIntent = classifyReviewChatIntent(question)
+        val fallbackWantsAnalysis =
+            fallbackIntent != ReviewChatIntent.RECALL || reviewChatDeepAnalysisHints.any(question::contains)
         val fallbackEntityTerms = modelPlan?.entityTerms ?: extractReviewChatEntityTerms(question)
         val fallbackIsTopicSummary = isReviewChatTopicSummaryQuestion(
             question = question,
@@ -32,6 +35,7 @@ internal object ReviewChatQueryParser {
             fallbackWantsTimelineAnchor -> ReviewChatQuestionMode.TIMELINE_ANCHOR
             fallbackWantsCount && !fallbackWantsCategories -> ReviewChatQuestionMode.COLLECTION_OVERVIEW
             fallbackIsTopicSummary -> ReviewChatQuestionMode.RECORD_LOOKUP
+            fallbackWantsAnalysis -> ReviewChatQuestionMode.ANALYSIS
             requestedDate != null || requestedMonth != null || requestedRange != null || fallbackWantsCategories ||
                 listOf("哪几条", "有哪些记录", "我只看", "都记了什么", "写了什么").any(question::contains) ->
                 ReviewChatQuestionMode.RECORD_LOOKUP
@@ -46,6 +50,7 @@ internal object ReviewChatQueryParser {
             fallbackWantsCount -> ReviewChatQueryOperation.COUNT
             fallbackIsTopicSummary && plannedOperation == ReviewChatQueryOperation.ANALYZE -> ReviewChatQueryOperation.LIST
             plannedOperation == ReviewChatQueryOperation.ANALYZE &&
+                !fallbackWantsAnalysis &&
                 (requestedDate != null || requestedMonth != null || requestedRange != null) -> ReviewChatQueryOperation.LIST
             else -> plannedOperation
         }

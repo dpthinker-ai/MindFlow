@@ -27,13 +27,13 @@ class ReviewChatPromptRegressionTest {
         val cloud = ReviewChatPromptFactory.cloud(packet)
         val onDevice = ReviewChatPromptFactory.onDevice(packet)
 
-        assertThat(cloud).contains("SkillResult：")
-        assertThat(cloud).contains("coverage｜范围内 2 条；命中 2 条；已处理 2 条；完整覆盖=true")
+        assertThat(cloud).doesNotContain("SkillResult：")
+        assertThat(cloud).doesNotContain("可用技能：")
         assertThat(cloud).contains("只把简短总结写进 summary，不要创建 `依据`、`下一步` 或 `记录` section")
-        assertThat(cloud).contains("record｜")
+        assertThat(cloud).contains("人生是多线程运行")
         assertThat(onDevice.systemInstruction).contains("不要创建 `依据`、`下一步` 或 `记录` section")
-        assertThat(onDevice.userMessage).contains("SkillResult：")
-        assertThat(onDevice.extraContext["skill_matched_count"]).isEqualTo("2")
+        assertThat(onDevice.userMessage).doesNotContain("SkillResult：")
+        assertThat(onDevice.extraContext["skill_matched_count"]).isEmpty()
     }
 
     @Test
@@ -52,13 +52,14 @@ class ReviewChatPromptRegressionTest {
         val onDevice = ReviewChatPromptFactory.onDevice(packet)
 
         assertThat(packet.wantsCategories).isTrue()
-        assertThat(cloud).contains("coverage｜范围内 4 条；命中 4 条；已处理 4 条；完整覆盖=true")
+        assertThat(cloud).doesNotContain("SkillResult：")
         assertThat(cloud).contains("每个数组元素只放一条 `类别名称：包含的信息`")
         assertThat(cloud).contains("不要把多个类别塞进同一个 items 字符串")
         assertThat(cloud).contains("分类范围｜当前分类必须覆盖 4 条命中记录")
         assertThat(onDevice.systemInstruction).contains("每个数组元素只放一条 `类别名称：包含的信息`")
         assertThat(onDevice.systemInstruction).contains("不要把多个类别塞进同一个 items 字符串")
-        assertThat(onDevice.userMessage).contains("coverage｜范围内 4 条；命中 4 条；已处理 4 条；完整覆盖=true")
+        assertThat(onDevice.userMessage).doesNotContain("SkillResult：")
+        assertThat(onDevice.userMessage).contains("分类范围｜当前分类必须覆盖 4 条命中记录")
     }
 
     @Test
@@ -86,7 +87,7 @@ class ReviewChatPromptRegressionTest {
     }
 
     @Test
-    fun historyPromptCarriesAvailableSkillSummariesBeforeSkillResult() {
+    fun historyPromptIgnoresAvailableSkillSummaries() {
         val packet = packet(
             question = "今天记录了什么？",
             notes = listOf(note(1L, "产品方向", "今天讨论了推荐链路")),
@@ -96,11 +97,11 @@ class ReviewChatPromptRegressionTest {
         val cloud = ReviewChatPromptFactory.cloud(packet)
         val onDevice = ReviewChatPromptFactory.onDevice(packet)
 
-        assertThat(cloud).contains("可用技能：")
-        assertThat(cloud).contains("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
-        assertThat(cloud.indexOf("可用技能：")).isLessThan(cloud.indexOf("SkillResult："))
-        assertThat(onDevice.userMessage).contains("可用技能：")
-        assertThat(onDevice.extraContext["available_skill_count"]).isEqualTo("1")
+        assertThat(cloud).doesNotContain("可用技能：")
+        assertThat(cloud).doesNotContain("history-query")
+        assertThat(cloud).doesNotContain("SkillResult：")
+        assertThat(onDevice.userMessage).doesNotContain("可用技能：")
+        assertThat(onDevice.extraContext["available_skill_count"]).isEqualTo("0")
     }
 
     @Test

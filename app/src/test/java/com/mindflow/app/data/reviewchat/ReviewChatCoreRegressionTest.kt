@@ -31,8 +31,7 @@ class ReviewChatCoreRegressionTest {
         assertThat(packet.collectionOverview?.totalCount).isEqualTo(3)
         assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜全部历史的记录共 3 条")
         assertThat(packet.rawNoteEvidence).isEmpty()
-        assertThat(packet.skillResult?.facts?.coverage?.scopedCount).isEqualTo(3)
-        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(3)
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test
@@ -60,7 +59,7 @@ class ReviewChatCoreRegressionTest {
         ).inOrder()
         assertThat(packet.querySummarySnippets).doesNotContain("主题｜分类")
         assertThat(packet.deterministicAnswerSnippets).contains("分类范围｜当前分类必须覆盖 5 条命中记录")
-        assertThat(packet.skillResult?.facts?.coverage?.complete).isTrue()
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test
@@ -90,7 +89,7 @@ class ReviewChatCoreRegressionTest {
             "人生是多线程运行",
             "社交边界与自我保护原则",
         )
-        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(2)
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test

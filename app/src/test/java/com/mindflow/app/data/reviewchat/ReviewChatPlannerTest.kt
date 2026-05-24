@@ -201,7 +201,7 @@ class ReviewChatPlannerTest {
             "社交边界与自我保护原则",
         )
         assertThat(packet.rawNoteEvidence.map { it.title }).doesNotContain("前端输入框问题")
-        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(2)
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test
@@ -250,7 +250,7 @@ class ReviewChatPlannerTest {
         assertThat(packet.categoryDigestSnippets).isNotEmpty()
         assertThat(packet.deterministicAnswerSnippets).contains("直接答案｜关于人生经验的记录共 3 条")
         assertThat(packet.deterministicAnswerSnippets).contains("分类范围｜当前分类必须覆盖 3 条命中记录")
-        assertThat(packet.skillResult?.facts?.coverage?.matchedCount).isEqualTo(3)
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test
@@ -280,10 +280,16 @@ class ReviewChatPlannerTest {
 
     @Test
     fun buildReviewChatContextPacket_usesRawInputsAndKeepsKnowledgeLayerOutOfChat() {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val recentStart = today.minusDays(11).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val packet = buildReviewChatContextPacket(
             question = "把最近两周的矛盾串一下",
             intent = ReviewChatIntent.SYNTHESIZE,
-            notes = List(12) { index -> sampleNote(index.toLong() + 1L, "主题$index", "正文$index") },
+            notes = List(12) { index ->
+                val timestamp = recentStart + index * 86_400_000L
+                sampleNote(index.toLong() + 1L, "主题$index", "正文$index")
+                    .copy(createdAt = timestamp, updatedAt = timestamp)
+            },
             weeklyReview = WeeklyReviewState(lines = listOf("主线", "推进", "重启", "串联")),
             maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(
                 currentJudgement = LocalMaintainerCard(line = "当前判断", support = "判断依据"),
@@ -383,6 +389,34 @@ class ReviewChatPlannerTest {
         assertThat(packet.rawNoteEvidence.map { it.title }).contains("最早主题")
         assertThat(packet.rawNoteEvidence.map { it.title }).contains("最近主题B")
         assertThat(packet.historyAnchors.first().item.title).isEqualTo("最早主题")
+    }
+
+    @Test
+    fun buildReviewChatContextPacket_recentQuestionUsesRecentlyUpdatedNotes() {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val oldCreatedAt = today.minusDays(60).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val recentUpdatedAt = today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val staleUpdatedAt = today.minusDays(45).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val packet = buildReviewChatContextPacket(
+            question = "最近我记录了什么",
+            intent = ReviewChatIntent.RECALL,
+            notes = listOf(
+                sampleNote(1L, "旧创建但最近更新", "这条是最近补充的新信息")
+                    .copy(createdAt = oldCreatedAt, updatedAt = recentUpdatedAt),
+                sampleNote(2L, "很久没动的旧记录", "这条不应该被最近问题统计")
+                    .copy(createdAt = oldCreatedAt, updatedAt = staleUpdatedAt),
+            ),
+            weeklyReview = WeeklyReviewState(lines = emptyList()),
+            maintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
+            wikiSnapshot = DirectionWikiSnapshot(),
+            sessionSummary = "",
+        )
+
+        assertThat(packet.collectionOverview?.scopeLabel).isEqualTo("最近30天")
+        assertThat(packet.collectionOverview?.totalCount).isEqualTo(1)
+        assertThat(packet.rawNoteEvidence.map { it.title }).containsExactly("旧创建但最近更新")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).contains("命中｜共 1 条记录")
+        assertThat(ReviewChatPromptFactory.cloud(packet)).doesNotContain("很久没动的旧记录")
     }
 
     @Test
@@ -509,7 +543,7 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_fullRecordQuestion_executesHistorySkillRuntimeWithContent() = runTest {
+    fun answer_fullRecordQuestion_usesLocalContextWithoutHistorySkillRuntime() = runTest {
         val april10Timestamp = LocalDate.now(ZoneId.systemDefault())
             .withMonth(4)
             .withDayOfMonth(10)
@@ -588,11 +622,10 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
-        assertThat(invocations).hasSize(1)
-        assertThat(invocations.single().data).contains("\"includeContent\":true")
-        assertThat(result.skillWebView?.url).contains("result-card.html?matched=1")
-        assertThat(capturedPrompts.single()).contains("skill runtime 返回的完整原文")
-        assertThat(capturedPrompts.single()).doesNotContain("旧路径里的完整原文")
+        assertThat(invocations).isEmpty()
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.single()).contains("旧路径里的完整原文")
+        assertThat(capturedPrompts.single()).doesNotContain("skill runtime 返回的完整原文")
     }
 
     @Test
@@ -800,7 +833,7 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_countQuestion_executesHistorySkillRuntime() = runTest {
+    fun answer_countQuestion_usesLocalContextWithoutHistorySkillRuntime() = runTest {
         val invocations = mutableListOf<SkillInvocation>()
         val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
@@ -864,17 +897,64 @@ class ReviewChatPlannerTest {
         )
 
         assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
-        assertThat(invocations).hasSize(1)
-        assertThat(invocations.single().skillId).isEqualTo("history-query")
-        assertThat(invocations.single().data).contains("\"intent\":\"count\"")
-        assertThat(capturedPrompts.single()).contains("可用技能：")
-        assertThat(capturedPrompts.single()).contains("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
-        assertThat(capturedPrompts.single()).contains("coverage｜范围内 2 条；命中 2 条；已处理 2 条；完整覆盖=true")
+        assertThat(invocations).isEmpty()
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.single()).doesNotContain("可用技能：")
+        assertThat(capturedPrompts.single()).doesNotContain("SkillResult：")
+        assertThat(capturedPrompts.single()).contains("直接答案｜全部历史的记录共 2 条")
     }
 
     @Test
-    fun answer_categoryLookupPassesCategoryIntentAndQuestionToHistorySkillRuntime() = runTest {
+    fun answer_countQuestion_doesNotExecuteHistorySkillRuntimeOrExposeSkillPrompt() = runTest {
         val invocations = mutableListOf<SkillInvocation>()
+        val capturedPrompts = mutableListOf<String>()
+        val planner = ReviewChatPlanner(
+            loadNotes = {
+                listOf(
+                    sampleNote(1L, "人生建议", "人生是多线程运行"),
+                    sampleNote(2L, "技术实现", "MindFlow 接入 OpenCL"),
+                )
+            },
+            loadWeeklyReview = { WeeklyReviewState(lines = emptyList()) },
+            loadMaintenanceSnapshot = { LocalKnowledgeMaintenanceSnapshot() },
+            loadWikiSnapshot = { DirectionWikiSnapshot() },
+            resolveExecutionMode = { AiExecutionMode.CLOUD_ONLY },
+            isCloudConfigured = { true },
+            isOnDeviceReady = { false },
+            listAvailableSkillSnippets = {
+                listOf("- history-query：Query and visualize MindFlow historical notes.（输出：text/webview）")
+            },
+            skillRuntime = object : SkillRuntime {
+                override suspend fun execute(invocation: SkillInvocation): SkillResult {
+                    invocations += invocation
+                    return SkillResult.failure("回看聊天不应该再执行 history-query Skill")
+                }
+            },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("共 2 条记录。")
+            },
+            runOnDevice = { AiChatResult.Success("不应该调用端侧") },
+        )
+
+        val result = planner.answer(
+            ReviewChatTurnRequest(
+                question = "我总共有多少条记录",
+                priorMessages = emptyList(),
+            ),
+        )
+
+        assertThat(result.provider).isEqualTo(ReviewChatProvider.CLOUD)
+        assertThat(invocations).isEmpty()
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.single()).doesNotContain("可用技能：")
+        assertThat(capturedPrompts.single()).doesNotContain("SkillResult：")
+    }
+
+    @Test
+    fun answer_categoryLookupDoesNotExecuteHistorySkillRuntime() = runTest {
+        val invocations = mutableListOf<SkillInvocation>()
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -917,7 +997,10 @@ class ReviewChatPlannerTest {
                     )
                 }
             },
-            runCloud = { AiChatResult.Success("分类结果") },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("分类结果")
+            },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
 
@@ -928,10 +1011,10 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        assertThat(invocations).hasSize(1)
-        assertThat(invocations.single().data).contains("\"intent\":\"categories\"")
-        assertThat(invocations.single().data).contains("\"query\":\"帮我分析所有的记录，都有哪些分类？\"")
-        assertThat(result.skillWebView?.url).contains("insight-card.html")
+        assertThat(invocations).isEmpty()
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.first()).contains("分类范围｜当前分类必须覆盖 2 条命中记录")
+        assertThat(capturedPrompts.first()).doesNotContain("SkillResult：")
     }
 
     @Test
@@ -955,7 +1038,8 @@ class ReviewChatPlannerTest {
     }
 
     @Test
-    fun answer_categoryLookupKeepsNativeSkillCardWhenRuntimeFails() = runTest {
+    fun answer_categoryLookupKeepsLocalContextWhenRuntimeFails() = runTest {
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -973,7 +1057,10 @@ class ReviewChatPlannerTest {
                 override suspend fun execute(invocation: SkillInvocation): SkillResult =
                     SkillResult.failure("WebView JS skill failed")
             },
-            runCloud = { AiChatResult.Success("分类结果") },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("分类结果")
+            },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
 
@@ -984,14 +1071,14 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        val cardUrl = result.skillWebView?.url.orEmpty()
-        assertThat(cardUrl).contains("insight-card.html?payload=")
-        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"cardType\":\"categories\"")
-        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"matchedCount\":2")
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.first()).contains("分类范围｜当前分类必须覆盖 2 条命中记录")
+        assertThat(capturedPrompts.first()).doesNotContain("SkillResult：")
     }
 
     @Test
-    fun answer_countQuestionKeepsNativeSkillCardWithoutRuntime() = runTest {
+    fun answer_countQuestionDoesNotAttachNativeSkillCardWithoutRuntime() = runTest {
+        val capturedPrompts = mutableListOf<String>()
         val planner = ReviewChatPlanner(
             loadNotes = {
                 listOf(
@@ -1006,7 +1093,10 @@ class ReviewChatPlannerTest {
             isCloudConfigured = { true },
             isOnDeviceReady = { false },
             skillRuntime = null,
-            runCloud = { AiChatResult.Success("共 2 条记录。") },
+            runCloud = { prompt ->
+                capturedPrompts += prompt
+                AiChatResult.Success("共 2 条记录。")
+            },
             runOnDevice = { AiChatResult.Success("不应该调用端侧") },
         )
 
@@ -1017,10 +1107,9 @@ class ReviewChatPlannerTest {
             ),
         )
 
-        val cardUrl = result.skillWebView?.url.orEmpty()
-        assertThat(cardUrl).contains("insight-card.html?payload=")
-        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"cardType\":\"count\"")
-        assertThat(decodeSkillCardPayload(cardUrl)).contains("\"matchedCount\":2")
+        assertThat(result.skillWebView).isNull()
+        assertThat(capturedPrompts.single()).contains("直接答案｜全部历史的记录共 2 条")
+        assertThat(capturedPrompts.single()).doesNotContain("SkillResult：")
     }
 
     @Test
@@ -1748,18 +1837,11 @@ class ReviewChatPlannerTest {
         assertThat(packet.categoryDigestSnippets.first()).contains("产品设计")
         assertThat(packet.categoryDigestSnippets.first()).contains("精神健康")
         assertThat(packet.rawNoteEvidence).hasSize(8)
-        assertThat(packet.skillResult).isNotNull()
-        assertThat(packet.skillResult!!.invocation.skillId).isEqualTo("history-query")
-        assertThat(packet.skillResult!!.facts.coverage.scopedCount).isEqualTo(8)
-        assertThat(packet.skillResult!!.facts.coverage.matchedCount).isEqualTo(8)
-        assertThat(packet.skillResult!!.facts.coverage.processedCount).isEqualTo(8)
-        assertThat(packet.skillResult!!.facts.coverage.complete).isTrue()
-        assertThat(packet.skillResult!!.responseRules)
-            .contains("分类必须覆盖 coverage 里的全部命中记录，每个类别单独成一条。")
+        assertThat(packet.skillResult).isNull()
     }
 
     @Test
-    fun reviewChatPromptFactory_cloudAndOnDeviceShareHistorySkillCoverage() {
+    fun reviewChatPromptFactory_cloudAndOnDeviceUseLocalCoverageWithoutSkillPrompt() {
         val packet = buildReviewChatContextPacket(
             question = "帮我分析总结下所有的记录，看看都有哪些类别。",
             intent = ReviewChatIntent.RECALL,
@@ -1777,15 +1859,13 @@ class ReviewChatPlannerTest {
 
         val cloudPrompt = ReviewChatPromptFactory.cloud(packet)
         val onDevicePrompt = ReviewChatPromptFactory.onDevice(packet)
-        val expectedCoverage = "coverage｜范围内 4 条；命中 4 条；已处理 4 条；完整覆盖=true"
-
-        assertThat(cloudPrompt).contains("SkillResult：")
-        assertThat(cloudPrompt).contains(expectedCoverage)
-        assertThat(cloudPrompt).contains("rule｜只回答用户当前问题，不要主动添加“依据”或“下一步”。")
-        assertThat(onDevicePrompt.userMessage).contains("SkillResult：")
-        assertThat(onDevicePrompt.userMessage).contains(expectedCoverage)
-        assertThat(onDevicePrompt.extraContext["skill_id"]).isEqualTo("history-query")
-        assertThat(onDevicePrompt.extraContext["skill_matched_count"]).isEqualTo("4")
+        assertThat(cloudPrompt).doesNotContain("SkillResult：")
+        assertThat(cloudPrompt).contains("命中｜共 4 条记录")
+        assertThat(cloudPrompt).contains("分类范围｜当前分类必须覆盖 4 条命中记录")
+        assertThat(onDevicePrompt.userMessage).doesNotContain("SkillResult：")
+        assertThat(onDevicePrompt.userMessage).contains("分类范围｜当前分类必须覆盖 4 条命中记录")
+        assertThat(onDevicePrompt.extraContext["skill_id"]).isEmpty()
+        assertThat(onDevicePrompt.extraContext["skill_matched_count"]).isEmpty()
     }
 
     @Test
@@ -1942,7 +2022,8 @@ class ReviewChatPlannerTest {
             isOnDeviceReady = { false },
             runCloud = { prompt ->
                 cloudCalls += 1
-                assertThat(prompt).contains("SkillResult：")
+                assertThat(prompt).doesNotContain("SkillResult：")
+                assertThat(prompt).contains("分类范围｜当前分类必须覆盖 12 条命中记录")
                 assertThat(prompt).doesNotContain("当前批次：")
                 assertThat(prompt).doesNotContain("你在合并多批个人历史记录的类别候选")
                 AiChatResult.Success(

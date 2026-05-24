@@ -291,7 +291,7 @@ internal fun buildReviewChatContextPacket(
 ): ReviewChatContextPacket {
     val parsedQuery = (parsedQueryOverride ?: ReviewChatQueryParser.parse(question)).copy(intent = intent)
     val corpusContext = corpusContextOverride ?: ReviewChatCorpusQueryEngine.build(parsedQuery, notes)
-    val skillResult = skillResultOverride ?: ReviewChatHistorySkill.run(parsedQuery, corpusContext)
+    val skillResult = skillResultOverride
     val effectiveRawNoteDetails = rawNoteDetails.ifEmpty { corpusContext.rawNoteDetails }
     val knowledgeBaseSnippets = emptyList<String>()
     val wikiSnippets = emptyList<String>()
@@ -324,7 +324,7 @@ internal fun buildReviewChatContextPacket(
         },
         memoryDigestSnippets = emptyList(),
         memoryThreadSnippets = emptyList(),
-        availableSkillSnippets = if (parsedQuery.isExternalQuestion) emptyList() else availableSkillSnippets,
+        availableSkillSnippets = emptyList(),
         knowledgeBaseSnippets = knowledgeBaseSnippets,
         wikiSnippets = wikiSnippets,
         rawNoteEvidence = rawNoteEvidenceOverride ?: corpusContext.rawNoteEvidence,
@@ -736,11 +736,13 @@ internal fun buildCollectionOverview(
         )
     }
 
-    val sorted = scopedNotes.sortedBy(NoteEntity::createdAt)
-    val earliest = sorted.first().createdLocalDate().format(reviewChatDateFormatter)
-    val latest = sorted.last().createdLocalDate().format(reviewChatDateFormatter)
-    val last7DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(7) }
-    val last30DaysCount = notes.count { it.createdLocalDate() >= today.minusDays(30) }
+    val rangeScope = requestedDateRangeForReviewChat(question)
+    val useActivityDate = rangeScope?.usesActivityDate == true
+    val sorted = scopedNotes.sortedBy { note -> note.scopeEpochMillis(useActivityDate) }
+    val earliest = sorted.first().scopeLocalDate(useActivityDate).format(reviewChatDateFormatter)
+    val latest = sorted.last().scopeLocalDate(useActivityDate).format(reviewChatDateFormatter)
+    val last7DaysCount = notes.count { it.activityLocalDate() >= today.minusDays(7) }
+    val last30DaysCount = notes.count { it.activityLocalDate() >= today.minusDays(30) }
 
     return ReviewChatCollectionOverview(
         scopeLabel = scopeLabel,
@@ -760,6 +762,17 @@ internal fun NoteEntity.createdLocalDate(): LocalDate =
     Instant.ofEpochMilli(createdAt)
         .atZone(ZoneId.systemDefault())
         .toLocalDate()
+
+internal fun NoteEntity.activityLocalDate(): LocalDate =
+    Instant.ofEpochMilli(maxOf(createdAt, updatedAt))
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+
+private fun NoteEntity.scopeLocalDate(useActivityDate: Boolean): LocalDate =
+    if (useActivityDate) activityLocalDate() else createdLocalDate()
+
+private fun NoteEntity.scopeEpochMillis(useActivityDate: Boolean): Long =
+    if (useActivityDate) maxOf(createdAt, updatedAt) else createdAt
 
 internal fun scoreQuestionMatch(
     question: String,
@@ -890,8 +903,10 @@ class ReviewChatPlanner(
     private val isCloudConfigured: suspend () -> Boolean,
     private val isOnDeviceReady: suspend () -> Boolean,
     private val planQueryWithCloud: (suspend (String) -> AiChatResult)? = null,
-    private val listAvailableSkillSnippets: () -> List<String> = { emptyList() },
-    private val skillRuntime: SkillRuntime? = null,
+    @Suppress("UNUSED_PARAMETER")
+    listAvailableSkillSnippets: () -> List<String> = { emptyList() },
+    @Suppress("UNUSED_PARAMETER")
+    skillRuntime: SkillRuntime? = null,
     private val runCloud: suspend (String) -> AiChatResult,
     private val runOnDevice: suspend (ReviewChatOnDeviceRequest) -> AiChatResult,
     private val streamOnDevice: (suspend (ReviewChatOnDeviceRequest) -> Flow<String>)? = null,
@@ -1261,61 +1276,8 @@ class ReviewChatPlanner(
                 inProgress = false,
             )
         )
-        val willUseSkillRuntime = skillRuntime != null && ReviewChatHistorySkill.shouldUseRuntime(parsedQuery)
-        if (willUseSkillRuntime) {
-            emitStatus(
-                ReviewChatTurnEvent.Status(
-                    message = "运行 history-query Skill",
-                    stage = ReviewChatTurnStage.RUN_SKILL,
-                    detail = "用 Skill 做结构化统计和卡片数据。",
-                )
-            )
-        }
-        val skillStartedAt = reviewChatClockNow()
-        val runtimeBackedSkillResult = buildRuntimeBackedSkillResult(
-            query = parsedQuery,
-            corpusContext = corpusContext,
-        )
-        if (willUseSkillRuntime) {
-            emitStatus(
-                ReviewChatTurnEvent.Status(
-                    message = if (runtimeBackedSkillResult?.skillWebView != null) {
-                        "生成 Skill 可视化卡片"
-                    } else {
-                        "合并 Skill 检索结果"
-                    },
-                    stage = ReviewChatTurnStage.RUN_SKILL,
-                    detail = if (runtimeBackedSkillResult?.skillWebView != null) {
-                        "已生成可展开的历史结果卡片，耗时 ${formatReviewChatDuration(reviewChatElapsedMs(skillStartedAt))}。"
-                    } else {
-                        "Skill 结果已合并进模型上下文，耗时 ${formatReviewChatDuration(reviewChatElapsedMs(skillStartedAt))}。"
-                    },
-                    inProgress = false,
-                )
-            )
-        }
-        val runtimeRawNoteDetails = runtimeBackedSkillResult
-            ?.rawNoteDetails
-            .orEmpty()
-        val effectiveRawNoteDetails = runtimeRawNoteDetails.ifEmpty {
-            corpusContext.rawNoteDetails
-        }
-        val runtimeRawNoteEvidence = runtimeBackedSkillResult
-            ?.skillResult
-            ?.facts
-            ?.recordPreview
-            .orEmpty()
-            .map { record ->
-                ReviewChatEvidenceItem(
-                    noteId = record.id,
-                    dateLabel = record.dateLabel,
-                    title = record.title,
-                    summary = record.summary,
-                )
-            }
-        val effectiveRawNoteEvidence = runtimeRawNoteEvidence.ifEmpty {
-            corpusContext.rawNoteEvidence
-        }
+        val effectiveRawNoteDetails = corpusContext.rawNoteDetails
+        val effectiveRawNoteEvidence = corpusContext.rawNoteEvidence
         val contextStartedAt = reviewChatClockNow()
         val weeklyReview = weeklyReviewDeferred.await()
         val maintenanceSnapshot = maintenanceSnapshotDeferred.await()
@@ -1333,10 +1295,8 @@ class ReviewChatPlanner(
             priorMessages = request.priorMessages,
             rawNoteDetails = effectiveRawNoteDetails,
             rawNoteEvidenceOverride = effectiveRawNoteEvidence,
-            availableSkillSnippets = listAvailableSkillSnippets(),
             parsedQueryOverride = parsedQuery,
             corpusContextOverride = corpusContext,
-            skillResultOverride = runtimeBackedSkillResult?.skillResult,
         )
         emitStatus(
             ReviewChatTurnEvent.Status(
@@ -1351,37 +1311,8 @@ class ReviewChatPlanner(
             packet = packet,
             directRawNoteDetails = effectiveRawNoteDetails,
             referencedNotes = corpusContext.referencedNotes,
-            skillWebView = runtimeBackedSkillResult?.skillWebView,
+            skillWebView = null,
         )
-    }
-
-    private suspend fun buildRuntimeBackedSkillResult(
-        query: ReviewChatParsedQuery,
-        corpusContext: ReviewChatCorpusContext,
-    ): ReviewChatHistorySkillRuntimeResult? {
-        val legacy = ReviewChatHistorySkill.run(query, corpusContext)
-            ?.let { skillResult ->
-                ReviewChatHistorySkillRuntimeResult(
-                    skillResult = skillResult,
-                    skillWebView = ReviewChatHistorySkill.buildFallbackSkillWebView(query, corpusContext),
-                )
-            }
-        val runtime = skillRuntime
-        if (runtime == null || !ReviewChatHistorySkill.shouldUseRuntime(query)) {
-            return legacy
-        }
-
-        val invocation = ReviewChatHistorySkill.buildRuntimeInvocation(query, corpusContext)
-            ?: return legacy
-        val runtimeResult = runCatching {
-            runtime.execute(invocation)
-        }.getOrNull() ?: return legacy
-
-        return ReviewChatHistorySkill.fromRuntime(
-            query = query,
-            corpusContext = corpusContext,
-            runtimeResult = runtimeResult,
-        ) ?: legacy
     }
 
     private suspend fun resolveParsedQuery(question: String): ReviewChatParsedQuery {
@@ -1718,6 +1649,28 @@ internal fun requestedMonthForReviewChat(question: String): YearMonth? {
 internal fun requestedDateRangeForReviewChat(question: String): ReviewChatTimeScope.Range? {
     val today = LocalDate.now(ZoneId.systemDefault())
     return when {
+        listOf("最近两周", "近两周", "这两周").any(question::contains) -> {
+            ReviewChatTimeScope.Range(
+                start = today.minusDays(13),
+                endInclusive = today,
+                label = "最近两周",
+            )
+        }
+        listOf("最近一周", "近一周", "这一周").any(question::contains) -> {
+            ReviewChatTimeScope.Range(
+                start = today.minusDays(6),
+                endInclusive = today,
+                label = "最近一周",
+            )
+        }
+        listOf("最近一个月", "近一个月", "最近30天", "近30天").any(question::contains) ||
+            (question.contains("最近") && reviewChatScopeHints.any(question::contains)) -> {
+            ReviewChatTimeScope.Range(
+                start = today.minusDays(29),
+                endInclusive = today,
+                label = "最近30天",
+            )
+        }
         "本周末" in question || "这个周末" in question || question.trim() == "周末" -> {
             val saturday = when (today.dayOfWeek.value) {
                 6 -> today
@@ -1747,6 +1700,9 @@ internal fun requestedDateRangeForReviewChat(question: String): ReviewChatTimeSc
     }
 }
 
+private val ReviewChatTimeScope.Range.usesActivityDate: Boolean
+    get() = label.startsWith("最近") || label.startsWith("近") || label.startsWith("这")
+
 internal fun hasRequestedTimeScope(question: String): Boolean =
     requestedDateForReviewChat(question) != null ||
         requestedMonthForReviewChat(question) != null ||
@@ -1767,7 +1723,7 @@ internal fun filterNotesForRequestedScope(
     val requestedRange = requestedDateRangeForReviewChat(question)
     if (requestedRange != null) {
         return notes.filter { created ->
-            val date = created.createdLocalDate()
+            val date = created.scopeLocalDate(requestedRange.usesActivityDate)
             date >= requestedRange.start && date <= requestedRange.endInclusive
         }
     }

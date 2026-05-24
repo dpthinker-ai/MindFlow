@@ -224,6 +224,22 @@
       <strong>Provider usage regression verification.</strong>
       Added a failing regression test for the reported issue: while viewing a dirty DeepSeek draft, an active saved Zhipu settings refresh must not replace DeepSeek's <code>今日请求</code>, <code>今日成功</code>, or <code>今日 Tokens</code>. After the fix, the focused regression, all settings tests, and the full debug unit test suite pass. Rebuilt and installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> without uninstalling or clearing data; package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:15:36</code>. On the phone, DeepSeek showed <code>24 / 23 / 20201</code>, OpenAI showed <code>0 / 0 / 0</code>, and Zhipu showed <code>24 / 0 / 0</code>; therefore the counters are no longer copied as one shared triplet. The matching DeepSeek/Zhipu request count appears to be retained historical provider data, not the previous UI merge overwrite.
     </div>
+    <div class="entry">
+      <strong>Review chat Skill path removal.</strong>
+      After reviewing the slow Review chat behavior, I decided not to keep <code>history-query</code> in the synchronous answer path. <code>ReviewChatPlanner</code> now relies on the local corpus query engine and no longer executes the WebView-backed Skill runtime, no longer exposes <code>可用技能</code> in model prompts, and no longer attaches <code>SkillResult</code> or Skill WebView cards to Review chat turns. The Skill source files are left in place for now because removing the asset/runtime subsystem is a wider cleanup than the reported Review chat latency problem.
+    </div>
+    <div class="entry">
+      <strong>Recent-record scope correction.</strong>
+      Added explicit relative scopes for <code>最近一周</code>, <code>最近两周</code>, and <code>最近30天</code>. These relative scopes use record activity time, defined as <code>max(createdAt, updatedAt)</code>, so a note created earlier but edited recently can be counted and surfaced when the user asks what was recorded recently. Fixed parser precedence so analysis language such as <code>把最近两周的矛盾串一下</code> remains an analysis task while still carrying the recent time scope.
+    </div>
+    <div class="entry">
+      <strong>Review chat regression verification.</strong>
+      Added tests proving that Review chat does not execute the Skill runtime or inject Skill prompt sections, and that <code>最近我记录了什么</code> includes a recently updated note while excluding stale old notes. Ran <code>./gradlew --no-daemon :app:testDebugUnitTest --tests "com.mindflow.app.data.reviewchat.*" --tests "com.mindflow.app.ui.screens.reviewchat.*"</code>; it passed.
+    </div>
+    <div class="entry">
+      <strong>Latest release install.</strong>
+      Ran <code>./gradlew --no-daemon :app:testDebugUnitTest</code> and <code>./gradlew --no-daemon :app:assembleRelease</code>; both passed. The release build still prints the known R8 Kotlin metadata warnings but exits successfully. Installed <code>app/build/outputs/apk/release/app-release.apk</code> to phone <code>AWPQUT6116001779</code> with <code>adb install -r</code>; install succeeded without uninstalling or clearing data. Package verification shows <code>versionCode=78</code>, <code>versionName=4.0.0</code>, and <code>lastUpdateTime=2026-05-24 18:44:09</code>. Launch check found <code>com.mindflow.app/.MainActivity</code> focused, with no recent <code>FATAL EXCEPTION</code> or <code>AndroidRuntime</code> entries in the checked logcat window.
+    </div>
   </main>
 </body>
 </html>
