@@ -116,10 +116,11 @@ class ReviewChatCoreRegressionTest {
     @Test
     fun thisWeekLookupExplainsActivityScopeAndIncludesUpdatedOldRecords() {
         val today = LocalDate.now(ZoneId.systemDefault())
-        val thisWeek = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
+        val weekStart = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val thisWeek = weekStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
         val oldCreated = today.minusDays(45).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
-        val oldUpdatedThisWeek = today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
-        val lastWeek = today.minusDays(8).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
+        val oldUpdatedThisWeek = weekStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 500L
+        val lastWeek = weekStart.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
 
         val packet = packet(
             question = "本周我记录了哪些内容？",

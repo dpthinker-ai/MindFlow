@@ -51,7 +51,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class FlowUiState(
+data class TodayUiState(
     val todayCount: Int = 0,
     val continueNote: NoteEntity? = null,
     val mainlineCandidate: MainlineBetCandidate? = null,
@@ -73,8 +73,8 @@ data class FlowUiState(
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
     val localMaintainerSnapshot: LocalKnowledgeMaintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
     val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
-    val settledFeedback: FlowCardFeedback? = null,
-    val gapFeedback: FlowCardFeedback? = null,
+    val settledFeedback: TodayCardFeedback? = null,
+    val gapFeedback: TodayCardFeedback? = null,
 )
 
 data class MainlineBetCandidate(
@@ -116,7 +116,7 @@ private data class KnowledgeSlice(
     val noteId: Long?,
 )
 
-enum class FlowCardFeedback {
+enum class TodayCardFeedback {
     HELPFUL,
     FLAT,
 }
@@ -168,14 +168,14 @@ data class FollowedDirectionSummary(
     val source: DailyBriefSource = DailyBriefSource.RULE,
 )
 
-class FlowViewModel(
+class TodayViewModel(
     noteRepository: NoteRepository,
     threadPreferencesRepository: ThreadPreferencesRepository,
     private val dailyBriefPlanner: DailyBriefPlanner,
     private val nextActionPlanner: NextActionPlanner,
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
-    private val flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
+    private val knowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
     private val staleReconnectPlanner: StaleReconnectPlanner,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
@@ -189,7 +189,7 @@ class FlowViewModel(
         val knowledgeItems: List<KnowledgeLayerSearchItem> = emptyList(),
     )
 
-    private data class FlowPrimaryInputs(
+    private data class TodayPrimaryInputs(
         val todayCount: Int,
         val activeNotes: List<NoteEntity>,
         val continueNote: NoteEntity?,
@@ -204,7 +204,7 @@ class FlowViewModel(
         val explorationSource: DailyBriefSource,
     )
 
-    private data class FlowCompressionInput(
+    private data class TodayCompressionInput(
         val signature: String,
         val mainlineKey: String,
         val settledKey: String,
@@ -223,8 +223,8 @@ class FlowViewModel(
     private val mainlineCandidateState = MutableStateFlow<MainlineBetCandidate?>(null)
     private val mainlineRefreshNonce = MutableStateFlow(0)
     private val gapRefreshNonce = MutableStateFlow(0)
-    private val settledFeedbackState = MutableStateFlow<FlowCardFeedback?>(null)
-    private val gapFeedbackState = MutableStateFlow<FlowCardFeedback?>(null)
+    private val settledFeedbackState = MutableStateFlow<TodayCardFeedback?>(null)
+    private val gapFeedbackState = MutableStateFlow<TodayCardFeedback?>(null)
 
     private val primaryInputs = combine(
         noteRepository.observeAllNotes(),
@@ -253,7 +253,7 @@ class FlowViewModel(
         } else {
             ""
         }
-        FlowPrimaryInputs(
+        TodayPrimaryInputs(
             todayCount = activeNotes.count { it.createdAt.toLocalDate(zoneId) == today },
             activeNotes = activeNotes,
             continueNote = continueNote,
@@ -269,7 +269,7 @@ class FlowViewModel(
         )
     }
 
-    val uiState: StateFlow<FlowUiState> = combine(
+    val uiState: StateFlow<TodayUiState> = combine(
         primaryInputs,
         weeklyReviewPlanner.state,
         fusionSuggestionPlanner.state,
@@ -280,16 +280,16 @@ class FlowViewModel(
         settledFeedbackState,
         gapFeedbackState,
     ) { values ->
-        val primary = values[0] as FlowPrimaryInputs
+        val primary = values[0] as TodayPrimaryInputs
         val weeklyReviewState = values[1] as WeeklyReviewState
         val fusionState = values[2] as FusionSuggestionState
         val directions = values[3] as DirectionState
         val localSnapshot = values[4] as LocalKnowledgeMaintenanceSnapshot
         val compression = values[5] as FlowKnowledgeCompressionState
         val mainlineCandidate = values[6] as MainlineBetCandidate?
-        val settledFeedback = values[7] as FlowCardFeedback?
-        val gapFeedback = values[8] as FlowCardFeedback?
-        FlowUiState(
+        val settledFeedback = values[7] as TodayCardFeedback?
+        val gapFeedback = values[8] as TodayCardFeedback?
+        TodayUiState(
             todayCount = primary.todayCount,
             continueNote = primary.continueNote,
             mainlineCandidate = mainlineCandidate,
@@ -314,7 +314,7 @@ class FlowViewModel(
             settledFeedback = settledFeedback,
             gapFeedback = gapFeedback,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowUiState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 
     init {
         viewModelScope.launch {
@@ -438,15 +438,15 @@ class FlowViewModel(
                 settledFeedbackState,
                 gapFeedbackState,
             ) { values ->
-                val primary = values[0] as FlowPrimaryInputs
+                val primary = values[0] as TodayPrimaryInputs
                 val weekly = values[1] as WeeklyReviewState
                 val fusion = values[2] as FusionSuggestionState
                 val directions = values[3] as DirectionState
                 val maintainerSnapshot = values[4] as LocalKnowledgeMaintenanceSnapshot
                 val mainlineNonce = values[5] as Int
                 val gapNonce = values[6] as Int
-                val settledFeedback = values[7] as FlowCardFeedback?
-                val gapFeedback = values[8] as FlowCardFeedback?
+                val settledFeedback = values[7] as TodayCardFeedback?
+                val gapFeedback = values[8] as TodayCardFeedback?
                 buildCompressionInput(
                     primary = primary,
                     weeklyReviewState = weekly,
@@ -464,7 +464,7 @@ class FlowViewModel(
                 val next = if (input.preferMaintainerSnapshot) {
                     input.fallback
                 } else {
-                    flowKnowledgeCompressionPlanner.summarize(
+                    knowledgeCompressionPlanner.summarize(
                         mainlineKey = input.mainlineKey,
                         settledKey = input.settledKey,
                         gapKey = input.gapKey,
@@ -486,16 +486,16 @@ class FlowViewModel(
     }
 
     private fun buildCompressionInput(
-        primary: FlowPrimaryInputs,
+        primary: TodayPrimaryInputs,
         weeklyReviewState: WeeklyReviewState,
         fusionState: FusionSuggestionState,
         directions: DirectionState,
         maintainerSnapshot: LocalKnowledgeMaintenanceSnapshot,
         mainlineNonce: Int,
         gapNonce: Int,
-        settledFeedback: FlowCardFeedback?,
-        gapFeedback: FlowCardFeedback?,
-    ): FlowCompressionInput {
+        settledFeedback: TodayCardFeedback?,
+        gapFeedback: TodayCardFeedback?,
+    ): TodayCompressionInput {
         val primaryDirection = directions.followedDirections.firstOrNull()
         val anchoredCurrentJudgement = maintainerSnapshot.currentJudgement.takeIf {
             it.threadKey.isNotBlank() || it.noteId != null
@@ -749,8 +749,8 @@ class FlowViewModel(
             appendLine("不要把那条暗线换一种说法重复出来。这张卡必须更像已经能留下来的资产。")
             appendLine("不要默认复述当前最活跃项目里的结果；如果其他主题里已经长出更通用、更可迁移的资产，优先选那个。")
             when (settledFeedback) {
-                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、而且带清楚可信基础的资产更有用。")
-                FlowCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛进步描述和还不能复用的判断。")
+                TodayCardFeedback.HELPFUL -> appendLine("最近反馈：这种会改变优先级、而且带清楚可信基础的资产更有用。")
+                TodayCardFeedback.FLAT -> appendLine("最近反馈：避免保守的趋势总结、空泛进步描述和还不能复用的判断。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
@@ -798,8 +798,8 @@ class FlowViewModel(
             appendLine("不要重复那条暗线，也不要把已经长成的资产换个词说一遍。")
             appendLine("如果最近最热的是同一个项目，先向外找不同文件夹、不同主题或不同知识对象之间的连接，不要继续在同一条线内部打转。")
             when (gapFeedback) {
-                FlowCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出碰撞对象和试一下理由的结果更有用。")
-                FlowCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给泛泛灵感，要明确指出哪两点碰一下。")
+                TodayCardFeedback.HELPFUL -> appendLine("最近反馈：这种真正指出碰撞对象和试一下理由的结果更有用。")
+                TodayCardFeedback.FLAT -> appendLine("最近反馈：不要给维护口号、不要给泛泛灵感，要明确指出哪两点碰一下。")
                 null -> Unit
             }
             selectedMainlineCandidate?.let { candidate ->
@@ -847,7 +847,7 @@ class FlowViewModel(
             appendLine("目标：输出一次最值得试的碰撞，以及为什么现在值得撞。")
         }
 
-        return FlowCompressionInput(
+        return TodayCompressionInput(
             signature = signature,
             mainlineKey = mainlineKey,
             settledKey = settledKey,
@@ -876,15 +876,15 @@ class FlowViewModel(
     }
 
     fun markSettledFeedback(helpful: Boolean) {
-        settledFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
+        settledFeedbackState.value = if (helpful) TodayCardFeedback.HELPFUL else TodayCardFeedback.FLAT
     }
 
     fun markGapFeedback(helpful: Boolean) {
-        gapFeedbackState.value = if (helpful) FlowCardFeedback.HELPFUL else FlowCardFeedback.FLAT
+        gapFeedbackState.value = if (helpful) TodayCardFeedback.HELPFUL else TodayCardFeedback.FLAT
     }
 
     private fun buildMainlineCandidates(
-        primary: FlowPrimaryInputs,
+        primary: TodayPrimaryInputs,
         directions: List<FollowedDirectionSummary>,
     ): List<MainlineBetCandidate> {
         val noteById = primary.activeNotes.associateBy { it.id }
@@ -994,7 +994,7 @@ class FlowViewModel(
             nextActionPlanner: NextActionPlanner,
             weeklyReviewPlanner: WeeklyReviewPlanner,
             fusionSuggestionPlanner: FusionSuggestionPlanner,
-            flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
+            knowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
             staleReconnectPlanner: StaleReconnectPlanner,
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,
@@ -1003,14 +1003,14 @@ class FlowViewModel(
             localKnowledgeBrainPlanner: LocalKnowledgeBrainPlanner,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                FlowViewModel(
+                TodayViewModel(
                     noteRepository = noteRepository,
                     threadPreferencesRepository = threadPreferencesRepository,
                     dailyBriefPlanner = dailyBriefPlanner,
                     nextActionPlanner = nextActionPlanner,
                     weeklyReviewPlanner = weeklyReviewPlanner,
                     fusionSuggestionPlanner = fusionSuggestionPlanner,
-                    flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
+                    knowledgeCompressionPlanner = knowledgeCompressionPlanner,
                     staleReconnectPlanner = staleReconnectPlanner,
                     threadExecutionPlanner = threadExecutionPlanner,
                     externalResearchPlanner = externalResearchPlanner,

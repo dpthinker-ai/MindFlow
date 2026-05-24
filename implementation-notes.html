@@ -68,6 +68,26 @@
 
     <h2>时间线（从新到旧）</h2>
     <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-25T00:15:27+08:00">2026-05-25 00:15:27 +08:00</time></p>
+      <strong>最终自检与模拟器复验。</strong>
+      在删除 <code>TodayScreen</code> 从旧共享文件继承来的无用 import 后，重新运行 <code>./gradlew --no-daemon :app:testDebugUnitTest</code> 与 <code>./gradlew --no-daemon :app:assembleRelease</code>，均通过；release 构建仍只有既有 R8 Kotlin metadata 警告。已重新安装最新 <code>app/build/outputs/apk/release/app-release.apk</code> 到 <code>emulator-5554</code>，包信息显示 <code>lastUpdateTime=2026-05-25 00:15:27</code>，前台焦点为 <code>com.mindflow.app/.MainActivity</code>。重新点击 <code>今天</code> 和 <code>回看</code> 后，回看页面正常显示 <code>近期回看</code> 与 <code>推荐问题</code>，检查窗口中没有近期崩溃日志。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-25T00:11:56+08:00">2026-05-25 00:11:56 +08:00</time></p>
+      <strong>今天 / 回看运行时拆分。</strong>
+      按新 spec 自我审视后，我把验收边界收紧为“代码中不再存在可调用的 <code>FlowRoute</code>、<code>FlowViewModel</code>、<code>FlowUiState</code> 或 <code>FlowScreen(...)</code>”。实现上新增 <code>ReviewHomeRoute</code>，让 <code>FLOW_REVIEW</code> 只收集回看历史摘要和回看导航回调；原共享实现迁移为 <code>TodayRoute</code>、<code>TodayViewModel</code> 和 <code>TodayUiState</code>，<code>FLOW_TODAY</code> 继续复用今天侧状态。历史 route 字符串和 <code>FlowFocus</code> 仍保留在导航/通知兼容层，用于旧 intent 映射，不再作为用户可见页面或共享 UI runtime。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-25T00:11:56+08:00">2026-05-25 00:11:56 +08:00</time></p>
+      <strong>本周测试稳定性修正。</strong>
+      全量单测暴露了一个与本次拆分相邻但真实存在的问题：机器实际时间已进入 <code>2026-05-25</code> 周一，两个“本周”回归测试仍把昨天或明天当作本周范围内的数据，导致测试在周一必然失败。我没有改生产逻辑，因为本周范围“周一到今天”是正确的；只把测试数据改为使用本周起始日内的时间戳，确保它们继续验证“旧创建但本周更新的记录应被统计”这一行为。
+    </div>
+    <div class="entry">
+      <p class="entry-time"><time datetime="2026-05-25T00:11:56+08:00">2026-05-25 00:11:56 +08:00</time></p>
+      <strong>拆分验证与模拟器验证。</strong>
+      已完成红绿验证：新增 <code>ReviewHomeRouteContractTest</code>，并先让 <code>TodayDesignModelTest</code> 改用 <code>TodayUiState</code> 触发编译失败，再完成生产实现。随后运行 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.mindflow.app.ui.screens.flow.*'</code>、<code>./gradlew --no-daemon :app:testDebugUnitTest</code> 和 <code>./gradlew --no-daemon :app:assembleRelease</code>，均通过；release 构建仍只有既有 R8 Kotlin metadata 警告。已将 <code>app/build/outputs/apk/release/app-release.apk</code> 安装到 <code>emulator-5554</code> 并启动，焦点为 <code>com.mindflow.app/.MainActivity</code>，检查窗口中没有近期 <code>FATAL EXCEPTION</code>。模拟器截图显示 <code>今天</code> 和 <code>回看</code> 是独立页面，底部导航无 <code>Flow</code> 入口；截图保存在 <code>/tmp/mindflow-route-split-today.png</code> 和 <code>/tmp/mindflow-route-split-review.png</code>。
+    </div>
+    <div class="entry">
       <p class="entry-time"><time datetime="2026-05-24T23:20:16+08:00">2026-05-24 23:20:16 +08:00</time></p>
       <strong>后续入口与模型显示验证。</strong>
       已运行设置页聚焦测试 <code>./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.mindflow.app.ui.screens.settings.*'</code>，覆盖云端运行时 <code>DeepSeek · deepseek-v4-flash</code> 必须成为当前模型，以及自动模式下本地 Gemma 与已选 DeepSeek 都应被说明。随后运行 <code>./gradlew --no-daemon :app:assembleRelease</code> 成功，仍只有既有的 R8 Kotlin metadata 警告。已将 release APK 安装到模拟器 <code>emulator-5554</code>，包信息显示 <code>versionCode=78</code>、<code>versionName=4.0.0</code>、<code>lastUpdateTime=2026-05-24 23:20:16</code>；通过 <code>SplashActivity</code> 启动后焦点落在 <code>com.mindflow.app/.MainActivity</code>，检查的 logcat 窗口没有 <code>FATAL EXCEPTION</code> 或 <code>AndroidRuntime</code>。当前 adb 设备列表只有模拟器，真机 <code>AWPQUT6116001779</code> 未在线，因此本轮尚未覆盖安装到真机。

@@ -87,18 +87,18 @@ import com.mindflow.app.data.topic.TopicExtractor
 import com.mindflow.app.data.topic.VoiceTranscriptionPlanner
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.ui.navigation.CaptureSeed
-import com.mindflow.app.ui.navigation.FlowFocus
 import com.mindflow.app.ui.navigation.MindFlowDestinations
 import com.mindflow.app.ui.navigation.MindFlowLaunchRequest
 import com.mindflow.app.ui.navigation.ReviewChatSeed
 import com.mindflow.app.ui.components.MindFlowUiTestTags
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
-import com.mindflow.app.ui.screens.flow.FlowRoute
-import com.mindflow.app.ui.screens.flow.FlowViewModel
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
+import com.mindflow.app.ui.screens.flow.ReviewHomeRoute
 import com.mindflow.app.ui.screens.flow.TodayDiscoveryRoute
+import com.mindflow.app.ui.screens.flow.TodayRoute
 import com.mindflow.app.ui.screens.flow.TodayTaskDetailRoute
+import com.mindflow.app.ui.screens.flow.TodayViewModel
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatHistoryRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatRoute
@@ -162,15 +162,15 @@ fun MindFlowApp(
     val currentRoute = navBackStackEntry?.destination?.route
     val captureSeeds = remember { mutableStateMapOf<Long, CaptureSeed>() }
     val reviewChatSeeds = remember { mutableStateMapOf<Long, ReviewChatSeed>() }
-    val sharedFlowViewModel: FlowViewModel = viewModel(
-        factory = FlowViewModel.factory(
+    val sharedTodayViewModel: TodayViewModel = viewModel(
+        factory = TodayViewModel.factory(
             noteRepository = noteRepository,
             threadPreferencesRepository = threadPreferencesRepository,
             dailyBriefPlanner = dailyBriefPlanner,
             nextActionPlanner = nextActionPlanner,
             weeklyReviewPlanner = weeklyReviewPlanner,
             fusionSuggestionPlanner = fusionSuggestionPlanner,
-            flowKnowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
+            knowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
             staleReconnectPlanner = staleReconnectPlanner,
             threadExecutionPlanner = threadExecutionPlanner,
             externalResearchPlanner = externalResearchPlanner,
@@ -300,19 +300,15 @@ fun MindFlowApp(
             }
 
             composable(MindFlowDestinations.FLOW_TODAY) {
-                FlowRoute(
-                    viewModel = sharedFlowViewModel,
+                TodayRoute(
+                    viewModel = sharedTodayViewModel,
                     reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
-                    initialFocus = FlowFocus.TODAY,
                     onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
                     onOpenNote = openNoteSafely,
                     onCreateCapture = ::openCapture,
                     onOpenTodayDiscovery = { navController.navigate(MindFlowDestinations.TODAY_DISCOVERY) },
                     onOpenTodayTask = { threadKey ->
                         navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
-                    },
-                    onOpenReviewChat = { question ->
-                        openReviewChat(ReviewChatSeed(initialQuestion = question))
                     },
                     onOpenLatestSavedReviewChat = { sessionId ->
                         openReviewChat(ReviewChatSeed(savedSessionId = sessionId))
@@ -322,17 +318,8 @@ fun MindFlowApp(
             }
 
             composable(MindFlowDestinations.FLOW_REVIEW) {
-                FlowRoute(
-                    viewModel = sharedFlowViewModel,
+                ReviewHomeRoute(
                     reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
-                    initialFocus = FlowFocus.REVIEW,
-                    onOpenThread = { threadKey -> navController.navigate(MindFlowDestinations.threadRoute(threadKey)) },
-                    onOpenNote = openNoteSafely,
-                    onCreateCapture = ::openCapture,
-                    onOpenTodayDiscovery = { navController.navigate(MindFlowDestinations.TODAY_DISCOVERY) },
-                    onOpenTodayTask = { threadKey ->
-                        navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
-                    },
                     onOpenReviewChat = { question ->
                         openReviewChat(ReviewChatSeed(initialQuestion = question))
                     },
@@ -345,7 +332,7 @@ fun MindFlowApp(
 
             composable(MindFlowDestinations.TODAY_DISCOVERY) {
                 TodayDiscoveryRoute(
-                    viewModel = sharedFlowViewModel,
+                    viewModel = sharedTodayViewModel,
                     onBack = { navController.popBackStack() },
                     onOpenTaskDetail = { threadKey ->
                         navController.navigate(MindFlowDestinations.todayTaskDetailRoute(threadKey))
@@ -363,7 +350,7 @@ fun MindFlowApp(
                     .orEmpty()
                 val threadKey = Uri.decode(rawThreadKey)
                 TodayTaskDetailRoute(
-                    viewModel = sharedFlowViewModel,
+                    viewModel = sharedTodayViewModel,
                     threadKey = threadKey,
                     onBack = { navController.popBackStack() },
                     onOpenThread = { key -> navController.navigate(MindFlowDestinations.threadRoute(key)) },

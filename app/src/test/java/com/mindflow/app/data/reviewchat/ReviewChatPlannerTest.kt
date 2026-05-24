@@ -484,7 +484,7 @@ class ReviewChatPlannerTest {
         val today = LocalDate.now(ZoneId.systemDefault())
         val thisWeekStart = today.minusDays((today.dayOfWeek.value - 1).toLong())
         val oldCreatedAt = thisWeekStart.minusDays(45).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val updatedThisWeek = thisWeekStart.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val updatedThisWeek = thisWeekStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000L
         val updatedBeforeThisWeek = thisWeekStart.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val packet = buildReviewChatContextPacket(
             question = "本周我记录了哪些内容？",

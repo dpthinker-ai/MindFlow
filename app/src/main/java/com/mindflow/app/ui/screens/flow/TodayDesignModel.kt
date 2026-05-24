@@ -94,7 +94,7 @@ data class TodayTaskMaterialModel(
     val meta: String,
 )
 
-fun FlowUiState.toTodayDesignModel(
+fun TodayUiState.toTodayDesignModel(
     latestSavedConversationSummary: SavedReviewChatSessionSummary?,
     surface: IncubationSurfaceState,
 ): TodayDesignModel {
@@ -202,7 +202,7 @@ fun TodayDesignModel.taskDetailFor(threadKey: String): TodayTaskDetailModel? {
     )
 }
 
-private fun FlowUiState.buildTodayFocusModel(
+private fun TodayUiState.buildTodayFocusModel(
     surface: IncubationSurfaceState,
 ): TodayFocusModel {
     val direction = surface.threadDirection
@@ -245,7 +245,7 @@ private fun FlowUiState.buildTodayFocusModel(
     )
 }
 
-private fun FlowUiState.buildTodayReasonModel(
+private fun TodayUiState.buildTodayReasonModel(
     focus: TodayFocusModel,
     surface: IncubationSurfaceState,
 ): TodayReasonModel {
@@ -274,7 +274,7 @@ private fun FlowUiState.buildTodayReasonModel(
     )
 }
 
-private fun FlowUiState.buildTodayDiscoveryCards(
+private fun TodayUiState.buildTodayDiscoveryCards(
     surface: IncubationSurfaceState,
 ): List<TodayDiscoveryCardModel> {
     val confidence = listOf("92%", "84%", "78%")
@@ -334,7 +334,7 @@ private fun FlowUiState.buildTodayDiscoveryCards(
     return (models + supplemental).take(3)
 }
 
-private fun FlowUiState.buildTodayTrackingRows(
+private fun TodayUiState.buildTodayTrackingRows(
     surface: IncubationSurfaceState,
 ): List<TodayTrackingRowModel> {
     val tracked = followedDirections.ifEmpty { listOfNotNull(surface.threadDirection) }
@@ -387,7 +387,7 @@ private fun todayDestinationLabel(
     else -> "新建记录"
 }
 
-private fun FlowUiState.todayDirectionCount(): Int {
+private fun TodayUiState.todayDirectionCount(): Int {
     val candidateCount = if (mainlineCandidate != null) 1 else 0
     val count = followedDirections.size + candidateCount
     return when {
@@ -398,7 +398,7 @@ private fun FlowUiState.todayDirectionCount(): Int {
     }
 }
 
-private fun FlowUiState.todayProgressFraction(): Float = when {
+private fun TodayUiState.todayProgressFraction(): Float = when {
     continueNote?.status == NoteStatus.DONE -> 1f
     mainlineCandidate != null -> 0.65f
     continueNote?.status == NoteStatus.IN_PROGRESS -> 0.65f

@@ -15,7 +15,7 @@ import org.junit.Test
 class TodayDesignModelTest {
     @Test
     fun toTodayDesignModel_preservesReferenceTodayHierarchyFromFlowState() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             todayCount = 2,
             mainlineCandidate = MainlineBetCandidate(
                 key = "today-redesign",
@@ -77,7 +77,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_labelsCaptureFallbackDestinations() {
-        val uiState = FlowUiState(todayCount = 1)
+        val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
             latestSavedConversationSummary = null,
@@ -90,7 +90,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_capsHeroCountToDisplayedSuggestions() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = (1..5).map { index ->
                 followedDirection(
                     key = "direction-$index",
@@ -112,7 +112,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_prefersSpecificDirectionCopyOverBroadBuckets() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "work",
@@ -135,7 +135,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_prefersThreadSummaryWhenDirectionSummaryIsGeneric() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             mainlineCandidate = MainlineBetCandidate(
                 key = "work",
                 title = "工作",
@@ -165,7 +165,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_trackingRowsOpenTheDisplayedDirectionThread() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "work",
@@ -190,7 +190,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_cleansMachineJsonFromTrackingRows() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "project",
@@ -213,7 +213,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_cleansMachineJsonFromReviewHint() {
-        val uiState = FlowUiState(todayCount = 1)
+        val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
             latestSavedConversationSummary = SavedReviewChatSessionSummary(
@@ -233,7 +233,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_deduplicatesRepeatedReviewTitleAndExcerpt() {
-        val uiState = FlowUiState(todayCount = 1)
+        val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
             latestSavedConversationSummary = SavedReviewChatSessionSummary(
@@ -251,7 +251,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_hidesCaptureMetadataPathsFromContinueNote() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             continueNote = note(
                 topic = "原始录音：/data/user/0/com.mindflow.app/files/recordings/voice-001.m4a",
                 content = """
@@ -277,7 +277,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_hidesCaptureMetadataPathsFromDiscoverySource() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "project",
@@ -300,7 +300,7 @@ class TodayDesignModelTest {
 
     @Test
     fun taskDetailFor_buildsReferenceTaskDetailFromDisplayedDirection() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "work",
@@ -333,7 +333,7 @@ class TodayDesignModelTest {
 
     @Test
     fun toTodayDesignModel_keepsDiscoveryTitlesCompactForEqualHeightCards() {
-        val uiState = FlowUiState(
+        val uiState = TodayUiState(
             followedDirections = listOf(
                 followedDirection(
                     key = "work",

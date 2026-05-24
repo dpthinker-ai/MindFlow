@@ -115,6 +115,7 @@
       <ul>
         <li>点击底部 <code>今天</code> 时，只创建/收集 <code>TodayViewModel</code> 相关状态。</li>
         <li>点击底部 <code>回看</code> 时，不依赖 <code>TodayViewModel</code>，不计算 <code>TodayDesignModel</code>。</li>
+        <li>代码中不再存在可直接调用的 <code>FlowRoute</code> 或 <code>FlowViewModel</code> 类型；保留的 <code>FLOW_TODAY</code> / <code>FLOW_REVIEW</code> 只作为历史 route 字符串兼容层。</li>
         <li>通知、Widget 和旧 <code>ACTION_OPEN_FLOW</code> 仍能正确打开“今天”或“回看”。</li>
         <li>回看首页仍能打开新聊天、推荐问题、历史列表和最近保存会话。</li>
         <li>今天首页、自动发现、今日任务详情仍保持现有行为。</li>
@@ -135,6 +136,11 @@
     <h2>风险与取舍</h2>
     <div class="card">
       <p>本次拆分会触及导航 graph、Compose route、ViewModel factory 和 Today 测试。最大风险是误删历史入口兼容逻辑，因此 route 字符串和 <code>ACTION_OPEN_FLOW</code> 不应在第一轮删除。更深层的 planner/use case 拆分暂不纳入，避免一次性重构过大。</p>
+    </div>
+
+    <h2>自我审视结论</h2>
+    <div class="card decision">
+      <p>补充审视后，我认为 spec 需要明确一个硬性边界：<code>回看</code> 不只是 UI 分支独立，而是运行时不应触发今日状态聚合。因此验收标准增加了“删除可调用的 <code>FlowRoute</code> / <code>FlowViewModel</code> 类型”这一条。这样后续实现不能只在 <code>MindFlowApp</code> 改两个函数名，而必须让回看 route 的参数列表、状态收集和模型转换都脱离今天侧。</p>
     </div>
   </main>
 </body>

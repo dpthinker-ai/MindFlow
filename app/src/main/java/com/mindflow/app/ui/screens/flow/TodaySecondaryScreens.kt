@@ -63,7 +63,7 @@ import com.mindflow.app.ui.theme.Panel
 
 @Composable
 fun TodayDiscoveryRoute(
-    viewModel: FlowViewModel,
+    viewModel: TodayViewModel,
     onBack: () -> Unit,
     onOpenTaskDetail: (String) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
@@ -158,7 +158,7 @@ fun TodayDiscoveryRoute(
 
 @Composable
 fun TodayTaskDetailRoute(
-    viewModel: FlowViewModel,
+    viewModel: TodayViewModel,
     threadKey: String,
     onBack: () -> Unit,
     onOpenThread: (String) -> Unit,

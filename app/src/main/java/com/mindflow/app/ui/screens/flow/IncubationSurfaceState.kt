@@ -26,7 +26,7 @@ data class IncubationSurfaceState(
     val gapProvenance: FlowCardProvenance = FlowCardProvenance.LocalMaintainer,
 )
 
-fun FlowUiState.toIncubationSurfaceState(): IncubationSurfaceState {
+fun TodayUiState.toIncubationSurfaceState(): IncubationSurfaceState {
     val sparkDirection = followedDirections.firstOrNull { it.thread.key == localMaintainerSnapshot.recentAbsorption.threadKey }
         ?: followedDirections.firstOrNull()
     val collisionDirection = followedDirections.firstOrNull { it.thread.key == localMaintainerSnapshot.newConnection.threadKey }
