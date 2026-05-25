@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -19,8 +19,6 @@ import com.mindflow.app.data.connect.ThemeThread
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.connect.DirectionStage
 import com.mindflow.app.data.followup.StaleReconnectPlanner
-import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
-import com.mindflow.app.data.flow.FlowKnowledgeCompressionState
 import com.mindflow.app.data.followup.StaleReconnectState
 import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.local.entity.NoteEntity
@@ -36,6 +34,8 @@ import com.mindflow.app.data.review.WeeklyReviewState
 import com.mindflow.app.data.review.items
 import com.mindflow.app.data.review.statsLine
 import com.mindflow.app.data.settings.ThreadPreferencesRepository
+import com.mindflow.app.data.today.TodayKnowledgeCompressionPlanner
+import com.mindflow.app.data.today.TodayKnowledgeCompressionState
 import com.mindflow.app.data.wiki.DirectionWikiCoordinator
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchItem
 import com.mindflow.app.data.wiki.KnowledgeLayerSearchType
@@ -72,7 +72,7 @@ data class TodayUiState(
     val fusionSuggestions: List<String> = emptyList(),
     val fusionSource: DailyBriefSource = DailyBriefSource.RULE,
     val localMaintainerSnapshot: LocalKnowledgeMaintenanceSnapshot = LocalKnowledgeMaintenanceSnapshot(),
-    val knowledgeCompression: FlowKnowledgeCompressionState = FlowKnowledgeCompressionState(),
+    val knowledgeCompression: TodayKnowledgeCompressionState = TodayKnowledgeCompressionState(),
     val settledFeedback: TodayCardFeedback? = null,
     val gapFeedback: TodayCardFeedback? = null,
 )
@@ -175,7 +175,7 @@ class TodayViewModel(
     private val nextActionPlanner: NextActionPlanner,
     private val weeklyReviewPlanner: WeeklyReviewPlanner,
     private val fusionSuggestionPlanner: FusionSuggestionPlanner,
-    private val knowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
+    private val knowledgeCompressionPlanner: TodayKnowledgeCompressionPlanner,
     private val staleReconnectPlanner: StaleReconnectPlanner,
     private val threadExecutionPlanner: ThreadExecutionPlanner,
     private val externalResearchPlanner: ExternalResearchPlanner,
@@ -213,13 +213,13 @@ class TodayViewModel(
         val mainlineContextSummary: String,
         val settledContextSummary: String,
         val gapContextSummary: String,
-        val fallback: FlowKnowledgeCompressionState,
+        val fallback: TodayKnowledgeCompressionState,
         val preferMaintainerSnapshot: Boolean,
     )
 
     private val directionState = MutableStateFlow(DirectionState())
     private val localMaintainerSnapshotState = MutableStateFlow(LocalKnowledgeMaintenanceSnapshot())
-    private val knowledgeCompressionState = MutableStateFlow(FlowKnowledgeCompressionState())
+    private val knowledgeCompressionState = MutableStateFlow(TodayKnowledgeCompressionState())
     private val mainlineCandidateState = MutableStateFlow<MainlineBetCandidate?>(null)
     private val mainlineRefreshNonce = MutableStateFlow(0)
     private val gapRefreshNonce = MutableStateFlow(0)
@@ -285,7 +285,7 @@ class TodayViewModel(
         val fusionState = values[2] as FusionSuggestionState
         val directions = values[3] as DirectionState
         val localSnapshot = values[4] as LocalKnowledgeMaintenanceSnapshot
-        val compression = values[5] as FlowKnowledgeCompressionState
+        val compression = values[5] as TodayKnowledgeCompressionState
         val mainlineCandidate = values[6] as MainlineBetCandidate?
         val settledFeedback = values[7] as TodayCardFeedback?
         val gapFeedback = values[8] as TodayCardFeedback?
@@ -625,7 +625,7 @@ class TodayViewModel(
                 ?: fusionState.lines.getOrNull(1).orEmpty()
         }
 
-        val fallback = FlowKnowledgeCompressionState(
+        val fallback = TodayKnowledgeCompressionState(
             mainline = recurringLine,
             whyNow = recurringWhyNow,
             mainlineSource = DailyBriefSource.RULE,
@@ -994,7 +994,7 @@ class TodayViewModel(
             nextActionPlanner: NextActionPlanner,
             weeklyReviewPlanner: WeeklyReviewPlanner,
             fusionSuggestionPlanner: FusionSuggestionPlanner,
-            knowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
+            knowledgeCompressionPlanner: TodayKnowledgeCompressionPlanner,
             staleReconnectPlanner: StaleReconnectPlanner,
             threadExecutionPlanner: ThreadExecutionPlanner,
             externalResearchPlanner: ExternalResearchPlanner,

@@ -25,6 +25,7 @@ class ParsedCaptureScreenTest {
                     onContentChange = {},
                     onEnsureVoiceInsight = {},
                     onEnsureVoiceTranscription = {},
+                    onPrepareNewVoiceRecording = {},
                     onSave = {},
                     onSaveAndExit = {},
                     onCaptureAction = {},

@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -40,7 +40,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mindflow.app.data.reviewchat.ReviewChatSavedConversationRepository
-import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.components.BottomBarClearance
 import com.mindflow.app.ui.components.CardShape
 import com.mindflow.app.ui.components.ScreenBackground
@@ -69,7 +68,7 @@ fun TodayRoute(
         .collectAsStateWithLifecycle(initialValue = null)
     TodayScreen(
         uiState = uiState,
-        latestSavedConversationSummary = latestSavedConversationSummary,
+        reviewPreview = latestSavedConversationSummary?.toTodayReviewPreview() ?: TodayReviewPreview.Empty,
         onOpenThread = onOpenThread,
         onOpenNote = onOpenNote,
         onCreateCapture = onCreateCapture,
@@ -83,7 +82,7 @@ fun TodayRoute(
 @Composable
 private fun TodayScreen(
     uiState: TodayUiState,
-    latestSavedConversationSummary: SavedReviewChatSessionSummary?,
+    reviewPreview: TodayReviewPreview,
     onOpenThread: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCreateCapture: (CaptureSeed) -> Unit,
@@ -94,9 +93,9 @@ private fun TodayScreen(
 ) {
     val maintainerSnapshot = uiState.localMaintainerSnapshot
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
-    val todayModel = remember(uiState, latestSavedConversationSummary, surface) {
+    val todayModel = remember(uiState, reviewPreview, surface) {
         uiState.toTodayDesignModel(
-            latestSavedConversationSummary = latestSavedConversationSummary,
+            reviewPreview = reviewPreview,
             surface = surface,
         )
     }

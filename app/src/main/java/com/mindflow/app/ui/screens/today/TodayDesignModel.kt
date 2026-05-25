@@ -1,7 +1,6 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import com.mindflow.app.data.model.NoteStatus
-import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import com.mindflow.app.ui.components.compactRecordPreviewText
 import com.mindflow.app.ui.components.compactRecordTitleText
 
@@ -95,7 +94,7 @@ data class TodayTaskMaterialModel(
 )
 
 fun TodayUiState.toTodayDesignModel(
-    latestSavedConversationSummary: SavedReviewChatSessionSummary?,
+    reviewPreview: TodayReviewPreview,
     surface: IncubationSurfaceState,
 ): TodayDesignModel {
     val candidateCount = todayDirectionCount().coerceAtLeast(0).coerceAtMost(3)
@@ -116,24 +115,11 @@ fun TodayUiState.toTodayDesignModel(
         trackingActionLabel = "共 ${trackingRows.size} 个任务",
         trackingRows = trackingRows,
         review = TodayReviewModel(
-            title = "今日回看",
-            description = latestSavedConversationSummary
-                ?.toTodayReviewDescription()
-                ?: "打开回看历史，手动选择一个问题再继续",
-            savedSessionId = latestSavedConversationSummary?.sessionId,
+            title = reviewPreview.title,
+            description = reviewPreview.description,
+            savedSessionId = reviewPreview.savedSessionId,
         ),
     )
-}
-
-private fun SavedReviewChatSessionSummary.toTodayReviewDescription(): String {
-    val titleText = title.cleanTodayVisibleText()
-    val excerptText = latestExcerpt.cleanTodayVisibleText()
-    val combined = when {
-        titleText.isBlank() -> excerptText
-        excerptText.isBlank() || excerptText == titleText -> titleText
-        else -> "$titleText：$excerptText"
-    }
-    return combined.asTodayDesignPreview(72)
 }
 
 fun TodayDesignModel.taskDetailFor(threadKey: String): TodayTaskDetailModel? {
@@ -438,7 +424,7 @@ private fun FollowedDirectionSummary.todaySourceLabel(): String {
 private fun String.isBroadTodayBucket(): Boolean =
     this in setOf("工作", "生活", "健康", "学习", "想法", "任务", "文章", "语音", "图片", "未分类")
 
-private fun String.asTodayDesignPreview(limit: Int): String {
+internal fun String.asTodayDesignPreview(limit: Int): String {
     val normalized = replace("\n", " ")
         .replace(Regex("\\s+"), " ")
         .trim()
@@ -449,7 +435,7 @@ private fun String.asTodayDesignPreview(limit: Int): String {
     }
 }
 
-private fun String.cleanTodayVisibleText(): String {
+internal fun String.cleanTodayVisibleText(): String {
     val normalized = replace("\n", " ")
         .replace(Regex("\\s+"), " ")
         .trim()

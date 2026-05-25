@@ -57,7 +57,7 @@ import com.mindflow.app.data.connect.FusionSuggestionPlanner
 import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.followup.StaleReconnectPlanner
-import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
+import com.mindflow.app.data.today.TodayKnowledgeCompressionPlanner
 import com.mindflow.app.data.organize.BackgroundFolderOrganizer
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.reminder.ReminderScheduler
@@ -94,11 +94,11 @@ import com.mindflow.app.ui.components.MindFlowUiTestTags
 import com.mindflow.app.ui.screens.editor.EditorRoute
 import com.mindflow.app.ui.screens.feed.FeedRoute
 import com.mindflow.app.ui.screens.flow.KnowledgeGraphRoute
-import com.mindflow.app.ui.screens.flow.ReviewHomeRoute
-import com.mindflow.app.ui.screens.flow.TodayDiscoveryRoute
-import com.mindflow.app.ui.screens.flow.TodayRoute
-import com.mindflow.app.ui.screens.flow.TodayTaskDetailRoute
-import com.mindflow.app.ui.screens.flow.TodayViewModel
+import com.mindflow.app.ui.screens.review.ReviewHomeRoute
+import com.mindflow.app.ui.screens.today.TodayDiscoveryRoute
+import com.mindflow.app.ui.screens.today.TodayRoute
+import com.mindflow.app.ui.screens.today.TodayTaskDetailRoute
+import com.mindflow.app.ui.screens.today.TodayViewModel
 import com.mindflow.app.ui.screens.folder.FolderRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatHistoryRoute
 import com.mindflow.app.ui.screens.reviewchat.ReviewChatRoute
@@ -135,7 +135,7 @@ fun MindFlowApp(
     nextActionPlanner: NextActionPlanner,
     weeklyReviewPlanner: WeeklyReviewPlanner,
     fusionSuggestionPlanner: FusionSuggestionPlanner,
-    flowKnowledgeCompressionPlanner: FlowKnowledgeCompressionPlanner,
+    todayKnowledgeCompressionPlanner: TodayKnowledgeCompressionPlanner,
     staleReconnectPlanner: StaleReconnectPlanner,
     threadExecutionPlanner: ThreadExecutionPlanner,
     externalResearchPlanner: ExternalResearchPlanner,
@@ -170,7 +170,7 @@ fun MindFlowApp(
             nextActionPlanner = nextActionPlanner,
             weeklyReviewPlanner = weeklyReviewPlanner,
             fusionSuggestionPlanner = fusionSuggestionPlanner,
-            knowledgeCompressionPlanner = flowKnowledgeCompressionPlanner,
+            knowledgeCompressionPlanner = todayKnowledgeCompressionPlanner,
             staleReconnectPlanner = staleReconnectPlanner,
             threadExecutionPlanner = threadExecutionPlanner,
             externalResearchPlanner = externalResearchPlanner,
@@ -252,17 +252,17 @@ fun MindFlowApp(
 
     val topLevelDestinations = listOf(
         TopLevelDestination(MindFlowDestinations.FEED, "记录", Icons.Outlined.Edit, MindFlowUiTestTags.NAV_RECORD),
-        TopLevelDestination(MindFlowDestinations.FLOW_TODAY, "今天", Icons.Outlined.WbSunny, MindFlowUiTestTags.NAV_TODAY),
-        TopLevelDestination(MindFlowDestinations.FLOW_REVIEW, "回看", Icons.Outlined.History, MindFlowUiTestTags.NAV_REVIEW),
-        TopLevelDestination(MindFlowDestinations.FLOW_GRAPH, "图谱", Icons.Outlined.Hub, MindFlowUiTestTags.NAV_GRAPH),
+        TopLevelDestination(MindFlowDestinations.TODAY, "今天", Icons.Outlined.WbSunny, MindFlowUiTestTags.NAV_TODAY),
+        TopLevelDestination(MindFlowDestinations.REVIEW, "回看", Icons.Outlined.History, MindFlowUiTestTags.NAV_REVIEW),
+        TopLevelDestination(MindFlowDestinations.GRAPH, "图谱", Icons.Outlined.Hub, MindFlowUiTestTags.NAV_GRAPH),
         TopLevelDestination(MindFlowDestinations.SETTINGS, "设置", Icons.Outlined.Settings, MindFlowUiTestTags.NAV_SETTINGS),
     )
 
     val normalizedRoute = when {
         currentRoute == null -> null
-        currentRoute == MindFlowDestinations.FLOW_GRAPH -> MindFlowDestinations.FLOW_GRAPH
-        currentRoute == MindFlowDestinations.FLOW_TODAY -> MindFlowDestinations.FLOW_TODAY
-        currentRoute == MindFlowDestinations.FLOW_REVIEW -> MindFlowDestinations.FLOW_REVIEW
+        currentRoute == MindFlowDestinations.GRAPH -> MindFlowDestinations.GRAPH
+        currentRoute == MindFlowDestinations.TODAY -> MindFlowDestinations.TODAY
+        currentRoute == MindFlowDestinations.REVIEW -> MindFlowDestinations.REVIEW
         currentRoute == MindFlowDestinations.SETTINGS -> MindFlowDestinations.SETTINGS
         currentRoute == MindFlowDestinations.SEARCH -> MindFlowDestinations.SEARCH_BASE
         else -> currentRoute
@@ -270,9 +270,9 @@ fun MindFlowApp(
 
     val showBottomBar = normalizedRoute in setOf(
         MindFlowDestinations.FEED,
-        MindFlowDestinations.FLOW_TODAY,
-        MindFlowDestinations.FLOW_REVIEW,
-        MindFlowDestinations.FLOW_GRAPH,
+        MindFlowDestinations.TODAY,
+        MindFlowDestinations.REVIEW,
+        MindFlowDestinations.GRAPH,
         MindFlowDestinations.SETTINGS,
     )
 
@@ -299,7 +299,7 @@ fun MindFlowApp(
                 )
             }
 
-            composable(MindFlowDestinations.FLOW_TODAY) {
+            composable(MindFlowDestinations.TODAY) {
                 TodayRoute(
                     viewModel = sharedTodayViewModel,
                     reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
@@ -317,7 +317,7 @@ fun MindFlowApp(
                 )
             }
 
-            composable(MindFlowDestinations.FLOW_REVIEW) {
+            composable(MindFlowDestinations.REVIEW) {
                 ReviewHomeRoute(
                     reviewChatSavedConversationRepository = reviewChatSavedConversationRepository,
                     onOpenReviewChat = { question ->
@@ -360,7 +360,7 @@ fun MindFlowApp(
                 )
             }
 
-            composable(MindFlowDestinations.FLOW_GRAPH) {
+            composable(MindFlowDestinations.GRAPH) {
                 KnowledgeGraphRoute(
                     noteRepository = noteRepository,
                     directionWikiCoordinator = directionWikiCoordinator,

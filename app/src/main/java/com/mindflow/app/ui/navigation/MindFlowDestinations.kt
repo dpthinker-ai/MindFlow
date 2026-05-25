@@ -7,9 +7,9 @@ import java.nio.charset.StandardCharsets
 
 object MindFlowDestinations {
     const val FEED = "feed"
-    const val FLOW_TODAY = "flow/today"
-    const val FLOW_REVIEW = "flow/review"
-    const val FLOW_GRAPH = "flow/graph"
+    const val TODAY = "flow/today"
+    const val REVIEW = "flow/review"
+    const val GRAPH = "flow/graph"
     const val TODAY_DISCOVERY = "flow/today/discovery"
     const val TODAY_TASK_DETAIL = "flow/today/task/{threadKey}"
     const val TODAY_TASK_DETAIL_ARG = "threadKey"
@@ -35,15 +35,17 @@ object MindFlowDestinations {
     fun detailRoute(noteId: Long): String = "detail/$noteId"
     fun threadRoute(threadKey: String): String = "flow/thread/${Uri.encode(threadKey)}"
     fun todayTaskDetailRoute(threadKey: String): String = "flow/today/task/${threadKey.encodeRouteSegment()}"
-    fun graphRoute(): String = FLOW_GRAPH
+    fun todayRoute(): String = TODAY
+    fun reviewRoute(): String = REVIEW
+    fun graphRoute(): String = GRAPH
     fun captureRoute(seedId: Long): String = "capture/$seedId"
     fun reviewChatRoute(seedId: Long): String = "review-chat/$seedId"
     fun flowRoute(focus: FlowFocus? = null): String =
         when (focus) {
             FlowFocus.REVIEW,
-            FlowFocus.RECONNECT -> FLOW_REVIEW
+            FlowFocus.RECONNECT -> REVIEW
             FlowFocus.TODAY,
-            null -> FLOW_TODAY
+            null -> TODAY
         }
     fun searchRoute(
         status: NoteStatus? = null,

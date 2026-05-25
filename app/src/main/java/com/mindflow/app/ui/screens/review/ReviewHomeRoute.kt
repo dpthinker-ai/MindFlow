@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.review
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues

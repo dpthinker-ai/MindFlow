@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.review
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test

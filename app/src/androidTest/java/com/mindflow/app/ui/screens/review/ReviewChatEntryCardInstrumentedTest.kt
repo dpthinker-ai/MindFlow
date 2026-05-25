@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.review
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule

@@ -2,9 +2,9 @@ package com.mindflow.app.ui.screens.reviewchat
 
 import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
-import com.mindflow.app.ui.screens.flow.reviewHomeReferenceSectionKeys
-import com.mindflow.app.ui.screens.flow.reviewHomeReferenceQuestionPrompts
-import com.mindflow.app.ui.screens.flow.reviewHomeLatestExcerpt
+import com.mindflow.app.ui.screens.review.reviewHomeReferenceSectionKeys
+import com.mindflow.app.ui.screens.review.reviewHomeReferenceQuestionPrompts
+import com.mindflow.app.ui.screens.review.reviewHomeLatestExcerpt
 import org.junit.Test
 
 class ReviewChatReferenceDesignModelTest {

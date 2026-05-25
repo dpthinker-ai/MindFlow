@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import com.mindflow.app.data.brief.DailyBriefSource
 

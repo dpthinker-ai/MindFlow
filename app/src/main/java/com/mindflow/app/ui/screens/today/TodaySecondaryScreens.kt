@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -72,7 +72,7 @@ fun TodayDiscoveryRoute(
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
     val model = remember(uiState, surface) {
         uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = surface,
         )
     }
@@ -168,7 +168,7 @@ fun TodayTaskDetailRoute(
     val surface = remember(uiState) { uiState.toIncubationSurfaceState() }
     val todayModel = remember(uiState, surface) {
         uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = surface,
         )
     }

@@ -14,7 +14,7 @@ import com.mindflow.app.data.connect.ExternalResearchPlanner
 import com.mindflow.app.data.connect.ThreadExecutionPlanner
 import com.mindflow.app.data.export.MarkdownExporter
 import com.mindflow.app.data.followup.StaleReconnectPlanner
-import com.mindflow.app.data.flow.FlowKnowledgeCompressionPlanner
+import com.mindflow.app.data.today.TodayKnowledgeCompressionPlanner
 import com.mindflow.app.data.importing.MarkdownImportParser
 import com.mindflow.app.data.knowledgebrain.LocalKnowledgeBrainPlanner
 import com.mindflow.app.data.localmodel.LiteRtLmOnDeviceAiClient
@@ -318,12 +318,7 @@ class AppContainer(context: Context) {
         aiServiceClient = aiServiceClient,
     )
 
-    val flowKnowledgeCompressionPlanner = FlowKnowledgeCompressionPlanner(
-        aiSettingsRepository = aiSettingsRepository,
-        aiServiceClient = aiServiceClient,
-        onDeviceModelSettingsRepository = onDeviceModelSettingsRepository,
-        onDeviceAiClient = onDeviceAiClient,
-    )
+    val todayKnowledgeCompressionPlanner = TodayKnowledgeCompressionPlanner()
 
     val staleReconnectPlanner = StaleReconnectPlanner(
         context = context.applicationContext,

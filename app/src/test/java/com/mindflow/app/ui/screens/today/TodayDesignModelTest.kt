@@ -1,4 +1,4 @@
-package com.mindflow.app.ui.screens.flow
+package com.mindflow.app.ui.screens.today
 
 import com.google.common.truth.Truth.assertThat
 import com.mindflow.app.data.connect.ThemeThread
@@ -9,7 +9,6 @@ import com.mindflow.app.data.model.NoteHorizon
 import com.mindflow.app.data.model.NoteStatus
 import com.mindflow.app.data.model.TagSource
 import com.mindflow.app.data.model.TopicSource
-import com.mindflow.app.data.reviewchat.SavedReviewChatSessionSummary
 import org.junit.Test
 
 class TodayDesignModelTest {
@@ -42,12 +41,10 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = SavedReviewChatSessionSummary(
-                sessionId = 7L,
-                title = "昨天推进回顾",
-                updatedAt = 2_000L,
-                messageCount = 3,
-                latestExcerpt = "完成 2 个子任务，产出 1 篇设计草图。",
+            reviewPreview = TodayReviewPreview(
+                title = "今日回看",
+                description = "昨天推进回顾：完成 2 个子任务，产出 1 篇设计草图。",
+                savedSessionId = 7L,
             ),
             surface = uiState.toIncubationSurfaceState(),
         )
@@ -80,7 +77,7 @@ class TodayDesignModelTest {
         val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -102,7 +99,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -124,7 +121,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -154,7 +151,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -178,7 +175,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -202,7 +199,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -216,12 +213,10 @@ class TodayDesignModelTest {
         val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = SavedReviewChatSessionSummary(
-                sessionId = 8L,
-                title = "围绕「项目」，我过去记录过哪些关键线",
-                updatedAt = 2_000L,
-                messageCount = 2,
-                latestExcerpt = """{"summary":"过去记录了10条关键线索，涉及训练编辑功能和技术方案。"}""",
+            reviewPreview = TodayReviewPreview(
+                title = "今日回看",
+                description = "围绕「项目」，我过去记录过哪些关键线：过去记录了10条关键线索，涉及训练编辑功能和技术方案。",
+                savedSessionId = 8L,
             ),
             surface = uiState.toIncubationSurfaceState(),
         )
@@ -236,12 +231,10 @@ class TodayDesignModelTest {
         val uiState = TodayUiState(todayCount = 1)
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = SavedReviewChatSessionSummary(
-                sessionId = 9L,
-                title = "我最近在关注什么？",
-                updatedAt = 2_000L,
-                messageCount = 1,
-                latestExcerpt = "我最近在关注什么？",
+            reviewPreview = TodayReviewPreview(
+                title = "今日回看",
+                description = "我最近在关注什么？",
+                savedSessionId = 9L,
             ),
             surface = uiState.toIncubationSurfaceState(),
         )
@@ -263,7 +256,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -289,7 +282,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
@@ -315,7 +308,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
         val detail = model.taskDetailFor("work")
@@ -345,7 +338,7 @@ class TodayDesignModelTest {
         )
 
         val model = uiState.toTodayDesignModel(
-            latestSavedConversationSummary = null,
+            reviewPreview = TodayReviewPreview.Empty,
             surface = uiState.toIncubationSurfaceState(),
         )
 
