@@ -1,211 +1,127 @@
 # MindFlow
 
-MindFlow is a native Android `idea incubator`.
+[简体中文](README.zh-CN.md)
 
-It is built for one job:
+MindFlow is a local-first Android idea incubator.
 
-- capture strange, early, unfinished thoughts fast
-- keep them alive over time
-- surface recurring threads and promising collisions
-- turn mature patterns into reusable personal assets
+It helps you capture fragile thoughts, keep them alive, find recurring threads,
+create useful collisions, and turn mature patterns into reusable personal assets.
+It is not a generic note app with an AI chat box attached.
 
-This is not a generic note app with AI bolted on.
+## Why It Exists
 
-## Product thesis
+Most note apps are optimized for storage. MindFlow is optimized for incubation:
 
-MindFlow has two layers:
+1. Capture a spark before it disappears.
+2. Let the local knowledge layer absorb and connect it.
+3. Surface a thread, collision, asset, or gap worth acting on.
+4. Deepen the material locally or through explicit cloud-assisted work.
+5. File useful outputs back into durable local memory.
 
-1. `frontstage`: an idea incubator for capture, recall, collision, and growth
-2. `backstage`: a local-first `LLM Wiki` maintainer that keeps long-term memory coherent
+The product should feel like a pocket lab notebook with long memory, not an AI
+dashboard or model playground.
 
-The app should feel like:
+## Product Surfaces
 
-- a pocket lab notebook
-- a long-memory thinking companion
-- a place where weak signals compound
+| Surface | Role |
+| --- | --- |
+| `记录` | Fast capture for text, voice, links, screenshots, and clipped material. |
+| `今天` | The active incubation feed: sparks, threads, collisions, assets, and gaps. |
+| `回看` | Directed thinking over maintained memory. |
+| `图谱` | A shape view of hubs, isolated nodes, dense clusters, and missing links. |
+| `设置` | Model controls, cloud configuration, sync/export, and diagnostics. |
 
-It should not feel like:
+Older internal routes may still use names such as `flow/*`, but new product
+language should use `今天` and `回看`.
 
-- an AI dashboard
-- a model playground
-- a direction tracker
-- a wiki admin console
+## Current Capabilities
 
-## Core product loop
-
-1. capture a spark
-2. let the system absorb and connect it
-3. surface a live thread
-4. deepen or collide it
-5. grow it into an asset
-6. feed the next missing material
-
-## Navigation
-
-MindFlow now organizes around five product surfaces:
-
-- `记录`
-- `Flow`
-- `查询`
-- `图谱`
-- `设置`
-
-### 记录
-
-Fast capture beats forgetting.
-
-Primary inputs:
-
-- quick text
-- voice thought
-- pasted link
-- screenshot
-- clipped excerpt
-
-### Flow
-
-The home feed for idea incubation.
-
-It should answer:
-
-- which spark should not be lost
-- which thread keeps recurring
-- which two points are worth colliding
-- what has matured enough to reuse
-- what to feed next
-
-### 查询
-
-Directed thinking over the maintained knowledge layer.
-
-The user should feel they are doing one of these:
-
-- `继续养`
-- `撞一下`
-- `反驳它`
-- `帮我抽象`
-- `帮我拉成方案`
-- `帮我找证据`
-
-### 图谱
-
-Not a node dump.
-
-It should show:
-
-- what is becoming a hub
-- what is still isolated
-- which cluster is getting denser
-- which missing edge looks valuable
-
-### 设置
-
-All system-facing controls stay here:
-
-- local model management
-- cloud model/provider configuration
-- sync and export
-- maintenance diagnostics
-- performance and battery tradeoffs
-
-## Model strategy
-
-MindFlow supports both:
-
-- `Local Gemma 4`
-- `Cloud models`
-
-This is one product, not two product modes.
-
-### Local Gemma 4
-
-Default layer for:
-
-- capture enrichment
-- old-note recall
-- routine maintenance
-- low-latency synthesis
-- privacy-sensitive workflows
-
-### Cloud models
-
-Escalation layer for:
-
-- harder critique
-- deeper cross-domain synthesis
-- stronger reframing
-- richer proposal shaping
-
-### Routing rule
-
-The user should choose an intention, not a model.
-
-The system routes the work.
-
-### Trust boundary
-
-This is non-negotiable:
-
-- local is the default for raw capture, recall, and maintenance
-- raw sources must not be silently sent to the cloud during background maintenance
-- cloud use must be user-invoked or clearly signaled by the action the user chose
-- cloud-derived output must be marked with provenance and filed back into local memory
-- the product must remain useful with cloud disabled
-
-## Current implementation status
-
-Already in the product:
-
-- fast note capture and editing
+- native capture and editing
 - voice-to-text capture
-- share-to-capture
-- widget and launcher shortcuts
-- search and filtering
-- thread and related-note structure
-- reminder flows
+- share-to-capture flows
+- launcher shortcuts and quick-capture widget
+- search, filters, reminders, and related-note structure
 - local knowledge-layer maintenance
-- local `Gemma 4 E4B` download and runtime support
-- local runtime upgraded to `LiteRT-LM`
-- cloud model configuration
-- local-first knowledge export back into app surfaces
+- on-device Gemma 4 E4B support through LiteRT-LM
+- explicit cloud model configuration
+- graph and review surfaces for memory context
 
-The current codebase still contains older `AI brief / direction dashboard` language in some places.
-The current phase is to realign those surfaces to the idea-incubator thesis above.
+## Local-First AI
 
-## Local-first knowledge layer
+MindFlow treats AI as one coherent thinking role: capture help, memory
+maintenance, thread detection, collision generation, and asset shaping.
 
-The maintained knowledge layer stores durable objects like:
+The trust boundary is local-first:
 
-- concepts
-- questions
-- methods
-- experiments
-- evidence
-- conclusions
-- links
-- logs and index pages
+- raw capture stays local by default
+- background maintenance stays local by default
+- cloud use must be explicit or clearly implied by the selected action
+- cloud-derived output should carry provenance
+- the app should remain useful with cloud disabled
 
-Raw sources stay append-only.
+## Project Layout
 
-High-value query results and cloud-assisted outputs must file back into this layer, or they do not compound.
+- `app/src/main/java/com/mindflow/app/data/`: repositories, AI routing, local model, knowledge maintenance, backup/export, and graph planning
+- `app/src/main/java/com/mindflow/app/ui/`: Compose screens, navigation, and UI components
+- `app/src/main/assets/`: graph and skill runtime assets
+- `docs/superpowers/specs/`: design notes
+- `docs/superpowers/plans/`: historical implementation plans
+- `PROJECT_GUIDE.md`: maintainer guidance, validation rules, and data-preservation constraints
 
 ## Build
 
-The local Gemma 4 path now uses `LiteRT-LM`.
-
 Requirements:
 
-- Android SDK configured in `local.properties`
-- `JDK 21` for local build and release verification
-
-Example:
+- Android Studio or Android SDK command-line tools
+- JDK 21
+- `local.properties` with `sdk.dir`
 
 ```properties
-sdk.dir=/your/android/sdk
+sdk.dir=/path/to/android/sdk
 ```
 
 ```bash
 export JAVA_HOME=/path/to/jdk-21
 export PATH="$JAVA_HOME/bin:$PATH"
-./gradlew --no-daemon assembleRelease
+
+./gradlew --no-daemon :app:assembleDebug
+./gradlew --no-daemon :app:testDebugUnitTest
+./gradlew --no-daemon :app:assembleRelease
 ```
+
+Release APK:
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+## Secrets And Local Files
+
+Do not commit local credentials, signing files, validation data, or personal
+exports. These are ignored by default:
+
+- `local.properties`
+- `signing.properties`
+- `keystore/`
+- `.env` files
+- `data/`
+- `recovery/`
+- `tmp/`
+- `docs/product/`
+
+## Release Validation Safety
+
+User-visible validation must preserve existing app data and local model files.
+
+For emulator or device validation:
+
+- install the release APK, not a debug APK
+- use `adb install -r app/build/outputs/apk/release/app-release.apk`
+- do not run `adb uninstall`
+- do not run `pm clear`
+- do not wipe emulator or AVD data
+- do not delete downloaded local model files
+- stop if signing does not match
+
+Read `PROJECT_GUIDE.md` before changing release validation, signing, local model,
+or recovery workflows.
