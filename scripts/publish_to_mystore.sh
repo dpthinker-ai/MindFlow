@@ -2,8 +2,8 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MYSTORE_ROOT="${MYSTORE_ROOT:-/home/dpthinker/MyStore}"
-ANDROID_HOME="${ANDROID_HOME:-/home/dpthinker/Android/Sdk}"
+MYSTORE_ROOT="${MYSTORE_ROOT:-$HOME/MyStore}"
+ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 JAVA_HOME="${JAVA_HOME:-$HOME/.jdks/temurin-21}"
 DEFAULT_MYSTORE_ENV_FILE="$HOME/.config/mystore/publish.env"

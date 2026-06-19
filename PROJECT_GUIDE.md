@@ -190,7 +190,7 @@ Current emulator/release validation state:
 Current Review UI task:
 
 - The user selected approach A: align Review surfaces quickly and closely with the reference image, rather than making tiny incremental changes.
-- Reference image: `/Users/dpthinker/workspace/new-design/design-pics/ChatGPT Image 2026年5月2日 13_38_29 (4).png`
+- Reference image: local private design reference, intentionally not stored in this repository.
 - Current release screenshot after latest changes: `/tmp/mindflow-review-fast-align.png`
 - The user still feels the implementation is far from reference and too slow. Continue with larger visual alignment passes.
 - Already removed from Review page: `值得回看的`, `还值得翻的`, and `刷新本地知识层`.

@@ -55,7 +55,7 @@ Install a signed release build on the real device:
 
 ```bash
 ~/.codex/skills/android-release-install/scripts/install_release.sh \
-  --project /home/dpthinker/MindFlow \
+  --project "$PWD" \
   --package com.mindflow.app
 ```
 

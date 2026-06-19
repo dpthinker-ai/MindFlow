@@ -445,9 +445,9 @@ v2 第一版不做：
 
 按顺序做，不要并发乱改：
 
-1. 扩展 [DirectionWikiModels.kt](/home/dpthinker/MindFlow/app/src/main/java/com/mindflow/app/data/wiki/DirectionWikiModels.kt) 的 graph schema
-2. 重写 [KnowledgeGraphPlanner.kt](/home/dpthinker/MindFlow/app/src/main/java/com/mindflow/app/data/wiki/KnowledgeGraphPlanner.kt) 的输出链路，拆成 extract/adjudicate/present
-3. 让 [KnowledgeGraphScreen.kt](/home/dpthinker/MindFlow/app/src/main/java/com/mindflow/app/ui/screens/flow/KnowledgeGraphScreen.kt) 只消费 presentation snapshot
+1. 扩展 `app/src/main/java/com/mindflow/app/data/wiki/DirectionWikiModels.kt` 的 graph schema
+2. 重写 `app/src/main/java/com/mindflow/app/data/wiki/KnowledgeGraphPlanner.kt` 的输出链路，拆成 extract/adjudicate/present
+3. 让 `app/src/main/java/com/mindflow/app/ui/screens/flow/KnowledgeGraphScreen.kt` 只消费 presentation snapshot
 4. 删除 UI 里的 fallback edge 生成逻辑
 
 ## 13. 设计判断

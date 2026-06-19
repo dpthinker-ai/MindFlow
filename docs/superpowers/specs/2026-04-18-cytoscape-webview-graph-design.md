@@ -7,7 +7,7 @@ The current concept graph page mixes two different problems:
 1. Data generation quality in the concept graph pipeline.
 2. Graph rendering and interaction quality in the UI.
 
-The current UI implementation renders the graph directly in Compose inside [KnowledgeGraphScreen.kt](/home/dpthinker/MindFlow/app/src/main/java/com/mindflow/app/ui/screens/flow/KnowledgeGraphScreen.kt). It manually manages node positions, label placement, curved edges, and viewport spacing. This has created an expensive iteration loop:
+The current UI implementation renders the graph directly in Compose inside `app/src/main/java/com/mindflow/app/ui/screens/flow/KnowledgeGraphScreen.kt`. It manually manages node positions, label placement, curved edges, and viewport spacing. This has created an expensive iteration loop:
 
 - every visual issue requires hand-tuning slot coordinates and offsets
 - graph layouts degrade quickly on real devices

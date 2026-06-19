@@ -785,8 +785,8 @@ Expected: all targeted unit tests pass, Kotlin compile passes, Android test comp
 Run:
 
 ```bash
-/home/dpthinker/.local/bin/adb install -r app/build/outputs/apk/release/app-release.apk
-/home/dpthinker/.local/bin/adb shell input keyevent KEYCODE_HOME
+adb install -r app/build/outputs/apk/release/app-release.apk
+adb shell input keyevent KEYCODE_HOME
 ```
 
 Then manually verify on device:
